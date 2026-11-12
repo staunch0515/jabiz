@@ -79,9 +79,14 @@ GRAFANA_USER=… GRAFANA_PASSWORD=… tools/ops/alert-fire-test.sh disk /var/lib
   `tools/ops` 里没有 repair 工具，用 Flyway CLI：
   `flyway -url=jdbc:postgresql://主机/库 -user=… -password=… -schemas=<schema> -table=jabiz_schema_history -locations=… repair`；
   或直接在库里：`DELETE FROM jabiz_schema_history WHERE version = '66' AND NOT success;`（repair 对失败的记录做的就是删去它）。
-- 进程在建索引时被杀：没有历史记录，重启时 `V66` 重跑，不需要 repair。
-- 重跑的 `V66` 先看同名索引：存在且 INVALID 时删去（普通的 `DROP INDEX`，因为 `DROP INDEX CONCURRENTLY` 不能放在 `DO` 块里：删除的一瞬间对 `ledger_entry_version` 持有 ACCESS EXCLUSIVE 锁，
-  要等正在使用该表的语句结束，期间过账排队），有效的索引从不删；然后 `CREATE INDEX CONCURRENTLY IF NOT EXISTS`。
+- 进程在建索引时被杀：没有历史记录，重启时 `V66` 重跑，不需要 repair。但数据库里执行 `CREATE INDEX CONCURRENTLY` 的后端进程可能还活着，要扫完整张表才结束。
+  **重启之前**先确认没有遗留的建索引：`SELECT pid, state, now() - query_start AS running, left(query, 80) FROM pg_stat_activity WHERE query ILIKE 'CREATE INDEX%ledger_entry_version_account_dimension_1_idx%';`
+  （别的角色的会话只有超级用户或 `pg_read_all_stats` 的成员能看到语句；否则看 `pg_locks` 中对 `ledger_entry_version` 持有 `ShareUpdateExclusiveLock` 的 `pid`）。
+  有就等它结束，或以 `SELECT pg_cancel_backend(<pid>);` 取消，再重启。
+- 重跑的 `V66` 先看同名索引：存在且 INVALID 时删去，有效的索引从不删；然后 `CREATE INDEX CONCURRENTLY IF NOT EXISTS`。删去用普通的 `DROP INDEX`（`DROP INDEX CONCURRENTLY` 不能放在 `DO` 块里），
+  对 `ledger_entry_version` 取 ACCESS EXCLUSIVE 锁：**只有没有会话还在建该索引时才是一瞬间**。所以脚本删除之前先看是否有别的会话（autovacuum 除外）对该表持有 `ShareUpdateExclusiveLock`，
+  有就报错 `… is still being built by another session (pid …)` 而不排队；删除等锁也至多等占位符 `drop_lock_timeout`（`PlatformSchemaMigration` 缺省 `3s`，可经 `spring.flyway.placeholders.drop_lock_timeout` 改）。
+  这两种失败都让 Flyway 把 `V66` 记为失败：按上一条确认没有遗留的建索引（或手工 VACUUM 已结束、长读取已结束）后，repair 再重启。
 - 启动检查 `SCHEMA`（`SchemaIndexChecks`，默认连接池当前 schema 的全部索引）把每个 INVALID 索引报为**警告**（从不阻止启动，`platformCheck` 也只列出），并设仪表 `jabiz.schema.invalid-indexes`，
   大于 0 时告警 `jabiz-schema-invalid-indexes`（设计 13 §7）。仪表在每次启动时更新：手工处理后到下次启动才归零。
   警告分三种说法：正在建（有会话在 `pg_stat_progress_create_index` 中建它，或另一会话持有该表的 SHARE UPDATE EXCLUSIVE 锁，并发建索引从头到尾持有它，VACUUM / ANALYZE 也持有，所以只说"可能"）；

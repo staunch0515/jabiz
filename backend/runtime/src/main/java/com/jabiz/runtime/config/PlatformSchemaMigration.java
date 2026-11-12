@@ -53,14 +53,8 @@ public final class PlatformSchemaMigration implements FlywayMigrationStrategy {
     public static final Map<String, String> NON_TRANSACTIONAL_LOCK =
         Map.of("flyway.postgresql.transactional.lock", "false");
 
-    /**
-     * The Flyway placeholder {@code ${concurrently}} of the platform scripts: the keyword of an index built without
-     * blocking writers (V66). Production runs with {@code CONCURRENTLY} (the default set here); tests that migrate
-     * several schemas of one database at once set it empty, because CREATE INDEX CONCURRENTLY waits for the
-     * transactions of the whole database. A runner that runs the platform scripts without defining it fails fast on
-     * the unresolved placeholder instead of hanging.
-     */
-    public static final String CONCURRENTLY_PLACEHOLDER = "concurrently";
+    /** The placeholder {@code ${concurrently}} ({@link PlatformScriptPlaceholders#CONCURRENTLY}). */
+    public static final String CONCURRENTLY_PLACEHOLDER = PlatformScriptPlaceholders.CONCURRENTLY;
 
     /** The setting of {@link #lockTimeout()}: how long a platform migration waits for a lock, 0 for ever. */
     public static final String LOCK_TIMEOUT_PROPERTY = "jabiz.schema.migration.lock-timeout";
@@ -126,7 +120,7 @@ public final class PlatformSchemaMigration implements FlywayMigrationStrategy {
         boolean applicationIsNew = isNewToApplication(config);
 
         Map<String, String> placeholders = new HashMap<>(config.getPlaceholders());
-        placeholders.putIfAbsent(CONCURRENTLY_PLACEHOLDER, "CONCURRENTLY");
+        PlatformScriptPlaceholders.defaults().forEach(placeholders::putIfAbsent);
 
         Flyway.configure()
             .configuration(config)

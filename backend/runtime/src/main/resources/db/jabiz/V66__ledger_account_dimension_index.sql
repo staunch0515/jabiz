@@ -20,19 +20,42 @@
 --
 -- Run again after a failure, this file repairs what the failure left: a build that failed or was killed half way leaves
 -- an INVALID index under this name, which "IF NOT EXISTS" alone would keep. The DO block drops the index only when it
--- exists and is INVALID, with a plain DROP INDEX (DROP INDEX CONCURRENTLY cannot run in a DO block): it takes an ACCESS
--- EXCLUSIVE lock on ledger_entry_version for the moment of the drop, waiting for the statements already using the table,
--- and postings wait behind it. A valid index is never dropped. A killed process leaves no history row, so Flyway runs
--- this file again at the next start; a failed statement leaves V66 recorded as failed, and the next start stops at
--- validation until "flyway repair" removes that row (docs/guide/platform-operations.md section 6). The startup check
--- SCHEMA reports any index left INVALID, as a warning.
+-- exists and is INVALID; a valid index is never dropped. It uses a plain DROP INDEX (DROP INDEX CONCURRENTLY cannot run
+-- in a DO block), which takes an ACCESS EXCLUSIVE lock on ledger_entry_version; that is brief only when no session is
+-- still building the index. After the migrating process is killed, its server backend may go on with the CREATE INDEX
+-- CONCURRENTLY until it has scanned the table, holding a SHARE UPDATE EXCLUSIVE lock on it; a DROP queued behind that
+-- would hold up every read and write of the ledger. So the block first looks for another session holding that lock
+-- (autovacuum aside, which gives way) and stops with an error instead, and it waits for the drop's lock at most
+-- ${drop_lock_timeout} (placeholder, PlatformSchemaMigration sets 3s) before failing. Either failure records V66 as
+-- failed: once nothing builds the index any more, "flyway repair" removes that row and the next start drops and builds
+-- (docs/guide/platform-operations.md section 6). A killed process leaves no history row, so Flyway runs this file again
+-- at the next start. The startup check SCHEMA reports any index left INVALID, as a warning.
 DO $$
+DECLARE
+    builder integer;
 BEGIN
     IF EXISTS (SELECT 1 FROM pg_index x
                JOIN pg_class i ON i.oid = x.indexrelid
                WHERE i.relname = 'ledger_entry_version_account_dimension_1_idx'
                  AND i.relnamespace = current_schema()::regnamespace
                  AND NOT x.indisvalid) THEN
+        SELECT l.pid INTO builder
+        FROM pg_locks l
+        LEFT JOIN pg_stat_activity a ON a.pid = l.pid
+        WHERE l.locktype = 'relation'
+          AND l.database = (SELECT oid FROM pg_database WHERE datname = current_database())
+          AND l.relation = (current_schema() || '.ledger_entry_version')::regclass
+          AND l.mode = 'ShareUpdateExclusiveLock' AND l.granted
+          AND l.pid <> pg_backend_pid()
+          AND a.backend_type IS DISTINCT FROM 'autovacuum worker'
+        LIMIT 1;
+        IF builder IS NOT NULL THEN
+            RAISE EXCEPTION 'The INVALID index ledger_entry_version_account_dimension_1_idx is still being built by '
+                'another session (pid %): wait for it to finish (see pg_stat_activity), or cancel it with '
+                'pg_cancel_backend(%), then run flyway repair on jabiz_schema_history and restart '
+                '(docs/guide/platform-operations.md section 6)', builder, builder;
+        END IF;
+        PERFORM set_config('lock_timeout', '${drop_lock_timeout}', true);
         DROP INDEX ledger_entry_version_account_dimension_1_idx;
     END IF;
 END

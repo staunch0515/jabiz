@@ -461,7 +461,7 @@ groups:
               expression: A
               conditions:
                 - evaluator: { type: gt, params: [0] }
-        for: 0s
+        for: 15m
         noDataState: OK
         execErrState: Error
         labels: { severity: warning, area: schema }

@@ -134,6 +134,50 @@ expect "edit the .sql.conf of a merged migration" "$d" conf-edit fail "V65__key_
 git -C "$d" checkout -q base
 git -C "$d" reset -q --hard HEAD~1
 
+# The exception: a merged migration listed in .jabiz-migration-exceptions may be renamed, content unchanged.
+branch "$d" excepted
+git -C "$d" mv "$jabiz/V65__key_rotation.sql" "$jabiz/V67__key_rotation.sql"
+printf '# merged, never run in production\n%s 2026-11-12 renumbered behind V66, not deployed yet  # ok\n' \
+  "$jabiz/V65__key_rotation.sql" >"$d/.jabiz-migration-exceptions"
+commit "$d" excepted
+expect "a listed merged migration renamed unchanged" "$d" excepted pass ""
+
+branch "$d" excepted-app
+git -C "$d" mv "$app/V19__warehouse.sql" "$app/V20__warehouse.sql"
+echo "$app/V19__warehouse.sql 2026-11-12 the application's own list" >"$d/.jabiz-app-migration-exceptions"
+commit "$d" excepted-app
+expect "a merged migration listed in the application's file" "$d" excepted-app pass ""
+
+branch "$d" unlisted
+git -C "$d" mv "$jabiz/V65__key_rotation.sql" "$jabiz/V67__key_rotation.sql"
+echo "$jabiz/V64__a.sql 2026-11-12 another one" >"$d/.jabiz-migration-exceptions"
+commit "$d" unlisted
+expect "an unlisted merged migration renamed" "$d" unlisted fail "renames (to $jabiz/V67__key_rotation.sql)"
+
+branch "$d" excepted-edit
+git -C "$d" mv "$jabiz/V65__key_rotation.sql" "$jabiz/V67__key_rotation.sql"
+echo "-- changed" >>"$d/$jabiz/V67__key_rotation.sql"
+echo "$jabiz/V65__key_rotation.sql 2026-11-12 renumbered" >"$d/.jabiz-migration-exceptions"
+commit "$d" excepted-edit
+expect "a listed merged migration renamed and changed" "$d" excepted-edit fail "allows renaming it with its content unchanged"
+
+branch "$d" excepted-modify
+echo "-- changed" >>"$d/$jabiz/V64__a.sql"
+echo "$jabiz/V64__a.sql 2026-11-12 not a rename" >"$d/.jabiz-migration-exceptions"
+commit "$d" excepted-modify
+expect "a listed merged migration modified in place" "$d" excepted-modify fail "nothing else (status M)"
+
+for bad in "$jabiz/V65__key_rotation.sql renumbered" "$jabiz/V65__key_rotation.sql 12.11.2026 renumbered" \
+  "$jabiz/V65__key_rotation.sql 2026-11-12"; do
+  branch "$d" malformed
+  git -C "$d" mv "$jabiz/V65__key_rotation.sql" "$jabiz/V67__key_rotation.sql"
+  echo "$bad" >"$d/.jabiz-migration-exceptions"
+  commit "$d" malformed
+  expect "a malformed exception line ($bad)" "$d" malformed fail ".jabiz-migration-exceptions line 1 is not '<path> <YYYY-MM-DD> <reason>'"
+  git -C "$d" checkout -q base
+  git -C "$d" branch -qD malformed
+done
+
 # The pull request's own migration may be renamed and edited across its commits: the base does not have it.
 branch "$d" own
 add "$d" "$jabiz/V66__own.sql"

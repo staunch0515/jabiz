@@ -54,7 +54,7 @@ class ConcurrentIndexMigrationTest {
             .baselineOnMigrate(true)
             .baselineVersion("0")
             .configuration(PlatformSchemaMigration.NON_TRANSACTIONAL_LOCK)
-            .placeholders(Map.of(PlatformSchemaMigration.CONCURRENTLY_PLACEHOLDER, "CONCURRENTLY"));
+            .placeholders(PlatformScriptPlaceholders.defaults());
     }
 
     @Test
@@ -81,6 +81,50 @@ class ConcurrentIndexMigrationTest {
         new PlatformSchemaMigration().migrate(application().load());
 
         assertThat(index()).containsEntry("valid", true).containsEntry("oid", oid);
+    }
+
+    @Test
+    void anIndexStillBeingBuiltByAnotherSessionStopsTheRunInsteadOfQueueingTheDrop() throws SQLException {
+        platform().target("65").load().migrate();
+        leaveInvalidIndex("ledger_entry_version (account_id)");
+        // What a killed migration's server backend still building the index holds on the table.
+        try (Connection builder = DB.connect(schema); Statement statement = builder.createStatement()) {
+            builder.setAutoCommit(false);
+            statement.execute("LOCK TABLE ledger_entry_version IN SHARE UPDATE EXCLUSIVE MODE");
+            int pid = ((Number) single(builder, "SELECT pg_backend_pid()")).intValue();
+            long started = System.nanoTime();
+            assertThatThrownBy(() -> new PlatformSchemaMigration().migrate(application().load()))
+                .hasStackTraceContaining("is still being built by another session (pid " + pid + ")")
+                .hasStackTraceContaining("pg_cancel_backend(" + pid + ")");
+            // At once, without waiting for any lock: the drop was never asked for.
+            assertThat(Duration.ofNanos(System.nanoTime() - started)).isLessThan(Duration.ofSeconds(20));
+            assertThat(index()).containsEntry("valid", false);
+            builder.rollback();
+        }
+        assertThat(single("SELECT success FROM jabiz_schema_history WHERE version = '66'")).isEqualTo(false);
+
+        platform().load().repair();
+        new PlatformSchemaMigration().migrate(application().load());
+        assertThat(index()).containsEntry("valid", true);
+    }
+
+    @Test
+    void theDropOfAnInvalidIndexWaitsForItsLockOnlyAsLongAsTheTimeout() throws SQLException {
+        platform().target("65").load().migrate();
+        leaveInvalidIndex("ledger_entry_version (account_id)");
+        // A long reader of the ledger: the drop needs ACCESS EXCLUSIVE and would wait for it (the default 3s here).
+        try (Connection reader = DB.connect(schema); Statement statement = reader.createStatement()) {
+            reader.setAutoCommit(false);
+            statement.execute("LOCK TABLE ledger_entry_version IN ACCESS SHARE MODE");
+            long started = System.nanoTime();
+            assertThatThrownBy(() -> new PlatformSchemaMigration().migrate(application().load()))
+                .hasStackTraceContaining("lock timeout");
+            Duration took = Duration.ofNanos(System.nanoTime() - started);
+            assertThat(took).isGreaterThanOrEqualTo(Duration.ofSeconds(3)).isLessThan(Duration.ofSeconds(30));
+            reader.rollback();
+        }
+        assertThat(index()).containsEntry("valid", false);
+        assertThat(single("SELECT success FROM jabiz_schema_history WHERE version = '66'")).isEqualTo(false);
     }
 
     @Test
@@ -163,8 +207,13 @@ class ConcurrentIndexMigrationTest {
     }
 
     private Object single(String sql) throws SQLException {
-        try (Connection connection = DB.connect(schema); Statement statement = connection.createStatement();
-             ResultSet rs = statement.executeQuery(sql)) {
+        try (Connection connection = DB.connect(schema)) {
+            return single(connection, sql);
+        }
+    }
+
+    private static Object single(Connection connection, String sql) throws SQLException {
+        try (Statement statement = connection.createStatement(); ResultSet rs = statement.executeQuery(sql)) {
             rs.next();
             return rs.getObject(1);
         }

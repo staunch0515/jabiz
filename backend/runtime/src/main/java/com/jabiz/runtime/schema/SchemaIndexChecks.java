@@ -20,9 +20,10 @@ import java.util.concurrent.atomic.AtomicLong;
  * Startup check of the schema's indexes (ROADMAP 17zz18): every INVALID index ({@code pg_index.indisvalid} false) is a
  * warning, never an error, so that it never stops a start. A {@code CREATE [UNIQUE] INDEX CONCURRENTLY} that fails half
  * way (a lock timeout, a deadlock, a cancel, duplicate rows for a unique index) leaves one behind: PostgreSQL maintains
- * it on every write but never reads it, and nothing else would notice. The count of the last check is the gauge
- * {@value PlatformObservations#SCHEMA_INVALID_INDEXES} (no index name in it), alerted on above zero; it is taken at
- * each start (and by {@code platformCheck}), so an index dropped or rebuilt by hand counts until the next start.
+ * it on every write but never reads it, and nothing else would notice. The count of the last check, leaving out the
+ * indexes probably being built (below), is the gauge {@value PlatformObservations#SCHEMA_INVALID_INDEXES} (no index
+ * name in it), alerted on above zero for 15 minutes; it is taken at each start (and by {@code platformCheck}), so an
+ * index dropped or rebuilt by hand counts until the next start.
  *
  * <p>The message tells three cases apart, as far as the database lets it see:
  * <ul>
@@ -77,15 +78,16 @@ public class SchemaIndexChecks implements PlatformCheck {
     public List<CheckProblem> check() {
         List<Map<String, Object>> rows = storages.getEngine(poolRef).select(INVALID_INDEXES, Map.of())
             .collectList().block(TIMEOUT);
-        List<CheckProblem> problems = (rows == null ? List.<Map<String, Object>>of() : rows).stream()
+        List<Map<String, Object>> found = rows == null ? List.of() : rows;
+        // The gauge leaves out what is probably being built: a build running at the start is no failure (yet).
+        lastCount.set(found.stream().filter(row -> !Boolean.TRUE.equals(row.get("building"))).count());
+        return found.stream()
             .map(row -> problem(Rows.string(row.get("table_name")), Rows.string(row.get("index_name")),
                 Boolean.TRUE.equals(row.get("building"))))
             .toList();
-        lastCount.set(problems.size());
-        return problems;
     }
 
-    /** INVALID indexes found by the last check (0 before one). */
+    /** INVALID indexes found by the last check that are not probably being built (0 before one). */
     public long lastCount() {
         return lastCount.get();
     }
@@ -116,7 +118,8 @@ public class SchemaIndexChecks implements PlatformCheck {
             return;
         }
         Gauge.builder(PlatformObservations.SCHEMA_INVALID_INDEXES, this, SchemaIndexChecks::lastCount)
-            .description("INVALID indexes in the current schema of the default pool, at the last startup check")
+            .description("INVALID indexes in the current schema of the default pool not being built, at the last"
+                + " startup check")
             .register(registry);
     }
 }
