@@ -88,6 +88,10 @@ public final class ClaudeStub {
                 send(exchange, 200, message(model, "refusal", null, in, 0));
                 return;
             }
+            if (body.contains("You read ONE company's website")) {
+                send(exchange, 200, message(model, "end_turn", siteDraft(unescaped(body)), in, 3000));
+                return;
+            }
             if (body.contains("<help_question>")) {
                 send(exchange, 200, message(model, "end_turn", helpAnswer(unescaped(body)), in, 120));
                 return;
@@ -231,6 +235,97 @@ public final class ClaudeStub {
 
     private static boolean japanese(String body) {
         return body.contains("Language: Japanese");
+    }
+
+    private static final Pattern SITE_HOST = Pattern.compile("\"website\":\"https://([a-z0-9.-]+)/\"");
+    private static final Pattern SITE_LANGUAGES = Pattern.compile("\"languages\":\\[([^\\]]*)]");
+    private static final Pattern SITE_NUMBER = Pattern.compile("\"(questions|options|materialsMax|maxProducts)\":(\\d+)");
+
+    /**
+     * A site draft (F-C7, {@code <request>} of the site job): a company named after the site's host, two products, two
+     * articles and as many questions as asked, each text in the languages asked (the others "translated"). A host
+     * starting {@code unreachable.}, {@code robots.} or {@code notext.} is answered with that failure; the company's
+     * introduction holds a person's e-mail address and telephone number, which the job must take out.
+     */
+    private static String siteDraft(String body) {
+        Matcher host = SITE_HOST.matcher(body);
+        String name = host.find() ? host.group(1) : "stub.example";
+        for (String failure : new String[] {"unreachable", "robots", "notext"}) {
+            if (name.startsWith(failure + ".")) {
+                return "{\"failure\":\"" + (failure.equals("notext") ? "NO_TEXT" : failure.toUpperCase()) + "\"}";
+            }
+        }
+        Matcher languageMatch = SITE_LANGUAGES.matcher(body);
+        List<String> languages = new ArrayList<>();
+        if (languageMatch.find()) {
+            for (String language : languageMatch.group(1).split(",")) {
+                languages.add(language.replace("\"", "").strip());
+            }
+        }
+        if (languages.isEmpty()) {
+            languages.add("en");
+        }
+        int questions = 5;
+        int options = 4;
+        int materials = 5;
+        Matcher numbers = SITE_NUMBER.matcher(body);
+        while (numbers.find()) {
+            int value = Integer.parseInt(numbers.group(2));
+            switch (numbers.group(1)) {
+                case "questions" -> questions = value;
+                case "options" -> options = value;
+                case "materialsMax" -> materials = Math.min(2, value);
+                default -> { }
+            }
+        }
+        String label = name.startsWith("www.") ? name.substring(4) : name;
+        String handle = label.contains(".") ? label.substring(0, label.indexOf('.')) : label;
+        String site = "https://" + name + "/";
+        StringBuilder out = new StringBuilder("{\"failure\":null,\"package\":{");
+        out.append("\"basics\":{\"company\":\"Stub Company " + handle + "\"")
+            .append(",\"intro\":").append(texts(languages, "We make things. Write to taro@" + label
+                + " or call 03-1234-5678, or use our contact form at " + site + "contact."))
+            .append(",\"avatar\":{\"url\":\"" + site + "logo.png\"}},");
+        out.append("\"page\":{\"handle\":\"" + handle + "\",\"headline\":")
+            .append(texts(languages, "Made well, made here")).append(",\"website\":\"" + site + "\",\"cover\":{\"url\":\""
+                + site + "hero.jpg\"}},");
+        out.append("\"products\":[");
+        out.append("{\"code\":\"STUB-1\",\"name\":").append(texts(languages, "Stub Kettle"))
+            .append(",\"description\":").append(texts(languages, "A kettle that boils water."))
+            .append(",\"price\":3200,\"currency\":\"JPY\",\"shopUrl\":\"" + site + "shop/kettle\"},");
+        out.append("{\"name\":").append(texts(languages, "Stub Cup")).append(",\"price\":12.5,\"currency\":\"USD\","
+            + "\"shopUrl\":\"" + site + "shop/cup\"}]},");
+        out.append("\"sources\":{\"basics.company\":\"" + site + "about\",\"page.headline\":\"" + site
+            + "\",\"products[0].price\":\"" + site + "shop/kettle\"},");
+        out.append("\"notFound\":[\"page.cover\"],\"translated\":[");
+        for (int i = 1; i < languages.size(); i++) {
+            out.append(i > 1 ? "," : "").append("\"").append(languages.get(i)).append("\"");
+        }
+        out.append("],\"materials\":[");
+        for (int i = 1; i <= materials; i++) {
+            out.append(i > 1 ? "," : "").append("{\"title\":\"About us " + i + "\",\"body\":\"We have made stub things since "
+                + (1990 + i) + ".\",\"url\":\"" + site + "about" + i + "\"}");
+        }
+        out.append("],\"questions\":[");
+        for (int q = 1; q <= questions; q++) {
+            out.append(q > 1 ? "," : "").append("{\"stem\":\"Since when have we made stub things (" + q
+                + ")?\",\"options\":[");
+            for (int o = 0; o < options; o++) {
+                out.append(o > 0 ? "," : "").append("{\"text\":\"" + (o == 0 ? "Since " + (1991) : "Since " + (2001 + o))
+                    + "\",\"correct\":" + (o == 0) + "}");
+            }
+            out.append("],\"materials\":[1]}");
+        }
+        return out.append("]}").toString();
+    }
+
+    private static String texts(List<String> languages, String base) {
+        StringBuilder out = new StringBuilder("{");
+        for (int i = 0; i < languages.size(); i++) {
+            out.append(i > 0 ? "," : "").append("\"").append(languages.get(i)).append("\":\"")
+                .append(i == 0 ? base : "[" + languages.get(i) + "] " + base).append("\"");
+        }
+        return out.append("}").toString();
     }
 
     private static String message(String model, String stop, String text, long in, long out) {

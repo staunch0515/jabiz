@@ -497,6 +497,22 @@ public final class QbParams {
         FEE_CREDIT_GRANT_CERTIFIED, FEE_CREDIT_VALID_DAYS);
 
     /**
+     * F-C7: drafting a profile package and a quiz from the sponsor's website. The switch and the monthly requests spend
+     * money, so they are controlled (four eyes; the switch stays off until the AI credit can be charged, F-M9); the
+     * rest are limits of one request, ordinary.
+     */
+    public static final String SITE_PROFILE_ENABLED = "qb.ai.site-profile.enabled";
+    public static final String SITE_PROFILE_MONTHLY = "qb.ai.site-profile.monthly";
+    public static final String SITE_PROFILE_DAILY = "qb.ai.site-profile.daily";
+    public static final String SITE_PROFILE_MAX_PAGES = "qb.ai.site-profile.max-pages";
+    public static final String SITE_PROFILE_QUESTIONS = "qb.ai.site-profile.questions";
+    public static final String SITE_PROFILE_OPTIONS = "qb.ai.site-profile.options";
+    public static final String SITE_PROFILE_MATERIALS_MAX = "qb.ai.site-profile.materials-max";
+    public static final String SITE_PROFILE_HANDLE_ALTERNATIVES = "qb.ai.site-profile.handle-alternatives";
+    /** The controlled ones, in the order of {@link #CONTROLLED} (last). */
+    public static final List<String> SITE_PROFILE_CONTROLLED = List.of(SITE_PROFILE_ENABLED, SITE_PROFILE_MONTHLY);
+
+    /**
      * The parameters that change only through controlled changes (proposed by one administrator, published by
      * another): the money settings, and the review switches, since turning one on removes a person's review.
      */
@@ -506,7 +522,7 @@ public final class QbParams {
         REWARD, JOURNAL_ACCOUNTS, ISSUER, List.of(LEGAL_MAX_ANNOUNCE_DAYS), AI_CONTROLLED, PROSPECT_CONTROLLED,
         OPERATOR_PLANS, OPERATOR_WITHDRAWAL, List.of(TOPUP_BANK_MIN, TOPUP_BANK_MAX), BANK_RECEIVING, WITHDRAWAL_BANK, AUDIENCE_BILLING_PARAMS,
         CASH_ACCOUNT_PARAMS, FEE_PARAMS,
-        List.of(ENTRY_FEE_ENABLED), List.of(USAGE_FREE_BYTES), List.of(VIDEO_MAINLAND_SITES), HELP_CONTROLLED, FEE_CREDIT_PARAMS)
+        List.of(ENTRY_FEE_ENABLED), List.of(USAGE_FREE_BYTES), List.of(VIDEO_MAINLAND_SITES), HELP_CONTROLLED, FEE_CREDIT_PARAMS, SITE_PROFILE_CONTROLLED)
         .flatMap(List::stream).toList();
 
     /** A parameter: its key, kind (as the platform writes kinds) and first value. */
@@ -854,6 +870,24 @@ public final class QbParams {
             "The areas of the Sponsor app's bottom menu on a phone, comma-separated (home, quizzes, publications, "
                 + "prizes, messages, benefits, money, assets, hub; at most four, \"More\" follows; empty: this "
                 + "default)"),
+        // F-C7: drafting from a website (the ordinary ones, then the controlled ones in the order of
+        // SITE_PROFILE_CONTROLLED; last).
+        new Param(SITE_PROFILE_DAILY, Map.of("type", "numeric", "precision", 3, "scale", 0), "3",
+            "How many times a sponsor may ask the AI to draft from their website a day"),
+        new Param(SITE_PROFILE_MAX_PAGES, Map.of("type", "numeric", "precision", 3, "scale", 0), "10",
+            "The most pages of a website the AI reads for one draft"),
+        new Param(SITE_PROFILE_QUESTIONS, Map.of("type", "numeric", "precision", 3, "scale", 0), "5",
+            "How many questions the \"get to know us\" quiz drafted from a website has"),
+        new Param(SITE_PROFILE_OPTIONS, Map.of("type", "numeric", "precision", 2, "scale", 0), "4",
+            "How many options each question of the \"get to know us\" quiz has"),
+        new Param(SITE_PROFILE_MATERIALS_MAX, Map.of("type", "numeric", "precision", 2, "scale", 0), "5",
+            "The most articles the \"get to know us\" quiz drafted from a website has"),
+        new Param(SITE_PROFILE_HANDLE_ALTERNATIVES, Map.of("type", "numeric", "precision", 2, "scale", 0), "3",
+            "How many other link names are offered when the one drafted from a website is another sponsor's"),
+        new Param(SITE_PROFILE_ENABLED, BOOL, false,
+            "Whether sponsors may ask the AI to draft a profile package and a quiz from their website"),
+        new Param(SITE_PROFILE_MONTHLY, Map.of("type", "numeric", "precision", 3, "scale", 0), "10",
+            "How many times a sponsor may ask the AI to draft from their website a month"),
         // F-M3: company verification (ordinary; last).
         new Param(VERIFICATION_LINK_HOURS, Map.of("type", "numeric", "precision", 3, "scale", 0), "48",
             "How many hours the link mailed to a company address to verify a sponsor's company stays good (1 to 168)"));

@@ -75,11 +75,30 @@ public final class AiCodes {
     /** Questions asked for a survey: they would need correct options (Q12, D-Q12-9). */
     public static final String SURVEY_UNSUPPORTED = "QB_AI_SURVEY_UNSUPPORTED";
 
+    /** F-C7: the sponsor did not declare the website theirs (or one they may use). */
+    public static final String SITE_RIGHTS_REQUIRED = "QB_AI_SITE_RIGHTS_REQUIRED";
+    /** F-C7: the address is not a website's (https, a host name, no user information or port). */
+    public static final String SITE_URL_INVALID = "QB_AI_SITE_URL_INVALID";
+    /** F-C7: no content was asked for, or the languages are not a base and up to two others. */
+    public static final String SITE_REQUEST_INVALID = "QB_AI_SITE_REQUEST_INVALID";
+    /** F-C7: a site draft is already being made for this sponsor. */
+    public static final String SITE_BUSY = "QB_AI_SITE_BUSY";
+    public static final String SITE_DAILY_LIMIT = "QB_AI_SITE_DAILY_LIMIT";
+    public static final String SITE_MONTHLY_LIMIT = "QB_AI_SITE_MONTHLY_LIMIT";
+    /** F-C7: why a site could not be read (the job's failure codes). */
+    public static final String SITE_UNREACHABLE = "QB_AI_SITE_UNREACHABLE";
+    public static final String SITE_ROBOTS = "QB_AI_SITE_ROBOTS";
+    public static final String SITE_NO_TEXT = "QB_AI_SITE_NO_TEXT";
+    public static final String SITE_TIMEOUT = "QB_AI_SITE_TIMEOUT";
+
     public static final List<String> ALL = List.of(UNAVAILABLE, NOTICE_MISSING, NOTICE_REQUIRED, INPUT_TOO_LARGE, NO_SOURCE,
         MATERIAL_NOT_IN_QUIZ, QUIZ_BUSY, TOO_MANY_OPEN, DAILY_LIMIT, MONTHLY_LIMIT, GLOBAL_LIMIT, JOB_NOT_READY,
         JOB_EXPIRED, CANDIDATE_UNKNOWN, NOT_REVIEWED, TEXT_TOO_LONG, RATE_LIMITED, PROVIDER_UNAVAILABLE, AUTH,
         REQUEST_INVALID, BAD_RESPONSE, REFUSED, TRUNCATED, NO_CANDIDATES, COUNT_TOO_HIGH, STOPPED,
-        PDF_TOO_LARGE, WRONG_KIND, PDF_TOO_LONG, PDF_UNREADABLE, COVER_WITHDRAWN, SURVEY_UNSUPPORTED);
+        PDF_TOO_LARGE, WRONG_KIND, PDF_TOO_LONG, PDF_UNREADABLE, COVER_WITHDRAWN, SURVEY_UNSUPPORTED,
+        // F-C7: drafting from a website.
+        SITE_RIGHTS_REQUIRED, SITE_URL_INVALID, SITE_REQUEST_INVALID, SITE_BUSY,
+        SITE_DAILY_LIMIT, SITE_MONTHLY_LIMIT, SITE_UNREACHABLE, SITE_ROBOTS, SITE_NO_TEXT, SITE_TIMEOUT);
 
     private AiCodes() {}
 }
