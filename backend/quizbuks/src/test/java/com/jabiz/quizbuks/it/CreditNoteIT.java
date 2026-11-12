@@ -23,6 +23,7 @@ import java.util.List;
 import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
  * F-M7 (docs/quizbuks/plans/impl/F-M.md §10.3-2 to -5, -12): credit notes by hand and the unused days of an audience
@@ -369,5 +370,46 @@ class CreditNoteIT extends CreditNoteItSupport {
                 "sponsorId", sponsor, "purpose", "AUDIENCE"));
         }
         assertThat(differences(sponsor)).isEmpty();
+    }
+
+    /**
+     * N10: the daily release (03:23) closed the prepayment before the refund job (03:37) decided. The note still gives
+     * the unused days back through it, and neither the prepayments' check nor the stale one sees a difference. The
+     * notes and their uses are only ever inserted into, behind the append-only guard.
+     */
+    @Test
+    void aPrepaymentReleasedBeforeTheDecisionStillGivesBackAndTheNotesAreOnlyInserted() {
+        autoApprove(true);
+        param(QbParams.AUDIENCE_REFUND_UNUSED_DAYS, "true");
+        String sponsor = pricedSponsor("fm7-released");
+        cash(sponsor, 1_000);
+        credit(sponsor, 10_000);
+        String publicationId = oneWinnerAudienceDraft(sponsor, "FM7 released");
+        submit(sponsorToken(sponsor), publicationId);
+        goLive(publicationId);
+        BigDecimal cashBefore = balance(sponsor, QbWallets.CASH);
+        Map<String, Object> ref = endEarly(sponsor, publicationId);
+        systemRun(com.jabiz.quizbuks.fee.Prepayments.RELEASE_ITEM, body("publicationId", publicationId,
+            "sponsorId", sponsor, "purpose", "AUDIENCE"));
+        assertThat(prepayments(publicationId).getFirst()).containsEntry("status", "RELEASED");
+
+        assertThat(((FeeProcesses.ItemOutput) systemRun(AudienceRefundJob.ITEM, ref)).outcome())
+            .isEqualTo("REFUNDED");
+        assertThat(notes(sponsor)).singleElement()
+            .satisfies(note -> assertThat((BigDecimal) note.get("total")).isEqualByComparingTo("440"));
+        assertThat(balance(sponsor, QbWallets.CASH)).isEqualByComparingTo(cashBefore.add(new BigDecimal("440")));
+        assertThat(ledger("2180", sponsor)).isEqualByComparingTo("0");
+        assertThat(ledger("1130", sponsor)).isEqualByComparingTo("0");
+        assertThat(differences(sponsor)).isEmpty();
+
+        for (String table : List.of("qb_fee_credit_note_version", "qb_fee_credit_note_use_version")) {
+            assertThat(query("SELECT coalesce(n_tup_upd, 0) + coalesce(n_tup_del, 0) AS changed "
+                + "FROM pg_stat_user_tables WHERE schemaname = current_schema() AND relname = ?", table))
+                .as(table).singleElement()
+                .satisfies(row -> assertThat(((Number) row.get("changed")).longValue()).as(table).isZero());
+            assertThatThrownBy(() -> execute("UPDATE " + table + " SET process_seq_id = process_seq_id"))
+                .as(table).hasMessageContaining("append-only");
+            assertThatThrownBy(() -> execute("DELETE FROM " + table)).as(table).hasMessageContaining("append-only");
+        }
     }
 }
