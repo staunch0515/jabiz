@@ -118,6 +118,7 @@
 |---|---|---|
 | `QB_TRANSFER_RUN_CRON`、`QB_RECONCILE_RUN_CRON` | e2e 与 Stripe 测试模式：每分钟转账、每分钟核对 | `TransferScheduleCheck` |
 | `QB_ANALYTICS_RUN_CRON` | e2e：每分钟运行发起方分析（Q9e2）。**隐私控制**：概览是任务的快照，频率决定能把一个学者的作答定位到多细；缺省（每 10 分钟）以外的值**任何环境**都要同时设 `QB_E2E_ENABLED=true`，否则启动失败；**比每分钟更频繁的值一律拒绝**（评审 M1） | `TransferScheduleCheck` |
+| `QB_DISTRIBUTION_MONTHLY_CRON` / `QB_DISTRIBUTION_FINAL_CRON` | 配送费的月度结算（缺省每月 2 日 00:37）与结束结算（缺省每天 03:07），按 `jabiz.fiscal-year-zone`（F-M6，§7.48）。e2e 把结束结算设为每分钟（`'45 * * * * *'`）；项都可重复运行，更频繁只是多读几次 | — |
 | `QB_E2E_ENABLED`（`quizbuks.e2e.enabled`） | e2e 的开关（Q9e2 评审 M1）：允许改分析任务的时间；正式模式或正式密钥下设了即启动失败 | `TransferScheduleCheck` |
 | `QB_ADMIN_ROLES` 中的 `QB_E2E_*` | e2e 的无二次验证的测试角色 | `TransferScheduleCheck` |
 | 开发入账 `quizbuks.wallet.dev-credit.enabled`（`dev` 配置开启） | 不付款给发起方钱包入账 | `StripeModeCheck` |

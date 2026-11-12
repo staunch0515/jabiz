@@ -31,6 +31,7 @@ import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 
 /**
@@ -153,9 +154,11 @@ public final class DistributionSettlements {
         }
         ParamValues params = ctx.get(PARAMS, ParamValues.class);
         Instant endedAt = PublicationStatus.ENDED.equals(card.get("status")) ? instant(card.get("endedAt")) : null;
-        long grace = Math.clamp(params.find(QbParams.DISTRIBUTION_FINAL_END_GRACE_SEC, BigDecimal.class)
-            .orElse(new BigDecimal(QbParams.defaultOf(QbParams.DISTRIBUTION_FINAL_END_GRACE_SEC))).longValue(), 0, 86_400);
-        boolean ended = endedAt != null && !endedAt.plus(Duration.ofSeconds(grace)).isAfter(ctx.opTime());
+        // No grace parameter (QB_SETUP's proposal not published yet; SetupParamsCheck warns): not settled as ended,
+        // the monthly job still settles its months and a later run its end.
+        Optional<BigDecimal> graceParam = params.find(QbParams.DISTRIBUTION_FINAL_END_GRACE_SEC, BigDecimal.class);
+        boolean ended = endedAt != null && graceParam.isPresent() && !endedAt.plus(
+            Duration.ofSeconds(Math.clamp(graceParam.get().longValue(), 0, 86_400))).isAfter(ctx.opTime());
         Set<String> periods = new HashSet<>();
         rows.forEach(row -> periods.add(String.valueOf((Object) row.get("period"))));
         String period;
