@@ -139,7 +139,9 @@ export function SiteProfileDialog({ open, onClose, onReview, onPrompt }: {
             <AlertDescription className="flex flex-col gap-2">
               <span role="alert">{t(`site.failure.${reason}`)}</span>
               <span>
-                <Button type="button" variant="outline" size="sm" data-testid="site-failed-prompt" onClick={onPrompt}>
+                {/* The alert colours its text; the button keeps the page's own, which has the contrast in both appearances. */}
+                <Button type="button" variant="outline" size="sm" className="text-foreground" data-testid="site-failed-prompt"
+                  onClick={onPrompt}>
                   {t('site.failure.prompt')}
                 </Button>
               </span>
