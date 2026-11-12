@@ -364,14 +364,14 @@
 5. 共用文件只需与 S3 对齐（S3 在做 F-F10）。钱的部分写完先报分支名，总控安排额外审查后再开 PR。
 
 ### 8.9 进度（S2，2026-11-11，需求方决定暂停开发，WIP）
-分支 `1.3/quizbuks-FM5-funds-check`（迁移 `V114`，开 PR 时如被占用改下一个空号），未开 PR。
+分支 `1.3/quizbuks-FM5-funds-check`（迁移 `V115`：原定 V114，S4 的 #630 先全绿取了 V114），未开 PR。
 
 **已做**：
-- 后端：`QbPrepayment`（V114）、科目 2180 与维度 3 `purpose`、`PrepaymentRules`、`Prepayments`（`QB_PREPAYMENT_FREEZE` / `USE` / `CHARGE` / `RELEASE` / `RELEASE_ITEM`，每日 `qb.prepayment-release`）、`PublicationPrepayments`（提交时在钱包锁内检查与冻结、`QB_PUBLICATION_FUNDS_CHECK`、`PublicationEditing.write` 的 `note` 与提交 / 撤回 / 审批结果 / `ADVANCE` 末尾的 `after`）、`QB_FEE_CHARGE` 的 `operatorId` / `prepaymentId`（F-M11）、费用种类 `AUDIENCE`、核对 `PREPAYMENTS` / `PREPAYMENT_STALE`、月报三类与列 `feePrepayments`、模板 `qb.system.fee-receivable` / `prepayments-due`、`qb.sponsor.publication-prepayments`、`qb.sponsor.wallet` 的 `prepaymentHeld`、三语消息。
+- 后端：`QbPrepayment`（V115）、科目 2180 与维度 3 `purpose`、`PrepaymentRules`、`Prepayments`（`QB_PREPAYMENT_FREEZE` / `USE` / `CHARGE` / `RELEASE` / `RELEASE_ITEM`，每日 `qb.prepayment-release`）、`PublicationPrepayments`（提交时在钱包锁内检查与冻结、`QB_PUBLICATION_FUNDS_CHECK`、`PublicationEditing.write` 的 `note` 与提交 / 撤回 / 审批结果 / `ADVANCE` 末尾的 `after`）、`QB_FEE_CHARGE` 的 `operatorId` / `prepaymentId`（F-M11）、费用种类 `AUDIENCE`、核对 `PREPAYMENTS` / `PREPAYMENT_STALE`、月报三类与列 `feePrepayments`、模板 `qb.system.fee-receivable` / `prepayments-due`、`qb.sponsor.publication-prepayments`、`qb.sponsor.wallet` 的 `prepaymentHeld`、三语消息。
 - 删除（需求方 2026-11-09 确认）：`direct` 受众价目与 `qb.audience.price.fallback`（后端、管理系统扩展的价目页、测试；页面删去的项见扩展的 `audiencePricing` 改动）。
 - 页面：发起方向导确认步的"资金"一栏与"去充值"、发布页"预付款"、平台费账户"冻结在预付款中"；管理系统扩展的月报标签与 2180 列。
 - 测试：`PrepaymentIT`（5 例通过）、`PrepaymentRulesTest`；`AudiencePricingIT`、`AudienceBillingTest`、`NoDirectOwnerTest`、`SetupIT`、`ProcessAccessIT`、`AdminFinanceIT` 与 setup / publishing / payout / topup 场景快照已随之改（单独运行通过）；发起方页面 Vitest 1245、扩展 502 通过；`platformCheck` 无错误。
-- 文档：`operations.md` §7.44、发起方手册底稿三语、`backend/quizbuks/CLAUDE.md`、规格与 §2.d 的删除说明、走查清单第 2′ 步；e2e `launch-loop.spec.ts` 第 2′ 步与 `wallet.ts` 的 `fund`（**未在本机运行**）。
+- 文档：`operations.md` §7.46（原 §7.44，合并 F-C9 后顺延）、发起方手册底稿三语、`backend/quizbuks/CLAUDE.md`、规格与 §2.d 的删除说明、走查清单第 2′ 步；e2e `launch-loop.spec.ts` 第 2′ 步与 `wallet.ts` 的 `fund`（**未在本机运行**）。
 
 **下一步（恢复后）**：
 1. 合并最新 `1.3/quizbuks`；跑模块全部测试与 `platformCheck`（暂停时全量运行被中止，未得结果）。
@@ -578,4 +578,4 @@
 9. 语句数在 `DistributionIT` 中用 `SqlStatementLog` 断言，不另建测试类（9.4）。
 10. 第二次复核（@115b56e）：N1 两个任务都能写 `final`、谁先谁写；N2 `final` 的人数晚一个月收，接受并写进规格与 `operations.md`（含 F-M12 的影响）；N3、N4、N5 照改；下限的缺省 > 0 并登记上线开关清单；切换版本不改单价（9.3、9.5–9.9）。
 11. 规格 F-M6 的改动（验收行"直营发起方照付"、规则行的单位与"按下限"、N2 的说明）随本项的代码提交。
-12. **总控 2026-11-12 批准**（Fable 第三次复核 @644a38b："可以批准"），采纳两条小建议：N1 的期间规则写成确定的一句；"月度先于每日"的测试造成"月度写了普通行之后才满足宽限"。顺序：F-M5 合格并开出草稿 PR 之后，从 F-M5 的分支拉出 `1.3/quizbuks-FM6-distribution`；迁移暂定 `V116`（`V115` 已由 S4 的 #630 预占），取开 PR 时的下一个空号。
+12. **总控 2026-11-12 批准**（Fable 第三次复核 @644a38b："可以批准"），采纳两条小建议：N1 的期间规则写成确定的一句；"月度先于每日"的测试造成"月度写了普通行之后才满足宽限"。顺序：F-M5 合格并开出草稿 PR 之后，从 F-M5 的分支拉出 `1.3/quizbuks-FM6-distribution`；迁移暂定 `V116`（#630 取了 V114，F-M5 顺延为 V115），取开 PR 时的下一个空号。
