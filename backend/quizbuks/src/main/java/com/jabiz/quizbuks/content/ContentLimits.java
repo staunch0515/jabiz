@@ -17,6 +17,22 @@ public final class ContentLimits {
      * QuizBankLimits.maxQuestions}), never above this.
      */
     public static final int MAX_QUESTIONS_TECH = 2_000;
+    /**
+     * F-F11a: the technical ceiling of the bytes one import request carries. The business value is the parameter
+     * {@code qb.content.import.batch-bytes} (3 MiB by default, {@code QuizBankLimits.importBatchBytes}), never above
+     * this; it stays below {@code spring.http.codecs.max-in-memory-size} (4 MB) with room for the envelope and the
+     * field names, which the framework refuses a request above before any process sees it.
+     */
+    public static final int IMPORT_BATCH_BYTES_TECH = 3_500_000;
+    /** F-F11a: the smallest value {@code qb.content.import.batch-bytes} counts as (below it a batch could hold no question). */
+    public static final int IMPORT_BATCH_BYTES_MIN = 65_536;
+    /**
+     * F-F11a: how long one read of a bank's questions, options or translations may take. A quiz of
+     * {@link #MAX_QUESTIONS_TECH} questions has ten times the rows of the platform's 5-second default (and, in its
+     * versions' history, several times that); replacing its content (the package's current content over a version, a
+     * bank imported again) reads it whole.
+     */
+    public static final java.time.Duration BANK_QUERY_TIMEOUT = java.time.Duration.ofSeconds(30);
     /** Materials in one quiz. */
     public static final int MAX_MATERIALS = 10;
     /** Options of one question, in a draft; a version needs at least {@link #MIN_OPTIONS}. */

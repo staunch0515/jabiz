@@ -8,6 +8,7 @@ import com.jabiz.query.EntityQuery;
 import com.jabiz.query.QueryPredicate;
 import com.jabiz.quizbuks.QbPermissions;
 import com.jabiz.quizbuks.audience.AudienceCriteria;
+import com.jabiz.quizbuks.content.ContentLimits;
 import com.jabiz.quizbuks.content.QbContent;
 import com.jabiz.quizbuks.content.QuestionImportProcesses;
 import com.jabiz.quizbuks.content.QuizProcesses;
@@ -87,21 +88,26 @@ public final class PackageImportProcesses {
      * @param mode          {@code FULL} or {@code PROFILE}
      * @param batchSize     the questions per batch of a large bank (the console's {@code qb.content.import.batch-size});
      *                      an import gone on with keeps its own
+     * @param batchBytes    the bytes of one request of a large bank (the console's {@code
+     *                      qb.content.import.batch-bytes}, F-F11a); an import gone on with keeps its own; none from an
+     *                      older console
      * @param stepsTotal    how many steps the console planned
      */
     public record StartInput(@NotBlank @Pattern(regexp = "[0-9a-f]{64}") String packageHash,
         @Min(1) @Max(2) int formatVersion, @NotBlank @Pattern(regexp = "FULL|PROFILE") String mode,
         @Min(1) @Max(PackageImportRules.MAX_BATCH) int batchSize,
+        @Min(ContentLimits.IMPORT_BATCH_BYTES_MIN) @Max(ContentLimits.IMPORT_BATCH_BYTES_TECH) Integer batchBytes,
         @Min(1) @Max(PackageImportRules.MAX_STEPS) int stepsTotal) {}
 
     /**
      * An import as the console sees it.
      *
+     * @param batchBytes the bytes of a request the import was planned by; none for an import that started before F-F11a
      * @param done    the steps done, each with what it made
      * @param resumed whether {@value #START} went on with an open import
      */
-    public record ImportView(UUID importId, String mode, String status, int batchSize, int stepsTotal, int stepsDone,
-        Map<String, Map<String, Object>> done, boolean resumed) {}
+    public record ImportView(UUID importId, String mode, String status, int batchSize, Integer batchBytes,
+        int stepsTotal, int stepsDone, Map<String, Map<String, Object>> done, boolean resumed) {}
 
     /** A quiz's topics, set with its content (F-S9). */
     public record QuizTopicsInput(
@@ -241,7 +247,8 @@ public final class PackageImportProcesses {
             values.put("stepsTotal", BigDecimal.valueOf(input.stepsTotal()));
             ctx.changes().update(QbPackageImports.IMPORT, open.id(), open.version(), values);
             ctx.put(OUTPUT, new ImportView(uuid(open.id()), input.mode(), QbPackageImports.RUNNING,
-                number(open.get("batchSize")), input.stepsTotal(), number(open.get("stepsDone")),
+                number(open.get("batchSize")), open.get("batchBytes") == null ? null : number(open.get("batchBytes")),
+                input.stepsTotal(), number(open.get("stepsDone")),
                 PackageImportRules.done(open.get("done")), true));
             return;
         }
@@ -257,6 +264,9 @@ public final class PackageImportProcesses {
         values.put("mode", input.mode());
         values.put("status", QbPackageImports.RUNNING);
         values.put("batchSize", BigDecimal.valueOf(input.batchSize()));
+        if (input.batchBytes() != null) {
+            values.put("batchBytes", BigDecimal.valueOf(input.batchBytes()));
+        }
         values.put("stepsTotal", BigDecimal.valueOf(input.stepsTotal()));
         values.put("stepsDone", BigDecimal.ZERO);
         values.put("done", PackageImportRules.json(Map.of()));
@@ -264,7 +274,7 @@ public final class PackageImportProcesses {
         values.put("updatedAt", ctx.opTime());
         Object importId = ctx.changes().insert(QbPackageImports.IMPORT, values);
         ctx.put(OUTPUT, new ImportView(uuid(importId), input.mode(), QbPackageImports.RUNNING, input.batchSize(),
-            input.stepsTotal(), 0, Map.of(), false));
+            input.batchBytes(), input.stepsTotal(), 0, Map.of(), false));
     }
 
     // ---- step ------------------------------------------------------------------------------------------------------

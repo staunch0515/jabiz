@@ -291,6 +291,46 @@ class PackageImportIT extends TreeItSupport {
     }
 
     @Test
+    void theBytesOfARequestAreKeptWithTheImportAndAnOlderRecordGoesOnByTheQuestionCount() {
+        // F-F11a: the plan of a large bank (its batches' number) is kept with the import, so that going on cuts it as the
+        // first run did even after the parameter was changed.
+        String token = sponsorToken(newSponsor(unique("s-ff11-bytes")));
+        Map<String, Object> started = run(PackageImportProcesses.START, token, body("packageHash", HASH_A,
+            "formatVersion", 2, "mode", "FULL", "batchSize", 200, "batchBytes", 3_000_000, "stepsTotal", 5));
+        assertThat(started).containsEntry("batchSize", 200).containsEntry("batchBytes", 3_000_000)
+            .containsEntry("resumed", false);
+        assertThat(record(started.get("importId"))).containsEntry("batch_bytes", new java.math.BigDecimal("3000000"));
+
+        try {
+            setParam(com.jabiz.quizbuks.setup.QbParams.CONTENT_IMPORT_BATCH_BYTES, "70000");
+            setParam(com.jabiz.quizbuks.setup.QbParams.CONTENT_IMPORT_BATCH, "3");
+            // Going on answers what the import started with, whatever the console now plans or the parameters now say.
+            Map<String, Object> resumed = run(PackageImportProcesses.START, token, body("packageHash", HASH_A,
+                "formatVersion", 2, "mode", "FULL", "batchSize", 3, "batchBytes", 70_000, "stepsTotal", 9));
+            assertThat(resumed).containsEntry("resumed", true).containsEntry("batchSize", 200)
+                .containsEntry("batchBytes", 3_000_000).containsEntry("stepsTotal", 9);
+            assertThat(record(started.get("importId"))).containsEntry("batch_bytes", new java.math.BigDecimal("3000000"));
+        } finally {
+            setParam(com.jabiz.quizbuks.setup.QbParams.CONTENT_IMPORT_BATCH_BYTES, "3145728");
+            setParam(com.jabiz.quizbuks.setup.QbParams.CONTENT_IMPORT_BATCH, "200");
+        }
+
+        // An import that started without them (older console, older record) goes on without error and without bytes.
+        String oldToken = sponsorToken(newSponsor(unique("s-ff11-old")));
+        Object oldId = start(oldToken, HASH_B, "FULL", 4).get("importId");
+        assertThat(record(oldId)).containsEntry("batch_bytes", null);
+        Map<String, Object> goneOn = run(PackageImportProcesses.START, oldToken, body("packageHash", HASH_B,
+            "formatVersion", 2, "mode", "FULL", "batchSize", 2, "batchBytes", 3_000_000, "stepsTotal", 4));
+        assertThat(goneOn).containsEntry("resumed", true).containsEntry("batchSize", 2)
+            .containsEntry("batchBytes", null);
+
+        // The field takes the technical limits only.
+        assertThat(codes(refused(PackageImportProcesses.START, sponsorToken(newSponsor(unique("s-ff11-range"))),
+            body("packageHash", HASH_A, "formatVersion", 2, "mode", "FULL", "batchSize", 2, "batchBytes", 3_500_001,
+                "stepsTotal", 1), 400))).isNotEmpty();
+    }
+
+    @Test
     void recordsPastTheirRetentionAreDeleted() {
         String old = sponsorToken(newSponsor(unique("s-fc4-old")));
         String fresh = sponsorToken(newSponsor(unique("s-fc4-fresh")));

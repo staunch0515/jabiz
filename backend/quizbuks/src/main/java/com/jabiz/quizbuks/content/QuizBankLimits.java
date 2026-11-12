@@ -17,7 +17,7 @@ public final class QuizBankLimits {
      * counts as its declared value ({@link QbParams#defaultOf}), so a deployment before {@code QB_SETUP} keeps working.
      */
     public static final String[] PARAMS = {QbParams.CONTENT_MAX_QUESTIONS, QbParams.PLAY_MAX_PER_ATTEMPT,
-        QbParams.CONTENT_IMPORT_BATCH};
+        QbParams.CONTENT_IMPORT_BATCH, QbParams.CONTENT_IMPORT_BATCH_BYTES};
 
     private QuizBankLimits() {}
 
@@ -34,6 +34,15 @@ public final class QuizBankLimits {
     /** The most questions one import batch adds. */
     public static int importBatch(ParamValues params) {
         return clamp(read(params, QbParams.CONTENT_IMPORT_BATCH), ContentLimits.MAX_QUESTIONS_TECH);
+    }
+
+    /**
+     * F-F11a: the most bytes of one import request's body, which the page cuts a large bank by (besides the question
+     * count); between {@link ContentLimits#IMPORT_BATCH_BYTES_MIN} and {@link ContentLimits#IMPORT_BATCH_BYTES_TECH}.
+     */
+    public static int importBatchBytes(ParamValues params) {
+        return Math.clamp(read(params, QbParams.CONTENT_IMPORT_BATCH_BYTES), ContentLimits.IMPORT_BATCH_BYTES_MIN,
+            ContentLimits.IMPORT_BATCH_BYTES_TECH);
     }
 
     private static int read(ParamValues params, String key) {
