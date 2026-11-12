@@ -152,7 +152,7 @@ public final class PublicationLifecycle {
                 // Q87b: the fee gate's switches; not published yet reads as before (no gate), like the cash account's.
                 .step("Load the fee switches", LoadParams.<ProcessContext>optional(ProcessContext::opTime, FEE_PARAMS,
                     QbParams.FEE_OVERDUE_BLOCK, QbParams.FEE_DEFAULT_BILLING_MODE, QbParams.AUDIENCE_BILLING_ENABLED,
-                    QbParams.FEE_TAX_RATE))
+                    QbParams.FEE_TAX_RATE, QbParams.DISTRIBUTION_BILLING_ENABLED))
                 // Q87 (D-Q87-5): unpaid platform fees beyond what the sponsor's billing allows stop a submission.
                 .steps(b -> com.jabiz.quizbuks.fee.FeeGate.load(b, ctx -> ctx.request().actorId()))
                 .steps(PublicationEditing::loadTiers)

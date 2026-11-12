@@ -163,6 +163,49 @@ public class FeeConfig {
             .maxItems(maxItems);
     }
 
+    /** F-M6: the operators' distribution prices and the publications' settlements. */
+    @Bean
+    EntityDefinition qbDistributionPriceEntity() {
+        return QbDistributions.PRICE_ENTITY;
+    }
+
+    @Bean
+    DatasetDefinition qbDistributionPriceDataset() {
+        return processOnly(QbDistributions.PRICE);
+    }
+
+    @Bean
+    EntityDefinition qbDistributionSettlementEntity() {
+        return QbDistributions.SETTLEMENT_ENTITY;
+    }
+
+    @Bean
+    DatasetDefinition qbDistributionSettlementDataset() {
+        return processOnly(QbDistributions.SETTLEMENT);
+    }
+
+    @Bean
+    DatasetDefinition qbSponsorDistributionSettlementDataset() {
+        return own(QbDistributions.SPONSOR_SETTLEMENTS, QbDistributions.SETTLEMENT);
+    }
+
+    @Bean
+    ProcessDefinition<DistributionPrices.PriceInput, DistributionPrices.PriceOutput, ProcessContext>
+        qbDistributionPriceSet() {
+        return DistributionPrices.set();
+    }
+
+    @Bean
+    ProcessDefinition<DistributionPrices.PriceInput, DistributionPrices.PriceOutput, ProcessContext>
+        qbOperatorDistributionPriceSet() {
+        return DistributionPrices.operatorSet();
+    }
+
+    @Bean
+    RetentionPolicy qbDistributionSettlementRetention() {
+        return RetentionPolicy.of(QbDistributions.SETTLEMENT).keep(RETENTION).from("settledAt").afterFiscalYearEnd();
+    }
+
     @Bean
     RetentionPolicy qbPrepaymentRetention() {
         return RetentionPolicy.of(QbPrepayments.PREPAYMENT).keep(RETENTION).from("frozenAt").afterFiscalYearEnd();
@@ -274,7 +317,8 @@ public class FeeConfig {
         return StaticDictionary.define(QbFees.KIND_DICTIONARY, d -> d
             .item(FeeRules.MONTHLY, "en", "Monthly fee", "zh", "月费", "ja", "月額料金")
             .item(FeeRules.MANUAL, "en", "Fee charged by hand", "zh", "手工记费", "ja", "手動の料金")
-            .item(FeeRules.AUDIENCE, "en", "Audience rules", "zh", "受众规则费", "ja", "対象者ルール料"));
+            .item(FeeRules.AUDIENCE, "en", "Audience rules", "zh", "受众规则费", "ja", "対象者ルール料")
+            .item(FeeRules.DISTRIBUTION, "en", "Distribution fee", "zh", "配送费", "ja", "配信料"));
     }
 
     @Bean

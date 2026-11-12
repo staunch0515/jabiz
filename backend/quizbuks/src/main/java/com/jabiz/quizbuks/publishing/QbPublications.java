@@ -170,6 +170,10 @@ public final class QbPublications {
         // to its draft); F-M5: what its submission set aside for its fees (none: nothing).
         eb.field("billingOperatorId", f -> f.physicalColumn("billing_operator_id").processOnly().asText(36));
         eb.field("prepaymentTotal", f -> f.physicalColumn("prepayment_total").processOnly().asMonetary("JPY", 0));
+        // F-M6: the distribution fee's price per start, frozen at the submission (none: no distribution fee), and
+        // whether it is the operator's floor.
+        eb.field("distributionUnit", f -> f.physicalColumn("distribution_unit").processOnly().asNumeric(19, 4));
+        eb.field("distributionAtFloor", f -> f.physicalColumn("distribution_at_floor").processOnly().asBool());
         eb.field("fullScore", f -> f.physicalColumn("full_score").processOnly().asNumeric(7, 0));
         eb.field("maxReward", f -> f.physicalColumn("max_reward").processOnly().asMonetary("JPY", 0));
         eb.field("maxSpend", f -> f.physicalColumn("max_spend").processOnly().asMonetary("JPY", 0));

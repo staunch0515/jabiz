@@ -72,7 +72,12 @@ public final class FirstLaunchSwitches {
             "no publication offers a Kudos reward at the launch (declared on: today's behaviour)"),
         active(QbParams.REWARD_DEFAULT_METHODS, "kudos", "", null),
         // The charge groups of F-M: their rows turn ACTIVE in the pull request that adds the key (F-F10 plan, 2).
-        waiting("qb.distribution.billing.enabled", "distribution", true, "F-M6"),
+        // F-M6: on at the launch once the requester has confirmed the floor of the price per start (its least value
+        // qb.distribution.unit-floor.min is a placeholder, 1 yen); the operators' prices are their own (no row).
+        active(QbParams.DISTRIBUTION_BILLING_ENABLED, "distribution", true,
+            "publications pay the distribution fee at the launch (declared off: the tests rely on it); the requester "
+                + "confirms qb.distribution.unit-floor.min before the proposal is published"),
+        keep(QbParams.DISTRIBUTION_UNIT_FLOOR_MIN, "distribution"),
         waiting(QbParams.AUDIENCE_BILLING_ENABLED, "audience", true, "F-M7"),
         waiting("qb.exposure.billing.enabled", "exposure", true, "F-M8"),
         waiting("qb.ai.fee.enabled", "aifee", true, "F-M9"),
