@@ -1390,6 +1390,35 @@ describe('the question bank (F-S6b)', () => {
       await expectAccessible()
     })
 
+  it('says what a batch takes by questions and bytes, from the numbers the server gives (F-F11b)', async () => {
+    server({ limits: { maxQuestions: 1000, maxPerAttempt: 100, importBatch: 2, importBatchBytes: 3_145_728 },
+      processes: { QB_QUIZ_IMPORT_CHECK: [CHECKED] } })
+    render(<App />)
+    await userEvent.click(await screen.findByTestId('tab-questions'))
+    await waitFor(() => expect(screen.getByTestId('bank-import')).toBeEnabled())
+    await userEvent.upload(screen.getByTestId('bank-import-file'), new File([JSON.stringify(FILE)], 'beans.json',
+      { type: 'application/json' }))
+    expect(await screen.findByTestId('sponsor-bank-batch-info'))
+      .toHaveTextContent('A batch takes at most 2 questions or 3 MB, whichever comes first.')
+    expect(screen.getByTestId('bank-import-summary')).toHaveTextContent('3 questions in 2 batches')
+    expect(screen.queryByTestId('bank-import-too-large')).toBeNull()
+    expect(screen.getByTestId('bank-import-confirm')).toBeEnabled()
+  })
+
+  it('names the questions too large for one request and does not start (F-F11b)', async () => {
+    const { processCalls } = server({ limits: { maxQuestions: 1000, maxPerAttempt: 100, importBatch: 2,
+      importBatchBytes: 100 }, processes: { QB_QUIZ_IMPORT_CHECK: [CHECKED] } })
+    render(<App />)
+    await userEvent.click(await screen.findByTestId('tab-questions'))
+    await waitFor(() => expect(screen.getByTestId('bank-import')).toBeEnabled())
+    await userEvent.upload(screen.getByTestId('bank-import-file'), new File([JSON.stringify(FILE)], 'beans.json',
+      { type: 'application/json' }))
+    expect(await screen.findByTestId('bank-import-too-large')).toHaveTextContent('Question 1, 2, 3 alone takes more than')
+    expect(screen.getByTestId('bank-import-confirm')).toBeDisabled()
+    expect(processCalls('QB_QUIZ_IMPORT_QUESTIONS')).toHaveLength(0)
+    await expectAccessible()
+  })
+
   it('stops at a refused batch, saying which and why; the batches before it stay', async () => {
     server({ limits: { maxQuestions: 1000, maxPerAttempt: 100, importBatch: 2 },
       processes: { QB_QUIZ_IMPORT_CHECK: [CHECKED], QB_QUIZ_IMPORT_QUESTIONS: [imported(8, 2),

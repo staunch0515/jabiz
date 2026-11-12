@@ -933,13 +933,15 @@ export interface BankLimits {
   maxPerAttempt: number
   /** The most questions one import batch adds. */
   importBatch: number
+  /** F-F11a/b: the most bytes one import request takes (the batches are cut by it too); 0: not given (an older server). */
+  importBatchBytes: number
 }
 
 export async function readBankLimits(): Promise<BankLimits> {
   const page = await runQuery<Row>(CONTENT_TEMPLATE.quizLimits, { limit: 1 })
   const row = page.items[0] ?? {}
   return { maxQuestions: num(row.maxQuestions), maxPerAttempt: num(row.maxPerAttempt),
-    importBatch: num(row.importBatch) }
+    importBatch: num(row.importBatch), importBatchBytes: num(row.importBatchBytes) }
 }
 
 /**
