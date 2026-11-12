@@ -193,7 +193,7 @@ export function ProfileTransfer({ controls, onExporting }: {
     setState({ kind: 'importing', done: 0, total: plan.files.length })
     try {
       await importProfile(document, plan, password, (done, total) => setState({ kind: 'importing', done, total }),
-        linked)
+        linked, site?.draft.aiJobId)
       setState(null)
       notify.success(t('profile.transfer.imported'))
       await queryClient.invalidateQueries({ queryKey: ['qb'] })

@@ -105,6 +105,8 @@ function server(options: Options = {}) {
         return json(200, { output: { aiJobId: 'j1', status: 'CANCELLED' } })
       case '/api/processes/QB_PROFILE_IMPORT_CHECK/latest':
         return json(200, { output: { plan: PLAN } })
+      case '/api/processes/QB_PROFILE_IMPORT/latest':
+        return json(200, { output: { plan: PLAN } })
       default:
         return json(404, {})
     }
@@ -298,6 +300,16 @@ describe('reviewing the draft', () => {
     expect(dropped).toHaveTextContent('About you: a person\'s e-mail address, phone number or social account was removed')
     expect(dropped).toHaveTextContent('Product 2: Price is not a number')
     await expectAccessible()
+  })
+
+  it('names the draft when it imports, so that its request to review is closed with it', async () => {
+    const { calls, confirmation } = await review()
+    await userEvent.click(within(confirmation).getByTestId('site-handle-aini-2'))
+    await waitFor(() => expect(within(screen.getByTestId('profile-import-dialog')).getByTestId('profile-import-confirm'))
+      .toBeEnabled())
+    await userEvent.click(within(screen.getByTestId('profile-import-dialog')).getByTestId('profile-import-confirm'))
+    await waitFor(() => expect(calls.of('/api/processes/QB_PROFILE_IMPORT/latest')).toHaveLength(1))
+    expect(calls.of('/api/processes/QB_PROFILE_IMPORT/latest')[0]).toMatchObject({ siteDraftId: 'j1' })
   })
 
   it('holds the import back while the drafted link name is another Sponsor\'s, and checks again with the chosen one', async () => {

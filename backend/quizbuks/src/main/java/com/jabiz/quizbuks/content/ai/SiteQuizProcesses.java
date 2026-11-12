@@ -145,6 +145,23 @@ public final class SiteQuizProcesses {
         document.put("format", QuizFileFormat.FORMAT);
         document.put("formatVersion", QuizFileFormat.CURRENT);
         document.put("quiz", quiz);
+        // The other languages the sponsor asked for: the quiz's title and introduction in each (fixed wording with the
+        // company's name, not the AI's); the articles and questions stay in the base language until translated in the
+        // quiz editor, which has the AI translation for that.
+        Map<String, Object> translations = new LinkedHashMap<>();
+        if (params.get("languages") instanceof List<?> asked) {
+            for (Object other : asked) {
+                if (other instanceof String code && !code.equals(language) && TITLES.containsKey(code)) {
+                    String name = company(stored.path("profile"), code);
+                    translations.put(code, Map.of("texts", Map.of(
+                        "title", clip(TITLES.get(code).formatted(name), com.jabiz.quizbuks.content.ContentLimits.TITLE_LENGTH),
+                        "intro", INTROS.get(code).formatted(name))));
+                }
+            }
+        }
+        if (!translations.isEmpty()) {
+            document.put("translations", translations);
+        }
         document.put("materials", articles);
         document.put("questions", List.of());
         document.put("files", Map.of());

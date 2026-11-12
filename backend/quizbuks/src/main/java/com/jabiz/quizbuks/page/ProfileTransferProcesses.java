@@ -111,9 +111,17 @@ public final class ProfileTransferProcesses {
     /**
      * @param files        the id of each file uploaded for the package (or downloaded for a link of it, F-C6), by its path
      * @param mailPassword the mail server's password; none keeps the stored one when the server is the same
+     * @param siteDraftId  F-C7c: the website draft the package came from; its request to review is closed once the
+     *                     package is imported (only the caller's own draft counts)
      */
     public record ImportInput(@NotNull Map<String, Object> document, Map<String, UUID> files,
-        @Sensitive String mailPassword) {
+        @Sensitive String mailPassword, UUID siteDraftId) {
+
+        /** As before F-C7c: a package that did not come from a website draft. */
+        public ImportInput(Map<String, Object> document, Map<String, UUID> files, String mailPassword) {
+            this(document, files, mailPassword, null);
+        }
+
         @Override
         public String toString() {
             return "ImportInput[files=" + files + "]";
@@ -170,6 +178,11 @@ public final class ProfileTransferProcesses {
                 pb.step("Save the mail server", CallProcess.<ProcessContext>when(
                     ctx -> doing(ctx).mailServer().equals(SAVE), MailServerProcesses.SET, 1,
                     ProfileTransferProcesses::mailInput, null));
+                pb.step("Close the request to review the draft", CallProcess.<ProcessContext>when(
+                    ctx -> ctx.get(INPUT, ImportInput.class).siteDraftId() != null,
+                    com.jabiz.quizbuks.content.ai.SiteProfileProcesses.REVIEW_DONE, 1,
+                    ctx -> new com.jabiz.quizbuks.content.ai.SiteProfileProcesses.ReviewRef(
+                        String.valueOf(ctx.get(INPUT, ImportInput.class).siteDraftId())), null));
             });
     }
 

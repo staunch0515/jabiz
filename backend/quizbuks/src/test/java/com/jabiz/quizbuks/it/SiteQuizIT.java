@@ -68,8 +68,12 @@ class SiteQuizIT extends AiItSupport {
     }
 
     private Object readyDraft(String token) {
+        return readyDraft(token, List.of());
+    }
+
+    private Object readyDraft(String token, List<String> others) {
         Object aiJobId = run(SiteProfileProcesses.REQUEST, token, body("siteAddress", "https://www.aini.example/",
-            "language", "ja", "otherLanguages", List.of(), "rightsDeclared", true,
+            "language", "ja", "otherLanguages", others, "rightsDeclared", true,
             "aiNoticeVersionNo", noticeVersion())).get("aiJobId");
         runJobs();
         assertThat(job(aiJobId)).containsEntry("status", QbAi.READY);
@@ -254,5 +258,18 @@ class SiteQuizIT extends AiItSupport {
         } finally {
             setParam(QbParams.SITE_PROFILE_MATERIALS_MAX, "5");
         }
+    }
+
+    @Test
+    void theOtherLanguagesAskedForGetTheQuizsTitleAndIntroductionInThem() {
+        String token = sponsorFull(newSponsor("site-quiz-l-" + UUID.randomUUID()));
+        Object aiJobId = readyDraft(token, List.of("en"));
+        String quizId = String.valueOf(run(SiteQuizProcesses.QUIZ, token, body("aiJobId", aiJobId)).get("quizId"));
+        Map<String, Object> quiz = latest("qb_quiz_version", "quiz_id", "quiz_id = '" + quizId + "'").getFirst();
+        assertThat(quiz).containsEntry("title", "Aini Inc.を知ろう");
+        assertThat(String.valueOf(quiz.get("translation_languages"))).contains("en");
+        assertThat(latest("qb_content_translation_version", "translation_id", "quiz_id = '" + quizId + "'"))
+            .extracting(row -> row.get("language") + ":" + row.get("element_key") + ":" + row.get("text"))
+            .contains("en:quiz.title:Get to know Aini Inc.");
     }
 }

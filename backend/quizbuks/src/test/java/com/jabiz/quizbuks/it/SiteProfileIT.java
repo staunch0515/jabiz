@@ -420,6 +420,37 @@ class SiteProfileIT extends AiItSupport {
     }
 
     @Test
+    @SuppressWarnings("unchecked")
+    void importingTheDraftClosesItsRequestToReviewAsDoneAndNobodyElsesIsTouched() {
+        answerWith(DRAFT.replace("\"handle\": \"aini\"", "\"handle\": \"site-"
+            + UUID.randomUUID().toString().substring(0, 8) + "\""));
+        String sponsor = newSponsor("site-done-" + UUID.randomUUID());
+        String token = sponsorFull(sponsor);
+        Object mine = run(SiteProfileProcesses.REQUEST, token, ask(token, "https://www.aini.example/", true)).get("aiJobId");
+        String other = sponsorFull(newSponsor("site-done-b-" + UUID.randomUUID()));
+        answerWith(DRAFT.replace("\"handle\": \"aini\"", "\"handle\": \"site-"
+            + UUID.randomUUID().toString().substring(0, 8) + "\""));
+        Object theirs = run(SiteProfileProcesses.REQUEST, other, ask(other, "https://www.aini.example/", true)).get("aiJobId");
+        runJobs();
+        assertThat(tasksOf("site-profile:" + mine)).singleElement().satisfies(task -> assertThat(task).containsEntry("status", "OPEN"));
+
+        Map<String, Object> profile = (Map<String, Object>) JSON.readValue(
+            String.valueOf(job(mine).get("candidates")), Map.class).get("profile");
+        Map<String, Object> document = new java.util.LinkedHashMap<>(profile);
+        Map<String, Object> basics = new java.util.LinkedHashMap<>((Map<String, Object>) profile.get("basics"));
+        basics.put("contactName", "Ann");
+        document.put("basics", basics);
+        // Naming somebody else's draft closes nothing of theirs.
+        run(com.jabiz.quizbuks.page.ProfileTransferProcesses.IMPORT, token, body("document", document, "siteDraftId", theirs));
+        assertThat(tasksOf("site-profile:" + theirs)).singleElement().satisfies(task -> assertThat(task).containsEntry("status", "OPEN"));
+        assertThat(tasksOf("site-profile:" + mine)).singleElement().satisfies(task -> assertThat(task).containsEntry("status", "OPEN"));
+        // Naming one's own does.
+        run(com.jabiz.quizbuks.page.ProfileTransferProcesses.IMPORT, token, body("document", document, "siteDraftId", mine));
+        assertThat(tasksOf("site-profile:" + mine)).singleElement().satisfies(task -> assertThat(task).containsEntry("status", "DONE"));
+        assertThat(tasksOf("site-profile:" + theirs)).singleElement().satisfies(task -> assertThat(task).containsEntry("status", "OPEN"));
+    }
+
+    @Test
     void aReadThatTimedOutIsNotTriedAgainAndIsChargedOnce() {
         String sponsor = newSponsor("site-slow-" + UUID.randomUUID());
         String token = sponsorFull(sponsor);
