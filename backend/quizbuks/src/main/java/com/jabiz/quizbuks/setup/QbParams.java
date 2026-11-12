@@ -179,8 +179,6 @@ public final class QbParams {
     public static final String CONVERSATION_CLOSE_DAYS = "qb.conversation.close-days";
     /** Q47c: whether publications pay for the audience rules they use (controlled; off: everything is free). */
     public static final String AUDIENCE_BILLING_ENABLED = "qb.audience.billing.enabled";
-    /** Q47c: how a sponsor whose operator has no price list is priced: {@code DIRECT} (headquarters' list) or {@code FREE}. */
-    public static final String AUDIENCE_PRICE_FALLBACK = "qb.audience.price.fallback";
     /** Q47c: whether the unused days are refunded when a publication ends early (Q47c-2 charges; controlled). */
     public static final String AUDIENCE_REFUND_UNUSED_DAYS = "qb.audience.fee.refund-unused-days";
     /**
@@ -219,6 +217,35 @@ public final class QbParams {
     public static final String FEE_CREDIT_EXPIRY_NOTICE_DAYS = "qb.fee-credit.expiry-notice-days";
     /** F-M3: how many hours the link that proves a company's mailbox stays good (ordinary; 1 to 168). */
     public static final String VERIFICATION_LINK_HOURS = "qb.sponsor-verification.link-hours";
+    /** F-M5 (M3 of its review): days after its end an open prepayment is a difference of the daily check. */
+    public static final String PREPAYMENT_RELEASE_OVERDUE_DAYS = "qb.prepayment.release.overdue-days";
+    /**
+     * F-M6 (docs/quizbuks/plans/impl/F-M.md §9): the distribution fee. Whether a submission sets its deposit aside and
+     * freezes its price per start (read at the submission only: turning it off does not touch what was submitted);
+     * the headquarters' range of the operators' prices (the rate in yen per Kudos of the highest tier, the floor and
+     * ceiling of the price per start, the least deposit); how long after its end a publication's final settlement
+     * waits (the starts in its start lock by then are committed); after how many hours of a month a publication
+     * still unsettled for the month before, or one ended without its final settlement, is reported. All controlled.
+     */
+    public static final String DISTRIBUTION_BILLING_ENABLED = "qb.distribution.billing.enabled";
+    public static final String DISTRIBUTION_RATE_MIN = "qb.distribution.rate.min";
+    public static final String DISTRIBUTION_RATE_MAX = "qb.distribution.rate.max";
+    public static final String DISTRIBUTION_UNIT_FLOOR_MIN = "qb.distribution.unit-floor.min";
+    public static final String DISTRIBUTION_UNIT_FLOOR_MAX = "qb.distribution.unit-floor.max";
+    public static final String DISTRIBUTION_UNIT_CEILING_MAX = "qb.distribution.unit-ceiling.max";
+    public static final String DISTRIBUTION_MINIMUM_DEPOSIT_MAX = "qb.distribution.minimum-deposit.max";
+    public static final String DISTRIBUTION_FINAL_END_GRACE_SEC = "qb.distribution.final.end-grace-sec";
+    public static final String DISTRIBUTION_UNSETTLED_AFTER_HOURS = "qb.distribution.unsettled-after-hours";
+    public static final String DISTRIBUTION_FINAL_MISSING_AFTER_HOURS = "qb.distribution.final-missing-after-hours";
+    /** The headquarters' range of the operators' distribution prices, in the order the price check reads them. */
+    public static final List<String> DISTRIBUTION_RANGE = List.of(DISTRIBUTION_RATE_MIN, DISTRIBUTION_RATE_MAX,
+        DISTRIBUTION_UNIT_FLOOR_MIN, DISTRIBUTION_UNIT_FLOOR_MAX, DISTRIBUTION_UNIT_CEILING_MAX,
+        DISTRIBUTION_MINIMUM_DEPOSIT_MAX);
+    /** The controlled ones, in the order of {@link #CONTROLLED} (before {@link #REWARD_KUDOS}). */
+    public static final List<String> DISTRIBUTION_CONTROLLED = java.util.stream.Stream.of(
+        List.of(DISTRIBUTION_BILLING_ENABLED), DISTRIBUTION_RANGE, List.of(DISTRIBUTION_FINAL_END_GRACE_SEC,
+            DISTRIBUTION_UNSETTLED_AFTER_HOURS, DISTRIBUTION_FINAL_MISSING_AFTER_HOURS))
+        .flatMap(List::stream).toList();
     /** The cap's kind, which the controlled change that first sets it gives (yen, whole). */
     public static final Map<String, Object> FEE_CREDIT_MANUAL_MAX_KIND = Map.of("type", "monetary", "currency", "JPY",
         "scale", 0);
@@ -249,6 +276,11 @@ public final class QbParams {
     public static final String PLAY_MAX_PER_ATTEMPT = "qb.play.max-questions-per-attempt";
     /** F-S6: the most questions one import batch adds to a quiz (not controlled). */
     public static final String CONTENT_IMPORT_BATCH = "qb.content.import.batch-size";
+    /**
+     * F-F11a: the most bytes of one import request's body (not controlled; from ContentLimits.IMPORT_BATCH_BYTES_MIN
+     * to ContentLimits.IMPORT_BATCH_BYTES_TECH): the page cuts a large bank by it as well as by the question count.
+     */
+    public static final String CONTENT_IMPORT_BATCH_BYTES = "qb.content.import.batch-bytes";
     /** F-S2: the most items (nodes and the pass) one node's condition names, at every level (not controlled). */
     public static final String TREE_MAX_CONDITIONS = "qb.tree.max-conditions-per-node";
     /** F-S2: the longest chain of nodes naming nodes, which bounds the lighting's chained evaluation (not controlled). */
@@ -350,10 +382,13 @@ public final class QbParams {
     public static final String JOURNAL_ACCOUNT_2190 = JOURNAL_ACCOUNT_PREFIX + "2190";
     /** F-M2: the promotion expenses of the platform fee Kudos granted. */
     public static final String JOURNAL_ACCOUNT_5140 = JOURNAL_ACCOUNT_PREFIX + "5140";
+    /** F-M5: the platform fee prepayments. */
+    public static final String JOURNAL_ACCOUNT_2180 = JOURNAL_ACCOUNT_PREFIX + "2180";
     public static final List<String> JOURNAL_ACCOUNTS = List.of(JOURNAL_ACCOUNT_1110, JOURNAL_ACCOUNT_1120,
         JOURNAL_ACCOUNT_2110, JOURNAL_ACCOUNT_2120, JOURNAL_ACCOUNT_2130, JOURNAL_ACCOUNT_4110, JOURNAL_ACCOUNT_5110,
         JOURNAL_ACCOUNT_5120, JOURNAL_ACCOUNT_2140, JOURNAL_ACCOUNT_5130, JOURNAL_ACCOUNT_2160, JOURNAL_ACCOUNT_1130,
-        JOURNAL_ACCOUNT_4120, JOURNAL_ACCOUNT_2150, JOURNAL_ACCOUNT_2170, JOURNAL_ACCOUNT_2190, JOURNAL_ACCOUNT_5140);
+        JOURNAL_ACCOUNT_4120, JOURNAL_ACCOUNT_2150, JOURNAL_ACCOUNT_2170, JOURNAL_ACCOUNT_2190, JOURNAL_ACCOUNT_5140,
+        JOURNAL_ACCOUNT_2180);
 
     /*
      * The issuer of the top-up receipts (Q9d, F-09, D-4): the operator's name, address and registration number as the
@@ -366,7 +401,7 @@ public final class QbParams {
     public static final List<String> ISSUER = List.of(ISSUER_NAME, ISSUER_ADDRESS, ISSUER_REGISTRATION_NO);
 
     /** Q47c: the audience rules' charging (controlled, last, in this order). */
-    public static final List<String> AUDIENCE_BILLING_PARAMS = List.of(AUDIENCE_BILLING_ENABLED, AUDIENCE_PRICE_FALLBACK,
+    public static final List<String> AUDIENCE_BILLING_PARAMS = List.of(AUDIENCE_BILLING_ENABLED,
         AUDIENCE_REFUND_UNUSED_DAYS);
 
 
@@ -535,7 +570,7 @@ public final class QbParams {
         OPERATOR_PLANS, OPERATOR_WITHDRAWAL, List.of(TOPUP_BANK_MIN, TOPUP_BANK_MAX), BANK_RECEIVING, WITHDRAWAL_BANK, AUDIENCE_BILLING_PARAMS,
         CASH_ACCOUNT_PARAMS, FEE_PARAMS,
         List.of(ENTRY_FEE_ENABLED), List.of(USAGE_FREE_BYTES), List.of(VIDEO_MAINLAND_SITES), HELP_CONTROLLED, FEE_CREDIT_PARAMS,
-        SITE_PROFILE_CONTROLLED, REWARD_KUDOS)
+        SITE_PROFILE_CONTROLLED, DISTRIBUTION_CONTROLLED, REWARD_KUDOS)
         .flatMap(List::stream).toList();
 
     /** A parameter: its key, kind (as the platform writes kinds) and first value. */
@@ -551,6 +586,9 @@ public final class QbParams {
     private static final Map<String, Object> TOKENS = Map.of("type", "numeric", "precision", 12, "scale", 0);
     private static final Map<String, Object> USD = Map.of("type", "numeric", "precision", 8, "scale", 4);
     /** An account code of the accounting system: at most 20 characters (letters, digits, {@code . _ -}). */
+    /** F-M6: a rate or a price per start, in yen with four decimals. */
+    public static final Map<String, Object> DISTRIBUTION_RATE_KIND = Map.of("type", "numeric", "precision", 12,
+        "scale", 4);
     private static final Map<String, Object> ACCOUNT_CODE = Map.of("type", "text", "maxLength", 20);
 
     public static final List<Param> ALL = List.of(
@@ -599,6 +637,7 @@ public final class QbParams {
         journal(JOURNAL_ACCOUNT_2170, "2170 Entry fees unsettled"),
         journal(JOURNAL_ACCOUNT_2190, "2190 Sponsor platform fee Kudos"),
         journal(JOURNAL_ACCOUNT_5140, "5140 Promotion expenses (platform fee Kudos)"),
+        journal(JOURNAL_ACCOUNT_2180, "2180 Platform fee prepayments"),
         new Param(ISSUER_NAME, Map.of("type", "text", "maxLength", 200), "",
             "Name of the operator issuing the top-up receipts"),
         new Param(ISSUER_ADDRESS, Map.of("type", "text", "maxLength", 500), "",
@@ -696,9 +735,6 @@ public final class QbParams {
             "Hours after a bank account is saved or changed before anything may be withdrawn to it"),
         // Q47c: the audience rules' charging (controlled, last, in the order of AUDIENCE_BILLING_PARAMS).
         new Param(AUDIENCE_BILLING_ENABLED, BOOL, false, "Whether publications pay for the audience rules they use"),
-        new Param(AUDIENCE_PRICE_FALLBACK, Map.of("type", "code", "dictUrn", "urn:jabiz:dict:quizbuks:audience-fallback",
-            "allowedValues", List.of("DIRECT", "FREE")), "DIRECT",
-            "How sponsors of an operator without a price list are priced: headquarters' list, or free"),
         new Param(AUDIENCE_REFUND_UNUSED_DAYS, BOOL, false,
             "Whether the unused days of the audience rules are refunded when a publication ends early"),
         // Q87a: the cash account (controlled, last, in the order of CASH_ACCOUNT_PARAMS). The defaults keep what was:
@@ -901,13 +937,48 @@ public final class QbParams {
             "Whether sponsors may ask the AI to draft a profile package and a quiz from their website"),
         new Param(SITE_PROFILE_MONTHLY, Map.of("type", "numeric", "precision", 3, "scale", 0), "10",
             "How many times a sponsor may ask the AI to draft from their website a month"),
+        // F-M6: the distribution fee (controlled, before the Kudos reward switch: that one stays the last proposal).
+        new Param(DISTRIBUTION_BILLING_ENABLED, BOOL, false,
+            "Whether a publication's submission freezes its price per start and sets its distribution fee's deposit "
+                + "aside (read at the submission only; publications submitted while on are settled to their end)"),
+        new Param(DISTRIBUTION_RATE_MIN, DISTRIBUTION_RATE_KIND, "0.0000",
+            "The least rate an operator may set: yen per start for each Kudos of the publication's highest tier"),
+        new Param(DISTRIBUTION_RATE_MAX, DISTRIBUTION_RATE_KIND, "1.0000",
+            "The highest rate an operator may set: yen per start for each Kudos of the publication's highest tier"),
+        new Param(DISTRIBUTION_UNIT_FLOOR_MIN, DISTRIBUTION_RATE_KIND, "1.0000",
+            "The least floor of the price per start an operator may set, in yen (a placeholder: confirmed by the "
+                + "requester before qb.distribution.billing.enabled is turned on; a tier set too low lands on it)"),
+        new Param(DISTRIBUTION_UNIT_FLOOR_MAX, DISTRIBUTION_RATE_KIND, "100.0000",
+            "The highest floor of the price per start an operator may set, in yen"),
+        new Param(DISTRIBUTION_UNIT_CEILING_MAX, DISTRIBUTION_RATE_KIND, "1000.0000",
+            "The highest ceiling of the price per start an operator may set, in yen"),
+        new Param(DISTRIBUTION_MINIMUM_DEPOSIT_MAX, KUDOS, "100000",
+            "The highest least deposit an operator may set (a publication without a cap on its winners sets it "
+                + "aside), in yen"),
+        new Param(DISTRIBUTION_FINAL_END_GRACE_SEC, Map.of("type", "numeric", "precision", 5, "scale", 0), "3600",
+            "How many seconds after a publication ended its final distribution settlement waits, so that every "
+                + "start before the end is counted (60 to 86400; less counts as 60)"),
+        new Param(DISTRIBUTION_UNSETTLED_AFTER_HOURS, Map.of("type", "numeric", "precision", 3, "scale", 0), "30",
+            "After how many hours of a month a publication not settled for the month before is reported by the "
+                + "daily check (the monthly settlement runs on the 2nd at 00:37)"),
+        new Param(DISTRIBUTION_FINAL_MISSING_AFTER_HOURS, Map.of("type", "numeric", "precision", 3, "scale", 0),
+            "48", "After how many hours of its end a publication without its final distribution settlement is "
+                + "reported by the daily check"),
         // F-F10a: the Kudos reward switch (controlled, after the F-C7 ones: the last of CONTROLLED, and so the last proposal of QB_SETUP, which follows this list).
         new Param(REWARD_KUDOS_ENABLED, BOOL, true,
             "Whether a publication may offer the reward method PLATFORM (Kudos paid by QuizBuks); off at the first "
                 + "launch (F-F10a)"),
         // F-M3: company verification (ordinary; last).
         new Param(VERIFICATION_LINK_HOURS, Map.of("type", "numeric", "precision", 3, "scale", 0), "48",
-            "How many hours the link mailed to a company address to verify a sponsor's company stays good (1 to 168)"));
+            "How many hours the link mailed to a company address to verify a sponsor's company stays good (1 to 168)"),
+        // F-M5 (M3 of its review): the daily check (ordinary; last).
+        new Param(PREPAYMENT_RELEASE_OVERDUE_DAYS, DAYS, "2",
+            "How many days after a publication ends a prepayment still open is reported by the daily check (1 to 30; "
+                + "the daily job gives it back within a day)"),
+        // F-F11a: the bytes of one import request (ordinary; last).
+        new Param(CONTENT_IMPORT_BATCH_BYTES, Map.of("type", "numeric", "precision", 7, "scale", 0), "3145728",
+            "The most bytes one import request carries; the page cuts a large bank into batches by it as well as by "
+                + "the question count (65536 to 3500000)"));
 
     /** The declared value of a parameter: what {@code QB_SETUP} writes. */
     public static String defaultOf(String key) {

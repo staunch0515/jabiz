@@ -550,8 +550,16 @@ final class PublicationEditing {
         long revision = number(publication.get("revision")) + 1;
         Map<String, Object> next = new LinkedHashMap<>(values);
         if (PublicationStatus.DRAFT.equals(status)) {
-            // Back to its draft, the publication has no review any more: its next submission makes a new one.
+            // Back to its draft, the publication has no review any more: its next submission makes a new one. Nor
+            // anything set aside (F-M5, given back after this) nor a frozen operator (F-M11): frozen again then.
             next.put("approvalRequestId", null);
+            next.put("billingOperatorId", null);
+            next.put("prepaymentTotal", null);
+            next.put("distributionUnit", null);
+            next.put("distributionAtFloor", null);
+        }
+        if (status != null) {
+            PublicationPrepayments.note(ctx, publication, values, status.toString());
         }
         next.put("revision", BigDecimal.valueOf(revision));
         next.put("editedAt", ctx.opTime());

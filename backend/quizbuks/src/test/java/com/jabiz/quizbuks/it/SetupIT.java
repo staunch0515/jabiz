@@ -359,6 +359,7 @@ class SetupIT extends QbItSupport {
         expected.put("4120", "REVENUE");
         expected.put("2150", "LIABILITY");
         expected.put("2170", "LIABILITY");
+        expected.put("2180", "LIABILITY");
         // F-M1: the Sponsors' platform fee Kudos (granted credit).
         expected.put("2190", "LIABILITY");
         // F-M2: the promotion expenses of the platform fee Kudos granted.
@@ -513,8 +514,8 @@ class SetupIT extends QbItSupport {
         // Q82: the conversations' daily cap and quiet days (not controlled).
         expected.put(QbParams.CONVERSATION_DAILY_CAP, "20");
         expected.put(QbParams.CONVERSATION_CLOSE_DAYS, "90");
-        // Q47c: charging for the audience rules (off), its fallback and the unused-days refund (all controlled).
-        expected.putAll(Map.of(QbParams.AUDIENCE_BILLING_ENABLED, "false", QbParams.AUDIENCE_PRICE_FALLBACK, "DIRECT",
+        // Q47c: charging for the audience rules (off) and the unused-days refund (controlled; F-M5 removed the fallback).
+        expected.putAll(Map.of(QbParams.AUDIENCE_BILLING_ENABLED, "false",
             QbParams.AUDIENCE_REFUND_UNUSED_DAYS, "false"));
         // Q87a: where top-ups go, the exchange's switches and the transfers' rate (all controlled).
         expected.putAll(Map.of(QbParams.TOPUP_TARGETS, "KUDOS,CASH", QbParams.TOPUP_DEFAULT_TARGET, "KUDOS",
@@ -535,11 +536,23 @@ class SetupIT extends QbItSupport {
             QbParams.OPERATOR_WITHDRAWAL_COOLDOWN_HOURS, "24"));
         // F-M3: how long the company verification's link is good (not controlled).
         expected.put(QbParams.VERIFICATION_LINK_HOURS, "48");
+        // F-M5: when an ended publication's open prepayment is a difference (not controlled).
+        expected.put(QbParams.PREPAYMENT_RELEASE_OVERDUE_DAYS, "2");
+        // F-F11a: the bytes one import request carries (an ordinary parameter).
+        expected.put(QbParams.CONTENT_IMPORT_BATCH_BYTES, "3145728");
         // F-C7: drafting from a website (the switch off; the limits of one request and of a month).
         expected.putAll(Map.of(QbParams.SITE_PROFILE_ENABLED, "false", QbParams.SITE_PROFILE_MONTHLY, "10",
             QbParams.SITE_PROFILE_DAILY, "3", QbParams.SITE_PROFILE_MAX_PAGES, "10",
             QbParams.SITE_PROFILE_QUESTIONS, "5", QbParams.SITE_PROFILE_OPTIONS, "4",
             QbParams.SITE_PROFILE_MATERIALS_MAX, "5", QbParams.SITE_PROFILE_HANDLE_ALTERNATIVES, "3"));
+        // F-M6: the distribution fee (off; the headquarters' range of the operators' prices; the final settlement's
+        // grace and the daily check's hours).
+        expected.putAll(Map.of(QbParams.DISTRIBUTION_BILLING_ENABLED, "false",
+            QbParams.DISTRIBUTION_RATE_MIN, "0.0000", QbParams.DISTRIBUTION_RATE_MAX, "1.0000",
+            QbParams.DISTRIBUTION_UNIT_FLOOR_MIN, "1.0000", QbParams.DISTRIBUTION_UNIT_FLOOR_MAX, "100.0000",
+            QbParams.DISTRIBUTION_UNIT_CEILING_MAX, "1000.0000", QbParams.DISTRIBUTION_MINIMUM_DEPOSIT_MAX, "100000",
+            QbParams.DISTRIBUTION_FINAL_END_GRACE_SEC, "3600", QbParams.DISTRIBUTION_UNSETTLED_AFTER_HOURS, "30",
+            QbParams.DISTRIBUTION_FINAL_MISSING_AFTER_HOURS, "48"));
         assertThat(values).containsExactlyInAnyOrderEntriesOf(expected);
     }
 

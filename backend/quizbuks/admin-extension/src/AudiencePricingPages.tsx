@@ -38,7 +38,7 @@ import {
 } from './audience-pricing-api'
 import { LoadFailed, Section } from './components'
 import { when } from './hooks'
-import { AUDIENCE_DIRECT, AUDIENCE_RULE_KEYS } from './ids'
+import { AUDIENCE_RULE_KEYS } from './ids'
 
 /*
  * The audience rules as a product line and their prices (Q47c, docs/quizbuks/plans/Q47c-audience-billing.md). The
@@ -230,16 +230,16 @@ function PriceListForm({ list, onSave, testId }: {
   )
 }
 
-/** Headquarters: every owner's list; their own (`direct`) or an operator's, picked from the lists or by its ID. */
+/** Headquarters: the operators' lists (it has none of its own), an operator picked from the lists or by its ID. */
 export function AudiencePricesPage() {
   const { t } = useTranslation(EXTENSION_NAMESPACE)
   const id = useId()
   const lists = useQuery({ queryKey: [...AUDIENCE_PRICING_KEY, 'lists'], queryFn: readPriceLists })
-  const [owner, setOwner] = useState<string>(AUDIENCE_DIRECT)
+  const [owner, setOwner] = useState<string>('')
   const [typed, setTyped] = useState('')
   const known = lists.data ?? []
-  const ownerOf = (list: PriceList) => (list.owner === AUDIENCE_DIRECT ? t('audiencePricing.direct')
-    : list.operatorName ?? list.owner)
+  const ownerOf = (list: PriceList) => list.operatorName ?? list.owner
+  // The server takes an operator as the owner of every list; none is chosen until the page is told which.
   const chosen = typed.trim() || owner
   const list = known.find((l) => l.owner === chosen) ?? null
   return (
@@ -254,13 +254,12 @@ export function AudiencePricesPage() {
               <div className="flex flex-wrap items-end gap-4">
                 <div className="flex flex-col gap-2">
                   <Label htmlFor={`${id}-owner`}>{t('audiencePricing.owner')}</Label>
-                  <Select value={owner} onValueChange={(value) => { setOwner(value); setTyped('') }}>
+                  <Select value={owner || undefined} onValueChange={(value) => { setOwner(value); setTyped('') }}>
                     <SelectTrigger id={`${id}-owner`} className="w-72" data-testid="price-list-owner">
-                      <SelectValue />
+                      <SelectValue placeholder={t('audiencePricing.pickOwner')} />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value={AUDIENCE_DIRECT}>{t('audiencePricing.direct')}</SelectItem>
-                      {known.filter((l) => l.owner !== AUDIENCE_DIRECT).map((l) => (
+                      {known.map((l) => (
                         <SelectItem key={l.owner} value={l.owner}>{ownerOf(l)}</SelectItem>
                       ))}
                     </SelectContent>
@@ -276,16 +275,19 @@ export function AudiencePricesPage() {
                   </p>
                 </div>
               </div>
-              <Section title={list ? ownerOf(list) : chosen === AUDIENCE_DIRECT ? t('audiencePricing.direct') : chosen}
-                testId="price-list">
-                {!list && (
-                  <p className="text-muted-foreground text-sm" data-testid="price-list-none">
-                    {chosen === AUDIENCE_DIRECT ? t('audiencePricing.noDirectList') : t('audiencePricing.noList')}
-                  </p>
-                )}
-                <PriceListForm key={`${chosen}-${list?.updatedAt ?? ''}`} list={list} testId="price-list-form"
-                  onSave={(input) => savePriceList(chosen, input)} />
-              </Section>
+              {chosen
+                ? (
+                  <Section title={list ? ownerOf(list) : chosen} testId="price-list">
+                    {!list && (
+                      <p className="text-muted-foreground text-sm" data-testid="price-list-none">
+                        {t('audiencePricing.noList')}
+                      </p>
+                    )}
+                    <PriceListForm key={`${chosen}-${list?.updatedAt ?? ''}`} list={list} testId="price-list-form"
+                      onSave={(input) => savePriceList(chosen, input)} />
+                  </Section>
+                )
+                : <p className="text-muted-foreground text-sm" data-testid="price-list-pick">{t('audiencePricing.pickOwnerHint')}</p>}
             </>
           )}
     </div>

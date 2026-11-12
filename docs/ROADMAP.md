@@ -5568,9 +5568,39 @@ QuizBuks 的 #545、#546、#547 用了 43.5–45 分钟，#545 到点被取消�
 
 **17zz18 状态**：📝 待评审（分支 `1.3/phase-17zz18-ledger-dimension-index`）。
 
+### 17zz19 对话框缺省的高度上限（2026-11-12，QuizBuks e2e 中发现）
+
+**缘由**：`@jabiz/ui` 的 `DialogContent` 没有高度上限，也不滚动：内容比屏幕高时，对话框（固定定位，背后的页面不滚动）末尾的确认按钮被挤出屏幕、无法到达。QuizBuks 的 e2e 中实际发生过，应用当时在 4 个对话框上临时加了类。
+
+| # | 内容 |
+|---|---|
+| 17zz19-1 | `DialogContent` 与 `AlertDialogContent` 的缺省类加上 `max-h-[calc(100dvh-2rem)] overflow-y-auto`（`cn` 即 tailwind-merge：调用者的 `max-h-*`、`overflow-*` 替换缺省，`CommandDialog` 的 `overflow-hidden` 照旧）；Javadoc 写明固定页脚的做法 |
+| 17zz19-2 | 核对现有对话框：平台前端与 `@jabiz/ui` 中没有自定义 `max-h` 或固定页脚的对话框（`FilePreview` 的图片 `max-h-[75vh]` 在框内，不冲突），示范应用（门户、扩展）不用 `Dialog` |
+| 17zz19-3 | 测试：Vitest `dialog.test.tsx`（缺省类、调用者替换、警示对话框，`expectAccessible` 亮暗两种）；Playwright `e2e/dialog-height.spec.ts`（320×420 窗口，会话页"结束会话"对话框填 30 行原因：确认与取消按钮都能滚动到并完整在视口内，框不超出视口，axe 亮暗两种）。去掉修改时该测试失败（确认按钮不在视口内），恢复后通过 |
+| 17zz19-4 | 文档：设计 12 §12 |
+
+**验收**：前端 lint、typecheck、全部 Vitest 绿；e2e 全绿。
+
+**17zz19 状态**：📝 待评审（分支 `1.3/phase-17zz19-dialog-max-height`）。
+
+### 17zz20 合并读取的代价从乘积改为和（2026-11-12，QuizBuks 替换题库时发现）
+
+**缘由**：`QueryEntities.all`（几个互不依赖的查询一条语句，16p T5）生成 `FROM (VALUES (0), (1), …) k LEFT JOIN b0 ON k.jabiz_q = 0 LEFT JOIN b1 ON k.jabiz_q = 1 …`。条件只涉及外侧的编号，PostgreSQL 只能以嵌套循环逐对检验：结果是各查询之和，处理的却是乘积。QuizBuks 的题目、选项、译文三个查询合起来约 7,900 万行对、8.9 秒，超过 5 秒的查询时限。
+
+| # | 内容 |
+|---|---|
+| 17zz20-1 | `R2dbcStorageEngine.executeQueries`：`LEFT JOIN LATERAL (… WHERE k.jabiz_q = i) bi ON true`，编号成为各读取内的一次性条件（One-Time Filter），每个读取只在自己那一行执行。列、类型、行号、排序与拆分不变，仍是一条语句（`StatementBudgetIT` 不变）。比较过的写法：`UNION ALL` 加标记不可行（其他读取的列只能是无类型的 NULL，多路合并时先解析为 text，遇 uuid 等报 "UNION types text and uuid cannot be matched"）；`FULL JOIN … ON false` 同样线性，但依赖优化器对常量假条件的特例 |
+| 17zz20-2 | 测试 `CombinedReadCostIT`（先写，旧写法上失败）：300、1,200、3,000 行的三个读取合成一条，每个读取的行与单独读取相同；实际执行的语句以绑定的值 `EXPLAIN (ANALYZE)`，Memoize 开与关两种计划中，任何一步处理的行（返回的行 × 循环次数，加过滤掉的行）不超过读取行数之和的 20 倍。实测：旧写法 4,504,500，新写法 4,500 |
+| 17zz20-3 | 文档：决策 D46 第 7 项后加一行带日期的说明（原文不改，规则不变）、设计 03 §3.1 |
+
+**验收**：`:runtime:check`、`WriteCombiningIT`、`StatementBudgetIT`、`CombinedReadCostIT` 绿。
+
+**17zz20 状态**：📝 待评审（分支 `1.3/phase-17zz20-combined-read-lateral`）。
+
 ### 线 1.3 的候选（未排期，2026-11-08 总控：首次上线前不做）
 
 | 候选 | 缘由 | 粗估 |
 |---|---|---|
 | 补投放弃的事件 | 事件消费者用满 `jabiz.events.delivery.max-attempts`（缺省 10）后只记 error 日志，11 §2 写"由运维处理"却没有工具（2026-11-08 staging 的邮件因出站 465 被封全部放弃）。做法：受保护的权限、必填原因、按消费者与时间范围补投；邮件另有年龄限制（发信时才生成令牌的旧消息记为 `SKIPPED`，不在几小时后寄出登录链接）；`DeliverMail` 已跳过 `SENT` 的消息，不会重复 | 约 2 天 |
 | 经 HTTPS 发信 API 发信（如 Cloudflare Email Sending） | 服务器的出站 SMTP 端口被托管商封锁时不依赖端口。`NotificationSender` 的第二个实现，`jabiz.mail.transport` 选择；令牌只取自环境变量、出站主机白名单、4xx 不重试；附件视 API 而定（不支持则 `DOCUMENT_SEND` 明确拒绝）；应用登记的发信服务器（D56）仍走 SMTP。设计 18 §5.6 增节，可能需要新决策 | 约 1.5–2 天 |
+| 升级 Playwright 前：axe 与沙箱 frame | 2026-11-12 查明：Playwright 1.56.1 配 Chromium 153（build 1243，非配套）时，`sandbox=""` 的邮件预览 frame 中注入的定时器永不触发，`AxeBuilder.analyze()` 挂到超时（QuizBuks `mail-layout.spec.ts` 本机复现，CI 用配套的 build 1194 通过）。升级到自带 Chromium ≥ 153 的 Playwright 时 CI 也会挂。做法：升级时先把管理系统的 `/mail/layout` 与 `/mail/texts/edit` 加进平台的 `e2e/a11y.spec.ts`（亮暗两种），让平台 CI 先发现；遇到沙箱 frame 用哪种办法（等 Playwright / axe 修复，或 `accessibilityViolations` 不进入不允许脚本的 frame，与 Vitest 版的 `iframes: false` 一致，属于改变 axe 的检查范围），到那时再决定。本机规避见 `docs/guide/app-spa.md` §4 "浏览器的版本" | 约 0.5 天（不含所选办法） |

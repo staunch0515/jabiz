@@ -31,11 +31,11 @@ Once verified, the onboarding granted credit you received is topped up to the ve
 - A publication puts a saved quiz version in front of Takers. "New publication" opens the wizard: Quiz (the knowledge map node it lights, if any; name and version) → Time and rewards (period, marks, reward tiers) → Customer matching (who it is for) → Check and submit.
 - Customer matching aims a quiz at Takers whose profile matches. Some conditions are charged per day; the wizard shows the estimated fee. Counts of matching Takers are rounded, so nobody can be singled out.
 - Who may answer: everyone in the chosen regions, or only the e-mail addresses you invite (an invitation list; the invitations are sent from your own mail server, set up in the Sponsor profile).
-- Rewards are paid in Kudos from your wallet, in cash at your place, as a prize collected at your place, or as a digital prize (codes, vouchers or links).
-- Referrals, entry fees and languages are set in the publication too.
+- Rewards are paid in cash at your place, as a prize collected at your place, or as a digital prize (codes, vouchers or links). At the first launch, Kudos are not in use yet: a publication cannot offer Kudos as its reward. Once Kudos open, rewards can also be paid in Kudos from your wallet.
+- Referrals and languages are set in the publication too. At the first launch there are no entry fees; once they open, they are set in the publication as well.
 - Submitted publications are reviewed before they go on. While in review you can withdraw one to change it; once approved it cannot be changed (copy it to publish it again with changes). A sent-back publication says why.
 - The page of a submitted publication has seven tabs, each with its own address: Overview, Quiz & version, Audience, Rewards, Fees, Statistics, and Share & QR code; the status and next steps (pause, copy, preview and more) are beside them. A draft still opens in the wizard.
-- Takers cannot start a publication while your wallet cannot pay its highest reward: top up. You can pause a publication and resume it (also from the app's My Sponsor account).
+- You can pause a publication and resume it (also from the app's My Sponsor account). Once Kudos open, Takers cannot start a publication that pays in Kudos while your wallet cannot pay its highest reward: top up.
 
 ## Knowledge map (/sponsor/publications/map)
 
@@ -67,9 +67,12 @@ Once verified, the onboarding granted credit you received is topped up to the ve
 
 ## Money
 
-- Wallet (/sponsor/wallet): your Kudos pay the rewards of your publications. Top up to keep them running (by card, or by bank transfer where it is offered). Your cash account holds money you turn into Kudos when needed; pay open invoices of fees from it.
-- Moved here by your operator (an operator's direct Sponsor only): your operator's lead may move money from the operator's account into your platform fee account, shown as "From the operator". It pays platform fees only (after any granted platform fee Kudos); it cannot be turned into Kudos or withdrawn.
-- Transactions (/sponsor/transactions): every movement, receipts and invoices; exportable.
+- Platform fee account (/sponsor/money/account): your Granted credit and the cash you top up (by card, or by bank transfer where it is offered), which pay platform fees only. Invoices are in "Money → Invoices" (/sponsor/money/bills); unpaid ones are paid from here.
+- Kudos: at the first launch, Kudos are not in use yet: you cannot turn cash into Kudos or Kudos back into cash, publications do not pay rewards in Kudos, and the menu has no Wallet. Once Kudos open, the Kudos in your wallet (/sponsor/money/wallet) pay the publications with Kudos rewards, and you turn cash into Kudos when needed.
+- Moved here by your operator (an operator's direct Sponsor only): your operator's lead may move money from the operator's account into your platform fee account, shown as "From the operator". It pays platform fees only (after any Granted credit); it cannot be turned into Kudos or withdrawn.
+- Prepayments: when you submit a publication, the fees it will be charged (today the audience rules) are set aside from your platform fee account as a prepayment (granted credit first, then cash). If the account is short, the submission does not go through; the "Funds" part of the wizard's last step lists each amount and the shortfall, with a "Top up" link. A prepayment is not a fee: it all comes back when the publication returns to its draft (withdrawn, rejected or its review expired), and what is left comes back within a day after it ends; what goes back to granted credit that has expired is voided at once. The publication's "Prepayment" section and the "Held in prepayments" line of the platform fee account show what is set aside.
+- Distribution fee: Takers get every reward you set; the platform charges the distribution fee separately for each person who starts your quiz (whether they finish or pass). The price per start is fixed when you submit, from your operator's price and the publication's highest tier, and does not change after; a deposit is set aside then (the cap on winners times the price, with tax; without a cap, your operator's least deposit). On the 2nd of each month the starts of the month before are settled, from the deposit first and then your platform fee account; after the publication ends a last settlement gives the rest back. The publication's "Distribution fee" section shows the price per start, the people who started since the last settlement and about how much that is, and each month's settlement.
+- Transactions (/sponsor/money/transactions): every movement, receipts and invoices; exportable.
 
 ## Settings and messages
 

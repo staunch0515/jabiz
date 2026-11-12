@@ -118,6 +118,7 @@
 |---|---|---|
 | `QB_TRANSFER_RUN_CRON`、`QB_RECONCILE_RUN_CRON` | e2e 与 Stripe 测试模式：每分钟转账、每分钟核对 | `TransferScheduleCheck` |
 | `QB_ANALYTICS_RUN_CRON` | e2e：每分钟运行发起方分析（Q9e2）。**隐私控制**：概览是任务的快照，频率决定能把一个学者的作答定位到多细；缺省（每 10 分钟）以外的值**任何环境**都要同时设 `QB_E2E_ENABLED=true`，否则启动失败；**比每分钟更频繁的值一律拒绝**（评审 M1） | `TransferScheduleCheck` |
+| `QB_DISTRIBUTION_MONTHLY_CRON` / `QB_DISTRIBUTION_FINAL_CRON` | 配送费的月度结算（缺省每月 2 日 00:37）与结束结算（缺省每天 03:07），按 `jabiz.fiscal-year-zone`（F-M6，§7.48）。e2e 把结束结算设为每分钟（`'45 * * * * *'`）；项都可重复运行，更频繁只是多读几次 | — |
 | `QB_E2E_ENABLED`（`quizbuks.e2e.enabled`） | e2e 的开关（Q9e2 评审 M1）：允许改分析任务的时间；正式模式或正式密钥下设了即启动失败 | `TransferScheduleCheck` |
 | `QB_ADMIN_ROLES` 中的 `QB_E2E_*` | e2e 的无二次验证的测试角色 | `TransferScheduleCheck` |
 | 开发入账 `quizbuks.wallet.dev-credit.enabled`（`dev` 配置开启） | 不付款给发起方钱包入账 | `StripeModeCheck` |
@@ -219,6 +220,7 @@ FROM pg_stat_statements ORDER BY total_exec_time DESC LIMIT 20;
    邀请要求邮件已开启（`JABIZ_MAIL_ENABLED=true`，否则 422 `MAIL_DISABLED`），只寄到建号时填写、之后没改过的邮箱：邮箱填错时重新建号。
    已用临时密码建好、尚未经邮件设定密码的管理员账号，同样对其执行"发送邀请"（替换已有密码另需 `security.user.password`，首个管理员持有）。
 5. 财务管理员在平台管理系统**发布** `QB_SETUP` 的提案（`CONTROL_CHANGE_PUBLISH`，四眼：提出人不能发布自己的），**包括三条职责分离规则**（含 F-C8、F-C9 的 `qb.sod.mail-texts`）。发布之前发起方入驻与提交发布一律被拒。
+   发布的顺序有要求：**先发布 `qb.reward.kudos.enabled` 与 `qb.reward.default-methods` 这两个参数，再发布审批规则 `qb.sponsor.review` 与 `qb.publication.review`**，另有几项要等前置条件满足后才发布（见 §4 的"首次上线的开关"）。
    操作：平台管理系统"数据 → SysControlChange"列出提案，在状态为待发布（`PROPOSED`）的一行执行行操作 `CONTROL_CHANGE_PUBLISH`。财务角色以 `approval.read` 读这个视图；
    这项权限在 2026-10-29 才加入财务角色，此前建好的系统要由超级管理员再执行一次 `QB_SETUP` 补上（不是受保护的权限，当即生效），财务管理员重新登录后才看得到。
    职责分离规则须在建立期结束（下一步）之前发布：之后任命内容或财务管理员要由一位超级管理员审批，而超级管理员不持有、也不能持有 `approval.decide` 与 `control.publish`，
@@ -234,9 +236,10 @@ FROM pg_stat_statements ORDER BY total_exec_time DESC LIMIT 20;
    - `qb.transfer.enabled` **保持 false**，直到取得法务意见（§4）；
    - **奖励的缺省**（Q28）：`qb.reward.default-methods`（**所有**发起方都可用的支付方式，逗号分隔；F-S4b 起与单独设定、点亮门槛开通的取并集；声明值与 `QB_SETUP` 提出的首个值都是**空 = 没有任何方式**（新发起方点亮相应节点或被单独开通才有，需求方 2026-11-07，§7.41）；参数还不存在时（`QB_SETUP` 之前）按平台 Kudos；见下文"阶段一的设置"）与 `qb.reward.max-per-attempt`（每次答题可得的最高奖励，Kudos；`0` 不限；景品表示法的上限由法务给出）；
    - 法律文本的最长预告期 `qb.legal.max-announce-days`（缺省 180 天；未发布时同样按 180 天）。
-   - `qb.ai.enabled` 由 `QB_SETUP` 提出 `false`，**照样发布**（AI 在上线检查清单的条件满足后才开启）。发布之前参数不存在：启动检查 `EXTERNAL` 对 `job qb.ai.questions` 与 `job qb.ai.cover` 各报一条**警告**
+   - `qb.ai.enabled`：`JABIZ_WEB_ENVIRONMENT` 为 `production` 或 `staging` 时 `QB_SETUP` 提出 `true`（其他环境提出声明值 `false`），**AI 使用说明（法律文本 `AI_NOTICE`，发布方法见本节第 9 步，上线条件见 `launch-checklist.md`）发布之后才发布这条提案**（学者的 AI 问题解答 `qb.help.enabled` 同样，见 §4 的"首次上线的开关"）。
+     发布之前参数不存在：启动检查 `EXTERNAL` 对 `job qb.ai.questions` 与 `job qb.ai.cover` 各报一条**警告**
      `enabledBy: parameter qb.ai.enabled has no value in effect now; the type is paused …`，执行器第一次轮询时也记一条 WARN。这在新安装上是预期的（参数缺失与 `false` 一样：请求被拒、没有作业），
-     发布 `false` 之后不再出现；已发布之后仍出现即参数被删或读不出来，应调查（§5"AI 作业暂停"）。
+     提案发布之后不再出现；已发布之后仍出现即参数被删或读不出来，应调查（§5"AI 作业暂停"）。
 7. 在测试模式下做一次 Stripe 测试模式全流程（`stripe-test-mode.md`），并按 §2.4 做一次恢复演练。
 8. 每次部署新版本后：再执行一次 `QB_SETUP`，发布它的新提案（README 各阶段的"部署后"）。忘了的话，启动日志与 `platformCheck` 对每个没有生效值的业务参数各报一条警告 `QUIZBUKS | parameter <键>`（从未执行过设置的数据库只报一条 `QB_SETUP has not run yet`）；读这些参数的流程在那之前一律失败（`PARAM_NOT_FOUND`）。
 9. **条款、隐私政策与帮助**（Q7b）：`QB_SETUP` 为四种法律文本（学者条款、发起方条款、隐私政策、特定商取引法表记）各建一份**明确标注 `[TEST PLACEHOLDER]` 的草稿**，什么也不发布。
@@ -309,6 +312,21 @@ FROM pg_stat_statements ORDER BY total_exec_time DESC LIMIT 20;
 - [ ] `QB_SPONSOR_LINK`、`QB_APP_LINK`、`JABIZ_MAIL_BASE_URL` 都是正式的 `https` 地址；正式域名写进 `tools/quizbuks/stripe-test-mode/production-hosts`
 - [ ] `./gradlew :quizbuks:platformCheck` 以正式的设置（不含密钥值的同形假值）跑一遍；启动日志中没有 `Platform check failed`
 - [ ] 首次启动（§3）完成：两位管理员都有二次验证，提案已发布，开具方与科目映射已设
+- [ ] **首次上线的开关**（F-F10；`setup.FirstLaunchSwitches` 是唯一的清单，`JABIZ_WEB_ENVIRONMENT` 须为 `production`，测试系统为 `staging`：只有这两个环境的 `QB_SETUP` 提出首次上线的值，其他环境提出声明值，卡片上会显示"不同"）：
+  1. 执行 `QB_SETUP` 后，核对平台管理系统"数据 → SysControlChange"中待发布的提案，与"QuizBuks 财务"总览页的卡片"首次上线的资金开关"一致（每行：首次上线的值、现值、状态；读提案需要 `approval.read`，财务角色已有）。卡片显示"待发布的值与首次上线的值不同"时**不要发布**：多半是 `JABIZ_WEB_ENVIRONMENT` 没设成 `production` 就执行了 `QB_SETUP`，改好环境变量重新部署，然后：
+     - **撤回**：只有提案人能撤回，即当初执行 `QB_SETUP` 的管理员。在"数据 → SysControlChange"中对这几行执行行操作"撤回"（`CONTROL_CHANGE_WITHDRAW`）；
+     - **重提**（`QB_SETUP` 每项只提一次，再执行不会重新提出）：首次上线的值与声明值不同的只有这 7 条：`qb.fee-credit.grant.enabled` → `true`、`qb.help.enabled` → `true`、`qb.ai.enabled` → `true`、`qb.topup.targets` → `CASH`、`qb.topup.default-target` → `CASH`、`qb.kudos.buy.enabled` → `false`、`qb.reward.kudos.enabled` → `false`。以被撤回提案的 `changeValues` 为准，原样填 `paramKey`、`valueKind`、`description`，只改 `value`（字符串）；
+     - **用接口提交**（本机演练过：撤回后重提得到新的待发布提案）：先 `POST /api/auth/login`（`{"userName":…,"password":…,"entry":"admin"}`）取 `accessToken`，再以 `Authorization: Bearer <accessToken>`、每次新的 `Idempotency-Key` 调用 `POST /api/processes/CONTROL_CHANGE_PROPOSE/latest`，正文如 `{"targetEntity":"SysParam","values":{"paramKey":"qb.kudos.buy.enabled","valueKind":{"type":"bool"},"value":"false","description":"Whether sponsors may turn cash into Kudos"},"reason":"首次上线的值：QB_SETUP 未按 production 执行后重提"}`（不带 `targetId` 即新建参数）。平台管理系统的流程表单中 `values` 是一个 JSON 输入框，按理也能提交同样的内容，但没有在浏览器里演练过，以接口为准；
+     - 重提后卡片应显示"待发布"（值与首次上线的值相同），再由另一位管理员发布；
+  2. 发布的顺序：
+     - 先发布 `qb.reward.kudos.enabled` 与 `qb.reward.default-methods` 这两个键，**再**发布审批规则（`qb.sponsor.review`、`qb.publication.review`）：正式环境里学分奖励的开关没有发布就算关，这样发起方入驻与发布的流程不会出现不一致的中间状态；
+     - 法务相关的不打开：`qb.transfer.enabled`、`qb.withdrawal.bank.enabled` 保持 `false`（§1.3b、§1.3c）；`qb.kudos.buy.enabled`、`qb.kudos.sell.enabled`、`qb.reward.kudos.enabled`、`qb.play.entry-fee.enabled` 的首次上线的值也是 `false`（学分只显示、不使用，学分的帮助见 `help/fee-account.md`）；
+     - `qb.fee.monthly`、`qb.creator-fee-rate`（与 `qb.transfer.fee-rate`）的提案值是 0，**必须先发布**（与其他提案一起，不等价目表）：首次上线不收这些费用，发布后参数才存在、卡片才显示"一致"，以后改声明值也不会改到已上线的系统；价目表设好、收费开始前再由受控变更改为实际金额；赠送额度的开关 `qb.fee-credit.grant.enabled` 在价目表与赠送额度（`qb.fee-credit.grant.*`）设好之后发布；
+     - AI 使用说明发布、**且 AI 使用手册（`manual-sponsor.*.md`、`manual-app.*.md`）已按首次上线的状态（学分只显示、不使用，无报名费）改好并由内容管理员重新载入、发布**之后，才发布 `qb.ai.enabled` 与 `qb.help.enabled`（两条提案的值都是 `true`）；
+     - 收费组尚未上线的行：已经存在的两个键 `qb.audience.billing.enabled`（F-M7）、`qb.ai.site-profile.enabled`（F-M9）由 `QB_SETUP` 提出 `false`，**照常发布**，卡片比较它们的现值（为开即"不同"，启动检查警告）；其余四个键（配送费 `qb.distribution.billing.enabled`、曝光费 `qb.exposure.billing.enabled`、AI 费 `qb.ai.fee.enabled`、自动付账单 `qb.fee.auto-pay.enabled`）尚不存在，卡片显示"等 F-Mx 上线"，不提案、不用管；它们的上线顺序见 `plans/impl/F-M.md` §4；
+  3. 财务页卡片中可比较的行全部显示"一致"（金额类的行显示"金额，不比较"）。新建的测试系统（`staging`）同样应全部一致；只有此前已经建过参数的测试系统，以及本地环境（不是 `production` / `staging`，提出声明值），才会显示"不同"；
+  4. 启动日志没有 `FirstLaunchSwitchesCheck` 的警告（`production` 上：学分买卖、转账、提现、学分奖励、报名费的开关为开，受众规则费 `qb.audience.billing.enabled` 或网站资料的 AI `qb.ai.site-profile.enabled` 为开，或学分奖励的开关从未发布；Stripe 正式模式而环境不是 `production`）。
+  运营商自己的提现（`qb.operator.withdrawal.*`）没有开关：那是运营商的收入，不是学分，不由本项挡住。
 - [ ] 小额实测：一位内部发起方用真实卡充值最小额（`qb.topup.min`），确认到账、手续费分录、收据；在 Stripe Dashboard 全额退款，确认扣回；次日核对为 `OK`
 - [ ] 资金调度：充值在 Stripe 上几天后才变为可用余额，转账从可用余额转出；定好打开转账前的余额与打款计划
 - [ ] 法务意见允许后，才提出并发布 `qb.transfer.enabled=true`；第一次每日转账（01:07 UTC）后核对每一笔
@@ -586,6 +604,7 @@ AI 为运营商找发起方（F-S1：所有者一律是运营商；平台不自�
 | `qb.journal.account.2160` | 空 | 分录导出 2160 的科目代码：现金账户有过账后，导出前必须设好 |
 
 - 发布之前一切同 Q87 之前（只进学分钱包、不能兑换）。
+- 首个值是声明值（`QB_SETUP` 在 `production` / `staging` 以外的环境提出的值）。**首次上线**在 `production` / `staging` 提出的是 `CASH`、`CASH`、关（现金只进现金账户、不能换学分，学分只显示、不使用），见 §4 的"首次上线的开关"。
 - 进现金账户的卡充值被退款或争议败诉时从现金账户扣回；每日核对多两项（`CASH_ACCOUNT`、`TOTAL_2160`）。
 - 月报多一列"2160 发起方现金账户"与六类（现金充值、银行转账进现金、现金退款、现金争议、现金换学分、学分换回现金）。
 
@@ -942,7 +961,7 @@ Quiz 与发布有主题词（平台词表中的词与自定义词），学者可
   3. "只能导入资料部分"（`QB_PACKAGE_SUBMITTED`）：账户提交过发布（有发布不是草稿或有提交时间）。整个包只能导入新账户或从未提交过发布的账户。
   4. 记录的细节：`SELECT status, mode, steps_done, steps_total, last_step, started_at, updated_at, done FROM qb_package_import WHERE sponsor_id = '<用户编号>' ORDER BY started_at DESC`（`done` 只有编号，没有内容与秘密）。
 - **放弃**删除这次导入生成的草稿（图以退役代替删除，仍是草稿的发布删除，没有被已提交的发布用着的 Quiz 移除），资料部分不还原。审计由各现有流程照常记录（`GET /api/audit/records`）。
-- **测试期重置数据库之后的导回**（需求方 2026-11-05：测试期反复重置数据库）：
+- **测试期重置数据库之后的导回**（需求方 2026-11-05：测试期反复重置数据库；样板发起方的完整恢复步骤、用时与包不带的东西见 §7.49）：
   1. 重置**之前**：每个要保留的发起方登录发起方页面，在"概况"页"导出发起方包"，把文件存好（每个发起方一个文件；文件含图片，可能较大）。运营商的直营发起方（样板间）同样导出。
   2. 重置数据库并部署（§2），运行 `QB_SETUP` 并由另一位管理员发布受控参数的首个值（§1）。
   3. 重新建立账户：发起方重新注册（或由运营商为直营发起方建立），验证邮箱。
@@ -1034,7 +1053,8 @@ Quiz 与发布有主题词（平台词表中的词与自定义词），学者可
   - `qb.content.max-questions`（缺省 1000）：一个 Quiz（题库）至多几题。至多 2000（代码的技术上限 `ContentLimits.MAX_QUESTIONS_TECH`），填得更大也按 2000。调低后已有的大题库照常读取、修改、删除，只是不能再加题（`QB_TOO_MANY_QUESTIONS`，提示中带上限）。
   - `qb.play.max-questions-per-attempt`（缺省 100）：一次答题至多几题，题库更大时发布必须抽题。至多 200（`PlayLimits.MAX_PER_ATTEMPT_TECH`，答题记录的列宽按它）。在 F-S7 合入前，发布只按 200 检查（`QB_PUBLICATION_PICK_REQUIRED` / `QB_PUBLICATION_PICK_TOO_MANY`）。
   - `qb.content.import.batch-size`（缺省 200）：往已有的 Quiz 中导入时每批的题数（分批导入随 F-S6 的编辑器一起提供）。
-  - 部署后没有重跑 `QB_SETUP` 时，三个参数都按缺省值。
+  - `qb.content.import.batch-bytes`（缺省 3145728，即 3 MiB；F-F11a）：一次导入请求的正文字节数上限，页面除了按题数，也按它把大题库切成几批。至少 65536、至多 3500000（`ContentLimits.IMPORT_BATCH_BYTES_TECH`，必须小于 `application.yml` 的 `spring.http.codecs.max-in-memory-size`（4 MB）并留出信封与字段名：超过 4 MB 的请求在框架解码前就被拒绝（413），业务代码看不到；`QuizBankLimitsTest` 断言这一点，调高 `max-in-memory-size` 时才可同步调高这个上限）。最坏的一批（200 题 × 题干 1000 字 + 6 个选项各 300 字 × 三语，全是三字节字符）约 5 MB，所以不按字节切就会被拒；`LargeBankIT` 证实了这一点。包导入把开始时的值记在导入记录（`qb_package_import.batch_bytes`，V118），继续时沿用，参数此后被改也不影响；V118 之前开始的导入没有这个值，按只有题数的计划继续。
+  - 部署后没有重跑 `QB_SETUP` 时，四个参数都按缺省值。
 - **每日核对**：任务 `qb.content-check`，每天 19:13 UTC，模板 `qb.admin.content-health`。
   - `SNAPSHOT_NEAR_LIMIT`：版本的快照超过上限（6 MB）的 80 %。
   - 有问题即给持 `qb.admin.quiz.read` 的人一个待办，每天一个。
@@ -1189,6 +1209,91 @@ Quiz 与发布有主题词（平台词表中的词与自定义词），学者可
 - **待办**：草稿就绪时给发起方一条待办（`task.qb.ai.site-profile`，来源键 `site-profile:<作业号>`），丢弃或过期时经子流程 `QB_SITE_PROFILE_REVIEW_CLOSE` 关闭。
 - **出了问题**：发起方说读不了：看作业的 `failure_code`（`QB_AI_SITE_UNREACHABLE` 打不开、`QB_AI_SITE_ROBOTS` robots.txt 不允许、`QB_AI_SITE_NO_TEXT` 几乎没有文字、`QB_AI_SITE_TIMEOUT` 用时过长、`QB_AI_NO_CANDIDATES` 没有可用的内容）；这几种都请发起方改用“给 AI 工具的提示词”或手填。作业输入里的官网地址在操作记录中被遮蔽（`siteAddress` 标 `@Sensitive`），要查就看作业本身的 `params`。
 - **部署**：迁移 V114；部署后执行一次 `QB_SETUP`（新的参数与审核规则），再由另一位管理员发布。
+
+### 7.47 提交时的资金检查与预付款（F-M5）
+
+发布提交时一次算清它要预留的费用，按整个平台费账户检查，并冻结为预付款（`docs/quizbuks/plans/impl/F-M.md` §8）。现在预留的只有受众规则费（F-M7 的提交部分）；配送费（F-M6）、曝光费（F-M8）随各自的项加入同一检查。
+
+- **规则**：提交（`QB_PUBLICATION_SUBMIT`）在申请审核之后、发起方的钱包锁内检查一次：预付的发起方可用额（未到期的赠送额度 + 现金）≥ 合计；后付的发起方未付（1130，含未开账单的费用）+ 其他已提交发布占用的额度 + 本次 ≤ 信用额。不足即 422 `QB_PUBLICATION_FUNDS`（各项金额、合计、可用额、差额），整个提交什么也不写。通过时冻结（`QB_PREPAYMENT_FREEZE`）：按平台费账户的顺序取（赠送先、现金后），借 2190 / 2160、贷 2180（维度：发起方、发布、用途）；后付的只占信用额、不过账。同时在发布上冻结费用的归属运营商（F-M11，`billingOperatorId`）。
+- **记费**：发布**开始时**（进入 `LIVE`，不是审核通过时；开始前暂停、开始后恢复的，恢复时记）从预付款记受众规则费（`QB_PREPAYMENT_CHARGE` → `QB_FEE_CHARGE` 种类 `AUDIENCE`，归属冻结的运营商；借 2180、贷 1130）。批准后、开始前就结束的发布不记费，预付款由每日任务全额退回。怎样付按**预付款冻结时的方式**，不看发起方此刻的计费方式：预付的冻结了钱，开出即付的账单（不进入后付的月账单）；后付的只占过信用额，费用记为应收、进入当月的后付账单。审核期间税率变了、预付款不够时，余额按平台费账户的顺序（赠送先、现金后）从账户扣，同一张账单；仍不够即 `PARTIAL` / `OPEN`。
+- **退回**：撤回、驳回、审核过期时全额退回（`QB_PREPAYMENT_RELEASE`）：按原分摊退回各笔，赠送退回原笔；原笔已到期或已作废的，当即连同其剩余一起作废（2190 / 5140）。发布结束后由每日任务 `qb.prepayment-release` 退回剩余，即"结束后一天内退回"；时刻与每次的上限是部署设置 `QB_PREPAYMENT_RELEASE_CRON`（缺省 `0 23 3 * * *`，`jabiz.fiscal-year-zone` 的时间）与 `QB_PREPAYMENT_RELEASE_MAX_ITEMS`（缺省 10000，余下的下次运行）。
+- **记费失败时发布上不了架**：记费与"进入 `LIVE`"在同一个事务里。记费失败（如 `qb.fee.tax-rate` 缺失或不可用、发起方已不是审核通过的状态）时，整个上架回滚，发布停在 `SCHEDULED`（或 `PAUSED`）。每分钟的 `QB_PUBLICATION_ADVANCE` 都会再试，再失败。
+  - **怎样发现**：现有告警已经覆盖：
+    - "Job items failing"（`jabiz-job-item-failed`）：任务 `qb.publication-tick` 每次运行都有失败的项，规则拒绝（422）与意外错误都算；
+    - 意外错误（参数不可用等）同时触发 "Process errors"（`jabiz-process-errors`，流程 `QB_PUBLICATION_ADVANCE`）。
+
+    失败的项记在平台的任务项失败记录中（任务页可查）。
+
+    另外有两处可以看到：日志中该流程的错误带违规码（如 `QB_FEE_PARAMS`、`QB_FEE_SPONSOR`）；平台管理系统的发布列表里，开始时间已过仍是"已排期"的发布。不另加告警。
+  - **怎样处理**：
+    - 参数问题：以受控变更补上参数（另一位管理员发布），下一分钟自动上架，记费一次。
+    - 发起方状态问题：先由总部暂停该发布（`QB_PUBLICATION_ADMIN_PAUSE`，停止重试），处理发起方后再恢复（恢复时记费）。
+    - 不要改表、不要绕过记费。
+- **作废从预付款付的账单**：作废（`FeeRequests` 的 `VOID`，四眼）冲正付款分录后，把从预付款付的部分退回账户（不退回预付款）：另过一笔借 2180、贷 2190 / 2160（来源为该预付款，月报 `PREPAYMENT_RELEASED`），赠送退回原笔、原笔已作废即再作废；冲正本身在月报 `FEE_VOIDED`。
+- **核对与月报**：每日核对 `PREPAYMENTS`（2180 按发起方 = 未关闭预付款的剩余）、`PREPAYMENT_STALE`（按发起方：已回到草稿、结束超过 `qb.prepayment.release.overdue-days`（普通参数，缺省 2 天）或发布不存在，仍有未关闭的预付款）、`PREPAYMENT_PARTS`（预付的预付款的分摊——冻结、退回，减去费用取走的——与其剩余不符）与 `PREPAYMENT_UNCHARGED`（发布已开始——LIVE、`FUNDS_SHORT` 或已有学者开始——而受众规则费还没有记，多半是某条进入 LIVE 的路径漏了记费，报开发）；月报新类 `PREPAYMENT_FROZEN`、`PREPAYMENT_USED`、`PREPAYMENT_RELEASED`，新列 `feePrepayments`（2180）。分录导出需要映射 `qb.journal.account.2180`（受控，`QB_SETUP` 提出，另一位管理员发布）。
+- **差异的处理**：`PREPAYMENTS` 有差异时，先查 `SELECT * FROM qb_prepayment WHERE sponsor_id = '<发起方>'` 与来源为 `QbPrepayment` 的分录、`qb_fee_payment_version` 中 `target_id` 或 `prepayment_id` 为该预付款的分摊是否对应；`PREPAYMENT_STALE` 多半是退回失败或每日任务没有运行，查该发布的操作记录与任务的运行；`PREPAYMENT_PARTS` 是缺陷（分摊与剩余不一致时付款与退回都会拒绝而不是少付），报开发。`ENDED` 的发布仍有预付款而任务已跑过：手工运行任务的补跑（`JOB_RUN_REQUEST` `qb.prepayment-release`，带原因）。不手工写分录或改表；报开发。
+- **常见询问**：发起方说提交被拒——向导最后一步的"资金"一栏写明各项与差额，充值或等赠送到账后再提交；发起方问钱去了哪里——发布页的"预付款"与平台费账户的"冻结在预付款中"一行；预付款不是费用，回到草稿时全额退回、结束后一天内退回剩余。
+- **受众规则价目**：需求方 2026-11-09 确认删除总部自己的 `direct` 价目表与参数 `qb.audience.price.fallback`：只有运营商的价目表（负责人或总部为它设置），运营商没有价目表即不收。已有安装中 `direct` 的价目行与该参数保留不读，下次清理时删除。
+### 7.48 配送费（F-M6）
+
+发起方按开始答题的人数向平台付配送费，由运营商定价、每月结算（`docs/quizbuks/plans/impl/F-M.md` §9）。学者读到的内容不变。
+
+- **价目与范围**：每个运营商一行价目（`QbDistributionPrice`）：比例（**日元 / Kudos**：发布最高档位每 1 Kudos、每人收多少日元，不是百分比）、单价下限、单价上限、最低预付（没有中奖名额上限的发布冻结它）。由运营商负责人在运营商管理系统的"配送费价目"页（`QB_OPERATOR_DISTRIBUTION_PRICE_SET`）或总部在平台管理系统的"配送费价目"页（`QB_DISTRIBUTION_PRICE_SET`，`qb.fee.manage`：只有总部的财务管理员，运营商没有）保存，理由必填；没有价目的运营商不收配送费。总部的范围是受控参数 `qb.distribution.rate.min|max`、`unit-floor.min|max`、`unit-ceiling.max`、`minimum-deposit.max`（一位管理员提出、另一位发布）；保存价目时按当时的范围检查，范围改窄后已有的价目不变，每日核对报 `DISTRIBUTION_PRICE_OUT_OF_RANGE`（`sponsorId` 一列是运营商），请运营商或总部改价。`qb.distribution.unit-floor.min` 的缺省值 1 日元是占位，**打开开关之前由需求方确认**。
+- **开关**：`qb.distribution.billing.enabled`（受控，缺省关）只在提交时读。打开后提交的发布冻结单价（clamp（比例 × 最高档位，下限，上限），四位小数）与预付（`⌈名额 × 单价⌉ + 税`，或最低预付），预付是 F-M5 的预付款，用途 `DISTRIBUTION`。**关掉不追溯**：已冻结单价的发布照常结算到结束。挑战与店面的发布不收；直营发起方照付。名额乘单价超过一笔费用的上限即 422 `QB_DISTRIBUTION_DEPOSIT_RANGE`。
+- **结算**（`QB_DISTRIBUTION_SETTLE`，逐项任务，每项一个事务，只取发起方的钱包锁）：
+  - 月度 `qb.distribution-fee`：每月 2 日 00:37（`jabiz.fiscal-year-zone`，部署设置 `QB_DISTRIBUTION_MONTHLY_CRON`），结算上个月该结算的发布（上架时间早于月末、月初之前没有结束、还没有 `final` 行）；已结束超过宽限的直接写成 `final` 并退回剩余。
+  - 结束 `qb.distribution-final`：每天 03:07（`QB_DISTRIBUTION_FINAL_CRON`），在 03:23 的预付款退回之前；结束超过宽限 `qb.distribution.final.end-grace-sec`（受控，缺省 3600 秒）而没有 `final` 行的发布写 `final`，期间是结束所在的月（该月已有行即其后第一个没有行的月），并退回剩余（按用途，`DISTRIBUTION` 只在有 `final` 行之后退回）。
+  - **月份的边界**：月度结算记的是运行那一刻的计数器，所以 M 月的行包含次月 1 日 0 时到 2 日 00:37 之间开始的人（约一天，不按开始时间数：答题表上不加索引；总控 2026-11-12 接受）。发起方或运营商问"10 月的人数为什么多于 10 月 31 日之前开始的人数"即此；运营商的分成（F-M12）按费用的月份，月界后约一天的人数在上一个月。月度补跑得晚，这一段就更长（补跑时刻的计数器）。
+  - 每行记累计的开始人数与金额，本次 = ⌈累计人数 × 单价⌉ − 此前已收，另加税（向下取整）；为 0 不记费。记费是 `QB_FEE_CHARGE` 种类 `DISTRIBUTION`，归属提交时冻结的运营商：预付的先从该发布的预付款扣（赠送先、现金后），不够从平台费账户扣，再不够成未付；后付的记应收，预付款按本次金额减少。
+  - 一次运行至多 10000 项；余下的由每日核对报出，用平台的补跑（`JOB_RUN_REQUEST`，带原因）再运行该时刻。
+- **账单的先后**：后付的月账单任务 `qb.fee-invoice` 改为每天 01:17（每月 1 日不运行），一个发起方某月的账单要等该月应结算的发布都有该月或 `final` 的结算行才开；结算晚了，补上后的下一次运行即开出。那个月的账单开出之后才记的费用（补跑的结算）进入记费当月的账单；`final` 行可能把结束所在月最后一段的人数晚一个月收（运营商结算按费用的月份分成，这部分在下一个月）。对账时区分结算行的 `period`（人数的月份）与费用的 `period`（账单的月份）。
+- **核对**（每日对账）：`DISTRIBUTION_DEPOSITS`（2180 用途 `DISTRIBUTION` 按发起方 = 未关闭的配送费预付款）；`DISTRIBUTION_UNSETTLED`（按（发起方，月份）列出：本月之前的每个月，月末之后过了 `qb.distribution.unsettled-after-hours` 小时（受控，缺省 30，即 2 日 06:00）仍没有该月或 `final` 结算行的发布个数，参照列是月份 `YYYY-MM`；包含后付发起方的账单在等的月份（`qb.system.fee-invoices-due` 的应开减已可开），也包含预付发起方的）；`DISTRIBUTION_FINAL_MISSING`（结束超过 `qb.distribution.final-missing-after-hours` 小时（受控，缺省 48）仍没有 `final` 行）；`DISTRIBUTION_PRICE_OUT_OF_RANGE`；`DISTRIBUTION_AT_FLOOR` 只提示（不算差异）：按下限计费的进行中的发布，非平台付奖的档位金额是发起方自报的，过低即落到下限，供运营商与总部查看。月报新类 `DISTRIBUTION_CHARGED`、`DISTRIBUTION_DEPOSIT`、`DISTRIBUTION_RELEASED`；全部结算在平台管理系统的"配送费结算"页（`qb.admin.distribution-settlements`，可按月份与"只看按下限"筛选，以平台的导出导出）。
+- **差异的处理**：`DISTRIBUTION_UNSETTLED` / `DISTRIBUTION_FINAL_MISSING` 多半是任务没有运行或该项失败：看任务的运行与失败的项，修好原因后补跑该时刻。补跑哪一个时刻：`DISTRIBUTION_UNSETTLED` 的月份 M 补跑 `qb.distribution-fee` 在 M 的次月 2 日 00:37 的计划时刻（`POST /api/jobs/qb.distribution-fee/runs`，带该时刻与原因；同一时刻幂等，已结的项不再写）；几个月都缺时从最早的月份起逐月补跑，一次只补一个月（期间由时刻决定）。`DISTRIBUTION_FINAL_MISSING` 补跑 `qb.distribution-final` 最近一次的计划时刻（任何一天的都结所有已过宽限的结束发布）。后付发起方的账单在补上之后的下一次 01:17 开出。`DISTRIBUTION_DEPOSITS` 有差异同 §7.47 的 `PREPAYMENTS`，报开发。不手工写结算行（只追加、只写一次）、分录或改表。
+- **常见询问**：发起方问配送费怎么算——发布页的"配送费"写明单价、上次结算以来开始的人数与目前约多少；"学者得到的奖励就是您设定的全部，配送费另由平台按开始答题的人数收取"。
+
+### 7.49 样板发起方与重置后的恢复（F-F11）
+
+样板发起方（`docs/quizbuks/plans/impl/F-F11.md`）：5 个发起方，共 15 套 Quiz、30 个发布，其中"安全生产知识库"一套 1000 题（6 个选项、三语），每人抽 20 题；公司名带"（样板）"，电子奖品的码是编出来的。**样板只在测试系统**（需求方 2026-11-12）：正式系统从空开始，不导入样板、没有"样板"标记。测试期数据库会被重置，样板靠发起方包（§7.33）恢复；本节写包带什么、不带什么、恢复的顺序与用时。
+
+- **样板包的保管**：由内容管理员保存在私有存储（不进仓库；含图片，可能较大），每个发起方一个文件，文件名带导出日期（如 `sample-safety-2026-11-12.json`）。包的内容是虚构的，但仍按普通文件保管，不贴到聊天或工单里。
+- **重置之前**：每个样板发起方登录发起方页面，"概况 → 导入与导出 → 导出发起方包"；另记下各自所属的运营商、联系邮箱，并导出邮件服务器设置（密码本来就不在包里）。
+- **包不带的东西**（所以恢复时要另做，见下面的顺序）：状态与审核结果；钱（充值、赠送额度）；店员；邮件服务器的密码；电子奖品的码与共用码；领奖码；邀请名单；资源库；发布封面与福利购买；**运营商归属、发起方可用的奖品方式、境外视频的例外、入驻赠送**——这些不是发起方的内容，而是运营商或总部的决定（包只带内容与设置，Q103 的原则）。
+- **恢复的顺序**（用时见下表；每一步的责任人在括号中）：
+  1. （总部管理员两位）部署、运行 `QB_SETUP`，由另一位管理员发布受控参数的首个值（§1）。赠送开关 `qb.fee-credit.grant.enabled` 没发布时，第 3 步会被拒（`QB_FEE_CREDIT_OFF`）。
+  2. （运营商两位成员 + 5 位发起方）建立运营商（至少两位成员：图与发布的审核要另一位成员）与 5 个发起方账户，验证邮箱，提交入驻申请并**审核通过**。
+  3. （运营商负责人）在发起方详情页确认"资料完整"，发放入驻赠送（`QB_FEE_CREDIT_ONBOARDING`，每个发起方一生一次；总部的内容管理员没有此权限）。F-F11b 起运营商的发起方列表可以勾选多个、逐个确认。
+  4. （发起方）"概况 → 导入与导出 → 导入发起方包"：检查页 → 逐步显示进度；中断后选同一个文件"继续"，不会做两遍。中断后某套 Quiz 的草稿可能是空的或只剩一部分（停在替换内容前的"清除"步之间，F-F11a），继续导入即补齐，或放弃导入（删除这次导入生成的草稿）即可；不要手工编辑这样的草稿。
+  5. （发起方）重新输入**邮件服务器的密码**（Q29，包里从不带）并验证。
+  6. （运营商）为每个样板发起方**允许奖品方式**（到店兑换、电子奖品；包不带，缺省见 `PublicationEditing.allowedMethods`）。
+  7. （发起方）电子奖品的**码 / 共用码**重新录入（包不带）；忘了的话，含码池的发布在提交时被拒（`DIGITAL_POOL_SHORT`），"提交全部草稿"会逐个列出原因，不会静默跳过。
+  8. （发起方 + 运营商另一位成员）"提交全部草稿"：知识结构图进入运营商另一位成员的审核；图生效后**再点一次**提交绑定节点的发布（§7.33 第 6 步）。
+  9. （运营商另一位成员）逐个审核发布（30 个）；没有免审的特例，每项都要另一位成员做出决定。
+  10. （总部或运营商）含 YouTube 等境外视频的发布 / 发起方设**中国大陆例外**（§7.24；包不带例外；原因写"样板：测试中国大陆访问"）。设了例外才能在中国大陆答；不设就是规则本意：被拒。F-F11b 起发起方 / 发布详情页有"设中国大陆例外"的链接并预填，之前要粘贴发起方编号或发布编号。
+  11. （视频提供方 + 总部）共享视频由提供方重新共享并审核（§7.33 第 7 步）。
+- **用时**：半小时指**人在系统里的操作时间**（账户、审核、确认、导入、提交），不是机器时间。机器时间已在测试中量过（`SampleRestoreIT`，本机、PostgreSQL 16 同机；见下面"实测"）；人的步骤数才是风险：
+
+  | 步骤 | 谁 | 操作次数（按样板形状） | 参考用时 |
+  |---|---|---|---|
+  | 1 部署、`QB_SETUP`、受控参数首个值 | 总部两位管理员 | 视首次启动的做法（§1） | 单独计时，不在下面的合计里 |
+  | 2 账户、邮箱、入驻申请与审核 | 运营商成员 + 5 位发起方 | 5 × 4（注册、验证、提交、审核）= 20 | 每次 20–30 秒 |
+  | 3 确认入驻赠送 | 运营商负责人 | 5（F-F11b 起可勾选一次） | 每次 20–30 秒 |
+  | 4 导入发起方包 | 发起方 | 5 × 3（选文件、看检查页、确认）= 15 | 点击每次 20–30 秒；机器时间见下 |
+  | 5 邮件服务器密码 | 发起方 | 至多 5 | 每次 30–60 秒 |
+  | 6 奖品方式 | 运营商 | 5 | 每次 20–30 秒 |
+  | 7 电子奖品的码 | 发起方 | 按含电子奖品的发布数（演练样板：4） | 每次 30–60 秒 |
+  | 8 提交全部草稿与图的审核 | 发起方 + 运营商另一位成员 | 5 + 1 + 1 = 7 | 每次 20–30 秒 |
+  | 9 审核发布 | 运营商另一位成员 | 30 | 每次 10–20 秒（列表内决定） |
+  | 10 境外视频的例外 | 总部 / 运营商 | 含境外视频的发起方数（≤ 5） | 每次 20–30 秒 |
+  | 11 共享视频 | 提供方 + 总部 | 按需 | 视情况 |
+
+  步骤 2–10 合计约 100 次操作，按上面的参考用时是 **35–55 分钟（估计，没有实测）**，高于半小时：表里的次数按最细的操作算，勾选、批量确认与列表内决定会更快，但**是否做得到半小时要靠演练**（计划 §6.4）。演练时用秒表记下每步，把实测写回这张表；超过 30 分钟时再讨论审核的批量化（计划问题 2，**不削弱审核**：每项仍须另一位成员逐项做出决定）。
+- **实测（机器时间，`SampleRestoreIT`，本机，PostgreSQL 同机）**：5 个样板共 125 步（15 套 Quiz、30 个发布；其中 35 步是下面的"清除"步），机器时间合计约 2.4 分钟，其中第一个样板（含 1000 题 × 6 选项 × 三语的题库，当前内容加 2 个版本）53 步约 2 分钟，其余四个各 18 步 4–8 秒。**每一步都很短：最长一步 5.4 秒（清除步），千题库的批（每批 200 题）和保存版本每步 1–2.3 秒，中位数 1.5 秒；其余样板的最长一步 1.1–1.9 秒、中位数不到 0.2 秒**。所以反向代理或 CDN 对 `/api/processes/QB_PACKAGE_IMPORT_STEP` 的响应时限不必特别放宽（常见的 100 秒时限远够）。"用后面的内容整体替换前面已导入的内容"（`intoQuizId`，包里的版本一个接一个重建）要先删掉旧内容：平台逐行删除（每行三条语句，约 2 毫秒），一个 1000 题 × 6 选项 × 三语的库约 1.9 万行，一个请求要近 40 秒，所以页面在每个这样的内容步之前排若干个"清除"步（`QB_QUIZ_CLEAR_CONTENT`，每步最多删 2000 行，3–5 秒），内容步本身只写新的一批（1.5–2 秒）。读题目、选项、翻译的查询用平台缺省的 5 秒时限（`SampleRestoreIT` 即回归测试）。最大的一批（200 题 × 题干 1000 字 + 6 个选项各 300 字 × 三语，全是三字节字符）约 5.1 MB，不按字节切会被框架以 413 拒绝，按 3 MiB 切成 2 批（123 + 77 题）就都能导入。从 1000 题中每人抽 20 题：开始答题的语句数与 `AttemptStatementBudgetIT` 的预算相同（`SampleDrawBudgetIT`，不随题库大小变化）。人的操作时间还没有实测，等 §6.4 的演练。
+- **测试系统的地址库**：要验证"在中国的手机上能答设了例外的 YouTube 发布"，测试系统须放 IP 地址库（§7.24 第 1–4 步）。没放时所有地址按 `qb.region.unknown-ip-country`（缺省中国大陆）处理：含境外视频且没有例外的发布谁也答不了、有例外的谁都能答，**不能证明地址库工作**。验收用手机的做法见 `china-access-check.md`：设了例外的 YouTube 发布能答，没设的显示"该内容在你所在的地区不可用"，`/api/client/region` 显示 `CN`。
+- **赠送 90 天到期**：入驻赠送的有效期是 `qb.fee-credit.valid-days`（缺省 90 天），测试系统放久了额度作废。需要时由总部以 `MANUAL`（四眼：财务管理员提出、内容管理员批准，可另定有效期）追加（§7.39）；入驻赠送一个账户一生一次，重置后是新账户，再领一次。**不要为此调长 `qb.fee-credit.valid-days`**：它是全局受控参数，影响所有发起方。
+- **配送费**（§7.48）：样板的发布是否收配送费取决于提交时的开关。`qb.distribution.billing.enabled` 打开时提交，"提交全部草稿"除了原有的预付，每个发布还多一项用途 `DISTRIBUTION` 的预付（按名额与单价冻结，没有名额上限的发布冻结最低预付）；只有入驻赠送、没有充值的样板发起方，预付先用赠送额度，不够才用现金，再不够即被拒，所以测试系统想让样板不受影响时，在开关关闭时提交，或为样板运营商不设价目（没有价目不收配送费）。赠送额度先于现金：平台费由 `SampleSponsorFeesIT` 证明（只有入驻赠送的发起方，手工费从赠送额度付，现金不动，不够时记未付）；配送费由 `DistributionIT` 证明（`theDepositIsSetAsideTheFeeCreditFirstAndSettledAMonthAtATimeThenGivenBack`：预付与结算都是赠送先、现金后；`beyondTheDepositTheFeeCreditThenCashPayAndTheRestIsOwedPartlyThenWhole`：超出预付的部分赠送、现金、未付依次）；0 人不记费由 `aZeroAmountWritesTheRowWithoutACharge` 证明。
+- **自动收尾**：样板中已经结束的发布照常结算，没有人付费的部分为 0（`SampleRestoreIT`：奖励在实物、电子奖品与绑定节点的发布，到期结束后账本与费用表都没有新行）。样板人员的问题记录即验收材料，由需求方保管，本系统不另建。
+- **千题库的 AI 生成**：站内 AI 每个作业至多 20 题、同时至多 2 个未完成、每人每天 20 个作业（`qb.ai.sponsor.daily-jobs`，受控），缺省每天至多 400 题，所以 1000 题的题库用外部 AI 按 `quiz-file-prompts.md` 生成 Quiz 文件再导入；必要时由总部在测试系统临时调高 `qb.ai.sponsor.daily-jobs`（四眼），用完调回。样板做成后靠发起方包恢复，不需要反复生成。
+- **部署**：迁移 V118（`qb_package_import.batch_bytes`）；部署后运行一次 `QB_SETUP`（新的普通参数 `qb.content.import.batch-bytes`，§7.37）。没有新的环境变量、角色权限、任务。
 
 ## 8. 升级到线 1.3（S0 的迁移 V29、V30）
 

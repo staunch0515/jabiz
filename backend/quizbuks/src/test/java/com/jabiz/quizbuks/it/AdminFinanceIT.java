@@ -1,6 +1,7 @@
 package com.jabiz.quizbuks.it;
 
 import com.jabiz.quizbuks.play.QbPlay;
+import com.jabiz.quizbuks.setup.FirstLaunchSwitches;
 import com.jabiz.quizbuks.setup.QbParams;
 import com.jabiz.quizbuks.setup.QbRoles;
 import com.jabiz.runtime.test.StubHttpServer;
@@ -64,6 +65,7 @@ class AdminFinanceIT extends PayoutItSupport {
         COLUMNS.put("2190", "feeCredit");
         // F-M2: the promotion expenses of the platform fee Kudos (FeeCreditGrantIT grants them; nothing here).
         COLUMNS.put("5140", "feeCreditPromotion");
+        COLUMNS.put("2180", "feePrepayments");
     }
 
     @BeforeEach
@@ -275,6 +277,12 @@ class AdminFinanceIT extends PayoutItSupport {
             row("FEE_CREDIT_GRANTED", 0, 0),
             row("FEE_CREDIT_VOIDED", 0, 0),
             row("OPERATOR_TRANSFER_TO_DIRECT", 0, 0),
+            row("PREPAYMENT_FROZEN", 0, 0),
+            row("PREPAYMENT_USED", 0, 0),
+            row("PREPAYMENT_RELEASED", 0, 0),
+            row("DISTRIBUTION_CHARGED", 0, 0),
+            row("DISTRIBUTION_DEPOSIT", 0, 0),
+            row("DISTRIBUTION_RELEASED", 0, 0),
             row("OTHER", 4, 3_870, "1110", 3_730, "1120", 70, "2110", -300, "2120", -3_500));
         // As recorded at the month's end: the late posting is not in it.
         List<Map<String, Object>> monthly = report(MONTHLY, from, to, to);
@@ -312,8 +320,8 @@ class AdminFinanceIT extends PayoutItSupport {
         Map<String, BigDecimal> opening = accountBalances(from.minusNanos(1_000), to);
         Map<String, BigDecimal> closing = accountBalances(to.minusNanos(1_000), to);
         assertThat(opening.get("2110")).isEqualByComparingTo("-700");
-        Map<String, Long> debits = Map.ofEntries(Map.entry("1110", 17_300L), Map.entry("1120", 6_070L), Map.entry("2110", 3_100L), Map.entry("2120", 3_500L), Map.entry("2130", 3_300L), Map.entry("2140", 0L), Map.entry("4110", 100L), Map.entry("5110", 360L), Map.entry("5120", 0L), Map.entry("5130", 0L), Map.entry("2160", 0L), Map.entry("1130", 0L), Map.entry("4120", 0L), Map.entry("2150", 0L), Map.entry("2170", 0L), Map.entry("2190", 0L), Map.entry("5140", 0L));
-        Map<String, Long> credits = Map.ofEntries(Map.entry("1110", 11_330L), Map.entry("1120", 1_000L), Map.entry("2110", 12_300L), Map.entry("2120", 5_580L), Map.entry("2130", 3_300L), Map.entry("2140", 0L), Map.entry("4110", 220L), Map.entry("5110", 0L), Map.entry("5120", 0L), Map.entry("5130", 0L), Map.entry("2160", 0L), Map.entry("1130", 0L), Map.entry("4120", 0L), Map.entry("2150", 0L), Map.entry("2170", 0L), Map.entry("2190", 0L), Map.entry("5140", 0L));
+        Map<String, Long> debits = Map.ofEntries(Map.entry("1110", 17_300L), Map.entry("1120", 6_070L), Map.entry("2110", 3_100L), Map.entry("2120", 3_500L), Map.entry("2130", 3_300L), Map.entry("2140", 0L), Map.entry("4110", 100L), Map.entry("5110", 360L), Map.entry("5120", 0L), Map.entry("5130", 0L), Map.entry("2160", 0L), Map.entry("1130", 0L), Map.entry("4120", 0L), Map.entry("2150", 0L), Map.entry("2170", 0L), Map.entry("2190", 0L), Map.entry("5140", 0L), Map.entry("2180", 0L));
+        Map<String, Long> credits = Map.ofEntries(Map.entry("1110", 11_330L), Map.entry("1120", 1_000L), Map.entry("2110", 12_300L), Map.entry("2120", 5_580L), Map.entry("2130", 3_300L), Map.entry("2140", 0L), Map.entry("4110", 220L), Map.entry("5110", 0L), Map.entry("5120", 0L), Map.entry("5130", 0L), Map.entry("2160", 0L), Map.entry("1130", 0L), Map.entry("4120", 0L), Map.entry("2150", 0L), Map.entry("2170", 0L), Map.entry("2190", 0L), Map.entry("5140", 0L), Map.entry("2180", 0L));
         List<Map<String, Object>> balances = report(BALANCES, from, to, to);
         Map<String, Map<String, Object>> accounts = balances.stream().filter(r -> "ACCOUNT".equals(r.get("rowKind")))
             .collect(Collectors.toMap(r -> (String) r.get("code"), Function.identity()));
@@ -346,7 +354,7 @@ class AdminFinanceIT extends PayoutItSupport {
         // the archive reproduces it.
         Map<String, Object> issued = run("REPORT_ISSUE", finance(), body("templateId", MONTHLY, "params",
             period(from, to)));
-        assertThat(issued).containsEntry("rowCount", 33).containsEntry("recomputable", true);
+        assertThat(issued).containsEntry("rowCount", 39).containsEntry("recomputable", true);
         advance(Duration.ofMinutes(5));
         credit(sponsor, 25);
         Map<String, Object> again = run("REPORT_ISSUE", finance(), body("templateId", MONTHLY, "params",
@@ -362,13 +370,13 @@ class AdminFinanceIT extends PayoutItSupport {
             .expectBodyList(MAP).returnResult().getResponseBody();
         assertThat(runs).extracting(r -> r.get("runId")).contains(issued.get("runId"), again.get("runId"));
         assertThat(run("REPORT_ISSUE", finance(), body("templateId", BALANCES, "params", period(from, to))))
-            // 17 accounts (F-M1: 2190, F-M2: 5140) and 4 checks.
-            .containsEntry("rowCount", 21);
+            // 18 accounts (F-M1: 2190, F-M2: 5140, F-M5: 2180) and 4 checks.
+            .containsEntry("rowCount", 22);
 
         // The export is the platform's, of the same rows; as known at the month's end, without the late posting,
         // and so is the run issued as known then (its archived rows, not run again).
         String csv = exportCsv(MONTHLY, period(from, to));
-        assertThat(csv.lines().count()).isEqualTo(34);
+        assertThat(csv.lines().count()).isEqualTo(40);
         assertThat(csv).contains("TRANSFER_REVERSED");
         String known = exportCsv(MONTHLY, period(from, to, to));
         assertThat(line(known, "OTHER")).isNotEqualTo(line(csv, "OTHER")).contains(",4,");
@@ -394,6 +402,78 @@ class AdminFinanceIT extends PayoutItSupport {
                 org.assertj.core.groups.Tuple.tuple("BALANCED", true));
         assertThat(report(BALANCES, to, next)).filteredOn(r -> "NO_OVERDRAWN_WALLET".equals(r.get("code")))
             .singleElement().satisfies(r -> assertThat(money(r.get("closing"))).isEqualByComparingTo("30"));
+    }
+
+    /**
+     * F-M6 (H1 of its review): the distribution fee's three kinds with something in them, row by row. In a month of its
+     * own: a deposit of 165 set aside of the fee credit, a final settlement of 3 starts charging 15 and 1 tax, paid
+     * from the deposit, and the rest (149) given back.
+     */
+    @Test
+    void theDistributionFeesKindsAreTheirPostingsRowByRow() {
+        autoApprove(true);
+        param(QbParams.DISTRIBUTION_BILLING_ENABLED, "true");
+        String sponsor = newSponsor(unique("s-f08-distribution"));
+        credit(sponsor, 5_000);
+        String operator = String.valueOf(query("SELECT operator_id FROM qb_sponsor_operator WHERE user_id = ?",
+            sponsor).getFirst().get("operator_id"));
+        run(com.jabiz.quizbuks.fee.DistributionPrices.SET, TestTokens.bearer(tokens, "f08-hq",
+            com.jabiz.quizbuks.QbPermissions.FEE_MANAGE), body("operatorId", operator, "rate", "0.05", "unitFloor", "1",
+            "unitCeiling", "20", "minimumDeposit", 500, "reason", "F-M6"));
+        ZonedDateTime month = now().atZone(ZoneOffset.UTC).plusMonths(3).withDayOfMonth(1).truncatedTo(ChronoUnit.DAYS);
+        Instant from = month.toInstant();
+        Instant to = month.plusMonths(1).toInstant();
+        // The fee credit before the month (granted as F-M2 does: 5140 / 2190).
+        clock.set(from.minus(Duration.ofHours(2)));
+        String grantId = java.util.UUID.randomUUID().toString();
+        execute("INSERT INTO qb_fee_credit_grant (grant_id, sponsor_id, source, source_key, amount, remaining, "
+            + "voided_amount, granted_at, expires_at, version) VALUES (?, ?, 'MANUAL', ?, 1000, 1000, 0, ?, ?, 1)",
+            grantId, sponsor, "test:" + grantId, java.sql.Timestamp.from(clock.instant()),
+            java.sql.Timestamp.from(to.plus(Duration.ofDays(400))));
+        run("LEDGER_POST", TestTokens.bearer(tokens, "ledger-test", "ledger.post"), body("bookingTime",
+            clock.instant().toString(), "description", "Granted credit (test)", "sourceEntity", "QbFeeCreditGrant",
+            "sourceId", grantId, "entries", List.of(
+                body("accountCode", "5140", "direction", "DEBIT", "amount", 1000, "dimensions", Map.of("party", sponsor)),
+                body("accountCode", "2190", "direction", "CREDIT", "amount", 1000, "dimensions",
+                    Map.of("party", sponsor)))));
+        execute("INSERT INTO qb_wallet (wallet_id, owner_id, kind, balance, pending_count, pending_amount, pending_out, "
+            + "version) VALUES (?, ?, 'FEE_CREDIT', 1000, 0, 0, 0, 1) ON CONFLICT (owner_id, kind) DO UPDATE SET "
+            + "balance = qb_wallet.balance + EXCLUDED.balance, version = qb_wallet.version + 1", java.util.UUID.randomUUID().toString(), sponsor);
+
+        clock.set(from.plus(Duration.ofHours(1)));
+        String publicationId = livePublication(sponsor, "F08 distribution", Map.of("maxWinners", 30, "regions",
+            List.of("GLOBAL")));
+        for (int i = 0; i < 3; i++) {
+            start(taker(newTaker(unique("t-f08-distribution-" + i), null)), publicationId);
+        }
+        run("QB_PUBLICATION_ADMIN_END", TestTokens.bearer(tokens, "f08-content",
+            com.jabiz.quizbuks.QbPermissions.ADMIN_CONTENT_WRITE), body("publicationId", publicationId, "reason", "F08"));
+        clock.set(from.plus(Duration.ofHours(4)));
+        systemRun(com.jabiz.quizbuks.fee.DistributionSettlements.SETTLE, body("publicationId", publicationId,
+            "sponsorId", sponsor, "period", null, "last", true));
+        assertThat(query("SELECT status FROM qb_prepayment WHERE publication_id = ?", publicationId)).singleElement()
+            .satisfies(row -> assertThat(row).containsEntry("status", "RELEASED"));
+
+        List<Expected> expected = List.of(
+            // The fee is charged (receivable, revenue, tax) and paid from the deposit (F-M5's kind).
+            row("DISTRIBUTION_CHARGED", 1, 16, "1130", 16, "4120", -15, "2150", -1),
+            row("PREPAYMENT_USED", 1, 16, "2180", 16, "1130", -16),
+            row("DISTRIBUTION_DEPOSIT", 1, 165, "2190", 165, "2180", -165),
+            row("DISTRIBUTION_RELEASED", 1, 149, "2180", 149, "2190", -149));
+        Map<String, Map<String, Object>> monthly = report(MONTHLY, from, to).stream()
+            .collect(Collectors.toMap(r -> (String) r.get("category"), Function.identity()));
+        for (Expected want : expected) {
+            Map<String, Object> got = monthly.get(want.category());
+            assertThat(((Number) got.get("transactionCount")).longValue()).as(want.category() + " count " + got)
+                .isEqualTo(want.count());
+            assertThat(money(got.get("amount"))).as(want.category() + " amount " + got)
+                .isEqualByComparingTo(BigDecimal.valueOf(want.amount()));
+            for (Map.Entry<String, String> column : COLUMNS.entrySet()) {
+                assertThat(money(got.get(column.getValue()))).as(want.category() + " " + column.getKey() + " " + got)
+                    .isEqualByComparingTo(BigDecimal.valueOf(want.moves().getOrDefault(column.getKey(), 0L)));
+            }
+        }
+        assertBooksBalance();
     }
 
     @Test
@@ -453,6 +533,56 @@ class AdminFinanceIT extends PayoutItSupport {
             .value()).isEqualTo(403);
         assertThat(items("qb.admin.transfers", finance, Map.of("filters", List.of(Map.of("field", "held", "op", "eq",
             "value", true))))).allSatisfy(r -> assertThat(r).containsEntry("held", true));
+    }
+
+    /**
+     * F-F10b: the overview's card of the first launch's switches. The system here is a test one (declared values), so
+     * the rows that the first launch would turn off read as on: the card shows them as different, and the template says
+     * what the first launch proposes next to what is in force. Finance reads it; nobody else does.
+     */
+    @Test
+    void theFirstLaunchSwitchesCardReadsTheValuesInForceNextToTheFirstLaunchsValues() {
+        String id = "qb.admin.first-launch-switches";
+        client.post().uri("/api/queries/" + id).contentType(MediaType.APPLICATION_JSON)
+            .header(HttpHeaders.AUTHORIZATION, tokenOf(user("f-content-card"), QbRoles.ADMIN_CONTENT)).bodyValue(Map.of())
+            .exchange().expectStatus().isForbidden();
+        client.post().uri("/api/queries/" + id).contentType(MediaType.APPLICATION_JSON)
+            .header(HttpHeaders.AUTHORIZATION, sponsorToken(newSponsor("s-f10b-card"))).bodyValue(Map.of())
+            .exchange().expectStatus().isForbidden();
+
+        List<Map<String, Object>> rows = items(id, TestTokens.bearer(tokens, "f-read-only-card",
+            "qb.admin.finance.read"), Map.of("limit", 100));
+        // The active rows, then the waiting ones whose key exists (the first launch has them off), in the registry's order.
+        List<String> keys = new java.util.ArrayList<>();
+        List<String> expectedValues = new java.util.ArrayList<>();
+        for (FirstLaunchSwitches.Row row : FirstLaunchSwitches.ALL) {
+            if (row.status() == FirstLaunchSwitches.Status.ACTIVE) {
+                keys.add(row.key());
+                expectedValues.add(row.value() == null ? null : String.valueOf(row.value()));
+            }
+        }
+        for (FirstLaunchSwitches.Row row : FirstLaunchSwitches.ALL) {
+            if (row.status() == FirstLaunchSwitches.Status.WAITING
+                && FirstLaunchSwitches.KEY_BEFORE_MEANING.contains(row.key())) {
+                keys.add(row.key());
+                expectedValues.add("false");
+            }
+        }
+        assertThat(rows).extracting(r -> r.get("paramKey")).containsExactlyElementsOf(keys);
+        // What the first launch proposes (null for an amount); the waiting rows with a key are off.
+        assertThat(rows).extracting(r -> r.get("expected")).containsExactlyElementsOf(expectedValues);
+        assertThat(rows).filteredOn(r -> QbParams.AUDIENCE_BILLING_ENABLED.equals(r.get("paramKey")))
+            .singleElement().satisfies(r -> assertThat(r).containsEntry("value", "false").containsEntry("grp", "audience"));
+        // The install published the declared values: every parameter is there, and cash into Kudos is on.
+        assertThat(rows).allSatisfy(r -> assertThat(r).containsEntry("paramExists", true));
+        Map<String, Object> buy = rows.stream().filter(r -> QbParams.KUDOS_BUY_ENABLED.equals(r.get("paramKey")))
+            .findFirst().orElseThrow();
+        assertThat(buy).containsEntry("value", "true").containsEntry("expected", "false").containsEntry("grp", "kudos");
+        // The numbers keep the form the parameter stores them in (the card compares them as numbers).
+        Map<String, Object> rate = rows.stream().filter(r -> QbParams.CREATOR_FEE_RATE.equals(r.get("paramKey")))
+            .findFirst().orElseThrow();
+        assertThat(new java.math.BigDecimal(String.valueOf(rate.get("value")))).isZero();
+        assertThat(rate).containsEntry("expected", "0");
     }
 
     @Test

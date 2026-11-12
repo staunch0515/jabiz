@@ -1,6 +1,10 @@
 import { signInAdmin } from './admin'
-import { bookingMonthOf, transferInReview, transfersOf } from './finance'
-import { expect, prepareQuizbuks, test } from './support'
+import { bookingMonthOf, expectOverviewAccounts, transferInReview, transfersOf } from './finance'
+import { query } from './content'
+import { adminToken, expect, prepareQuizbuks, test } from './support'
+
+/** The rows the funds switch card adds to the server's: WAITING_ROWS (3) and MANUAL_ROWS (2) of the extension. */
+const CARD_ONLY_ROWS = 5
 
 /*
  * Finance's pages in the administration (docs/quizbuks/plans/Q9c-admin-finance.md): the overview counts the large
@@ -23,9 +27,27 @@ test('finance reviews a large transfer and issues the monthly report', async ({ 
   const inReview = page.getByTestId('finance-in-review')
   await expect(inReview).toBeVisible()
   expect(Number(await inReview.getAttribute('data-count'))).toBeGreaterThanOrEqual(1)
-  // Q9c's eight accounts, Q87's four, Q88b's 2170 (entry fees unsettled), F-M1's 2190 (granted credit) and F-M2's
-  // 5140 (its promotion expenses).
-  await expect(page.getByTestId('finance-account')).toHaveCount(15)
+  await expectOverviewAccounts(page, request)
+  // F-F10b: the first launch's money switches, one row for each parameter of the registry (setup.FirstLaunchSwitches):
+  // the rows from the server (the template qb.admin.first-launch-switches, read here so that a charge that turns active
+  // adds its rows to the expectation by itself), and the rows the card adds: the 3 that wait for a feature of the charge
+  // groups whose key does not exist yet (WAITING_ROWS) and the 2 set up by hand (MANUAL_ROWS).
+  // What the active rows say depends on the system (this one proposes the declared values, other specs change some),
+  // so only the states that cannot change are fixed here.
+  const fromServer = (await query(request, await adminToken(request), 'qb.admin.first-launch-switches', {})).length
+  await expect(page.getByTestId('fund-switches')).toBeVisible()
+  await expect(page.getByTestId('fund-switch')).toHaveCount(fromServer + CARD_ONLY_ROWS)
+  await expect(page.locator('[data-testid="fund-switch"][data-key="qb.exposure.billing.enabled"]'))
+    .toHaveAttribute('data-state', 'waiting')
+  // Its key exists: the card reads its value, and says it waits for its feature.
+  const audience = page.locator('[data-testid="fund-switch"][data-key="qb.audience.billing.enabled"]')
+  await expect(audience).toHaveAttribute('data-state', /^(match|differs|proposed|proposedDiffers|missing)$/)
+  await expect(audience.getByTestId('fund-switch-note')).toContainText('F-M7')
+  await expect(page.locator('[data-testid="fund-switch"][data-key="qb.fee-credit.manual.max"]'))
+    .toHaveAttribute('data-state', 'manual')
+  await expect(page.locator('[data-testid="fund-switch"][data-key="qb.kudos.buy.enabled"]'))
+    .toHaveAttribute('data-state', /^(match|differs|proposed|proposedDiffers|missing)$/)
+  await expect(page.getByTestId('fund-switches-summary')).toBeVisible()
   await inReview.click()
   await expect(page).toHaveURL(/\/admin\/qb\/finance\/transfers\?status=REVIEW$/)
   const row = page.locator(`[data-testid="transfer-row"][data-id="${transferId}"]`)

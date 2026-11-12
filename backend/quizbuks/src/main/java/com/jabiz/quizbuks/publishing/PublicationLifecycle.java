@@ -151,7 +151,11 @@ public final class PublicationLifecycle {
                     QbParams.REVIEW_PUBLICATION_AUTO))
                 // Q87b: the fee gate's switches; not published yet reads as before (no gate), like the cash account's.
                 .step("Load the fee switches", LoadParams.<ProcessContext>optional(ProcessContext::opTime, FEE_PARAMS,
-                    QbParams.FEE_OVERDUE_BLOCK, QbParams.FEE_DEFAULT_BILLING_MODE))
+                    // F-M6 (review L2): with the distribution range, which a priced submission must find published.
+                    java.util.stream.Stream.concat(java.util.stream.Stream.of(QbParams.FEE_OVERDUE_BLOCK,
+                        QbParams.FEE_DEFAULT_BILLING_MODE, QbParams.AUDIENCE_BILLING_ENABLED, QbParams.FEE_TAX_RATE,
+                        QbParams.DISTRIBUTION_BILLING_ENABLED), QbParams.DISTRIBUTION_RANGE.stream())
+                        .toArray(String[]::new)))
                 // Q87 (D-Q87-5): unpaid platform fees beyond what the sponsor's billing allows stop a submission.
                 .steps(b -> com.jabiz.quizbuks.fee.FeeGate.load(b, ctx -> ctx.request().actorId()))
                 .steps(PublicationEditing::loadTiers)
@@ -190,7 +194,15 @@ public final class PublicationLifecycle {
                 .compute("Check the publication", (metadata, ctx) -> check(ctx))
                 .step("Ask for a review", RequireApproval.<ProcessContext>when(ctx -> ctx.contains(CASE),
                     PublicationApprovals.SUBJECT, ctx -> ctx.get(CASE, ApprovalCase.class), APPROVAL))
-                .compute("Submit", (metadata, ctx) -> submitted(ctx)));
+                // F-M5: one funds check of the whole account, under the sponsor's wallet lock (after the approval's,
+                // as the lock order says); a shortfall refuses the submission, which then writes nothing.
+                .steps(b -> PublicationPrepayments.load(b, PublicationEditing::publication,
+                    ctx -> ctx.contains(CASE) && !ctx.hasViolations(), true))
+                .compute("Check the funds", (metadata, ctx) -> PublicationPrepayments.check(ctx,
+                    PublicationEditing.publication(ctx)))
+                .steps(PublicationPrepayments::freeze)
+                .compute("Submit", (metadata, ctx) -> submitted(ctx))
+                .steps(PublicationPrepayments::after));
     }
 
     static final String BENEFIT_PURCHASE = "benefitPurchase";
@@ -299,6 +311,8 @@ public final class PublicationLifecycle {
         }
         Map<String, Object> values = new LinkedHashMap<>();
         values.put("submittedAt", ctx.opTime());
+        // F-M11, F-M5: the operator frozen and what was set aside.
+        values.putAll(PublicationPrepayments.values(ctx));
         switch (approval.status()) {
             case PENDING -> {
                 values.put("status", PENDING_REVIEW);
@@ -346,7 +360,9 @@ public final class PublicationLifecycle {
                         values.put("approvalRequestId", null);
                         PublicationEditing.write(ctx, publication, values);
                     }
-                }));
+                })
+                // F-M5: what its submission set aside goes back.
+                .steps(PublicationPrepayments::after));
     }
 
     public static ProcessDefinition<PublicationRef, PublicationOutput, ProcessContext> pause() {
@@ -452,7 +468,10 @@ public final class PublicationLifecycle {
                         return;
                     }
                     resumed(ctx, publication, null);
-                }));
+                })
+                // N1 of the F-M5 recheck: resumed live is its start when it has not started yet (paused while
+                // scheduled): the audience fee is charged then (lock order: the publication's, then the wallet's).
+                .steps(PublicationPrepayments::after));
     }
 
     /**
@@ -544,6 +563,8 @@ public final class PublicationLifecycle {
                     PublicationApprovals.SUBJECT, ctx -> PublicationVersions.switchCase(ctx, first(ctx, FOUND))
                         .preparedBy(input(ctx).preparerId()), APPROVAL))
                 .compute("Move on", (metadata, ctx) -> approvalResult(ctx))
+                // F-M5: approved, its audience fee is charged from what was set aside; refused, it goes back.
+                .steps(PublicationPrepayments::after)
                 .steps(PublicationNotices::announce));
     }
 
@@ -666,6 +687,8 @@ public final class PublicationLifecycle {
                     ctx -> expiredInReview(ctx) || switchEnding(ctx), PublicationApprovals.SUBJECT,
                     ctx -> PublicationEditing.publication(ctx).id()))
                 .compute("Move on", (metadata, ctx) -> advance(ctx))
+                // F-M5: its review expired, what its submission set aside goes back (an ended one's: the daily job).
+                .steps(PublicationPrepayments::after)
                 .steps(PublicationNotices::announce));
     }
 

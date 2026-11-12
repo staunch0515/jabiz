@@ -28,7 +28,7 @@
   }
 }
 * { box-sizing: border-box; }
-html { font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Noto Sans CJK JP", "Noto Sans CJK SC", "PingFang SC", "Microsoft YaHei", sans-serif; scroll-behavior: smooth; }
+html { font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", sans-serif; scroll-behavior: smooth; }
 body { margin: 0; background: var(--bg); color: var(--fg); line-height: 1.6; font-size: 16px; -webkit-font-smoothing: antialiased; }
 a { color: var(--accent); text-decoration: none; }
 a:hover { text-decoration: underline; }
@@ -224,3 +224,17 @@ table.fees .num { white-space: nowrap; font-variant-numeric: tabular-nums; font-
 /* Q95: the knowledge structure map beside its text on the home page. */
 .map-art { display: flex; justify-content: center; }
 .band-art { width: 100%; max-width: 28rem; height: auto; }
+
+/*
+ * CJK text (F-F12): each language has its own font stack, the Latin letters first and the language's own CJK fonts
+ * after them, and only system fonts (web fonts load slowly or not at all in mainland China). One stack for all three
+ * languages put a Japanese font before the Chinese ones, so a Chinese page was set in Japanese glyphs with the
+ * characters that font lacks falling to another family one by one; and a weight only some of the fonts have (800) was
+ * drawn thick in one and thin in the other. Chinese and Japanese headings are 600, which PingFang, Hiragino, Noto,
+ * Source Han and YaHei all have; no negative letter spacing, which spoils the characters.
+ */
+html:lang(zh) { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "PingFang SC", "Hiragino Sans GB", "Noto Sans SC", "Noto Sans CJK SC", "Source Han Sans SC", "Microsoft YaHei", sans-serif; }
+html:lang(ja) { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Noto Sans JP", "Noto Sans CJK JP", "Yu Gothic", "Meiryo", sans-serif; }
+html:lang(en) { font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", sans-serif; }
+html:lang(zh) :is(h1, h2, h3, .brand, .stat-value, .plan .amount, .eyebrow, .chip, .steps .num), html:lang(ja) :is(h1, h2, h3, .brand, .stat-value, .plan .amount, .eyebrow, .chip, .steps .num) { font-weight: 600; }
+html:lang(zh) *, html:lang(ja) * { letter-spacing: 0 !important; }

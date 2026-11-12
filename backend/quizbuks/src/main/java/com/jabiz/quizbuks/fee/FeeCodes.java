@@ -37,9 +37,25 @@ public final class FeeCodes {
     /** F-M2: only a lead of the sponsor's operator confirms the sponsor. */
     public static final String FEE_CREDIT_LEAD = "QB_FEE_CREDIT_LEAD";
 
-    public static final List<String> ALL = List.of(FEE_UNPAID, FEE_CASH_SHORT, FEE_INVOICE_STATE, FEE_SPONSOR,
+    /** F-M5: what a publication sets aside is more than the account (prepaid) or the credit limit (postpaid) allows. */
+    public static final String PUBLICATION_FUNDS = "QB_PUBLICATION_FUNDS";
+
+    /** F-M6: a value of an operator's distribution price is missing. */
+    public static final String DISTRIBUTION_PRICE_REQUIRED = "QB_DISTRIBUTION_PRICE_REQUIRED";
+    /** F-M6: a value of an operator's distribution price is negative or outside the headquarters' range. */
+    public static final String DISTRIBUTION_PRICE_RANGE = "QB_DISTRIBUTION_PRICE_RANGE";
+    /** F-M6: the floor of the price per start is above its ceiling. */
+    public static final String DISTRIBUTION_FLOOR_ABOVE_CEILING = "QB_DISTRIBUTION_FLOOR_ABOVE_CEILING";
+    /** F-M6: the cap on the winners times the price per start is more than any fee may be. */
+    public static final String DISTRIBUTION_DEPOSIT_RANGE = "QB_DISTRIBUTION_DEPOSIT_RANGE";
+    /** F-M6 (review L2): a bound of the headquarters' range (qb.distribution.*) is not published. */
+    public static final String DISTRIBUTION_RANGE_MISSING = "QB_DISTRIBUTION_RANGE_MISSING";
+
+    public static final List<String> ALL = List.of(PUBLICATION_FUNDS, FEE_UNPAID, FEE_CASH_SHORT, FEE_INVOICE_STATE, FEE_SPONSOR,
         FEE_PERIOD, FEE_PARAMS, FEE_NO_REVIEW, FEE_BILLING_MODE, FEE_OWN, FEE_NOTHING_DUE, FEE_CREDIT_OFF,
-        FEE_CREDIT_SPONSOR, FEE_CREDIT_GIVEN, FEE_CREDIT_MAX, FEE_CREDIT_LEAD);
+        FEE_CREDIT_SPONSOR, FEE_CREDIT_GIVEN, FEE_CREDIT_MAX, FEE_CREDIT_LEAD, DISTRIBUTION_PRICE_REQUIRED,
+        DISTRIBUTION_PRICE_RANGE, DISTRIBUTION_FLOOR_ABOVE_CEILING, DISTRIBUTION_DEPOSIT_RANGE,
+        DISTRIBUTION_RANGE_MISSING);
 
     private FeeCodes() {}
 }

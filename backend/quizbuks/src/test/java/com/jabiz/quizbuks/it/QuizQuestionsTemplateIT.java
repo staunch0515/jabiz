@@ -2,6 +2,7 @@ package com.jabiz.quizbuks.it;
 
 import com.jabiz.param.ParamValues;
 import com.jabiz.quizbuks.content.ContentLanguages;
+import com.jabiz.quizbuks.content.ContentLimits;
 import com.jabiz.quizbuks.content.QuizBankLimits;
 import com.jabiz.quizbuks.setup.QbParams;
 import org.junit.jupiter.api.Test;
@@ -135,6 +136,7 @@ class QuizQuestionsTemplateIT extends ContentItSupport {
         assertThat(number(limits().get("maxQuestions"))).isEqualTo(QuizBankLimits.maxQuestions(params));
         assertThat(number(limits().get("maxPerAttempt"))).isEqualTo(QuizBankLimits.maxPerAttempt(params));
         assertThat(number(limits().get("importBatch"))).isEqualTo(QuizBankLimits.importBatch(params));
+        assertThat(number(limits().get("importBatchBytes"))).isEqualTo(QuizBankLimits.importBatchBytes(params));
     }
 
     @Test
@@ -149,11 +151,30 @@ class QuizQuestionsTemplateIT extends ContentItSupport {
             sameAsTheProcesses(Map.of(QbParams.CONTENT_MAX_QUESTIONS, new java.math.BigDecimal(5000),
                 QbParams.PLAY_MAX_PER_ATTEMPT, new java.math.BigDecimal(20), QbParams.CONTENT_IMPORT_BATCH,
                 java.math.BigDecimal.ZERO));
-            assertThat(limits()).containsEntry("maxPerAttempt", 20);
+            assertThat(limits()).containsEntry("maxPerAttempt", 20).containsEntry("importBatchBytes", 3_145_728);
         } finally {
             setParam(QbParams.CONTENT_MAX_QUESTIONS, "1000");
             setParam(QbParams.PLAY_MAX_PER_ATTEMPT, "100");
             setParam(QbParams.CONTENT_IMPORT_BATCH, "200");
+        }
+    }
+
+    @Test
+    void theBytesOfARequestAreCutToTheSmallestAndTheCeiling() {
+        try {
+            assertThat(limits()).containsEntry("importBatchBytes", 3_145_728);
+            // F-F11a: the bytes of a request are cut to the smallest and the technical ceiling.
+            setParam(QbParams.CONTENT_IMPORT_BATCH_BYTES, "100");
+            sameAsTheProcesses(Map.of(QbParams.CONTENT_IMPORT_BATCH_BYTES, new java.math.BigDecimal(100)));
+            assertThat(limits()).containsEntry("importBatchBytes", ContentLimits.IMPORT_BATCH_BYTES_MIN);
+            setParam(QbParams.CONTENT_IMPORT_BATCH_BYTES, "9000000");
+            sameAsTheProcesses(Map.of(QbParams.CONTENT_IMPORT_BATCH_BYTES, new java.math.BigDecimal(9_000_000)));
+            assertThat(limits()).containsEntry("importBatchBytes", ContentLimits.IMPORT_BATCH_BYTES_TECH);
+            setParam(QbParams.CONTENT_IMPORT_BATCH_BYTES, "1000000");
+            sameAsTheProcesses(Map.of(QbParams.CONTENT_IMPORT_BATCH_BYTES, new java.math.BigDecimal(1_000_000)));
+            assertThat(limits()).containsEntry("importBatchBytes", 1_000_000);
+        } finally {
+            setParam(QbParams.CONTENT_IMPORT_BATCH_BYTES, "3145728");
         }
     }
 

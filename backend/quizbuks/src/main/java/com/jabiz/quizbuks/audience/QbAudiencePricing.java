@@ -9,8 +9,9 @@ import com.jabiz.entity.TemporalRole;
  *   <li>{@code QbAudienceRule}: one row per kind of criterion of {@link AudienceCriteria} (the code gives the kinds:
  *       how they match and how takers answer them): whether sponsors may use it now, whether it is charged for, and
  *       its place in the list. Headquarters manage them; a kind without a row is open and charged for;</li>
- *   <li>{@code QbAudiencePriceList}: an owner's price list — an operator's (its id), or headquarters' for the sponsors
- *       nobody looks after ({@link #DIRECT}) — with the least a publication pays when it uses a charged rule;</li>
+ *   <li>{@code QbAudiencePriceList}: an operator's price list (its id the owner) with the least a publication pays
+ *       when it uses a charged rule (F-M5: headquarters' own {@code direct} list is no longer read or written, the
+ *       requester 2026-11-09; its rows stay until a later clean-up);</li>
  *   <li>{@code QbAudiencePrice}: a rule's daily price in an owner's list (JPY).</li>
  * </ul>
  * Ordinary tables written by {@link AudiencePricingProcesses} only; their history is in the audit records.
@@ -20,9 +21,6 @@ public final class QbAudiencePricing {
     public static final String RULE = "QbAudienceRule";
     public static final String PRICE_LIST = "QbAudiencePriceList";
     public static final String PRICE = "QbAudiencePrice";
-
-    /** The owner of the price list of the sponsors no operator looks after (as the prospecting's owner, Q48c). */
-    public static final String DIRECT = "direct";
 
     public static final int REASON_LENGTH = 500;
     /** The highest daily price or least fee one may set, in JPY. */

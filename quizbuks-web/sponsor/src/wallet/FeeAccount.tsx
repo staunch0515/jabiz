@@ -94,6 +94,10 @@ export function FeeAccount({ wallet }: { wallet: SponsorWallet }) {
           value: <span data-testid="fee-account-credit">{formatKudos(wallet.feeCreditBalance)}</span> },
         { key: 'cash', label: t('wallet.feeAccount.cash'),
           value: <span data-testid="fee-account-cash">{formatKudos(cash)}</span> },
+        // F-M5: what the prepayments of your publications still hold.
+        ...(wallet.prepaymentHeld > 0
+          ? [{ key: 'prepaymentHeld', label: t('wallet.feeAccount.prepaymentHeld'),
+            value: <span data-testid="fee-account-prepayment-held">{formatKudos(wallet.prepaymentHeld)}</span> }] : []),
       ]} />
       <h3 className="font-semibold">{t('wallet.feeAccount.lots')}</h3>
       {lots.isError

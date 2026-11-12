@@ -23,9 +23,10 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 /**
  * The audience rules as a product line (Q47c-1, docs/quizbuks/plans/Q47c-audience-billing.md): headquarters open,
- * close and charge for the kinds of rule; each owner (headquarters for the direct sponsors, an operator's lead for
- * its own) prices them; a sponsor's draft is quoted from the list that applies to them, by the days of its run, never
- * below the least fee, and free while charging is off.
+ * close and charge for the kinds of rule; each operator prices them (its lead, or headquarters for it); a sponsor's
+ * draft is quoted from their operator's list, by the days of its run, never below the least fee, and free while
+ * charging is off or their operator has no list (F-M5: headquarters' own {@code direct} list and its fallback are
+ * gone, the requester 2026-11-09).
  */
 class AudiencePricingIT extends PlayItSupport {
 
@@ -126,9 +127,10 @@ class AudiencePricingIT extends PlayItSupport {
             body("ruleKey", "occupation", "enabled", true, "billable", true, "sortOrder", 30),
             body("ruleKey", "interest", "enabled", true, "billable", true, "sortOrder", 40))));
         param(QbParams.AUDIENCE_BILLING_ENABLED, "false");
-        param(QbParams.AUDIENCE_PRICE_FALLBACK, "DIRECT");
+        String north = newOperator(unique("North"));
+        run(OperatorProcesses.ASSIGN, hq(), body("userId", sponsor, "operatorId", north, "reason", "Q47c"));
         // Charging off: free, whatever the prices.
-        run(AudiencePricingProcesses.PRICES_SET, prices(), priceList(null, 1000, Map.of("gender", 100L, "age", 200L)));
+        run(AudiencePricingProcesses.PRICES_SET, prices(), priceList(north, 1000, Map.of("gender", 100L, "age", 200L)));
         assertThat(quote(token, publicationId)).containsEntry("enabled", false).satisfies(q ->
             assertThat(number(q.get("fee"))).isZero());
         assertThat(rulePrices(token, publicationId)).extracting(r -> r.get("ruleKey"))
@@ -136,21 +138,20 @@ class AudiencePricingIT extends PlayItSupport {
 
         param(QbParams.AUDIENCE_BILLING_ENABLED, "true");
         Map<String, Object> q = quote(token, publicationId);
-        assertThat(q).containsEntry("enabled", true).containsEntry("owner", "direct").containsEntry("days", 7);
+        assertThat(q).containsEntry("enabled", true).containsEntry("owner", north).containsEntry("days", 7);
         assertThat(number(q.get("subtotal"))).isEqualTo(2100);
         assertThat(number(q.get("fee"))).isEqualTo(2100);
         assertThat(rulePrices(token, publicationId)).filteredOn(r -> "age".equals(r.get("ruleKey")))
             .singleElement().satisfies(r -> assertThat(number(r.get("dailyPrice"))).isEqualTo(200));
 
-        // An operator's sponsor without the operator's list: headquarters' prices, or free by the fallback.
-        String north = newOperator(unique("North"));
-        run(OperatorProcesses.ASSIGN, hq(), body("userId", sponsor, "operatorId", north, "reason", "Q47c"));
-        assertThat(quote(token, publicationId)).containsEntry("owner", "direct");
-        param(QbParams.AUDIENCE_PRICE_FALLBACK, "FREE");
+        // An operator without a list prices nothing: free (no headquarters' list to fall back on).
+        String west = newOperator(unique("West"));
+        run(OperatorProcesses.ASSIGN, hq(), body("userId", sponsor, "operatorId", west, "reason", "Q47c"));
         assertThat(quote(token, publicationId)).satisfies(free -> {
             assertThat(free.get("owner")).isNull();
             assertThat(number(free.get("fee"))).isZero();
         });
+        run(OperatorProcesses.ASSIGN, hq(), body("userId", sponsor, "operatorId", north, "reason", "Q47c"));
 
         // The operator's lead prices its own; a member who is not the lead cannot; the least fee applies.
         String lead = member(north, unique("q47c-lead"), true);
@@ -174,14 +175,16 @@ class AudiencePricingIT extends PlayItSupport {
         run(AudiencePricingProcesses.PRICES_SET, prices(), priceList(north, 0, Map.of("gender", 10L, "age", 10L)));
         assertThat(number(quote(token, publicationId).get("fee"))).isEqualTo(140);
         refused(AudiencePricingProcesses.PRICES_SET, prices(), priceList("no-such-operator", 0, Map.of()), 404);
-        assertThat(codes(refused(AudiencePricingProcesses.PRICES_SET, prices(), priceList(null, 0,
+        // No owner is no list any more (headquarters' own is gone).
+        refused(AudiencePricingProcesses.PRICES_SET, prices(), priceList(null, 0, Map.of()), 404);
+        assertThat(codes(refused(AudiencePricingProcesses.PRICES_SET, prices(), priceList(north, 0,
             Map.of("astrology", 10L)), 422))).containsExactly(AudienceCodes.UNKNOWN);
 
         // Another sponsor's publication is none.
         refused(AudiencePricingProcesses.QUOTE, sponsorToken(newSponsor(unique("s-q47c-other"))),
             body("publicationId", publicationId), 404);
         assertThat(items("qb.admin.audience-prices", prices(), Map.of())).extracting(row -> row.get("owner"))
-            .contains("direct", north);
+            .contains(north);
     }
 
     @Test
@@ -190,7 +193,9 @@ class AudiencePricingIT extends PlayItSupport {
         String token = sponsorToken(sponsor);
         String publicationId = draftUsingGenderAndAge(token, "Q47c rules");
         param(QbParams.AUDIENCE_BILLING_ENABLED, "true");
-        run(AudiencePricingProcesses.PRICES_SET, prices(), priceList(null, 0, Map.of("gender", 100L, "age", 200L)));
+        String operator = newOperator(unique("Rules"));
+        run(OperatorProcesses.ASSIGN, hq(), body("userId", sponsor, "operatorId", operator, "reason", "Q47c"));
+        run(AudiencePricingProcesses.PRICES_SET, prices(), priceList(operator, 0, Map.of("gender", 100L, "age", 200L)));
 
         Map<String, Object> saved = run(AudiencePricingProcesses.RULES_SET, rulesAdmin(), body("rules", List.of(
             body("ruleKey", "age", "enabled", true, "billable", false, "sortOrder", 5),

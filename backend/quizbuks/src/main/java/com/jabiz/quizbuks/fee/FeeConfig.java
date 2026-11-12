@@ -77,6 +77,141 @@ public class FeeConfig {
         return QbFeeAccount.PAYMENT_ENTITY;
     }
 
+    /** F-M5: the prepayments publications' submissions set aside; finance reads them, the processes write them. */
+    @Bean
+    EntityDefinition qbPrepaymentEntity() {
+        return QbPrepayments.PREPAYMENT_ENTITY;
+    }
+
+    @Bean
+    DatasetDefinition qbPrepaymentDataset() {
+        return processOnly(QbPrepayments.PREPAYMENT);
+    }
+
+    @Bean
+    DatasetDefinition qbSponsorPrepaymentDataset() {
+        return own(QbPrepayments.SPONSOR_PREPAYMENTS, QbPrepayments.PREPAYMENT);
+    }
+
+    @Bean
+    StaticDictionary qbPrepaymentPurposeDictionary() {
+        return StaticDictionary.define(QbPrepayments.PURPOSE_DICTIONARY, d -> d
+            .item(QbPrepayments.DISTRIBUTION, "en", "Distribution fee", "zh", "配送费", "ja", "配信料")
+            .item(QbPrepayments.EXPOSURE, "en", "Exposure fee", "zh", "曝光费", "ja", "露出料")
+            .item(QbPrepayments.AUDIENCE, "en", "Audience rules", "zh", "受众规则费", "ja", "対象者ルール料")
+            .item(QbPrepayments.AI, "en", "AI credit", "zh", "AI 额度", "ja", "AI クレジット"));
+    }
+
+    @Bean
+    StaticDictionary qbPrepaymentModeDictionary() {
+        return StaticDictionary.define(QbPrepayments.MODE_DICTIONARY, d -> d
+            .item(QbPrepayments.PREPAID, "en", "Money set aside", "zh", "已冻结资金", "ja", "資金を確保")
+            .item(QbPrepayments.POSTPAID, "en", "Counted against the credit limit", "zh", "占用信用额",
+                "ja", "与信枠を使用"));
+    }
+
+    @Bean
+    StaticDictionary qbPrepaymentStatusDictionary() {
+        return StaticDictionary.define(QbPrepayments.STATUS_DICTIONARY, d -> d
+            .item(QbPrepayments.OPEN, "en", "Held", "zh", "冻结中", "ja", "確保中")
+            .item(QbPrepayments.RELEASED, "en", "Given back", "zh", "已退回", "ja", "返却済み"));
+    }
+
+    @Bean
+    ProcessDefinition<Prepayments.FreezeInput, Prepayments.FreezeOutput, ProcessContext> qbPrepaymentFreeze() {
+        return Prepayments.freeze();
+    }
+
+    @Bean
+    ProcessDefinition<Prepayments.UseInput, FeeSettlement.SettleOutput, ProcessContext> qbPrepaymentUse() {
+        return Prepayments.use();
+    }
+
+    @Bean
+    ProcessDefinition<Prepayments.ChargeInput, Prepayments.ChargeOutput, ProcessContext> qbPrepaymentCharge() {
+        return Prepayments.charge(zone);
+    }
+
+    @Bean
+    ProcessDefinition<Prepayments.ReleaseInput, Prepayments.ReleaseOutput, ProcessContext> qbPrepaymentRelease() {
+        return Prepayments.release();
+    }
+
+    @Bean
+    ProcessDefinition<Prepayments.ReleaseRef, FeeProcesses.ItemOutput, ProcessContext> qbPrepaymentReleaseItem() {
+        return Prepayments.releaseItem();
+    }
+
+    /**
+     * Every day ({@code quizbuks.prepayment.release-cron}, {@code QB_PREPAYMENT_RELEASE_CRON}; 03:23 in the fiscal
+     * year's zone): what ended publications' prepayments still hold goes back (F-M5: "within a day of the end"; F-M6:
+     * one item a publication and purpose, the distribution fee's deposit only after its final settlement), at most
+     * {@code quizbuks.prepayment.release-max-items} a run.
+     */
+    @Bean
+    JobDefinition<Prepayments.ReleaseRef> qbPrepaymentReleaseJob(
+        ProcessDefinition<Prepayments.ReleaseRef, FeeProcesses.ItemOutput, ProcessContext> qbPrepaymentReleaseItem,
+        @org.springframework.beans.factory.annotation.Value("${quizbuks.prepayment.release-cron:0 23 3 * * *}")
+        String cron,
+        @org.springframework.beans.factory.annotation.Value("${quizbuks.prepayment.release-max-items:10000}")
+        int maxItems) {
+        return JobDefinition.forEach(Prepayments.RELEASE_JOB, cron, zone,
+                JobItems.template(Prepayments.RELEASE_DUE_TEMPLATE, scheduledTime -> Map.of("at", scheduledTime),
+                    "prepaymentId"),
+                qbPrepaymentReleaseItem,
+                (scheduledTime, row) -> new Prepayments.ReleaseRef(String.valueOf(row.get("publicationId")),
+                    String.valueOf(row.get("sponsorId")), String.valueOf(row.get("purpose"))))
+            .maxItems(maxItems);
+    }
+
+    /** F-M6: the operators' distribution prices and the publications' settlements. */
+    @Bean
+    EntityDefinition qbDistributionPriceEntity() {
+        return QbDistributions.PRICE_ENTITY;
+    }
+
+    @Bean
+    DatasetDefinition qbDistributionPriceDataset() {
+        return processOnly(QbDistributions.PRICE);
+    }
+
+    @Bean
+    EntityDefinition qbDistributionSettlementEntity() {
+        return QbDistributions.SETTLEMENT_ENTITY;
+    }
+
+    @Bean
+    DatasetDefinition qbDistributionSettlementDataset() {
+        return processOnly(QbDistributions.SETTLEMENT);
+    }
+
+    @Bean
+    DatasetDefinition qbSponsorDistributionSettlementDataset() {
+        return own(QbDistributions.SPONSOR_SETTLEMENTS, QbDistributions.SETTLEMENT);
+    }
+
+    @Bean
+    ProcessDefinition<DistributionPrices.PriceInput, DistributionPrices.PriceOutput, ProcessContext>
+        qbDistributionPriceSet() {
+        return DistributionPrices.set();
+    }
+
+    @Bean
+    ProcessDefinition<DistributionPrices.PriceInput, DistributionPrices.PriceOutput, ProcessContext>
+        qbOperatorDistributionPriceSet() {
+        return DistributionPrices.operatorSet();
+    }
+
+    @Bean
+    RetentionPolicy qbDistributionSettlementRetention() {
+        return RetentionPolicy.of(QbDistributions.SETTLEMENT).keep(RETENTION).from("settledAt").afterFiscalYearEnd();
+    }
+
+    @Bean
+    RetentionPolicy qbPrepaymentRetention() {
+        return RetentionPolicy.of(QbPrepayments.PREPAYMENT).keep(RETENTION).from("frozenAt").afterFiscalYearEnd();
+    }
+
     @Bean
     DatasetDefinition qbFeeCreditGrantDataset() {
         return processOnly(QbFeeAccount.GRANT);
@@ -182,7 +317,9 @@ public class FeeConfig {
     StaticDictionary qbFeeKindDictionary() {
         return StaticDictionary.define(QbFees.KIND_DICTIONARY, d -> d
             .item(FeeRules.MONTHLY, "en", "Monthly fee", "zh", "月费", "ja", "月額料金")
-            .item(FeeRules.MANUAL, "en", "Fee charged by hand", "zh", "手工记费", "ja", "手動の料金"));
+            .item(FeeRules.MANUAL, "en", "Fee charged by hand", "zh", "手工记费", "ja", "手動の料金")
+            .item(FeeRules.AUDIENCE, "en", "Audience rules", "zh", "受众规则费", "ja", "対象者ルール料")
+            .item(FeeRules.DISTRIBUTION, "en", "Distribution fee", "zh", "配送费", "ja", "配信料"));
     }
 
     @Bean
@@ -449,16 +586,64 @@ public class FeeConfig {
             .maxItems(10_000);
     }
 
-    /** The postpaid invoices, issued on the 2nd at 01:17 (Japan) for the month that ended. */
+    /**
+     * The postpaid invoices (F-M6, F-M.md §9.6): every day at 01:17 in the fiscal year's zone except the 1st (the monthly
+     * distribution settlement on the 2nd at 00:37 comes first), each sponsor's earliest month that ended with postpaid
+     * fees not invoiced and every distribution fee due for it settled.
+     */
     @Bean
     JobDefinition<FeeProcesses.InvoiceInput> qbFeeInvoiceJob(
         ProcessDefinition<FeeProcesses.InvoiceInput, FeeProcesses.ItemOutput, ProcessContext> qbFeeInvoiceItem) {
-        return JobDefinition.forEach(FeeProcesses.INVOICE_JOB, "0 17 16 1 * *", ZoneOffset.UTC,
+        return JobDefinition.forEach(FeeProcesses.INVOICE_JOB, "0 17 1 2-31 * *", zone,
                 JobItems.template(FeeProcesses.INVOICES_DUE_TEMPLATE,
-                    scheduledTime -> Map.of("period", previousPeriod(scheduledTime)), "sponsorId"),
+                    scheduledTime -> Map.of("current", FeeRules.period(scheduledTime, zone), "zone", zone.getId()),
+                    "sponsorId"),
                 qbFeeInvoiceItem,
                 (scheduledTime, row) -> new FeeProcesses.InvoiceInput(String.valueOf(row.get("sponsorId")),
-                    previousPeriod(scheduledTime)))
+                    String.valueOf(row.get("period"))))
+            .maxItems(10_000);
+    }
+
+    /** F-M6: a publication's distribution fee settled for a month (the item of both jobs). */
+    @Bean
+    ProcessDefinition<DistributionSettlements.SettleRef, FeeProcesses.ItemOutput, ProcessContext>
+        qbDistributionSettle() {
+        return DistributionSettlements.settle(zone);
+    }
+
+    /** F-M6: the distribution fees of the month that ended, on the 2nd at 00:37 in the fiscal year's zone. */
+    @Bean
+    JobDefinition<DistributionSettlements.SettleRef> qbDistributionMonthlyJob(
+        ProcessDefinition<DistributionSettlements.SettleRef, FeeProcesses.ItemOutput, ProcessContext>
+            qbDistributionSettle,
+        @Value("${quizbuks.distribution.monthly-cron:0 37 0 2 * *}") String cron) {
+        return JobDefinition.forEach(DistributionSettlements.MONTHLY_JOB, cron, zone,
+                JobItems.template(DistributionSettlements.DUE_TEMPLATE, scheduledTime -> {
+                    String period = previousPeriod(scheduledTime);
+                    return Map.of("period", period, "periodStart", FeeRules.periodStart(period, zone),
+                        "periodEnd", FeeRules.periodStart(FeeRules.period(scheduledTime, zone), zone));
+                }, "publicationId"),
+                qbDistributionSettle,
+                (scheduledTime, row) -> new DistributionSettlements.SettleRef(String.valueOf(row.get("publicationId")),
+                    String.valueOf(row.get("sponsorId")), previousPeriod(scheduledTime), false))
+            .maxItems(10_000);
+    }
+
+    /**
+     * F-M6: the final settlement of the publications that ended, every day at 03:07 in the fiscal year's zone (before
+     * the prepayments' release at 03:23).
+     */
+    @Bean
+    JobDefinition<DistributionSettlements.SettleRef> qbDistributionFinalJob(
+        ProcessDefinition<DistributionSettlements.SettleRef, FeeProcesses.ItemOutput, ProcessContext>
+            qbDistributionSettle,
+        @Value("${quizbuks.distribution.final-cron:0 7 3 * * *}") String cron) {
+        return JobDefinition.forEach(DistributionSettlements.FINAL_JOB, cron, zone,
+                JobItems.template(DistributionSettlements.FINAL_DUE_TEMPLATE,
+                    scheduledTime -> Map.of("at", scheduledTime), "publicationId"),
+                qbDistributionSettle,
+                (scheduledTime, row) -> new DistributionSettlements.SettleRef(String.valueOf(row.get("publicationId")),
+                    String.valueOf(row.get("sponsorId")), null, true))
             .maxItems(10_000);
     }
 

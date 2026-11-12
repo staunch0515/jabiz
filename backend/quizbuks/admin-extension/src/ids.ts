@@ -208,6 +208,8 @@ export const TEMPLATE = {
   adminProspectFunnel: 'qb.admin.prospect-funnel',
   /** F-F8 (T9): the platform switch of prospecting in force (`qb.admin.prospect`). */
   adminProspectSwitch: 'qb.admin.prospect-switch',
+  /** F-F10b: the first launch's money switches in force, set against the registry (`qb.admin.finance.read`). */
+  adminFirstLaunchSwitches: 'qb.admin.first-launch-switches',
   /** Q48b: the operators' monthly settlements, every operator's (finance) and the caller operator's own. */
   operatorSettlements: 'qb.admin.operator-settlements',
   ownSettlements: 'qb.operator.settlements',
@@ -364,6 +366,8 @@ export const ACCOUNTS = ['2110', '2120', '2130', '1110', '1120', '4110', '5110',
   '2160', '1130', '4120', '2150',
   // Q88b: the entry fees unsettled (until the daily job moves them to the sponsors' cash accounts).
   '2170',
+  // F-M5: the platform fees prepaid when a publication is submitted.
+  '2180',
   // F-M1: the sponsors' granted credit (platform fee Kudos); F-M2: its promotion expenses.
   '2190', '5140'] as const
 
@@ -764,6 +768,10 @@ export const PATH = {
   audienceRules: '/qb/audience/rules',
   audiencePrices: '/qb/audience/prices',
   operatorAudiencePrices: '/qb/operator/audience-prices',
+  /** F-M6: every operator's distribution price (headquarters), the operator's own, and the settlements (finance). */
+  distributionPrices: '/qb/distribution/prices',
+  operatorDistributionPrice: '/qb/operator/distribution-price',
+  distributionSettlements: '/qb/finance/distribution-settlements',
   /** The platform's own pages. */
   tasks: '/tasks',
   /** F-C10c: the AI help's conversations handed to a person (headquarters every one, an operator its own). */
@@ -785,9 +793,6 @@ export const SPONSOR_KIND = 'SPONSOR'
  */
 export const AUDIENCE_RULE_KEYS = ['gender', 'age', 'occupation', 'interest'] as const
 
-/** The owner of headquarters' own price list (the sponsors no operator looks after). */
-export const AUDIENCE_DIRECT = 'direct'
-
 export const AUDIENCE_PRICING = {
   rulesSet: 'QB_AUDIENCE_RULES_SET',
   pricesSet: 'QB_AUDIENCE_PRICES_SET',
@@ -795,6 +800,17 @@ export const AUDIENCE_PRICING = {
   rulesTemplate: 'qb.admin.audience-rules',
   pricesTemplate: 'qb.admin.audience-prices',
   operatorPricesTemplate: 'qb.operator.audience-prices',
+} as const
+
+/** F-M6 (backend `fee.DistributionPrices`, `qb.admin.distribution-*`): the distribution fee's prices and settlements. */
+export const DISTRIBUTION = {
+  priceSet: 'QB_DISTRIBUTION_PRICE_SET',
+  operatorPriceSet: 'QB_OPERATOR_DISTRIBUTION_PRICE_SET',
+  pricesTemplate: 'qb.admin.distribution-prices',
+  operatorPriceTemplate: 'qb.operator.distribution-price',
+  settlementsTemplate: 'qb.admin.distribution-settlements',
+  /** Review L5: the caller operator's own settlements (its frozen fees), through its membership. */
+  operatorSettlementsTemplate: 'qb.operator.distribution-settlements',
 } as const
 
 /**

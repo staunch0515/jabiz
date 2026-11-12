@@ -50,6 +50,30 @@ public final class ReconChecks {
     public static final String CERTIFIED_GRANTS = "CERTIFIED_GRANTS";
     /** F-M4: an operator's account (2140) against its settlements, paid withdrawals and transfers to its Sponsor. */
     public static final String OPERATOR_ACCOUNT = "OPERATOR_ACCOUNT";
+    /** F-M5: a sponsor's prepayments (2180) against what their open prepaid prepayments hold. */
+    public static final String PREPAYMENTS = "PREPAYMENTS";
+    /**
+     * F-M5: prepayments still open that should have been given back: of a publication back in its draft (withdrawn,
+     * rejected, review expired), ended more than {@code qb.prepayment.release.overdue-days} ago, or not there.
+     */
+    public static final String PREPAYMENT_STALE = "PREPAYMENT_STALE";
+    /** F-M5 (M3 of its review): prepaid prepayments whose parts do not add up to what they hold. */
+    public static final String PREPAYMENT_PARTS = "PREPAYMENT_PARTS";
+    /** F-M5 (N1 of its recheck): audience fees not charged though the publication started. */
+    public static final String PREPAYMENT_UNCHARGED = "PREPAYMENT_UNCHARGED";
+    /** F-M6: a sponsor's distribution fee deposits (2180, purpose DISTRIBUTION) against what they hold. */
+    public static final String DISTRIBUTION_DEPOSITS = "DISTRIBUTION_DEPOSITS";
+    /**
+     * F-M6: publications due for the month before and not settled for it (no row of the month, no final one)
+     * {@code qb.distribution.unsettled-after-hours} into the month; actual: how many.
+     */
+    public static final String DISTRIBUTION_UNSETTLED = "DISTRIBUTION_UNSETTLED";
+    /** F-M6: publications ended {@code qb.distribution.final-missing-after-hours} ago without a final settlement. */
+    public static final String DISTRIBUTION_FINAL_MISSING = "DISTRIBUTION_FINAL_MISSING";
+    /** F-M6: operators' prices outside the headquarters' range as it is now (sponsorId holds the operator). */
+    public static final String DISTRIBUTION_PRICE_OUT_OF_RANGE = "DISTRIBUTION_PRICE_OUT_OF_RANGE";
+    /** F-M6: publications whose price per start is the operator's floor: a note for the operators, not a difference. */
+    public static final String DISTRIBUTION_AT_FLOOR = "DISTRIBUTION_AT_FLOOR";
     /** Account 2110 in all against all sponsors' cached balances. */
     public static final String TOTAL_2110 = "TOTAL_2110";
     /** Every posted line's debit less credit: 0. */
@@ -82,10 +106,12 @@ public final class ReconChecks {
         TOTAL_2110, LEDGER_ZERO, TOPUP_LEDGER, TOPUP_ARRIVALS, TOPUP_REFUNDS, TOPUP_FEE, TAKER_WALLET,
         TAKER_IN_TRANSFER, TAKER_WALLET_LAG, TRANSFER_LEDGER, TRANSFER_IN_TRANSIT, CASH_ACCOUNT, TOTAL_2160,
         FEES_RECEIVABLE, ENTRY_FEES_UNSETTLED, FEE_CREDIT, CASH_LOTS, FEE_PAYMENTS, FEE_CREDIT_PROMOTION,
-        LIGHT_GRANTS, LIGHT_VOIDS, CERTIFIED_GRANTS, OPERATOR_ACCOUNT);
+        LIGHT_GRANTS, LIGHT_VOIDS, CERTIFIED_GRANTS, OPERATOR_ACCOUNT, PREPAYMENTS, PREPAYMENT_STALE,
+        PREPAYMENT_PARTS, PREPAYMENT_UNCHARGED, DISTRIBUTION_DEPOSITS, DISTRIBUTION_UNSETTLED,
+        DISTRIBUTION_FINAL_MISSING, DISTRIBUTION_PRICE_OUT_OF_RANGE, DISTRIBUTION_AT_FLOOR);
 
     /** The checks that only note something: a run with notes alone is {@code OK}. */
-    public static final Set<String> NOTES = Set.of(TAKER_WALLET_LAG);
+    public static final Set<String> NOTES = Set.of(TAKER_WALLET_LAG, DISTRIBUTION_AT_FLOOR);
 
     public static final String OK = "OK";
     public static final String DIFF = "DIFF";
@@ -196,8 +222,9 @@ public final class ReconChecks {
             String check = text(row.get("checkCode"));
             if (check != null && ALL.contains(check)) {
                 String party = row.containsKey("userId") ? text(row.get("userId")) : text(row.get("sponsorId"));
+                // F-M6 (review M2, M4): the fee account's template names a publication or a month as its reference.
                 String reference = row.containsKey("transferId") ? text(row.get("transferId"))
-                    : text(row.get("topUpId"));
+                    : row.containsKey("reference") ? text(row.get("reference")) : text(row.get("topUpId"));
                 add(items, check, party, reference, row.get("expected"), row.get("actual"));
             }
         }

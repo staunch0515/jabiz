@@ -65,14 +65,6 @@ public class AudiencePricingConfig {
     }
 
     @Bean
-    StaticDictionary qbAudienceFallbackDictionary() {
-        return StaticDictionary.define("urn:jabiz:dict:quizbuks:audience-fallback", d -> d
-            .item(AudienceBilling.FALLBACK_DIRECT, "en", "Headquarters' prices", "zh", "按总部的价格",
-                "ja", "本部の価格")
-            .item(AudienceBilling.FALLBACK_FREE, "en", "Free", "zh", "免费", "ja", "無料"));
-    }
-
-    @Bean
     ProcessDefinition<AudiencePricingProcesses.RulesInput, AudiencePricingProcesses.RulesOutput, ProcessContext>
         qbAudienceRulesSet() {
         return AudiencePricingProcesses.rulesSet();

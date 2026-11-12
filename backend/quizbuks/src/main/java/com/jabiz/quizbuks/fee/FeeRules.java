@@ -27,7 +27,11 @@ public final class FeeRules {
     public static final String MONTHLY = "MONTHLY";
     /** A fee headquarters records by hand, another administrator approving. */
     public static final String MANUAL = "MANUAL";
-    public static final List<String> KINDS = List.of(MONTHLY, MANUAL);
+    /** F-M7 (with F-M5): a publication's audience rules, charged from what its submission set aside when it goes on. */
+    public static final String AUDIENCE = "AUDIENCE";
+    /** F-M6: a publication's distribution fee, charged a month at a time for the people who started its quiz. */
+    public static final String DISTRIBUTION = "DISTRIBUTION";
+    public static final List<String> KINDS = List.of(MONTHLY, MANUAL, AUDIENCE, DISTRIBUTION);
 
     private static final DateTimeFormatter MONTH = DateTimeFormatter.ofPattern("yyyy-MM", Locale.ROOT);
 

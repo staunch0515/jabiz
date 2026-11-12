@@ -6,9 +6,10 @@ import { searchHome } from './play'
 import { boundPublicationOf, CAPITALS, operatorTree, platformMap, pass } from './tree'
 import { answerQuiz, GRANT, loopCast, phone, rememberParams, STEP_TIMEOUT_MS, type Loop } from './launch-loop'
 import { contentAdmin } from './legal'
-import { approvedSponsor } from './wallet'
+import { approvedSponsor, fund } from './wallet'
 import {
-  accessibleInBoth, expect, mailTo, openArea, PASSWORD, prepareQuizbuks, run, setControlledParam, signIn, signOut,
+  accessibleInBoth, expect, mailTo, openArea, PASSWORD, prepareQuizbuks, run, runJobNow, setControlledParam, signIn,
+  signOut,
   takerArea, test, tokenOf, unique,
 } from './support'
 
@@ -20,6 +21,8 @@ import {
  *
  *   0  the people: an operator with its official account and a reviewer, Sora (a Sponsor of the operator), Rin and Kai
  *   1  Sora's map of two nodes, put in effect by another member of her operator
+ *   2' F-M5: submitting checks the whole platform fee account (granted credit first): short, refused with every
+ *      amount and nothing written; credited and topped up, it goes through; withdrawn, everything comes back
  *   2  a publication on each node (a digital prize, a prize at her place), approved by the operator and live
  *   3  Rin answers on her phone: the advanced node is hidden until the basics are lit; her map; the whole map lit
  *   4  the prizes: the digital one is shown, copied and confirmed; the other is handed over at Sora's counter by Kai
@@ -27,14 +30,14 @@ import {
  *   6a the platform's own map: its issuer is the platform
  *   6b a Sponsor of the operator lights the platform's template on the challenges tab: the credit and the way to give
  *      digital prizes arrive
+ *   7  F-M6: the distribution fee set aside when submitted; the publication ends, the final job charges its one start
+ *      from the prepayment and gives back the rest
  *
  * Not repeated here: the editor's keyboard (tree-graph.spec), certificates turned off and the deleted account
  * (certificates.spec), and mainland China's view of a publication with a foreign video (foreign-video.spec: the
  * end-to-end run has no address database, so that spec sets the region by parameter).
  *
  * To come with the money (the plan's table says where; no placeholder is written before the feature exists):
- *   2'  F-M5: submitting checks the platform fee account (granted credit first), in step 2 before the submit
- *   7   F-M6: the delivery fee, by the monthly job, from the credit first (run with `runJobNow`, parameters restored)
  *   8   F-M12: the monthly bill and the operator's settlement, each after the one before it
  *
  * The verify page is cached by the browser for up to a minute, so every look at it is in a context of its own.
@@ -96,6 +99,79 @@ test.describe.serial('the first launch\'s loop', () => {
     await expect(map.getByText('Latte art')).toBeVisible()
     await accessibleInBoth(page, 'sponsor map in effect')
   })
+
+  test('2\'. submitting checks the whole platform fee account: short, then credited and topped up, then given back',
+    async ({ request }) => {
+      test.setTimeout(STEP_TIMEOUT_MS)
+      const { sora, operator } = loop
+      // Her operator prices the gender rule at 100 a day (its own list); charging for the rules and granting the
+      // onboarding credit are global switches, put back after.
+      await run(request, operator.operatorToken, 'QB_OPERATOR_AUDIENCE_PRICES_SET', { minimumFee: 0,
+        prices: [{ ruleKey: 'gender', dailyPrice: 100 }], reason: 'Closed loop' })
+      const restore = await rememberParams(request, [
+        { key: 'qb.audience.billing.enabled', absent: 'false' },
+        { key: 'qb.fee-credit.grant.enabled', absent: 'false' },
+        { key: 'qb.fee-credit.grant.basic', absent: '1000' },
+      ])
+      try {
+        await setControlledParam(request, 'qb.audience.billing.enabled', 'true')
+        // A seven-day publication for women: 700 for the rule and its tax, set aside when submitted.
+        const quiz = await run(request, sora.token, 'QB_QUIZ_SAVE', { title: unique('Coffee for women '), intro: null,
+          timeLimitSec: 300 })
+        await run(request, sora.token, 'QB_QUESTION_SAVE', { quizId: quiz.quizId, stem: CAPITALS[0].stem, points: 1,
+          options: [{ text: CAPITALS[0].right, correct: true }, { text: CAPITALS[0].wrong }] })
+        const version = await run(request, sora.token, 'QB_QUIZ_PUBLISH_VERSION', { quizId: quiz.quizId })
+        const start = Date.now() + 86_400_000
+        const saved = await run(request, sora.token, 'QB_PUBLICATION_SAVE', { versionId: version.versionId,
+          name: unique('Coffee for women '), regions: ['GLOBAL'], startAt: new Date(start).toISOString(),
+          endAt: new Date(start + 7 * 86_400_000).toISOString(), passScore: 1, budgetCap: 500, maxWinners: 1000,
+          tiers: [{ fromScore: 0, toScore: 0, reward: 0 }, { fromScore: 1, toScore: 1, reward: 10 }] })
+        const publicationId = saved.publicationId as string
+        await run(request, sora.token, 'QB_PUBLICATION_AUDIENCE_SAVE', { publicationId,
+          criteria: [{ key: 'gender', options: ['FEMALE'] }] })
+
+        // Short: the wizard's look and the submission say what is set aside and what is missing; nothing is written.
+        const short = await run(request, sora.token, 'QB_PUBLICATION_FUNDS_CHECK', { publicationId })
+        expect(short.enough).toBe(false)
+        const total = Number(short.total)
+        expect(total, 'the rule and its tax').toBeGreaterThanOrEqual(700)
+        expect(short.items).toEqual([expect.objectContaining({ purpose: 'AUDIENCE', amount: total })])
+        const refused = await request.post('/api/processes/QB_PUBLICATION_SUBMIT/latest', {
+          headers: { Authorization: `Bearer ${sora.token}` }, data: { publicationId } })
+        expect(refused.status()).toBe(422)
+        expect((await refused.json()).violations.map((v: { ruleCode: string }) => v.ruleCode))
+          .toEqual(['QB_PUBLICATION_FUNDS'])
+        expect(await query(request, sora.token, 'qb.sponsor.publication-prepayments', { publicationId })).toEqual([])
+
+        // Her operator's lead confirms her onboarding credit (500 here) and she tops up 1,000 of cash: it goes
+        // through, the granted credit spent first.
+        await setControlledParam(request, 'qb.fee-credit.grant.enabled', 'true')
+        await setControlledParam(request, 'qb.fee-credit.grant.basic', '500',
+          { type: 'monetary', currency: 'JPY', scale: 0 })
+        await run(request, operator.operatorToken, 'QB_FEE_CREDIT_ONBOARDING', { sponsorId: sora.userId })
+        await fund(request, sora.token, 1000)
+        expect((await run(request, sora.token, 'QB_PUBLICATION_FUNDS_CHECK', { publicationId })).enough).toBe(true)
+        await run(request, sora.token, 'QB_PUBLICATION_SUBMIT', { publicationId })
+        const [held] = await query(request, sora.token, 'qb.sponsor.publication-prepayments', { publicationId })
+        expect(held).toEqual(expect.objectContaining({ purpose: 'AUDIENCE', status: 'OPEN', remaining: total }))
+        // The granted 500 first, then the cash for the rest.
+        const [wallet] = await query(request, sora.token, 'qb.sponsor.wallet', {})
+        expect(Number(wallet.prepaymentHeld)).toBe(total)
+        expect(Number(wallet.feeCreditBalance), 'the granted credit is spent first').toBe(0)
+        expect(Number(wallet.cashBalance)).toBe(1000 - (total - 500))
+
+        // Withdrawn: a prepayment is not a fee, everything comes back where it came from.
+        await run(request, sora.token, 'QB_PUBLICATION_WITHDRAW', { publicationId })
+        const [back] = await query(request, sora.token, 'qb.sponsor.publication-prepayments', { publicationId })
+        expect(back).toEqual(expect.objectContaining({ status: 'RELEASED', releaseReason: 'WITHDRAWN', remaining: 0 }))
+        const [after] = await query(request, sora.token, 'qb.sponsor.wallet', {})
+        expect(Number(after.prepaymentHeld)).toBe(0)
+        expect(Number(after.feeCreditBalance)).toBe(500)
+        expect(Number(after.cashBalance)).toBe(1000)
+      } finally {
+        await restore()
+      }
+    })
 
   test('2. a digital prize on the basics and a prize at her place on the advanced node, approved and live',
     async ({ page, request }) => {
@@ -453,6 +529,63 @@ test.describe.serial('the first launch\'s loop', () => {
         await page.goto(`/sponsor/profile/challenges/results/${started.attemptId}`)
         await expect(page.getByTestId('challenge-result')).toHaveAttribute('data-passed', 'false')
         await expect(page.getByTestId('challenge-next')).toBeVisible()
+      } finally {
+        await restore()
+      }
+    })
+
+  test('7. the distribution fee: set aside when submitted, settled by the final job once it ends, the rest given back',
+    async ({ request }) => {
+      // Up to a minute and a half of the publication running, the grace of a minute after its end (the least, review
+      // L1) and the first minute's final job after that (QB_DISTRIBUTION_FINAL_CRON runs every minute in the
+      // end-to-end run; a run settles the publications ended a grace before its scheduled time).
+      test.setTimeout(STEP_TIMEOUT_MS + 300_000)
+      const { sora, operator, rin, map } = loop
+      const restore = await rememberParams(request, [
+        { key: 'qb.distribution.billing.enabled', absent: 'false' },
+        { key: 'qb.distribution.final.end-grace-sec', absent: '3600' },
+      ])
+      try {
+        await setControlledParam(request, 'qb.distribution.billing.enabled', 'true')
+        await setControlledParam(request, 'qb.distribution.final.end-grace-sec', '60',
+          { type: 'numeric', precision: 5, scale: 0 })
+        // Her operator's lead prices a start at 1 yen per Kudos of the highest tier, between 1 and 20: the reward of 10
+        // comes to 0.1, so the floor of 1.
+        await run(request, operator.operatorToken, 'QB_OPERATOR_DISTRIBUTION_PRICE_SET', { rate: '0.0100',
+          unitFloor: '1.0000', unitCeiling: '20.0000', minimumDeposit: 500, reason: 'Closed loop' })
+        // Three winners at most: 3 set aside (tax rounds down to 0). It runs for 75 seconds.
+        const name = unique('Coffee sprint ')
+        const made = await boundPublicationOf(request, sora.token, map!.treeId, map!.basics, name,
+          { reward: 10, maxWinners: 3, endInMs: 75_000 })
+        const [held] = (await query(request, sora.token, 'qb.sponsor.publication-prepayments',
+          { publicationId: made.publicationId })).filter((row) => row.purpose === 'DISTRIBUTION')
+        expect(held).toEqual(expect.objectContaining({ status: 'OPEN', remaining: 3 }))
+        const [priced] = await query(request, sora.token, 'qb.sponsor.publication-distribution',
+          { publicationId: made.publicationId })
+        expect(priced).toEqual(expect.objectContaining({ atFloor: true }))
+        expect(Number(priced.unit)).toBe(1)
+
+        // Rin starts it (she lit the basics in step 3): one start.
+        await pass(request, rin.token, made.publicationId)
+        await expect.poll(async () => Number((await query(request, sora.token, 'qb.sponsor.publication-distribution',
+          { publicationId: made.publicationId }))[0].starts), { message: 'one start' }).toBe(1)
+
+        // Ended by the minute's tick, then the final job charges the one start and gives back the other 2.
+        await expect.poll(async () => {
+          const [settled] = await query(request, sora.token, 'qb.sponsor.publication-distribution',
+            { publicationId: made.publicationId })
+          if (settled.finalSettled === true) return true
+          // Asked again (D77) so that a run whose time was before the end does not leave it to the next minute's.
+          await runJobNow(request, 'qb.distribution-final').catch(() => undefined)
+          return false
+        }, { message: 'the final settlement', timeout: 270_000, intervals: [10_000] }).toBe(true)
+        const settlements = await query(request, sora.token, 'qb.sponsor.publication-distribution-settlements',
+          { publicationId: made.publicationId })
+        expect(settlements).toEqual([expect.objectContaining({ final: true, starts: 1, toStarts: 1, amount: 1, tax: 0,
+          total: 1 })])
+        const [after] = (await query(request, sora.token, 'qb.sponsor.publication-prepayments',
+          { publicationId: made.publicationId })).filter((row) => row.purpose === 'DISTRIBUTION')
+        expect(after).toEqual(expect.objectContaining({ status: 'RELEASED', remaining: 0 }))
       } finally {
         await restore()
       }

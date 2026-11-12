@@ -130,7 +130,7 @@ export function ImportQuestionsButton({ limits, count }: { limits: BankLimits | 
       <Dialog open={state !== null} onOpenChange={(open) => {
         if (!open && !busy) setState(null)
       }}>
-        <DialogContent className="max-h-[90vh] overflow-y-auto" data-testid="bank-import-dialog">
+        <DialogContent data-testid="bank-import-dialog">
           <DialogHeader>
             <DialogTitle>{t('bank.import.title')}</DialogTitle>
             <DialogDescription>{t('bank.import.hint', { batch: size })}</DialogDescription>

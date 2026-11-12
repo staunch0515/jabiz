@@ -23,6 +23,7 @@ import { PublicationActions, usePublicationLanguage } from './PublicationActions
 import { PublicationQrPanel } from './PublicationQrDialog'
 import { PublicationTabs } from './PublicationTabs'
 import { StaleBanner, PublicationWizard } from './PublicationWizard'
+import { DistributionSection, PrepaymentsSection } from './FundsPanel'
 import { ReferralsSection } from './ReferralsSection'
 import { ExposureSection } from '../exposure/ExposureCounts'
 import { VideoUseSection } from '../videouses/VideoUseSection'
@@ -203,6 +204,9 @@ function PublicationView({ detail, stale, onStale, tab }: {
             <ExposureSection publicationId={id} />
             {/* F-S14: the ledger of that shared video and both sides' figures (nothing for its own videos). */}
             <VideoUseSection publicationId={id} />
+            {/* F-M5: what its submission set aside, and what became of it (nothing while there are no rows). */}
+            <PrepaymentsSection publicationId={id} />
+            <DistributionSection publicationId={id} />
           </>
         )}
         {tab === 'share' && <ShareTab publication={publication} />}

@@ -44,6 +44,13 @@ public final class QbLedger {
     /** F-M2: what the platform spends granting platform fee Kudos (granted less voided), apart from 5120's Kudos. */
     public static final String FEE_CREDIT_PROMOTION = "5140";
 
+    /**
+     * F-M5: what publications' submissions set aside of the sponsors' accounts for their fees (and, F-M9, AI
+     * credit): owed to the sponsors until a fee is paid from it or it goes back. Its lines carry the sponsor, the
+     * publication and the purpose; each is a {@code QbPrepayment}.
+     */
+    public static final String FEE_PREPAYMENTS = "2180";
+
     /** The name of the dimension that carries the party (a user's id) on the wallet accounts. */
     public static final String PARTY = "party";
 
@@ -68,7 +75,8 @@ public final class QbLedger {
         new Account(TAX_PAYABLE, "Consumption tax payable", "LIABILITY"),
         new Account(ENTRY_FEES_UNSETTLED, "Entry fees unsettled", "LIABILITY"),
         new Account(FEE_CREDIT, "Sponsor platform fee Kudos (fee credit)", "LIABILITY"),
-        new Account(FEE_CREDIT_PROMOTION, "Promotion expenses (platform fee Kudos granted)", "EXPENSE"));
+        new Account(FEE_CREDIT_PROMOTION, "Promotion expenses (platform fee Kudos granted)", "EXPENSE"),
+        new Account(FEE_PREPAYMENTS, "Platform fee prepayments", "LIABILITY"));
 
     private QbLedger() {}
 }

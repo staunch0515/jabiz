@@ -6,16 +6,13 @@ import com.jabiz.quizbuks.publishing.RewardMethod;
 import com.jabiz.quizbuks.publishing.RewardMethodProcesses;
 import com.jabiz.quizbuks.setup.QbParams;
 import com.jabiz.runtime.test.TestTokens;
-import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.springframework.http.HttpHeaders;
-import org.springframework.http.MediaType;
-import org.springframework.test.context.TestPropertySource;
 
 import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -25,50 +22,11 @@ import static org.assertj.core.api.Assertions.assertThat;
  * default methods' fallback to the platform's Kudos (the parameter not there) is blocked too; the sponsor console's
  * template, asked as the pages ask it on such a system, offers the same. Once published true, Kudos are open.
  */
-@TestPropertySource(properties = "jabiz.web.environment=production")
-class KudosRewardBanProductionIT extends TreeItSupport {
+class KudosRewardBanProductionIT extends KudosRewardBanProductionSupport {
 
     @Override
-    boolean installs() {
-        return false;
-    }
-
-    /**
-     * The install of the other tests, except that the Kudos reward switch's proposal is not published; before the
-     * players of {@link PlayItSupport} are made (they need the install).
-     */
-    @Override
-    @BeforeEach
-    void players() {
-        installWithoutTheKudosSwitch();
-        super.players();
-    }
-
-    @SuppressWarnings("unchecked")
-    private void installWithoutTheKudosSwitch() {
-        if (!query("SELECT 1 FROM qb_setup_record_version LIMIT 1").isEmpty()) {
-            return;
-        }
-        Map<String, Object> output = setup();
-        List<String> keys = (List<String>) output.get("paramsProposed");
-        List<String> proposals = (List<String>) output.get("proposals");
-        for (int i = 0; i < proposals.size(); i++) {
-            if (i < keys.size() && QbParams.REWARD_KUDOS_ENABLED.equals(keys.get(i))) {
-                continue;
-            }
-            client.post().uri("/api/processes/CONTROL_CHANGE_PUBLISH/latest").contentType(MediaType.APPLICATION_JSON)
-                .header(HttpHeaders.AUTHORIZATION, TestTokens.bearer(tokens, "publisher", "control.publish"))
-                .bodyValue(Map.of("changeId", proposals.get(i))).exchange().expectStatus().isOk();
-        }
-        platformRewardMethods();
-        installDefaultOperator();
-        onboard(SPONSOR_A);
-        onboard(SPONSOR_B);
-    }
-
-    private List<Map<String, Object>> consoleMethods(String token, boolean firstLaunch) {
-        return items("qb.sponsor.reward-methods", token,
-            Map.of("params", Map.of("firstLaunch", firstLaunch), "limit", 5));
+    Set<String> unpublished() {
+        return Set.of(QbParams.REWARD_KUDOS_ENABLED);
     }
 
     @Test

@@ -1697,6 +1697,156 @@ export const feeQuoteQuery = (publicationId: string | null) => ['qb', 'publicati
 export const readFeeQuote = (publicationId: string) =>
   runProcess<FeeQuoteOutput>(AUDIENCE.feeQuote, { publicationId })
 
+// ---- F-M5: funds at submission and the prepayments ------------------------------------------------------------------
+
+/** `QbPrepayment.purpose`: what a sum set aside is for. */
+export type PrepaymentPurpose = 'AUDIENCE' | 'DISTRIBUTION' | 'EXPOSURE' | 'AI'
+export const PREPAYMENT_PURPOSES: readonly PrepaymentPurpose[] = ['AUDIENCE', 'DISTRIBUTION', 'EXPOSURE', 'AI']
+const purposeOf = (value: unknown): PrepaymentPurpose =>
+  PREPAYMENT_PURPOSES.find((p) => p === value) ?? 'AUDIENCE'
+
+/**
+ * One item submitting sets aside: `amount` is with tax, `chargeAmount` before it; F-M6: the distribution fee's price
+ * per start (`unit`, four decimals) and whether it is the operator's floor (null for the other purposes).
+ */
+export interface FundsItem {
+  purpose: PrepaymentPurpose
+  amount: number
+  chargeAmount: number
+  unit: number | null
+  atFloor: boolean | null
+}
+
+/** `QB_PUBLICATION_FUNDS_CHECK`'s answer: what submitting would set aside and whether the account holds it. */
+export interface FundsCheck {
+  items: FundsItem[]
+  total: number
+  available: number
+  shortfall: number
+  billingMode: 'PREPAID' | 'POSTPAID'
+  enough: boolean
+}
+
+/** The query of a draft's funds check: read again after each save (the server checks what is stored). */
+export const fundsCheckQuery = (publicationId: string | null, revision: number | null) =>
+  ['qb', 'publication-funds', publicationId, revision] as const
+
+export async function readFundsCheck(publicationId: string): Promise<FundsCheck> {
+  const out = await runProcess<Row>(PUBLISHING_PROCESS.fundsCheck, { publicationId })
+  return {
+    items: ((out.items as Row[] | undefined) ?? []).map((item) => ({ purpose: purposeOf(item.purpose),
+      amount: Number(item.amount ?? 0), chargeAmount: Number(item.chargeAmount ?? 0),
+      unit: item.unit == null ? null : Number(item.unit),
+      atFloor: item.atFloor == null ? null : item.atFloor === true })),
+    total: Number(out.total ?? 0),
+    available: Number(out.available ?? 0),
+    shortfall: Number(out.shortfall ?? 0),
+    billingMode: out.billingMode === 'POSTPAID' ? 'POSTPAID' : 'PREPAID',
+    enough: out.enough === true,
+  }
+}
+
+/** `QbPrepayment.releaseReason`: why a sum was given back. */
+export type ReleaseReason = 'WITHDRAWN' | 'REJECTED' | 'REVIEW_EXPIRED' | 'ENDED'
+
+/** A row of `qb.sponsor.publication-prepayments`. */
+export interface PublicationPrepayment {
+  prepaymentId: string
+  purpose: PrepaymentPurpose
+  mode: 'PREPAID' | 'POSTPAID'
+  amount: number
+  remaining: number
+  status: 'OPEN' | 'RELEASED'
+  frozenAt: string | null
+  chargedAt: string | null
+  releasedAt: string | null
+  releaseReason: ReleaseReason | null
+}
+
+export const prepaymentsQuery = (publicationId: string) => ['qb', 'publication-prepayments', publicationId] as const
+
+export async function readPublicationPrepayments(publicationId: string): Promise<PublicationPrepayment[]> {
+  const page = await runQuery<Row>(PUBLISHING_TEMPLATE.prepayments,
+    { params: { publicationId }, limit: 100 })
+  return page.items.map((row) => ({
+    prepaymentId: String(row.prepaymentId),
+    purpose: purposeOf(row.purpose),
+    mode: row.mode === 'POSTPAID' ? 'POSTPAID' : 'PREPAID',
+    amount: Number(row.amount ?? 0),
+    remaining: Number(row.remaining ?? 0),
+    status: row.status === 'RELEASED' ? 'RELEASED' : 'OPEN',
+    frozenAt: str(row.frozenAt),
+    chargedAt: str(row.chargedAt),
+    releasedAt: str(row.releasedAt),
+    releaseReason: row.releaseReason == null ? null : (String(row.releaseReason) as ReleaseReason),
+  }))
+}
+
+// ---- F-M6: the distribution fee -------------------------------------------------------------------------------------
+
+/** `qb.sponsor.publication-distribution`: the price per start, the starts and what those since the last settlement come to. */
+export interface PublicationDistribution {
+  unit: number | null
+  atFloor: boolean
+  starts: number
+  settledStarts: number
+  pendingStarts: number
+  charged: number
+  pendingEstimate: number
+  settlements: number
+  finalSettled: boolean
+}
+
+/** A row of `qb.sponsor.publication-distribution-settlements`: one month's settlement. */
+export interface DistributionSettlement {
+  settlementId: string
+  period: string
+  starts: number
+  unit: number
+  atFloor: boolean
+  amount: number
+  tax: number
+  total: number
+  final: boolean
+  settledAt: string | null
+}
+
+export const distributionQuery = (publicationId: string) => ['qb', 'publication-distribution', publicationId] as const
+
+export async function readPublicationDistribution(publicationId: string): Promise<PublicationDistribution | null> {
+  const page = await runQuery<Row>(PUBLISHING_TEMPLATE.distribution, { params: { publicationId }, limit: 1 })
+  const row = page.items[0]
+  if (!row) return null
+  return {
+    unit: row.unit == null ? null : Number(row.unit),
+    atFloor: row.atFloor === true,
+    starts: Number(row.starts ?? 0),
+    settledStarts: Number(row.settledStarts ?? 0),
+    pendingStarts: Number(row.pendingStarts ?? 0),
+    charged: Number(row.charged ?? 0),
+    pendingEstimate: Number(row.pendingEstimate ?? 0),
+    settlements: Number(row.settlements ?? 0),
+    finalSettled: row.finalSettled === true,
+  }
+}
+
+export async function readDistributionSettlements(publicationId: string): Promise<DistributionSettlement[]> {
+  const page = await runQuery<Row>(PUBLISHING_TEMPLATE.distributionSettlements,
+    { params: { publicationId }, limit: 120 })
+  return page.items.map((row) => ({
+    settlementId: String(row.settlementId),
+    period: String(row.period),
+    starts: Number(row.starts ?? 0),
+    unit: Number(row.unit ?? 0),
+    atFloor: row.atFloor === true,
+    amount: Number(row.amount ?? 0),
+    tax: Number(row.tax ?? 0),
+    total: Number(row.total ?? 0),
+    final: row.final === true,
+    settledAt: str(row.settledAt),
+  }))
+}
+
 /** Q89c: `PassProcesses.CheckOutput`: the prize a taker's pass is for, before handing it over. */
 export interface PassPrize {
   passId: string
