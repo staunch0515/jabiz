@@ -248,6 +248,11 @@ public class AiConfig {
     }
 
     @Bean
+    ProcessDefinition<SiteQuizProcesses.QuizInput, SiteQuizProcesses.QuizOutput, ProcessContext> qbSiteProfileQuiz() {
+        return SiteQuizProcesses.quiz();
+    }
+
+    @Bean
     ProcessDefinition<SiteProfileProcesses.ReviewRef, AiProcesses.JobOutput, ProcessContext> qbSiteProfileReviewClose() {
         return SiteProfileProcesses.closeReview();
     }

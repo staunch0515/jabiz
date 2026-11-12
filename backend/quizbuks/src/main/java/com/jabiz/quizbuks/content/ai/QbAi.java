@@ -152,7 +152,9 @@ public final class QbAi {
         eb.field("version", f -> f.physicalColumn("version").asVersion());
         eb.unique("uk_qb_ai_job_external", "externalJobId");
         eb.stateTransitions("status", st -> st
-            .initial(QUEUED)
+            // READY too: the questions of a website draft are kept, already drafted, for a new quiz's review (F-C7b-2,
+            // SiteQuizProcesses is the only process that starts a job there).
+            .initial(QUEUED, READY)
             .from(QUEUED).to(READY, FAILED, CANCELLED)
             .from(READY).to(ACCEPTED, DISCARDED, EXPIRED));
         eb.listView("default", lv -> lv

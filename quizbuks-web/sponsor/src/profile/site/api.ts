@@ -43,6 +43,8 @@ export interface SiteDraft {
   handle: HandleInfo | null
   materials: number
   questions: number
+  /** Whether a quiz was made from this draft already (one a draft). */
+  quizMade: boolean
 }
 
 const isLanguage = (value: unknown): value is ContentLanguage =>
@@ -88,6 +90,7 @@ export function toSiteDraft(row: Row): SiteDraft {
       ? { handle: handle.handle, taken: handle.taken === true, alternatives: strings(handle.alternatives) } : null,
     materials: Array.isArray(draft.materials) ? draft.materials.length : 0,
     questions: Array.isArray(draft.questions) ? draft.questions.length : 0,
+    quizMade: Number(row.acceptedCount) > 0,
   }
 }
 
@@ -127,6 +130,11 @@ export interface SiteRequestInput {
 
 export const requestSiteProfile = (input: SiteRequestInput) =>
   runProcess<{ aiJobId: string; externalJobId: string; status: SiteDraftStatus }>(SITE_PROFILE.request, { ...input })
+
+/** The quiz made from a draft: its id, and the job that keeps its drafted questions for review (null when none). */
+export interface SiteQuizOutput { quizId: string; questionsJob: string | null; materials: number; questions: number }
+
+export const makeSiteQuiz = (aiJobId: string) => runProcess<SiteQuizOutput>(SITE_PROFILE.quiz, { aiJobId })
 
 export const cancelSiteDraft = (aiJobId: string) => runProcess(AI_PROCESS.cancel, { aiJobId })
 export const discardSiteDraft = (aiJobId: string) => runProcess(AI_PROCESS.discard, { aiJobId })

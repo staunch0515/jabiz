@@ -210,4 +210,21 @@ class SiteProfileAnswerTest {
             input(true, true, false), JSON);
         assertThat(result.notFound()).containsExactly("page.cover", "basics.intro", "products[0].image");
     }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void aTextInALanguageNotAskedForIsTakenOutAndListedNotTheWholePackage() {
+        // The sponsor asked for Japanese only; the AI also wrote English headlines and introductions.
+        SiteProfileJob.Input japanese = new SiteProfileJob.Input("claude-opus-5-5", "medium", "https://www.aini.example/",
+            SITE, "ja", List.of("ja"), true, true, false, 10, 50, 5, 2, 3, "key");
+        SiteProfileJob.Result result = SiteProfileAnswer.parse("claude-opus-5-5", false, GOOD, japanese, JSON);
+        Map<String, Object> basics = (Map<String, Object>) result.profile().get("basics");
+        assertThat((Map<String, Object>) basics.get("intro")).containsOnlyKeys("ja");
+        Map<String, Object> page = (Map<String, Object>) result.profile().get("page");
+        assertThat((Map<String, Object>) page.get("headline")).containsOnlyKeys("ja");
+        assertThat(result.dropped()).extracting(SiteProfileJob.Dropped::path).contains("basics.intro.en",
+            "page.headline.en");
+        assertThat(result.dropped()).filteredOn(d -> d.path().equals("page.headline.en"))
+            .extracting(SiteProfileJob.Dropped::reason).containsExactly(SiteProfileAnswer.OTHER_LANGUAGE);
+    }
 }

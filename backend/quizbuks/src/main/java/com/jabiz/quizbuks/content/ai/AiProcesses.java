@@ -1663,7 +1663,7 @@ public final class AiProcesses {
 
     // ---- shared ----------------------------------------------------------------------------------------------------
 
-    private static com.jabiz.process.StepSpec<QueryEntities.Metadata<ProcessContext>, ProcessContext> loadJob(
+    static com.jabiz.process.StepSpec<QueryEntities.Metadata<ProcessContext>, ProcessContext> loadJob(
         java.util.function.Function<ProcessContext, UUID> id) {
         return QueryEntities.of(QbAi.defaultDataset(QbAi.JOB), ctx -> EntityQuery.builder()
             .where(new QueryPredicate.Eq("aiJobId", id.apply(ctx).toString())).limit(1).build(), JOB);

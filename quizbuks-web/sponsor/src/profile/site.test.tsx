@@ -48,6 +48,7 @@ interface Options {
   rows?: Record<string, unknown>[][]
   mustAccept?: boolean
   requestFails?: boolean
+  quizFails?: boolean
 }
 
 function server(options: Options = {}) {
@@ -92,6 +93,11 @@ function server(options: Options = {}) {
           ? json(422, { title: 'Refused', violations: [{ field: 'siteAddress', ruleCode: 'QB_AI_SITE_URL_INVALID',
             message: 'Give the website\'s address as a host name.' }] })
           : json(200, { output: { aiJobId: 'j1', externalJobId: 'x1', status: 'QUEUED' } })
+      case '/api/processes/QB_SITE_PROFILE_QUIZ/latest':
+        return options.quizFails
+          ? json(422, { title: 'Refused', violations: [{ field: 'aiJobId', ruleCode: 'QB_AI_SITE_QUIZ_MADE',
+            message: 'A quiz was made from this draft already.' }] })
+          : json(200, { output: { quizId: 'quiz-1', questionsJob: 'job-q', materials: 1, questions: 3 } })
       case '/api/processes/QB_AI_CANCEL/latest':
       case '/api/processes/QB_AI_DISCARD/latest':
         return json(200, { output: { aiJobId: 'j1', status: 'CANCELLED' } })
@@ -287,5 +293,41 @@ describe('reviewing the draft', () => {
     expect(second.document.page.handle).toBe('aini-2')
     await waitFor(() => expect(within(screen.getByTestId('profile-import-dialog')).getByTestId('profile-import-confirm'))
       .toBeEnabled())
+  })
+})
+
+describe('the "get to know us" quiz', () => {
+  async function review(options: Options) {
+    const calls = server({ rows: [[row('READY', options.quizFails ? { acceptedCount: 1 } : {})]], ...options })
+    renderMenu()
+    const dialog = await openDialog()
+    await userEvent.click(await within(dialog).findByTestId('site-review'))
+    const confirmation = await screen.findByTestId('profile-import-dialog')
+    await within(confirmation).findByTestId('site-quiz')
+    return { calls, confirmation }
+  }
+
+  it('makes the quiz draft from the articles on request; the questions wait for review in the quiz', async () => {
+    const { calls, confirmation } = await review({})
+    expect(within(confirmation).getByTestId('site-quiz')).toHaveTextContent('1 articles and 0 questions')
+    await userEvent.click(within(confirmation).getByTestId('site-quiz-make'))
+    await waitFor(() => expect(calls.of('/api/processes/QB_SITE_PROFILE_QUIZ/latest')).toEqual([{ aiJobId: 'j1' }]))
+  })
+
+  it('does not offer a second quiz from the same draft', async () => {
+    const { confirmation } = await review({ quizFails: true })
+    expect(within(confirmation).getByTestId('site-quiz-made')).toHaveTextContent('A quiz was made from this draft')
+    expect(within(confirmation).queryByTestId('site-quiz-make')).toBeNull()
+  })
+
+  it('shows the server\'s reason when the quiz cannot be made', async () => {
+    const calls = server({ rows: [[row('READY')]], quizFails: true })
+    renderMenu()
+    const dialog = await openDialog()
+    await userEvent.click(await within(dialog).findByTestId('site-review'))
+    const confirmation = await screen.findByTestId('profile-import-dialog')
+    await userEvent.click(await within(confirmation).findByTestId('site-quiz-make'))
+    expect(await within(confirmation).findByTestId('site-quiz-problems')).toHaveTextContent('aiJobId: A quiz was made')
+    expect(calls.of('/api/processes/QB_SITE_PROFILE_QUIZ/latest')).toHaveLength(1)
   })
 })

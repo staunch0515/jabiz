@@ -66,8 +66,12 @@ const en = {
       reason: {
         contact: 'a person\'s e-mail address, phone number or social account was removed',
         offSite: 'it is not on your website\'s own address, so it was left out',
+        otherLanguage: 'it is in a language you did not ask for, so it was left out',
       },
-      quiz: '{{n}} articles for a "get to know us" quiz were drafted too.',
+      quiz: '{{n}} articles and {{q}} questions for a "get to know us" quiz were drafted too.',
+      quizHint: 'Make the quiz as a draft of yours now: the articles become its materials, and the questions wait in the quiz for you to review one by one. Nothing is added to a question list without your review.',
+      quizMake: 'Make the quiz draft',
+      quizMade: 'A quiz was made from this draft. Open it in your quizzes.',
     },
   },
 }
@@ -133,8 +137,12 @@ const zh = {
       reason: {
         contact: '其中的个人邮箱、电话或社交账号已被去掉',
         offSite: '它不在你官网自己的地址下，所以被去掉',
+        otherLanguage: '它是你没有选的语言，所以被去掉',
       },
-      quiz: '还起草了 {{n}} 篇“认识我们”Quiz 的文章。',
+      quiz: '还起草了 {{n}} 篇文章和 {{q}} 道题，用于“认识我们”的 Quiz。',
+      quizHint: '现在就把它建成你的 Quiz 草稿：文章成为它的资料，题目留在 Quiz 里等你逐题校对。未经你校对，不会有任何题目加入题库。',
+      quizMake: '建立 Quiz 草稿',
+      quizMade: '已用这份草稿建过 Quiz，请到你的 Quiz 中打开。',
     },
   },
 }
@@ -200,8 +208,12 @@ const ja = {
       reason: {
         contact: '個人のメールアドレス・電話番号・SNS アカウントを取り除きました',
         offSite: '公式サイト自身のアドレスにないため除外しました',
+        otherLanguage: '選択していない言語のため除外しました',
       },
-      quiz: '「私たちを知る」クイズ用の記事を {{n}} 本下書きしました。',
+      quiz: '「私たちを知る」クイズ用に、記事 {{n}} 本と問題 {{q}} 問も下書きしました。',
+      quizHint: '今すぐあなたのクイズの下書きとして作成できます。記事は教材になり、問題はクイズ内で 1 問ずつ確認するまで待機します。確認しない問題は追加されません。',
+      quizMake: 'クイズの下書きを作る',
+      quizMade: 'この下書きからクイズを作成済みです。クイズ一覧から開いてください。',
     },
   },
 }
