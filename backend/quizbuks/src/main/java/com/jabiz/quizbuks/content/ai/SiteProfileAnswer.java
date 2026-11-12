@@ -61,7 +61,7 @@ public final class SiteProfileAnswer {
         AiCandidates.Checked questions = input.quiz() && !materials.isEmpty()
             ? questions(node.get("questions"), materials.size(), input, dropped) : new AiCandidates.Checked(List.of(), 0);
         return new SiteProfileJob.Result(servedModel, fellBack, null, profile, sources, notFound, dropped, translated,
-            materials, questions.valid(), questions.invalid());
+            materials, questions.valid(), questions.invalid(), input.handleAlternatives());
     }
 
     // ---- the package -----------------------------------------------------------------------------------------------

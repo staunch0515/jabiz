@@ -248,6 +248,11 @@ public class AiConfig {
     }
 
     @Bean
+    ProcessDefinition<SiteProfileProcesses.ReviewRef, AiProcesses.JobOutput, ProcessContext> qbSiteProfileReviewClose() {
+        return SiteProfileProcesses.closeReview();
+    }
+
+    @Bean
     ExternalJobType<AiCheckJob.Input, AiCheckJob.Result> qbAiCheckJob(
         @Value("${quizbuks.ai.max-concurrency:" + AiQuestionsJob.DEFAULT_CONCURRENCY + "}") int maxConcurrency) {
         return AiCheckJob.type(maxConcurrency);

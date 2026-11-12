@@ -34,17 +34,18 @@ public final class PersonalDetails {
     private static final String LOCAL = "[\\p{L}\\p{N}._%+-]+";
     private static final String DOMAIN = "[\\p{L}\\p{N}-]+(?:\\.[\\p{L}\\p{N}-]+)*\\.(?:[A-Za-z]{2,}|xn--[A-Za-z0-9-]+)";
     private static final Pattern EMAIL = Pattern.compile(
-        LOCAL + "(?:@|\\[\\s?at\\s?]|\\(\\s?at\\s?\\)|\\{\\s?at\\s?})" + DOMAIN, Pattern.CASE_INSENSITIVE);
+        LOCAL + "(?:\\s?@\\s?|\\[\\s?at\\s?]|\\(\\s?at\\s?\\)|\\{\\s?at\\s?})" + DOMAIN, Pattern.CASE_INSENSITIVE);
     private static final Pattern LINK_TARGET = Pattern.compile("\\]\\((?:mailto|tel):[^)]*\\)", Pattern.CASE_INSENSITIVE);
     private static final Pattern MARKDOWN_LINK = Pattern.compile("\\[([^\\]]*)]\\((https?://[^)\\s]*)\\)");
     private static final Pattern BARE_LINK = Pattern.compile("https?://[^\\s)\\]>]+", Pattern.CASE_INSENSITIVE);
     private static final String SERVICE = "(?:LINE|ＬＩＮＥ|Twitter|Instagram|IG|Facebook|FB|WeChat|WhatsApp|Telegram|TikTok"
         + "|ライン|ツイッター|インスタグラム|インスタ|フェイスブック|微信|微博)";
-    private static final String HANDLE = "@?[\\p{L}\\p{N}._-]{2,}";
+    // ASCII only: after a colon, ordinary writing ("LINE: 毎日更新") is not an account
+    private static final String HANDLE = "@?[A-Za-z0-9._-]{2,}";
     private static final Pattern ACCOUNT = Pattern.compile(
         "(?:" + SERVICE + "\\s*(?:ID|アカウント|账号|帐号|帳號)?\\s*[:：]\\s*" + HANDLE
-            + "|" + SERVICE + "\\s*(?:ID\\s*)?@[\\p{L}\\p{N}._-]{2,}"
-            + "|\\bX\\s*:?\\s*@[\\p{L}\\p{N}._-]{2,})", Pattern.CASE_INSENSITIVE);
+            + "|" + SERVICE + "\\s*(?:ID\\s*)?@[A-Za-z0-9._-]{2,}"
+            + "|\\bX\\s*:?\\s*@[A-Za-z0-9._-]{2,})", Pattern.CASE_INSENSITIVE);
     private static final List<String> SOCIAL_HOSTS = hosts();
 
     private static List<String> hosts() {
@@ -146,9 +147,16 @@ public final class PersonalDetails {
             return true;
         }
         char before = text.charAt(at - 1);
-        if (Character.isLetterOrDigit(before)) {
-            // "tel03-…", "fax0312345678": a label written against the number
+        if (before < 128 && Character.isLetter(before)) {
+            // "tel03-…", "fax0312345678": a label written against the number; any other ASCII word before it is a code
             return labelled(text, at);
+        }
+        if (Character.isDigit(before)) {
+            return false;
+        }
+        // 2026.01.31, 2025.04.01-2026.03.31: the tail of a dotted date or period is not a number
+        if (before == '.' && at >= 2 && Character.isDigit(text.charAt(at - 2))) {
+            return false;
         }
         return "/_=#?&%-".indexOf(before) < 0;
     }
@@ -184,16 +192,23 @@ public final class PersonalDetails {
                 }
                 continue;
             }
-            // a separator: at most two characters, one of them a space, dot or hyphen; a digit follows
+            // a separator: up to three characters, one hyphen-like (hyphen, dot, slash, long-vowel mark, middle dot),
+            // up to two spaces or brackets; a digit follows
             int j = i;
-            int plain = 0;
-            while (j < length && j - i < 2 && " .-()".indexOf(text.charAt(j)) >= 0) {
-                if (" .-".indexOf(text.charAt(j)) >= 0 && ++plain > 1) {
+            int dashes = 0;
+            int others = 0;
+            while (j < length && j - i < 3 && " .-/ー・()".indexOf(text.charAt(j)) >= 0) {
+                if (".-/ー・".indexOf(text.charAt(j)) >= 0) {
+                    dashes++;
+                } else {
+                    others++;
+                }
+                if (dashes > 1 || others > 2) {
                     break;
                 }
                 j++;
             }
-            if (j == i || j >= length || !digit(text.charAt(j))) {
+            if (j == i || dashes > 1 || others > 2 || j >= length || !digit(text.charAt(j))) {
                 break;
             }
             i = j;

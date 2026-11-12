@@ -850,13 +850,10 @@ public final class AiProcesses {
                 .step("Lock the sponsor's AI requests", HoldLock.<ProcessContext>exclusive(
                     ctx -> QbAi.lockName(ctx.get(INPUT, ExternalJobCompletion.class).requestedBy())))
                 .step("Lock everybody's usage", HoldLock.<ProcessContext>exclusive(ctx -> QbAi.GLOBAL_LOCK))
-                .step("Load the job and the usage", outcomeReads(zone,
+                .step("Load the job, the usage and who holds the drafted link name", outcomeReads(zone,
                     ctx -> ctx.get(INPUT, ExternalJobCompletion.class).jobId(),
                     ctx -> ctx.get(INPUT, ExternalJobCompletion.class).requestedBy(),
-                    ctx -> ctx.get(INPUT, ExternalJobCompletion.class).finishedTime()))
-                .step("Load who holds the drafted link names", QueryEntities.<ProcessContext>of(
-                    com.jabiz.quizbuks.page.QbSponsorPages.DEFAULT_DATASET, SiteProfileProcesses::handlesQuery,
-                    SiteProfileProcesses.HANDLES))
+                    ctx -> ctx.get(INPUT, ExternalJobCompletion.class).finishedTime(), true))
                 .compute("Keep the candidates", (metadata, ctx) -> complete(ctx, zone))
                 .step("Ask the sponsor to review the draft", CreateTask.<ProcessContext>when(
                     SiteProfileProcesses::draftReady, SiteProfileProcesses::reviewTask)));
@@ -876,7 +873,7 @@ public final class AiProcesses {
                 .step("Load the job and the usage", outcomeReads(zone,
                     ctx -> ctx.get(INPUT, ExternalJobFailure.class).jobId(),
                     ctx -> ctx.get(INPUT, ExternalJobFailure.class).requestedBy(),
-                    ctx -> ctx.get(INPUT, ExternalJobFailure.class).finishedTime()))
+                    ctx -> ctx.get(INPUT, ExternalJobFailure.class).finishedTime(), false))
                 .compute("Record the failure", (metadata, ctx) -> fail(ctx, zone)));
     }
 
@@ -894,13 +891,22 @@ public final class AiProcesses {
     private static com.jabiz.process.StepSpec<QueryEntities.AllMetadata<ProcessContext>, ProcessContext>
         outcomeReads(ZoneId zone, java.util.function.Function<ProcessContext, String> jobId,
             java.util.function.Function<ProcessContext, String> sponsorId,
-            java.util.function.Function<ProcessContext, Instant> finished) {
-        return QueryEntities.<ProcessContext>all(
+            java.util.function.Function<ProcessContext, Instant> finished, boolean withHandles) {
+        List<QueryEntities.Metadata<ProcessContext>> queries = new ArrayList<>(List.of(
             QueryEntities.query(QbAi.defaultDataset(QbAi.JOB), ctx -> EntityQuery.builder()
                 .where(new QueryPredicate.Eq("externalJobId", jobId.apply(ctx))).limit(1).build(), JOB),
             QueryEntities.query(QbAi.defaultDataset(QbAi.USAGE), ctx -> usageOf(sponsorId.apply(ctx),
                 AiLimits.month(finished.apply(ctx), zone)), USAGE),
-            settingsQuery());
+            settingsQuery()));
+        if (withHandles) {
+            // In the same statement as the rest (F-C7): who holds the link name a site draft proposes; no names for
+            // any other job.
+            queries.add(QueryEntities.query(com.jabiz.quizbuks.page.QbSponsorPages.DEFAULT_DATASET,
+                SiteProfileProcesses::handlesQuery, SiteProfileProcesses.HANDLES));
+        }
+        @SuppressWarnings("unchecked")
+        QueryEntities.Metadata<ProcessContext>[] all = queries.toArray(new QueryEntities.Metadata[0]);
+        return QueryEntities.<ProcessContext>all(all);
     }
 
     /** The job of the outcome, when it is the requester's and not finished yet; null otherwise (nothing to do). */
@@ -1218,7 +1224,7 @@ public final class AiProcesses {
                 .step("Load the job and the usage", outcomeReads(zone,
                     ctx -> ctx.get(INPUT, ExternalJobCancellation.class).jobId(),
                     ctx -> ctx.get(INPUT, ExternalJobCancellation.class).requestedBy(),
-                    ctx -> ctx.get(INPUT, ExternalJobCancellation.class).finishedTime()))
+                    ctx -> ctx.get(INPUT, ExternalJobCancellation.class).finishedTime(), false))
                 .compute("Close the job", (metadata, ctx) -> closeCancelled(ctx, zone)));
     }
 
@@ -1410,11 +1416,13 @@ public final class AiProcesses {
     }
 
     /** The request to review a site draft (F-C7), closed when the draft is dropped, expires or is used. */
-    static com.jabiz.process.StepSpec<CloseTasks.Metadata<ProcessContext>, ProcessContext> closeReview() {
-        return CloseTasks.<ProcessContext>cancel(ctx -> {
+    static com.jabiz.process.StepSpec<com.jabiz.runtime.process.steps.CallProcess.Metadata<ProcessContext>,
+        ProcessContext> closeReview() {
+        return com.jabiz.runtime.process.steps.CallProcess.<ProcessContext>when(ctx -> {
             EntityInstance job = first(ctx, JOB);
-            return SiteProfileProcesses.reviewSource(job == null ? "" : String.valueOf(job.id()));
-        });
+            return job != null && QbAi.KIND_SITE_PROFILE.equals(job.get("kind"));
+        }, SiteProfileProcesses.CLOSE_REVIEW, 1, ctx -> new SiteProfileProcesses.ReviewRef(
+            String.valueOf(first(ctx, JOB).id())), null);
     }
 
     /**

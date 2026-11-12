@@ -44,7 +44,23 @@ class SiteProfileRequestTest {
             assertThat(SiteProfileProcesses.siteUrl(refused)).as(refused).isNull();
         }
         assertThat(SiteProfileProcesses.siteUrl("https://shop.co.jp/")).isEqualTo("https://shop.co.jp/");
+        // a leading www. does not get round it
+        for (String refused : new String[] {"https://www.co.jp/", "www.github.io", "https://tokyo.jp/", "https://www.base.shop/",
+            "https://stores.jp/", "https://studio.site/", "https://notion.site/", "https://webflow.io/", "https://co.th/",
+            "https://com.vn/", "https://co.id/", "https://com.ph/", "https://sakura.ne.jp/"}) {
+            assertThat(SiteProfileProcesses.siteUrl(refused)).as(refused).isNull();
+        }
+        assertThat(SiteProfileProcesses.siteUrl("https://shop.base.shop/")).isEqualTo("https://shop.base.shop/");
         assertThat(SiteProfileProcesses.siteUrl("https://name.myshopify.com/")).isEqualTo("https://name.myshopify.com/");
+    }
+
+    @Test
+    void aPercentInThePathIsNotEncodedAgain() {
+        assertThat(SiteProfileProcesses.siteUrl("https://example.com/a%20b")).isEqualTo("https://example.com/a%20b");
+        assertThat(SiteProfileProcesses.siteUrl("https://example.com/a b")).isEqualTo("https://example.com/a%20b");
+        assertThat(SiteProfileProcesses.siteUrl("https://example.com/100%")).isEqualTo("https://example.com/100%25");
+        assertThat(SiteProfileProcesses.siteUrl("https://example.com/%E5%BA%97/店")).isEqualTo(
+            "https://example.com/%E5%BA%97/%E5%BA%97");
     }
 
     @Test

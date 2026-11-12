@@ -412,4 +412,28 @@ class SiteProfileIT extends AiItSupport {
         assertThat(tasksOf("site-profile:" + expiring)).singleElement()
             .satisfies(task -> assertThat(task).containsEntry("status", "CANCELLED"));
     }
+
+    @Test
+    void aReadThatTimedOutIsNotTriedAgainAndIsChargedOnce() {
+        String sponsor = newSponsor("site-slow-" + UUID.randomUUID());
+        String token = sponsorFull(sponsor);
+        Map<String, Object> requested = run(SiteProfileProcesses.REQUEST, token,
+            ask(token, "https://www.aini.example/", true));
+        Object aiJobId = requested.get("aiJobId");
+        long reserved = JSON.readTree(String.valueOf(job(aiJobId).get("params"))).get("reservedInputTokens").asLong();
+        long maxOut = JSON.readTree(String.valueOf(job(aiJobId).get("params"))).get("maxOutputTokens").asLong();
+        int calls = CLAUDE.requests(MESSAGES).size();
+        // The provider answers after the client stopped waiting (the request timeout is 2 s here).
+        answering = null;
+        CLAUDE.script(MESSAGES, answer("claude-opus-5-5", "end_turn", DRAFT, 100, 100).after(Duration.ofSeconds(5)));
+        CLAUDE.script(MESSAGES, answer("claude-opus-5-5", "end_turn", DRAFT, 100, 100).after(Duration.ofSeconds(5)));
+        runUntilDone(aiJobId);
+        Map<String, Object> failed = job(aiJobId);
+        assertThat(failed).containsEntry("status", QbAi.FAILED).containsEntry("failure_code", AiCodes.SITE_TIMEOUT);
+        assertThat(((Number) failed.get("attempts")).intValue()).isEqualTo(1);
+        assertThat(CLAUDE.requests(MESSAGES).size()).isEqualTo(calls + 1);
+        // One attempt, charged what it may have cost: the pages it could read and all the output it asked for.
+        assertThat(((Number) failed.get("input_tokens")).longValue()).isEqualTo(reserved);
+        assertThat(((Number) failed.get("output_tokens")).longValue()).isEqualTo(maxOut);
+    }
 }

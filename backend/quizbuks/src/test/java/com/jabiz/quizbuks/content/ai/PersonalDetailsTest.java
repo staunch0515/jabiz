@@ -13,7 +13,8 @@ class PersonalDetailsTest {
     @ValueSource(strings = {
         "0312345678", "09012345678", "+819012345678", "03(1234)5678", "(03)1234-5678", "Fax.03-1234-5678",
         "tel03-1234-5678", "０３－１２３４－５６７８", "03‐1234‐5678", "03－1234－5678",
-        "03-1234-5678", "090 1234 5678", "+81 90 1234 5678", "+81-90-1234-5678", "03.1234.5678", "TEL：03-1234-5678"})
+        "03-1234-5678", "090 1234 5678", "+81 90 1234 5678", "+81-90-1234-5678", "03.1234.5678", "TEL：03-1234-5678", "電話03-1234-5678", "携帯09012345678", "03ー1234ー5678", "090・1234・5678",
+        "090 - 1234 - 5678", "090/1234/5678", "090 1234 5678"})
     void aTelephoneNumberIsRemoved(String number) {
         String text = "Call " + number + " today";
         PersonalDetails.Cleaned cleaned = PersonalDetails.clean(text);
@@ -24,7 +25,7 @@ class PersonalDetailsTest {
     @ParameterizedTest
     @ValueSource(strings = {
         "info@example.com", "info＠example.com", "info[at]example.com", "taro(at)example.co.jp", "info@例え.jp",
-        "Info@Example.COM", "a.b+c@sub.example.org", "info@example.comまでご連絡ください"})
+        "Info@Example.COM", "info ＠ aini.example", "info @ aini.example", "a.b+c@sub.example.org", "info@example.comまでご連絡ください"})
     void anEmailAddressIsRemoved(String address) {
         PersonalDetails.Cleaned cleaned = PersonalDetails.clean("Mail " + address);
         assertThat(cleaned.changed()).isTrue();
@@ -35,7 +36,8 @@ class PersonalDetailsTest {
     @ValueSource(strings = {
         "Size 10-20-300 mm", "2020-2021-2022 seasons", "price 1.200.500", "型番 AB 12-345-6789", "Date 2026-01-31",
         "Founded in 1998, 2004 and 2010", "Order 1234567890", "x0312345678y", "Version 0.9.1", "Weight 0.5 kg, 10 cm",
-        "Code AB-0312345678", "https://example.com/0312345678", "¥1,200,500", "Room 301 and 302"})
+        "Code AB-0312345678", "https://example.com/0312345678", "¥1,200,500", "Room 301 and 302",
+        "2026.01.31 03.12.34", "2025.04.01-2026.03.31", "LINE: 毎日更新", "Twitter: フォロー歓迎"})
     void ordinaryNumbersAreNotTouched(String text) {
         PersonalDetails.Cleaned cleaned = PersonalDetails.clean(text);
         assertThat(cleaned.changed()).isFalse();

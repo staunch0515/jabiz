@@ -1,6 +1,11 @@
 # Public suffixes: names under which anybody may register a site. A website's address on one of these as it stands
 # (https://co.jp/, https://github.io/) belongs to nobody in particular and is refused by the site job (F-C7); a site
-# below one (https://shop.co.jp/, https://name.github.io/) is fine. One per line; lower case, punycode.
+# below one (https://shop.co.jp/, https://name.github.io/) is fine; a leading www. does not get round it. One per line;
+# lower case, punycode.
+#
+# To add one (a hosting service or a country's registry that sells names below it): append a line here and release;
+# nothing else reads it. The list is a floor, not the public suffix list in full: a service not on it can be added the
+# day it is found, and an address already drafted from is not touched.
 co.jp
 or.jp
 ne.jp
@@ -71,3 +76,70 @@ hatenadiary.com
 livedoor.blog
 ameblo.jp
 note.com
+base.shop
+stores.jp
+studio.site
+notion.site
+webflow.io
+sakura.ne.jp
+thebase.in
+theshop.jp
+co.th
+in.th
+or.th
+ac.th
+go.th
+com.vn
+net.vn
+co.id
+or.id
+web.id
+com.ph
+com.my
+hokkaido.jp
+aomori.jp
+iwate.jp
+miyagi.jp
+akita.jp
+yamagata.jp
+fukushima.jp
+ibaraki.jp
+tochigi.jp
+gunma.jp
+saitama.jp
+chiba.jp
+tokyo.jp
+kanagawa.jp
+niigata.jp
+toyama.jp
+ishikawa.jp
+fukui.jp
+yamanashi.jp
+nagano.jp
+gifu.jp
+shizuoka.jp
+aichi.jp
+mie.jp
+shiga.jp
+kyoto.jp
+osaka.jp
+hyogo.jp
+nara.jp
+wakayama.jp
+tottori.jp
+shimane.jp
+okayama.jp
+hiroshima.jp
+yamaguchi.jp
+tokushima.jp
+kagawa.jp
+ehime.jp
+kochi.jp
+fukuoka.jp
+saga.jp
+nagasaki.jp
+kumamoto.jp
+oita.jp
+miyazaki.jp
+kagoshima.jp
+okinawa.jp

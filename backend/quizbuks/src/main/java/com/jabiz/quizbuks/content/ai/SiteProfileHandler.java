@@ -1,6 +1,8 @@
 package com.jabiz.quizbuks.content.ai;
 
+import com.jabiz.external.ExternalCallException;
 import com.jabiz.external.ExternalJobContext;
+import com.jabiz.external.ExternalJobException;
 import com.jabiz.external.ExternalJobHandler;
 import com.jabiz.external.ExternalJobResult;
 import org.springframework.beans.factory.annotation.Value;
@@ -36,10 +38,20 @@ class SiteProfileHandler implements ExternalJobHandler<SiteProfileJob.Input, Sit
 
     @Override
     public ExternalJobResult<SiteProfileJob.Result> run(SiteProfileJob.Input input, ExternalJobContext ctx) {
-        ClaudeWebResearch.Answer answer = ClaudeWebResearch.of(ctx, json).ask(ctx, new ClaudeWebResearch.Request(
-            input.model(), input.effort(), SiteProfilePrompt.SYSTEM, SiteProfilePrompt.user(input, json),
-            input.userKey(), 0, input.maxPages(), null, input.domains(), SiteProfileJob.MAX_OUTPUT_TOKENS,
-            SiteProfileJob.reservedInput(input.maxPages())), timeout);
+        ClaudeWebResearch.Answer answer;
+        try {
+            answer = ClaudeWebResearch.of(ctx, json).ask(ctx, new ClaudeWebResearch.Request(
+                input.model(), input.effort(), SiteProfilePrompt.SYSTEM, SiteProfilePrompt.user(input, json),
+                input.userKey(), 0, input.maxPages(), null, input.domains(), SiteProfileJob.MAX_OUTPUT_TOKENS,
+                SiteProfileJob.reservedInput(input.maxPages())), timeout);
+        } catch (ExternalCallException e) {
+            // A read that timed out is not tried again: the provider may have billed it all, and the next would
+            // cost as much (the usage of this attempt is recorded by the reader before it throws).
+            if (e.kind() == ExternalCallException.Kind.TIMEOUT) {
+                throw ExternalJobException.permanent(AiCodes.SITE_TIMEOUT, "The website took too long to read");
+            }
+            throw e;
+        }
         SiteProfileJob.Result result = SiteProfileAnswer.parse(answer.servedModel(), answer.fellBack(), answer.text(),
             input, json);
         if (result == null) {

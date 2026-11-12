@@ -62,13 +62,23 @@ public final class SiteProfileJob {
      * @param questions    the questions asked ({@code qb.ai.site-profile.questions})
      * @param options      the options of each ({@code qb.ai.site-profile.options})
      * @param userKey      the provider's opaque user id
+     * @param handleAlternatives how many other link names are offered when the drafted one is taken
+     *                     ({@code qb.ai.site-profile.handle-alternatives}); echoed in the result for the outcome
      */
     public record Input(String model, String effort, String url, List<String> domains, String base,
         List<String> languages, boolean profile, boolean products, boolean quiz, int maxPages, int maxProducts,
-        int materialsMax, int questions, int options, String userKey) {
+        int materialsMax, int questions, int options, String userKey, int handleAlternatives) {
         public Input {
             domains = domains == null ? List.of() : List.copyOf(domains);
             languages = languages == null ? List.of() : List.copyOf(languages);
+        }
+
+        /** An input with the usual number of alternative link names. */
+        public Input(String model, String effort, String url, List<String> domains, String base,
+            List<String> languages, boolean profile, boolean products, boolean quiz, int maxPages, int maxProducts,
+            int materialsMax, int questions, int options, String userKey) {
+            this(model, effort, url, domains, base, languages, profile, products, quiz, maxPages, maxProducts,
+                materialsMax, questions, options, userKey, 3);
         }
     }
 
@@ -88,7 +98,15 @@ public final class SiteProfileJob {
      */
     public record Result(String servedModel, boolean fellBack, String failure, Map<String, Object> profile,
         Map<String, String> sources, List<String> notFound, List<Dropped> dropped, List<String> translated,
-        List<Material> materials, List<AiQuestionsJob.Candidate> questions, int invalidQuestions) {
+        List<Material> materials, List<AiQuestionsJob.Candidate> questions, int invalidQuestions,
+        int handleAlternatives) {
+        public Result(String servedModel, boolean fellBack, String failure, Map<String, Object> profile,
+            Map<String, String> sources, List<String> notFound, List<Dropped> dropped, List<String> translated,
+            List<Material> materials, List<AiQuestionsJob.Candidate> questions, int invalidQuestions) {
+            this(servedModel, fellBack, failure, profile, sources, notFound, dropped, translated, materials, questions,
+                invalidQuestions, 0);
+        }
+
         public Result {
             profile = profile == null ? Map.of() : profile;
             sources = sources == null ? Map.of() : Map.copyOf(sources);

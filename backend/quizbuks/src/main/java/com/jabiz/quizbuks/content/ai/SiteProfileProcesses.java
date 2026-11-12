@@ -17,6 +17,7 @@ import com.jabiz.runtime.BusinessRuleViolationException;
 import com.jabiz.security.Sensitive;
 import com.jabiz.quizbuks.page.QbSponsorPages;
 import com.jabiz.runtime.EntityInstance;
+import com.jabiz.runtime.task.CloseTasks;
 import com.jabiz.runtime.task.TaskSpec;
 import com.jabiz.runtime.process.steps.LoadParams;
 import com.jabiz.runtime.process.steps.QueryEntities;
@@ -194,17 +195,39 @@ public final class SiteProfileProcesses {
             return null;
         }
         String tld = host.substring(host.lastIndexOf('.') + 1);
-        if (!host.matches("[a-z0-9-]+(\\.[a-z0-9-]+)+") || host.length() > 253 || host.contains("..")
+        if (!host.matches("[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)+") || host.length() > 253 || host.contains("..")
             || !tld.matches("[a-z]{2,}|xn--[a-z0-9-]+")
             || List.of("local", "internal", "localhost", "lan", "home", "corp").contains(tld)
-            || PUBLIC_SUFFIXES.contains(host)) {
+            || PUBLIC_SUFFIXES.contains(host) || host.startsWith("www.") && PUBLIC_SUFFIXES.contains(host.substring(4))) {
             return null;
         }
         try {
-            return new URI("https", host, path.isEmpty() ? "/" : path, null).toASCIIString();
-        } catch (java.net.URISyntaxException e) {
+            return "https://" + host + (path.isEmpty() ? "/" : encodePath(path));
+        } catch (RuntimeException e) {
             return null;
         }
+    }
+
+    /** The path with what a path may not hold written as {@code %XX}; a {@code %} already in it is left as it is. */
+    static String encodePath(String path) {
+        StringBuilder out = new StringBuilder();
+        byte[] bytes = path.getBytes(java.nio.charset.StandardCharsets.UTF_8);
+        for (int i = 0; i < bytes.length; i++) {
+            int b = bytes[i] & 0xff;
+            char c = (char) b;
+            boolean legal = b < 128 && (Character.isLetterOrDigit(c) || "-._~!$&'()*+,;=:@/".indexOf(c) >= 0);
+            boolean escape = c == '%' && i + 2 < bytes.length && isHex(bytes[i + 1]) && isHex(bytes[i + 2]);
+            if (legal || escape) {
+                out.append(c);
+            } else {
+                out.append('%').append(String.format("%02X", b));
+            }
+        }
+        return out.toString();
+    }
+
+    private static boolean isHex(byte b) {
+        return b >= '0' && b <= '9' || b >= 'a' && b <= 'f' || b >= 'A' && b <= 'F';
     }
 
     /** The domains the provider may fetch from: the host and its {@code www.} twin. */
@@ -260,7 +283,8 @@ public final class SiteProfileProcesses {
             domainsOf(url), input.language(), languages, profile, products, quiz, maxPages,
             QbParams.limit(params, QbParams.PRODUCTS_MAX), QbParams.limit(params, QbParams.SITE_PROFILE_MATERIALS_MAX),
             QbParams.limit(params, QbParams.SITE_PROFILE_QUESTIONS), QbParams.limit(params,
-                QbParams.SITE_PROFILE_OPTIONS), userKeys.of(ctx.request().actorId()));
+                QbParams.SITE_PROFILE_OPTIONS), userKeys.of(ctx.request().actorId()),
+            QbParams.limit(params, QbParams.SITE_PROFILE_HANDLE_ALTERNATIVES));
         int size = AiProcesses.bytes(JSON.writeValueAsString(job));
         if (size > SiteProfileJob.MAX_JOB_INPUT_BYTES) {
             problems.add(new Violation(null, AiCodes.INPUT_TOO_LARGE, "The request is " + size + " bytes, more than "
@@ -339,17 +363,14 @@ public final class SiteProfileProcesses {
             ? handle : null;
     }
 
-    private static int alternativesOf(EntityInstance job) {
-        return AiProcesses.params(job).get("handleAlternatives") instanceof Number n ? n.intValue() : 0;
-    }
 
     /** The pages that hold the drafted link name or one of its numbered stand-ins (none for any other job). */
     static EntityQuery handlesQuery(ProcessContext ctx) {
         ExternalJobCompletion completion = ctx.get(AiProcesses.INPUT, ExternalJobCompletion.class);
-        EntityInstance job = AiProcesses.first(ctx, AiProcesses.JOB);
         List<Object> handles = new ArrayList<>();
-        if (job != null && QbAi.KIND_SITE_PROFILE.equals(job.get("kind"))) {
-            handles.addAll(handleCandidates(draftedHandle(completion), alternativesOf(job)));
+        if (SiteProfileJob.TYPE.equals(completion.jobType())) {
+            handles.addAll(handleCandidates(draftedHandle(completion),
+                completion.result(SiteProfileJob.Result.class).handleAlternatives()));
         }
         return EntityQuery.builder().where(new QueryPredicate.In("handle", handles))
             .limit(Math.max(1, handles.size())).build();
@@ -374,8 +395,9 @@ public final class SiteProfileProcesses {
         info.put("taken", others.contains(handle));
         List<String> free = new ArrayList<>();
         if (others.contains(handle)) {
-            for (String candidate : handleCandidates(handle, alternativesOf(job))) {
-                if (free.size() < alternativesOf(job) && !others.contains(candidate)) {
+            int wanted = completion.result(SiteProfileJob.Result.class).handleAlternatives();
+            for (String candidate : handleCandidates(handle, wanted)) {
+                if (free.size() < wanted && !others.contains(candidate)) {
                     free.add(candidate);
                 }
             }
@@ -388,6 +410,28 @@ public final class SiteProfileProcesses {
 
     static String reviewSource(String aiJobId) {
         return "site-profile:" + aiJobId;
+    }
+
+    public static final String CLOSE_REVIEW = "QB_SITE_PROFILE_REVIEW_CLOSE";
+
+    /** @param aiJobId the site draft whose request to review is closed */
+    public record ReviewRef(String aiJobId) {}
+
+    /**
+     * Closes the request to review a site draft: called by the discarding and the expiry of a site draft only, so that
+     * no other AI job costs a statement for it.
+     */
+    public static ProcessDefinition<ReviewRef, AiProcesses.JobOutput, ProcessContext> closeReview() {
+        return ProcessDefinition.define(CLOSE_REVIEW, 1, ReviewRef.class, AiProcesses.JobOutput.class,
+            ProcessContext.class, pb -> pb
+                .description("Closes the request to a sponsor to review the draft from their website.")
+                .permissions(QbPermissions.AI_USE)
+                .subProcessOnly()
+                .contextFactory(AiProcesses::context)
+                .outputMapper(ctx -> new AiProcesses.JobOutput(ctx.get(AiProcesses.INPUT, ReviewRef.class).aiJobId(),
+                    null))
+                .step("Close the request to review", CloseTasks.<ProcessContext>cancel(
+                    ctx -> reviewSource(ctx.get(AiProcesses.INPUT, ReviewRef.class).aiJobId()))));
     }
 
     /** Whether the outcome just kept is a site draft waiting for the sponsor. */
