@@ -407,6 +407,15 @@ final class PackageFixtures {
                 }
                 String quizStep = first;
                 boolean into = c > 0;
+                if (into) {
+                    // F-F11a: the content replaced is deleted in steps of CLEAR_ROWS parts, ahead of the step that
+                    // brings the next (what a count that is short leaves, that step deletes).
+                    int clears = (int) Math.ceil(partsOf(contents.get(c - 1).getValue()) / (double) CLEAR_ROWS);
+                    for (int k = 1; k <= clears; k++) {
+                        steps.add(new Step(base + ":clear:" + k, results -> map("clear", map("quizId",
+                            results.get(quizStep).get("quizId"), "rows", CLEAR_ROWS))));
+                    }
+                }
                 steps.add(new Step(contentKey, results -> {
                     Map<String, Object> quizInput = map("document", firstBatch(file, batchSize), "files", map());
                     if (into) {
@@ -523,9 +532,7 @@ final class PackageFixtures {
             Map<String, Object> out = calls.run(PackageImportProcesses.STEP, input, step.key());
             long took = Duration.ofNanos(System.nanoTime() - started).toMillis();
             total += took;
-            if (took > 2000) {
-                System.out.printf("F-F11 slow step %s: %d ms%n", step.key(), took);
-            }
+            System.out.printf("F-F11 step %s: %d ms%n", step.key(), took);
             if (took > slowest) {
                 slowest = took;
                 slowestStep = step.key();
@@ -535,6 +542,28 @@ final class PackageFixtures {
             results.put(step.key(), result);
         }
         return new Imported(importId, results, total, slowest, slowestStep);
+    }
+
+    /** The rows a step of the page clears: the most the process takes. */
+    static final int CLEAR_ROWS = com.jabiz.quizbuks.content.ContentLimits.CLEAR_ROWS_TECH;
+
+    /**
+     * The parts (rows) a quiz file makes: its materials, questions, options and every text, image and material it
+     * translates. The page counts them so, to plan the steps that delete a content before the next replaces it.
+     */
+    @SuppressWarnings("unchecked")
+    static int partsOf(Map<String, Object> document) {
+        int parts = ((List<Object>) document.getOrDefault("materials", List.of())).size();
+        for (Object question : questionsOf(document)) {
+            parts += 1 + ((List<Object>) ((Map<String, Object>) question).getOrDefault("options", List.of())).size();
+        }
+        for (Object value : ((Map<String, Object>) document.getOrDefault("translations", Map.of())).values()) {
+            Map<String, Object> t = (Map<String, Object>) value;
+            parts += ((Map<String, Object>) t.getOrDefault("texts", Map.of())).size()
+                + ((Map<String, Object>) t.getOrDefault("images", Map.of())).size()
+                + ((List<Object>) t.getOrDefault("materials", List.of())).size();
+        }
+        return parts;
     }
 
     /** The whole import of a sample, started and run to its end. */

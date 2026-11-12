@@ -17,6 +17,8 @@ import com.jabiz.runtime.process.steps.CallProcess;
 import com.jabiz.runtime.process.steps.HoldLock;
 import com.jabiz.runtime.process.steps.QueryEntities;
 import com.jabiz.runtime.process.steps.SaveChanges;
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
@@ -67,6 +69,8 @@ public final class QuizProcesses {
     public static final String PUBLISH_VERSION = "QB_QUIZ_PUBLISH_VERSION";
     /** Internal: tombstones one chunk of a removed quiz's version files (see {@link #releaseFiles()}). */
     public static final String RELEASE_FILES = "QB_QUIZ_RELEASE_FILES";
+    /** F-F11a: deletes a bounded number of the parts of a quiz without publications (see {@link #clearContentProcess()}). */
+    public static final String CLEAR_CONTENT = "QB_QUIZ_CLEAR_CONTENT";
 
     /**
      * A new draft (no {@code quizId}) or the heading of one. Every field is written as given: an empty one clears it.
@@ -115,6 +119,17 @@ public final class QuizProcesses {
         @NotNull @Size(max = ContentLimits.RELEASE_CHUNK) List<@NotNull UUID> versionFileIds) {}
 
     public record ReleaseOutput(int released) {}
+
+    /**
+     * @param quizId the caller's quiz without publications whose parts are deleted
+     * @param rows   at most this many parts (rows of translations, material images, materials, options and
+     *               questions together) in this call
+     */
+    public record ClearInput(@NotNull UUID quizId,
+        @Min(1) @Max(ContentLimits.CLEAR_ROWS_TECH) int rows) {}
+
+    /** @param remaining the parts still there after this call; 0 when the quiz has none left */
+    public record ClearOutput(UUID quizId, int cleared, int remaining) {}
 
     /**
      * @param versionNo the version to copy; the draft when not given
@@ -397,22 +412,87 @@ public final class QuizProcesses {
      * content ({@link #replaceContent}) share it.
      */
     static void clearContent(ProcessContext ctx) {
-        // Parts before what they belong to: an instance still referred to cannot be deleted (a material of another
-        // language refers to its base material, Q73a).
-        list(ctx, TranslationProcesses.TRANSLATIONS).forEach(row -> ctx.changes().delete(QbContent.TRANSLATION,
-            row.id(), row.version()));
+        clearContent(ctx, Integer.MAX_VALUE);
+        places(ctx).forEach(place -> AssetUses.forget(ctx, place.targetKind(), List.of(place.targetId())));
+    }
+
+    /**
+     * Deletes at most {@code limit} of the loaded quiz's parts, in the order {@link #clearContent(ProcessContext)}
+     * deletes them (translations, material images, materials, options, questions), and forgets where the asset
+     * library filled the deleted materials, options and questions. F-F11a: every deleted row costs the platform three
+     * statements (it reads the row, checks for a legal hold, appends the tombstone), so a bank of a thousand questions
+     * is some twenty thousand rows and takes tens of seconds; {@link #clearContentProcess()} deletes it in steps.
+     *
+     * @return the parts left
+     */
+    static int clearContent(ProcessContext ctx, int limit) {
+        int budget = limit;
+        int left = 0;
+        List<EntityInstance> translations = list(ctx, TranslationProcesses.TRANSLATIONS);
+        int cut = Math.min(budget, translations.size());
+        translations.subList(0, cut).forEach(row -> ctx.changes().delete(QbContent.TRANSLATION, row.id(),
+            row.version()));
+        budget -= cut;
+        left += translations.size() - cut;
         for (String key : List.of(IMAGES, MATERIALS, OPTIONS, QUESTIONS)) {
-            String entity = switch (key) {
-                case IMAGES -> QbContent.MATERIAL_IMAGE;
-                case MATERIALS -> QbContent.MATERIAL;
-                case OPTIONS -> QbContent.OPTION;
-                default -> QbContent.QUESTION;
-            };
+            String entity;
+            String kind;
+            switch (key) {
+                case IMAGES -> { entity = QbContent.MATERIAL_IMAGE; kind = null; }
+                case MATERIALS -> { entity = QbContent.MATERIAL; kind = QbAssets.MATERIAL; }
+                case OPTIONS -> { entity = QbContent.OPTION; kind = QbAssets.OPTION_IMAGE; }
+                default -> { entity = QbContent.QUESTION; kind = QbAssets.QUESTION_IMAGE; }
+            }
+            // Parts before what they belong to: an instance still referred to cannot be deleted (a material of
+            // another language refers to its base material, Q73a).
             List<EntityInstance> rows = new ArrayList<>(list(ctx, key));
             rows.sort(java.util.Comparator.comparing(row -> row.get("variantOf") == null));
-            rows.forEach(row -> ctx.changes().delete(entity, row.id(), row.version()));
+            cut = Math.min(budget, rows.size());
+            List<EntityInstance> gone = rows.subList(0, cut);
+            gone.forEach(row -> ctx.changes().delete(entity, row.id(), row.version()));
+            if (kind != null && limit != Integer.MAX_VALUE) {
+                String targetKind = kind;
+                gone.forEach(row -> AssetUses.forget(ctx, targetKind, List.of(row.id())));
+            }
+            budget -= cut;
+            left += rows.size() - cut;
         }
-        places(ctx).forEach(place -> AssetUses.forget(ctx, place.targetKind(), List.of(place.targetId())));
+        return left;
+    }
+
+    /**
+     * {@code QB_QUIZ_CLEAR_CONTENT} (F-F11a): deletes at most {@code rows} parts of one of the caller's quizzes
+     * without publications, and says how many are left. Replacing the content of a large bank deletes tens of
+     * thousands of rows, each three statements of the platform's (about 2 ms a row): the package import plans one
+     * call of this for every {@code rows} parts of the content to be replaced, ahead of the step that brings the
+     * next content ({@link #replaceContent} deletes what is left, so a plan that counted short is slow, not wrong).
+     * The quiz is a draft being imported into: the lock is the quiz's, the checks those of the replacement.
+     */
+    public static ProcessDefinition<ClearInput, ClearOutput, ProcessContext> clearContentProcess() {
+        return ProcessDefinition.define(CLEAR_CONTENT, 1, ClearInput.class, ClearOutput.class, ProcessContext.class,
+            pb -> pb
+                .description("Deletes part of the content of a quiz without publications, to be replaced.")
+                .permissions(QbPermissions.CONTENT_WRITE)
+                .requiresVerifiedEmail()
+                .steps(CallerChecks::refuseBanned)
+                .contextFactory((start, input) -> QuizEditing.start(start, input, input.quizId()))
+                .outputMapper(ctx -> ctx.get(OUTPUT, ClearOutput.class))
+                .steps(QuizProcesses::loadForReplace)
+                .compute("Delete a part of the content", (metadata, ctx) -> {
+                    ClearInput input = ctx.get(INPUT, ClearInput.class);
+                    if (list(ctx, REPLACED_QUIZ).isEmpty()) {
+                        throw new EntityNotFoundException(QbContent.QUIZ + " " + input.quizId() + " not found");
+                    }
+                    if (!list(ctx, REPLACED_PUBLICATIONS).isEmpty()) {
+                        ctx.reject(new Violation("quizId", ContentCodes.IMPORT_HAS_PUBLICATIONS, "Only a quiz "
+                            + "without publications takes another content", Map.of()));
+                        return;
+                    }
+                    int before = list(ctx, TranslationProcesses.TRANSLATIONS).size() + list(ctx, IMAGES).size()
+                        + list(ctx, MATERIALS).size() + list(ctx, OPTIONS).size() + list(ctx, QUESTIONS).size();
+                    int left = clearContent(ctx, input.rows());
+                    ctx.put(OUTPUT, new ClearOutput(input.quizId(), before - left, left));
+                }));
     }
 
     /** The key of the publications of a quiz whose content {@link #replaceContent} replaces. */
@@ -442,16 +522,24 @@ public final class QuizProcesses {
             .step("Load the quiz replaced", QueryEntities.<ProcessContext>of(
                 QbContent.sponsorDataset(QbContent.QUIZ), ctx -> EntityQuery.builder()
                     .where(new QueryPredicate.In("quizId", replaced(ctx))).limit(1).build(), REPLACED_QUIZ))
-            .step("Load its parts and a publication", QueryEntities.<ProcessContext>all(
+            // The few rows (materials and their images, one publication) share a statement. The bank's own parts
+            // (F-F11a: questions, options, translations, up to thousands of rows each) are read one statement each:
+            // QueryEntities.all joins its queries on a constant, so the work grows with the product of their row
+            // counts (79 million row pairs, 9 seconds, for a bank of 900 questions), where separate reads take a few
+            // milliseconds each.
+            .step("Load its materials and a publication", QueryEntities.<ProcessContext>all(
                 QueryEntities.query(QbContent.defaultDataset(QbContent.MATERIAL), QuizProcesses::partsOf, MATERIALS),
                 QueryEntities.query(QbContent.defaultDataset(QbContent.MATERIAL_IMAGE), QuizProcesses::partsOf,
                     IMAGES),
-                QueryEntities.query(QbContent.defaultDataset(QbContent.QUESTION), QuizProcesses::partsOf, QUESTIONS),
-                QueryEntities.query(QbContent.defaultDataset(QbContent.OPTION), QuizProcesses::partsOf, OPTIONS),
-                QueryEntities.query(QbContent.defaultDataset(QbContent.TRANSLATION), QuizProcesses::partsOf,
-                    TranslationProcesses.TRANSLATIONS),
                 QueryEntities.query(QbContent.defaultDataset(QbPublications.PUBLICATION), ctx -> EntityQuery.builder()
                     .where(new QueryPredicate.In("quizId", replaced(ctx))).limit(1).build(), REPLACED_PUBLICATIONS)))
+            .step("Load its questions", QueryEntities.<ProcessContext>of(
+                QbContent.defaultDataset(QbContent.QUESTION), QuizProcesses::partsOf, QUESTIONS))
+            .step("Load its options", QueryEntities.<ProcessContext>of(
+                QbContent.defaultDataset(QbContent.OPTION), QuizProcesses::partsOf, OPTIONS))
+            .step("Load its translations", QueryEntities.<ProcessContext>of(
+                QbContent.defaultDataset(QbContent.TRANSLATION), QuizProcesses::partsOf,
+                TranslationProcesses.TRANSLATIONS))
             .steps(b -> AssetUses.load(b, ctx -> List.of(), ctx -> {
                 if (replaced(ctx).isEmpty() || list(ctx, REPLACED_QUIZ).isEmpty()) {
                     return List.of();

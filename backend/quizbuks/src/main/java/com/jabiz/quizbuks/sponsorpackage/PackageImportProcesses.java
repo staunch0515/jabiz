@@ -143,6 +143,8 @@ public final class PackageImportProcesses {
      * @param quiz        a quiz's content: a new draft, or (with {@code intoQuizId}) the next content of one made
      *                    before, with its topics when given ({@code quizTopics})
      * @param questions   a further batch of a large bank (F-S6)
+     * @param clear       a part of the content of a quiz made before deleted, ahead of the step that brings its next
+     *                    content (F-F11a: a large bank is deleted in steps of a few seconds each)
      * @param version     a version saved of a quiz made before
      * @param tree        a graph
      * @param publication a publication
@@ -151,7 +153,7 @@ public final class PackageImportProcesses {
         @NotBlank @Pattern(regexp = "[A-Za-z0-9:._/-]{1,200}") String step,
         @Valid ProfileTransferProcesses.ImportInput profile, @Valid QuizTransferProcesses.ImportInput quiz,
         @Valid QuizTopicsInput quizTopics, @Valid QuestionImportProcesses.ImportInput questions,
-        @Valid QuizProcesses.QuizRef version, @Valid TreeStepInput tree, @Valid PublicationStepInput publication) {}
+        @Valid QuizProcesses.ClearInput clear, @Valid QuizProcesses.QuizRef version, @Valid TreeStepInput tree, @Valid PublicationStepInput publication) {}
 
     /**
      * @param result   what the step made (ids only)
@@ -183,6 +185,7 @@ public final class PackageImportProcesses {
     static final String PROFILE_OUT = "profileOut";
     static final String QUIZ_OUT = "quizOut";
     static final String QUESTIONS_OUT = "questionsOut";
+    static final String CLEAR_OUT = "clearOut";
     static final String VERSION_OUT = "versionOut";
     static final String TREE_CREATED = "treeCreated";
     static final String TREE_SAVED = "treeSaved";
@@ -195,7 +198,7 @@ public final class PackageImportProcesses {
     static final String PARAMS = "params";
 
     /** The kinds of step. */
-    enum Action { PROFILE, QUIZ, QUESTIONS, VERSION, TREE, PUBLICATION }
+    enum Action { PROFILE, QUIZ, QUESTIONS, CLEAR, VERSION, TREE, PUBLICATION }
 
     private PackageImportProcesses() {}
 
@@ -306,6 +309,8 @@ public final class PackageImportProcesses {
                 }, null))
             .step("Import a batch of questions", CallProcess.<ProcessContext>when(ctx -> runs(ctx, Action.QUESTIONS),
                 QuestionImportProcesses.IMPORT, 1, ctx -> ctx.get(INPUT, StepInput.class).questions(), QUESTIONS_OUT))
+            .step("Delete part of a quiz's content", CallProcess.<ProcessContext>when(ctx -> runs(ctx, Action.CLEAR),
+                QuizProcesses.CLEAR_CONTENT, 1, ctx -> ctx.get(INPUT, StepInput.class).clear(), CLEAR_OUT))
             .step("Save a version", CallProcess.<ProcessContext>when(ctx -> runs(ctx, Action.VERSION),
                 QuizProcesses.PUBLISH_VERSION, 1, ctx -> ctx.get(INPUT, StepInput.class).version(), VERSION_OUT))
             .step("Create the graph", CallProcess.<ProcessContext>when(ctx -> runs(ctx, Action.TREE),
@@ -383,6 +388,9 @@ public final class PackageImportProcesses {
         if (input.questions() != null) {
             actions.add(Action.QUESTIONS);
         }
+        if (input.clear() != null) {
+            actions.add(Action.CLEAR);
+        }
         if (input.version() != null) {
             actions.add(Action.VERSION);
         }
@@ -453,6 +461,12 @@ public final class PackageImportProcesses {
                     QuestionImportProcesses.ImportOutput.class);
                 result.put(PackageImportRules.QUIZ_ID, String.valueOf(out.quizId()));
                 result.put("questions", out.questions());
+            }
+            case CLEAR -> {
+                QuizProcesses.ClearOutput out = ctx.get(CLEAR_OUT, QuizProcesses.ClearOutput.class);
+                result.put(PackageImportRules.QUIZ_ID, String.valueOf(out.quizId()));
+                result.put("cleared", out.cleared());
+                result.put("remaining", out.remaining());
             }
             case VERSION -> {
                 QuizProcesses.VersionOutput out = ctx.get(VERSION_OUT, QuizProcesses.VersionOutput.class);

@@ -42,14 +42,6 @@ public class ContentConfig {
     }
 
     private DatasetDefinition defaultDataset(String entity, int maxWriteBatch) {
-        return defaultDataset(entity, maxWriteBatch, null);
-    }
-
-    /**
-     * @param queryTimeout the dataset's limit for one read, the platform's default when null (F-F11a: the parts of a
-     *                     bank, read whole to replace a quiz's content)
-     */
-    private DatasetDefinition defaultDataset(String entity, int maxWriteBatch, java.time.Duration queryTimeout) {
         return DatasetDefinition.define(QbContent.defaultDataset(entity), d -> d
             .targetEntityType(entity)
             .asDefault()
@@ -57,12 +49,7 @@ public class ContentConfig {
             .scope(OperatorScopes.of(entity))
             .permissions(QbPermissions.ADMIN_QUIZ_READ, QbPermissions.SPONSOR_VIEW_WRITE)
             // Cloning and removing a quiz write all its parts at once.
-            .policy(p -> {
-                p.processOnlyWrites().maxWriteBatchSize(maxWriteBatch);
-                if (queryTimeout != null) {
-                    p.queryTimeout(queryTimeout);
-                }
-            })
+            .policy(p -> p.processOnlyWrites().maxWriteBatchSize(maxWriteBatch))
             .storage(s -> s.driver("r2dbc-postgresql").connectionPoolRef(poolRef)));
     }
 
@@ -156,13 +143,12 @@ public class ContentConfig {
 
     @Bean
     DatasetDefinition qbQuestionDataset() {
-        return defaultDataset(QbContent.QUESTION, ContentLimits.MAX_QUESTIONS_TECH, ContentLimits.BANK_QUERY_TIMEOUT);
+        return defaultDataset(QbContent.QUESTION, ContentLimits.MAX_QUESTIONS_TECH);
     }
 
     @Bean
     DatasetDefinition qbOptionDataset() {
-        return defaultDataset(QbContent.OPTION, ContentLimits.MAX_QUESTIONS_TECH * ContentLimits.MAX_OPTIONS,
-            ContentLimits.BANK_QUERY_TIMEOUT);
+        return defaultDataset(QbContent.OPTION, ContentLimits.MAX_QUESTIONS_TECH * ContentLimits.MAX_OPTIONS);
     }
 
     @Bean
@@ -181,8 +167,7 @@ public class ContentConfig {
     @Bean
     DatasetDefinition qbContentTranslationDataset() {
         // A copy writes every translation of the quiz at once.
-        return defaultDataset(QbContent.TRANSLATION, ContentLanguages.MAX_TRANSLATION_ROWS,
-            ContentLimits.BANK_QUERY_TIMEOUT);
+        return defaultDataset(QbContent.TRANSLATION, ContentLanguages.MAX_TRANSLATION_ROWS);
     }
 
     @Bean
@@ -320,6 +305,11 @@ public class ContentConfig {
     @Bean
     ProcessDefinition<QuizProcesses.ReleaseInput, QuizProcesses.ReleaseOutput, ProcessContext> qbQuizReleaseFiles() {
         return QuizProcesses.releaseFiles();
+    }
+
+    @Bean
+    ProcessDefinition<QuizProcesses.ClearInput, QuizProcesses.ClearOutput, ProcessContext> qbQuizClearContent() {
+        return QuizProcesses.clearContentProcess();
     }
 
     @Bean

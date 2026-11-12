@@ -27,12 +27,11 @@ public final class ContentLimits {
     /** F-F11a: the smallest value {@code qb.content.import.batch-bytes} counts as (below it a batch could hold no question). */
     public static final int IMPORT_BATCH_BYTES_MIN = 65_536;
     /**
-     * F-F11a: how long one read of a bank's questions, options or translations may take. A quiz of
-     * {@link #MAX_QUESTIONS_TECH} questions has ten times the rows of the platform's 5-second default (and, in its
-     * versions' history, several times that); replacing its content (the package's current content over a version, a
-     * bank imported again) reads it whole.
+     * F-F11a: the most parts one call of {@code QB_QUIZ_CLEAR_CONTENT} deletes. The platform deletes a row of a
+     * temporal entity with three statements (about 2 ms), so 2000 rows are a few seconds, far below what a proxy
+     * waits; it is also the write limit of the question dataset ({@link #MAX_QUESTIONS_TECH}).
      */
-    public static final java.time.Duration BANK_QUERY_TIMEOUT = java.time.Duration.ofSeconds(30);
+    public static final int CLEAR_ROWS_TECH = 2_000;
     /** Materials in one quiz. */
     public static final int MAX_MATERIALS = 10;
     /** Options of one question, in a draft; a version needs at least {@link #MIN_OPTIONS}. */

@@ -291,6 +291,43 @@ class PackageImportIT extends TreeItSupport {
     }
 
     @Test
+    void aContentIsClearedInStepsOfAFewRowsAndWhatIsLeftIsReplacedWithThem() {
+        // F-F11a: three questions of two options are nine rows: cleared four at a time, 4 + 4 + 1.
+        String token = sponsorToken(newSponsor(unique("s-ff11-clear")));
+        String quizId = newQuiz(token, "Cleared");
+        run("QB_QUIZ_IMPORT", token, body("document", quizFile("Cleared", "One?", "Two?", "Three?"), "files", body(),
+            "intoQuizId", quizId));
+        assertThat(stemsOf(quizId)).hasSize(3);
+        assertThat(run("QB_QUIZ_CLEAR_CONTENT", token, body("quizId", quizId, "rows", 4)))
+            .containsEntry("cleared", 4).containsEntry("remaining", 5);
+        assertThat(run("QB_QUIZ_CLEAR_CONTENT", token, body("quizId", quizId, "rows", 4)))
+            .containsEntry("cleared", 4).containsEntry("remaining", 1);
+        assertThat(run("QB_QUIZ_CLEAR_CONTENT", token, body("quizId", quizId, "rows", 4)))
+            .containsEntry("cleared", 1).containsEntry("remaining", 0);
+        assertThat(stemsOf(quizId)).isEmpty();
+        assertThat(run("QB_QUIZ_CLEAR_CONTENT", token, body("quizId", quizId, "rows", 4)))
+            .containsEntry("cleared", 0).containsEntry("remaining", 0);
+
+        // A count that is short is not wrong: the replacement deletes what is left.
+        run("QB_QUIZ_IMPORT", token, body("document", quizFile("Again", "A?", "B?"), "files", body(),
+            "intoQuizId", quizId));
+        run("QB_QUIZ_CLEAR_CONTENT", token, body("quizId", quizId, "rows", 2));
+        run("QB_QUIZ_IMPORT", token, body("document", quizFile("Last", "Only?"), "files", body(),
+            "intoQuizId", quizId));
+        assertThat(stemsOf(quizId)).containsExactly("Only?");
+
+        // Another's quiz: not found; a number of rows beyond the limit: 400; a quiz with a publication: refused.
+        refused("QB_QUIZ_CLEAR_CONTENT", sponsorToken(newSponsor(unique("s-ff11-clear-other"))),
+            body("quizId", quizId, "rows", 4), 404);
+        refused("QB_QUIZ_CLEAR_CONTENT", token, body("quizId", quizId, "rows", 2001), 400);
+        String versionId = (String) run("QB_QUIZ_PUBLISH_VERSION", token, body("quizId", quizId)).get("versionId");
+        draft(token, versionId, "Cleared's draft");
+        assertThat(codes(refused("QB_QUIZ_CLEAR_CONTENT", token, body("quizId", quizId, "rows", 4), 422)))
+            .containsExactly(ContentCodes.IMPORT_HAS_PUBLICATIONS);
+        assertThat(stemsOf(quizId)).containsExactly("Only?");
+    }
+
+    @Test
     void theBytesOfARequestAreKeptWithTheImportAndAnOlderRecordGoesOnByTheQuestionCount() {
         // F-F11a: the plan of a large bank (its batches' number) is kept with the import, so that going on cuts it as the
         // first run did even after the parameter was changed.
