@@ -408,6 +408,15 @@ public final class PackageImportProcesses {
                 + "import takes", Map.of("step", input.step())));
             return;
         }
+        // A step clears or replaces only a quiz this import made (F-F11a review L3): another of the sponsor's quizzes
+        // is not the package's to empty.
+        UUID target = actions.getFirst() == Action.CLEAR ? input.clear().quizId()
+            : actions.getFirst() == Action.QUIZ ? input.quiz().intoQuizId() : null;
+        if (target != null && !PackageImportRules.made(done, PackageImportRules.QUIZ_ID).contains(target.toString())) {
+            ctx.reject(new Violation("step", PackageImportCodes.STEP_INVALID, "A step clears or replaces only a "
+                + "quiz the import made", Map.of("step", input.step())));
+            return;
+        }
         ctx.put(ACTION, actions.getFirst());
     }
 

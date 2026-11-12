@@ -413,7 +413,11 @@ public final class QuizProcesses {
      */
     static void clearContent(ProcessContext ctx) {
         clearContent(ctx, Integer.MAX_VALUE, new HashSet<>());
-        places(ctx).forEach(place -> AssetUses.forget(ctx, place.targetKind(), List.of(place.targetId())));
+        // One call a kind: each call goes through all the uses loaded.
+        Map<String, List<Object>> byKind = new java.util.LinkedHashMap<>();
+        places(ctx).forEach(place -> byKind.computeIfAbsent(place.targetKind(), kind -> new ArrayList<>())
+            .add(place.targetId()));
+        byKind.forEach((kind, ids) -> AssetUses.forget(ctx, kind, ids));
     }
 
     /**
@@ -456,9 +460,9 @@ public final class QuizProcesses {
                 ctx.changes().delete(entity, row.id(), row.version());
                 deleted.add(row.id());
             });
-            if (kind != null && limit != Integer.MAX_VALUE) {
-                String targetKind = kind;
-                gone.forEach(row -> AssetUses.forget(ctx, targetKind, List.of(row.id())));
+            if (kind != null && limit != Integer.MAX_VALUE && !gone.isEmpty()) {
+                // One call a kind with all the ids: each call goes through all the uses loaded.
+                AssetUses.forget(ctx, kind, gone.stream().map(EntityInstance::id).toList());
             }
             budget -= cut;
             left += rows.size() - cut;
@@ -479,8 +483,9 @@ public final class QuizProcesses {
             pb -> pb
                 .description("Deletes part of the content of a quiz without publications, to be replaced.")
                 // Only the package import's steps call it: on its own it would leave a sponsor a half-emptied quiz.
+                // Its permission is the one no role holds, as QB_QUIZ_RELEASE_FILES's (sub-processes are not checked).
                 .subProcessOnly()
-                .permissions(QbPermissions.CONTENT_WRITE)
+                .permissions(QbPermissions.CONTENT_SYSTEM)
                 .requiresVerifiedEmail()
                 .steps(CallerChecks::refuseBanned)
                 .contextFactory((start, input) -> QuizEditing.start(start, input, input.quizId()))

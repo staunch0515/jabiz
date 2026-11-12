@@ -292,54 +292,139 @@ class PackageImportIT extends TreeItSupport {
 
     @Test
     void aContentIsClearedInStepsOfAFewRowsAndWhatIsLeftIsReplacedWithThem() {
-        // F-F11a: three questions of two options are nine rows: cleared four at a time, 4 + 4 + 1, as steps of a
-        // package import (the clearing is a sub-process only: on its own it would leave a half-emptied quiz).
-        String token = sponsorToken(newSponsor(unique("s-ff11-clear")));
-        String quizId = newQuiz(token, "Cleared");
-        run("QB_QUIZ_IMPORT", token, body("document", quizFile("Cleared", "One?", "Two?", "Three?"), "files", body(),
-            "intoQuizId", quizId));
-        assertThat(stemsOf(quizId)).hasSize(3);
-        Object importId = start(token, HASH_A, "FULL", 20).get("importId");
-        assertThat(result(step(token, importId, "clear:1", "clear", body("quizId", quizId, "rows", 4))))
-            .containsEntry("quizId", quizId).containsEntry("cleared", 4).containsEntry("remaining", 5);
-        // Four options gone, no question yet: the heading still counts three.
-        assertThat(questionCount(quizId)).isEqualTo("3");
-        assertThat(result(step(token, importId, "clear:2", "clear", body("quizId", quizId, "rows", 4))))
-            .containsEntry("cleared", 4).containsEntry("remaining", 1);
-        // The heading counts what is left, as every change of the parts does: an import stopped here leaves a
-        // consistent draft.
-        assertThat(stemsOf(quizId)).hasSize(1);
-        assertThat(questionCount(quizId)).isEqualTo("1");
-        assertThat(result(step(token, importId, "clear:3", "clear", body("quizId", quizId, "rows", 4))))
-            .containsEntry("cleared", 1).containsEntry("remaining", 0);
+        // F-F11a: a quiz the import made, with all that the clearing deletes: texts in another language, a material in
+        // that language (a variant of a base one), materials and a question picked from the asset library.
+        String sponsor = newSponsor(unique("s-ff11-clear"));
+        String token = sponsorToken(sponsor);
+        Object importId = start(token, HASH_A, "FULL", 30).get("importId");
+        String quizId = (String) result(step(token, importId, "quiz:q1:v:v1:content", "quiz", body("document",
+            translatedFile(), "files", body()))).get("quizId");
+        String article = (String) run(com.jabiz.quizbuks.asset.AssetProcesses.SAVE, token, body("kind", "ARTICLE",
+            "name", "Brewing", "language", "en", "body", "Grind, pour, wait.")).get("assetId");
+        String picked = String.valueOf(run("QB_MATERIAL_SAVE", token, body("quizId", quizId, "kind", "ARTICLE",
+            "title", "Brewing", "body", "Grind, pour, wait.", "assetId", article)).get("itemId"));
+        String picture = (String) upload(com.jabiz.quizbuks.content.QbContent.IMAGE_POLICY,
+            com.jabiz.runtime.test.FileSamples.jpeg(400, 300), "picture.jpg", "image/jpeg", token)
+            .expectStatus().isCreated().expectBody(MAP).returnResult().getResponseBody().get("fileId");
+        String image = (String) run(com.jabiz.quizbuks.asset.AssetProcesses.SAVE, token, body("kind", "IMAGE",
+            "name", "Shop photo", "language", "en", "image", picture)).get("assetId");
+        String pictured = String.valueOf(run("QB_QUESTION_SAVE", token, body("quizId", quizId, "stem", "Pictured?",
+            "image", picture, "imageAssetId", image, "options", List.of(body("text", "Yes", "correct", true),
+                body("text", "No")))).get("itemId"));
+        // Four questions of two options, three base materials and one in Chinese, and the Chinese texts.
+        long texts = (Long) query("SELECT count(DISTINCT translation_id) AS n FROM qb_content_translation_version "
+            + "WHERE quiz_id = ?::uuid", quizId).getFirst().get("n");
+        assertThat(texts).isPositive();
+        assertThat(materialCount(quizId)).isEqualTo("3");
+        assertThat(questionCount(quizId)).isEqualTo("4");
+        assertThat(useOf(com.jabiz.quizbuks.asset.QbAssets.MATERIAL, picked)).isNotEmpty();
+        assertThat(useOf(com.jabiz.quizbuks.asset.QbAssets.QUESTION_IMAGE, pictured)).isNotEmpty();
+
+        // 1. The texts and the material in Chinese (a variant goes before its base): the heading counts three still.
+        assertThat(result(step(token, importId, "quiz:q1:c:clear:1", "clear", body("quizId", quizId,
+            "rows", (int) texts + 1)))).containsEntry("quizId", quizId).containsEntry("cleared", (int) texts + 1)
+            .containsEntry("remaining", 15);
+        assertThat(query("SELECT 1 FROM qb_content_translation_version t WHERE quiz_id = ?::uuid AND NOT is_deleted "
+            + "AND version_no = (SELECT max(version_no) FROM qb_content_translation_version WHERE translation_id = "
+            + "t.translation_id)", quizId)).isEmpty();
+        assertThat(materialCount(quizId)).isEqualTo("3");
+        assertThat(useOf(com.jabiz.quizbuks.asset.QbAssets.MATERIAL, picked)).isNotEmpty();
+        // 2. The three base materials, and the library's record of the one picked.
+        assertThat(result(step(token, importId, "quiz:q1:c:clear:2", "clear", body("quizId", quizId, "rows", 3))))
+            .containsEntry("cleared", 3).containsEntry("remaining", 12);
+        assertThat(materialCount(quizId)).isEqualTo("0");
+        assertThat(useOf(com.jabiz.quizbuks.asset.QbAssets.MATERIAL, picked)).isEmpty();
+        assertThat(useOf(com.jabiz.quizbuks.asset.QbAssets.QUESTION_IMAGE, pictured)).isNotEmpty();
+        assertThat(questionCount(quizId)).isEqualTo("4");
+
+        // A stop between two clearing steps: going on answers the steps done, and one done again does nothing.
+        Map<String, Object> resumed = start(token, HASH_A, "FULL", 30);
+        assertThat(resumed).containsEntry("resumed", true).containsEntry("importId", importId)
+            .containsEntry("stepsDone", 3);
+        Map<String, Object> again = step(token, importId, "quiz:q1:c:clear:2", "clear", body("quizId", quizId,
+            "rows", 3));
+        assertThat(again).containsEntry("repeated", true).containsEntry("stepsDone", 3);
+        assertThat(result(again)).containsEntry("cleared", 3).containsEntry("remaining", 12);
+        assertThat(stemsOf(quizId)).hasSize(4);
+        assertThat(questionCount(quizId)).isEqualTo("4");
+
+        // 3. The options; 4. the questions, and the library's record of the one picked; 5. nothing left.
+        assertThat(result(step(token, importId, "quiz:q1:c:clear:3", "clear", body("quizId", quizId, "rows", 8))))
+            .containsEntry("cleared", 8).containsEntry("remaining", 4);
+        assertThat(questionCount(quizId)).isEqualTo("4");
+        assertThat(result(step(token, importId, "quiz:q1:c:clear:4", "clear", body("quizId", quizId,
+            "rows", 2000)))).containsEntry("cleared", 4).containsEntry("remaining", 0);
         assertThat(stemsOf(quizId)).isEmpty();
         assertThat(questionCount(quizId)).isEqualTo("0");
-        assertThat(result(step(token, importId, "clear:4", "clear", body("quizId", quizId, "rows", 4))))
+        assertThat(useOf(com.jabiz.quizbuks.asset.QbAssets.QUESTION_IMAGE, pictured)).isEmpty();
+        assertThat(result(step(token, importId, "quiz:q1:c:clear:5", "clear", body("quizId", quizId, "rows", 4))))
             .containsEntry("cleared", 0).containsEntry("remaining", 0);
+        step(token, importId, "quiz:q1:c:content", "quiz", body("document", quizFile("Again", "A?", "B?"),
+            "files", body(), "intoQuizId", quizId));
+        assertThat(stemsOf(quizId)).containsExactly("A?", "B?");
 
         // A count that is short is not wrong: the replacement deletes what is left.
-        run("QB_QUIZ_IMPORT", token, body("document", quizFile("Again", "A?", "B?"), "files", body(),
-            "intoQuizId", quizId));
-        step(token, importId, "clear:5", "clear", body("quizId", quizId, "rows", 2));
-        run("QB_QUIZ_IMPORT", token, body("document", quizFile("Last", "Only?"), "files", body(),
-            "intoQuizId", quizId));
+        step(token, importId, "quiz:q1:c2:clear:1", "clear", body("quizId", quizId, "rows", 2));
+        step(token, importId, "quiz:q1:c2:content", "quiz", body("document", quizFile("Last", "Only?"),
+            "files", body(), "intoQuizId", quizId));
         assertThat(stemsOf(quizId)).containsExactly("Only?");
         assertThat(questionCount(quizId)).isEqualTo("1");
+
+        // Only a quiz the import made is cleared or replaced (review L3): another of the sponsor's own is not.
+        String own = newQuiz(token, "Not the package's");
+        question(token, own, "Mine?");
+        assertThat(codes(refused(PackageImportProcesses.STEP, token, body("importId", importId, "step",
+            "quiz:q2:c:clear:1", "clear", body("quizId", own, "rows", 4)), 422)))
+            .containsExactly(PackageImportCodes.STEP_INVALID);
+        assertThat(codes(refused(PackageImportProcesses.STEP, token, body("importId", importId, "step",
+            "quiz:q2:c:content", "quiz", body("document", quizFile("Taken", "Over?"), "files", body(),
+                "intoQuizId", own)), 422))).containsExactly(PackageImportCodes.STEP_INVALID);
+        assertThat(stemsOf(own)).containsExactly("Mine?");
 
         // Not a process of its own.
         refused("QB_QUIZ_CLEAR_CONTENT", token, body("quizId", quizId, "rows", 4), 403);
-        // Another's quiz: not found; a number of rows beyond the limit: 400; a quiz with a publication: refused.
+        // Another's import: not found; another's quiz in one's own import: not the import's; a number of rows beyond
+        // the limit: 400; a quiz with a publication: refused.
         String other = sponsorToken(newSponsor(unique("s-ff11-clear-other")));
         Object othersImport = start(other, HASH_A, "FULL", 20).get("importId");
-        refused(PackageImportProcesses.STEP, other, body("importId", othersImport, "step", "clear:1",
+        refused(PackageImportProcesses.STEP, token, body("importId", othersImport, "step", "quiz:q1:c3:clear:1",
             "clear", body("quizId", quizId, "rows", 4)), 404);
-        refused(PackageImportProcesses.STEP, token, body("importId", importId, "step", "clear:6",
+        assertThat(codes(refused(PackageImportProcesses.STEP, other, body("importId", othersImport, "step",
+            "quiz:q1:c:clear:1", "clear", body("quizId", quizId, "rows", 4)), 422)))
+            .containsExactly(PackageImportCodes.STEP_INVALID);
+        refused(PackageImportProcesses.STEP, token, body("importId", importId, "step", "quiz:q1:c3:clear:1",
             "clear", body("quizId", quizId, "rows", 2001)), 400);
         String versionId = (String) run("QB_QUIZ_PUBLISH_VERSION", token, body("quizId", quizId)).get("versionId");
         draft(token, versionId, "Cleared's draft");
-        assertThat(codes(refused(PackageImportProcesses.STEP, token, body("importId", importId, "step", "clear:7",
-            "clear", body("quizId", quizId, "rows", 4)), 422))).containsExactly(ContentCodes.IMPORT_HAS_PUBLICATIONS);
+        assertThat(codes(refused(PackageImportProcesses.STEP, token, body("importId", importId, "step",
+            "quiz:q1:c3:clear:1", "clear", body("quizId", quizId, "rows", 4)), 422)))
+            .containsExactly(ContentCodes.IMPORT_HAS_PUBLICATIONS);
         assertThat(stemsOf(quizId)).containsExactly("Only?");
+    }
+
+    /** A quiz file (version 3) in English with two articles, three questions and Chinese for some texts and the first article. */
+    private static Map<String, Object> translatedFile() {
+        Map<String, Object> file = quizFile("Cleared", "One?", "Two?", "Three?");
+        file.put("formatVersion", 3);
+        @SuppressWarnings("unchecked")
+        Map<String, Object> heading = (Map<String, Object>) file.get("quiz");
+        heading.put("language", "en");
+        file.put("materials", List.of(body("no", 1, "kind", "ARTICLE", "title", "Read first", "body", "Paris."),
+            body("no", 2, "kind", "ARTICLE", "title", "Read more", "body", "Lyon.")));
+        file.put("translations", body("zh", body("texts", body("title", "清空", "q1.stem", "一？", "q1.o1.text", "是",
+            "q2.stem", "二？"), "images", body(), "materials", List.of(body("no", 1, "kind", "ARTICLE",
+                "title", "先读", "body", "巴黎。", "images", List.of())))));
+        return file;
+    }
+
+    private static String materialCount(Object quizId) {
+        return latest("qb_quiz_version", "quiz_id", "quiz_id = '" + quizId + "'").getFirst().get("material_count")
+            .toString();
+    }
+
+    private static List<Map<String, Object>> useOf(String targetKind, Object targetId) {
+        return query("SELECT * FROM qb_asset_use WHERE target_kind = ? AND target_id = ?", targetKind,
+            String.valueOf(targetId));
     }
 
     private static String questionCount(Object quizId) {

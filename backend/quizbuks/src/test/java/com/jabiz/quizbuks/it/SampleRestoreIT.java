@@ -205,6 +205,49 @@ class SampleRestoreIT extends TreeItSupport {
         assertThat(Duration.ofMillis(total)).isLessThan(WIDE_LIMIT);
     }
 
+    /**
+     * F-F11a review M2: the worst shape a Sponsor can mean (ten articles of the longest body in three languages, about
+     * 1.8 MB, and questions of a 1000-character stem and six 300-character options in three languages) comes back
+     * from a package whose every step, the content's first (heading, materials, first questions) too, is cut by the
+     * bytes of a request: a version, then the current content replacing it.
+     */
+    @Test
+    void theWorstShapeComesBackCutByBytesFromItsFirstStep() {
+        Map<String, Map<String, Object>> versions = new LinkedHashMap<>();
+        versions.put("v1", PackageFixtures.worstShape("Worst shape", 120));
+        Map<String, Object> current = PackageFixtures.worstShape("Worst shape", 150);
+        Sample sample = new Sample("Worst shape (sample)", List.of(new PackageFixtures.SampleQuiz("q1", versions,
+            current)), List.of(), false);
+        String sponsor = sampleSponsor("s-ff11-worst");
+        List<Step> plan = PackageFixtures.plan(sample, BATCH_SIZE, BATCH_BYTES, clock.instant(), publication -> Map.of());
+        PackageFixtures.Calls calls = calls(sponsor);
+        Map<String, Object> started = PackageFixtures.start(calls, "f".repeat(63) + "1", plan.size(), BATCH_SIZE,
+            BATCH_BYTES);
+        PackageFixtures.Imported imported = PackageFixtures.runSteps(calls, plan, 0, plan.size(), Map.of(),
+            started.get("importId"));
+
+        // The first step of each content carries the ten materials and only the questions that fit after them.
+        List<Map<String, Object>> cut = PackageFixtures.splitContentByBytes(current, BATCH_SIZE, BATCH_BYTES);
+        assertThat((List<?>) cut.getFirst().get("materials")).hasSize(10);
+        assertThat(((List<?>) cut.getFirst().get("questions")).size()).isBetween(1, 149);
+        assertThat(cut).allSatisfy(step -> assertThat(PackageFixtures.bytesOf(step)).isLessThanOrEqualTo(BATCH_BYTES));
+        assertThat(plan.stream().map(Step::key)).contains("quiz:q1:c:clear:1", "quiz:q1:c:batch:2");
+
+        Object quizId = imported.results().get("quiz:q1:v:v1:content").get("quizId");
+        assertThat(stems(quizId)).hasSize(150);
+        assertThat(versionsOf(quizId)).isEqualTo(1);
+        Map<String, Object> heading = latest("qb_quiz_version", "quiz_id", "quiz_id = '" + quizId + "'").getFirst();
+        assertThat(heading).containsEntry("question_count", java.math.BigDecimal.valueOf(150))
+            .containsEntry("material_count", java.math.BigDecimal.TEN);
+        assertThat(query("SELECT status FROM qb_package_import WHERE import_id = ?",
+            String.valueOf(started.get("importId"))).getFirst()).containsEntry("status", "DONE");
+        System.out.printf("F-F11 the worst shape: %d steps in %d ms; slowest step %s %d ms; first step %d questions, "
+            + "%d bytes%n", imported.results().size(), imported.millis(), imported.slowestStep(),
+            imported.slowestMillis(), ((List<?>) cut.getFirst().get("questions")).size(),
+            PackageFixtures.bytesOf(cut.getFirst()));
+        assertThat(Duration.ofMillis(imported.millis())).isLessThan(WIDE_LIMIT);
+    }
+
     @Test
     void theRestoredBigBankIsSavedPublishedAndEveryTakerIsDrawnTwentyOfThousand() {
         autoApprove(true);

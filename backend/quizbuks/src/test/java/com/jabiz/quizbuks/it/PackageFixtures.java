@@ -129,6 +129,37 @@ final class PackageFixtures {
         return document;
     }
 
+    /**
+     * The worst content a Sponsor can mean in one quiz file (F-F11a review M2): the most materials, each an article of
+     * the longest body in the base language and in both others (about 1.8 MB together), and {@code count} questions
+     * of {@link #worstBatch}. Its first step (heading and materials) leaves room for few questions under the bytes of a
+     * request.
+     */
+    @SuppressWarnings("unchecked")
+    static Map<String, Object> worstShape(String title, int count) {
+        Map<String, Object> document = new LinkedHashMap<>(worstBatch(count));
+        document.put("quiz", map("kind", "QUIZ", "title", title, "timeLimitSec", 3600, "language", "en"));
+        int length = com.jabiz.quizbuks.content.ContentLimits.MATERIAL_BODY_LENGTH;
+        List<Object> materials = new ArrayList<>();
+        Map<String, List<Object>> translated = new LinkedHashMap<>();
+        for (int m = 1; m <= com.jabiz.quizbuks.content.ContentLimits.MAX_MATERIALS; m++) {
+            materials.add(map("no", m, "kind", "ARTICLE", "title", "Article " + m, "body", cjk("文", m, length)));
+            translated.computeIfAbsent("zh", key -> new ArrayList<>()).add(map("no", m, "kind", "ARTICLE",
+                "title", "文章 " + m, "body", cjk("中", m, length), "images", List.of()));
+            translated.computeIfAbsent("ja", key -> new ArrayList<>()).add(map("no", m, "kind", "ARTICLE",
+                "title", "記事 " + m, "body", cjk("日", m, length), "images", List.of()));
+        }
+        document.put("materials", materials);
+        Map<String, Object> translations = new LinkedHashMap<>();
+        ((Map<String, Object>) document.get("translations")).forEach((language, value) -> {
+            Map<String, Object> t = new LinkedHashMap<>((Map<String, Object>) value);
+            t.put("materials", translated.get(language));
+            translations.put(language, t);
+        });
+        document.put("translations", translations);
+        return document;
+    }
+
     /** Exactly {@code length} characters, every one of three bytes in UTF-8, different for each {@code salt}. */
     private static String cjk(String lead, int salt, int length) {
         StringBuilder text = new StringBuilder(lead).append(salt);
@@ -215,6 +246,39 @@ final class PackageFixtures {
      * request's envelope is a few hundred more). A question that alone passes it cannot be cut: the test fails there.
      */
     static List<Map<String, Object>> splitByBytes(Map<String, Object> document, int size, int bytes) {
+        return splitByBytes(document, 0, size, bytes);
+    }
+
+    /**
+     * A whole content as the page cuts it by bytes (F-F11a review M2): the first step is the heading and the materials
+     * with as many questions as fit within {@code size} and {@code bytes}, the next are batches of the rest, cut by
+     * {@link #splitByBytes}.
+     */
+    static List<Map<String, Object>> splitContentByBytes(Map<String, Object> document, int size, int bytes) {
+        List<Object> questions = questionsOf(document);
+        int[] weight = weights(document);
+        int used = bytesOf(firstBatch(document, 0)) + 64;
+        int count = 0;
+        while (count < questions.size() && count < size && used + weight[count] <= bytes) {
+            used += weight[count];
+            count++;
+        }
+        if (count == 0 && !questions.isEmpty()) {
+            throw new AssertionError("The heading and materials leave no room for a question within " + bytes);
+        }
+        Map<String, Object> first = firstBatch(document, count);
+        if (bytesOf(first) > bytes) {
+            throw new AssertionError("The first step of " + count + " questions is " + bytesOf(first) + " bytes, over "
+                + bytes);
+        }
+        List<Map<String, Object>> steps = new ArrayList<>();
+        steps.add(first);
+        steps.addAll(splitByBytes(document, count, size, bytes));
+        return steps;
+    }
+
+    /** The cost of each question: its own bytes and those of its texts in every language (a good estimate). */
+    private static int[] weights(Map<String, Object> document) {
         List<Object> questions = questionsOf(document);
         // The cost of each question: its own bytes and those of its texts in every language (a good estimate; the
         // batches are measured afterwards).
@@ -234,9 +298,16 @@ final class PackageFixtures {
                 }
             });
         });
+        return weight;
+    }
+
+    private static List<Map<String, Object>> splitByBytes(Map<String, Object> document, int start, int size,
+        int bytes) {
+        List<Object> questions = questionsOf(document);
+        int[] weight = weights(document);
         int envelope = bytesOf(batch(document, 0, 0)) + 64;
         List<Map<String, Object>> batches = new ArrayList<>();
-        int from = 0;
+        int from = start;
         while (from < questions.size()) {
             int count = 0;
             int used = envelope;
@@ -385,6 +456,16 @@ final class PackageFixtures {
      */
     static List<Step> plan(Sample sample, int batchSize, Instant startAt, Function<SamplePublication, Map<String, Object>>
         settings) {
+        return plan(sample, batchSize, 0, startAt, settings);
+    }
+
+    /**
+     * As {@link #plan(Sample, int, Instant, Function)}, each content cut by bytes too when {@code batchBytes} is above
+     * 0 (F-F11a review M2): its first step (heading, materials, first questions) and its batches each within it, as
+     * {@link #splitContentByBytes} cuts them.
+     */
+    static List<Step> plan(Sample sample, int batchSize, int batchBytes, Instant startAt,
+        Function<SamplePublication, Map<String, Object>> settings) {
         List<Step> steps = new ArrayList<>();
         if (sample.graph()) {
             steps.add(new Step("tree:1", results -> map("tree", map("create", map("ownerKind", "SPONSOR", "name",
@@ -416,16 +497,19 @@ final class PackageFixtures {
                             results.get(quizStep).get("quizId"), "rows", CLEAR_ROWS))));
                     }
                 }
+                // Index 0 is the content's first step, the rest its batches.
+                List<Map<String, Object>> cut = batchBytes > 0 ? splitContentByBytes(file, batchSize, batchBytes)
+                    : splitQuestions(file, batchSize);
+                Map<String, Object> head = batchBytes > 0 ? cut.getFirst() : firstBatch(file, batchSize);
                 steps.add(new Step(contentKey, results -> {
-                    Map<String, Object> quizInput = map("document", firstBatch(file, batchSize), "files", map());
+                    Map<String, Object> quizInput = map("document", head, "files", map());
                     if (into) {
                         quizInput.put("intoQuizId", results.get(quizStep).get("quizId"));
                     }
                     return map("quiz", quizInput, "quizTopics", map("topics", List.of(), "customTopics", List.of()));
                 }));
-                List<Map<String, Object>> rest = splitQuestions(file, batchSize);
-                for (int b = 1; b < rest.size(); b++) {
-                    Map<String, Object> batch = rest.get(b);
+                for (int b = 1; b < cut.size(); b++) {
+                    Map<String, Object> batch = cut.get(b);
                     steps.add(new Step(base + ":batch:" + (b + 1), results -> map("questions", map("quizId",
                         results.get(quizStep).get("quizId"), "document", batch, "files", map()))));
                 }
@@ -528,6 +612,10 @@ final class PackageFixtures {
             Map<String, Object> input = new LinkedHashMap<>(step.input().apply(results));
             input.put("importId", importId);
             input.put("step", step.key());
+            // Every request the page makes stays below the technical ceiling of a request's bytes.
+            if (bytesOf(input) >= com.jabiz.quizbuks.content.ContentLimits.IMPORT_BATCH_BYTES_TECH) {
+                throw new AssertionError("Step " + step.key() + " is " + bytesOf(input) + " bytes");
+            }
             long started = System.nanoTime();
             Map<String, Object> out = calls.run(PackageImportProcesses.STEP, input, step.key());
             long took = Duration.ofNanos(System.nanoTime() - started).toMillis();
