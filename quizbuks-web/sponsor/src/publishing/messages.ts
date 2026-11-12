@@ -96,7 +96,7 @@ export const publishingEn = {
       closedOn: 'This condition is no longer offered: switch it off before saving.',
       fee: {
         title: 'Condition fee',
-        hint: 'Conditions that are charged for cost their daily price for each day of the run (days rounded up), at least the minimum fee. Estimated from the saved conditions and dates.',
+        hint: 'Conditions that are charged for cost their daily price for each day of the run (days rounded up), at least the minimum fee. Estimated from the saved conditions and dates. It is charged by the day. Whether the unused days are given back when a publication ends early depends on the platform\'s setting, so do not count on a refund.',
         total: 'Estimated fee: {{fee}}',
         line: '{{rule}}: {{price}} × {{days}} days',
         minimum: 'Minimum fee {{fee}} applies',
@@ -164,6 +164,13 @@ export const publishingEn = {
         REVIEW_EXPIRED: 'its review ran out of time',
         ENDED: 'it ended',
       },
+    },
+    creditNotes: {
+      title: 'Credit notes',
+      usedDays: 'Days used: {{days}}',
+      total: 'Credit note {{total}} ({{amount}} and tax {{tax}})',
+      givenBack: 'Given back: cash {{cash}}, credit {{credit}}',
+      help: 'A credit note gives back what the platform charged for days the publication did not run. Its document is in your platform fee account area, under invoices.',
     },
     languages: {
       aiUse: 'Use, as checked',
@@ -751,7 +758,7 @@ export const publishingZh: typeof publishingEn = {
       closedOn: '此条件已不再提供：请先关闭它再保存。',
       fee: {
         title: '条件费用',
-        hint: '计费的条件按发布期间的天数（不足一天按一天）乘以日价计算，不低于最低使用费。按已保存的条件与日期估算。',
+        hint: '计费的条件按发布期间的天数（不足一天按一天）乘以日价计算，不低于最低使用费。按已保存的条件与日期估算。按天计费。发布提前结束时，未使用的天数是否退回取决于平台的设置，请勿默认会退款。',
         total: '预计费用：{{fee}}',
         line: '{{rule}}：{{price}} × {{days}} 天',
         minimum: '按最低使用费 {{fee}} 计',
@@ -819,6 +826,13 @@ export const publishingZh: typeof publishingEn = {
         REVIEW_EXPIRED: '审核超过了时限',
         ENDED: '发布已结束',
       },
+    },
+    creditNotes: {
+      title: '贷项凭证',
+      usedDays: '已使用天数：{{days}}',
+      total: '贷项凭证 {{total}}（{{amount}}，税 {{tax}}）',
+      givenBack: '退回：现金 {{cash}}，额度 {{credit}}',
+      help: '贷项凭证退回平台为发布未实施的天数所收的费用。其文件在平台费账户区域的账单中下载。',
     },
     languages: {
       aiUse: '确认并采用',
@@ -1406,7 +1420,7 @@ export const publishingJa: typeof publishingEn = {
       closedOn: 'この条件は提供を終了しました。保存する前にオフにしてください。',
       fee: {
         title: '条件の料金',
-        hint: '料金のかかる条件は、公開期間の日数（1 日未満は 1 日）× 日額で計算し、最低利用料を下回りません。保存済みの条件と日付から見積もります。',
+        hint: '料金のかかる条件は、公開期間の日数（1 日未満は 1 日）× 日額で計算し、最低利用料を下回りません。保存済みの条件と日付から見積もります。日割りで課金されます。公開が早く終了した場合に未使用日数が返還されるかどうかはプラットフォームの設定によるため、返金を前提にしないでください。',
         total: '見積もり：{{fee}}',
         line: '{{rule}}：{{price}} × {{days}} 日',
         minimum: '最低利用料 {{fee}} を適用',
@@ -1474,6 +1488,13 @@ export const publishingJa: typeof publishingEn = {
         REVIEW_EXPIRED: '審査が期限切れになりました',
         ENDED: '掲載が終了しました',
       },
+    },
+    creditNotes: {
+      title: '返還インボイス',
+      usedDays: '利用日数：{{days}}',
+      total: '返還インボイス {{total}}（{{amount}}、税 {{tax}}）',
+      givenBack: '返還：現金 {{cash}}、クレジット {{credit}}',
+      help: '返還インボイスは、公開が実施されなかった日数についてプラットフォームが請求した分を返すものです。書類は利用料アカウントの請求書の欄からダウンロードできます。',
     },
     languages: {
       aiUse: '確認して使う',

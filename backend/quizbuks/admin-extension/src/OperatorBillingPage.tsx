@@ -16,6 +16,7 @@ import {
 } from '@jabiz/admin'
 import { BillingDialog } from './BillingDialog'
 import { EmptyState, LoadFailed } from './components'
+import { FeeCreditNotes } from './FeeCreditNotes'
 import { useLabels, usePaged, usePoints, when } from './hooks'
 import { DICTIONARY, PATH, PERMISSION } from './ids'
 import { readOperatorBilling, type OperatorBilling } from './operator-api'
@@ -143,6 +144,11 @@ export default function OperatorBillingPage() {
             getRowId={(row) => row.userId} empty={<EmptyState art="people" title={t('operator.billingPage.none')} />}
             rowProps={(row) => ({ 'data-testid': 'billing-row', 'data-id': row.userId })} />
         )}
+      {/* F-M7: the credit notes on its Sponsors' fees, read only (what they take back is deducted from its share). */}
+      <section aria-labelledby="operator-credit-notes-title" className="flex flex-col gap-4" data-testid="operator-credit-notes">
+        <h2 id="operator-credit-notes-title" className="text-lg font-semibold">{t('fee.creditNotes.title')}</h2>
+        <FeeCreditNotes operator />
+      </section>
       {billing && (
         <BillingDialog sponsor={billing} onClose={() => setBilling(null)}
           onSaved={() => void queryClient.invalidateQueries({ queryKey: KEY })} />

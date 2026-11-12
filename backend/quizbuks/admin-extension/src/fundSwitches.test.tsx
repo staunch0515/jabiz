@@ -154,19 +154,19 @@ describe('FundSwitches', () => {
   })
 
   it('shows a waiting row whose key exists with its value in force and says what it waits for', async () => {
-    server.switches = [...(server.switches as Row[]), row('qb.audience.billing.enabled', 'audience', 'false', 'true', true),
-      row('qb.ai.site-profile.enabled', 'aifee', 'false', 'false', true)]
+    // F-M7: the audience fee's switch is an active row now (on at the launch), with no waiting note.
+    server.switches = [...(server.switches as Row[]), row('qb.audience.billing.enabled', 'audience', 'true', 'true', true),
+      row('qb.ai.site-profile.enabled', 'aifee', 'false', 'true', true)]
     renderCard()
     await screen.findByTestId('fund-switches')
     await screen.findAllByTestId('fund-switch-proposal')
-    expect(KEY_BEFORE_MEANING_ROWS.map((r) => r.key)).toEqual(['qb.audience.billing.enabled', 'qb.ai.site-profile.enabled'])
-    const audience = within(stateOfRow('qb.audience.billing.enabled') as HTMLElement)
-    expect(stateOfRow('qb.audience.billing.enabled')).toHaveAttribute('data-state', 'differs')
-    expect(audience.getByTestId('fund-switch-value')).toHaveTextContent('true')
-    expect(audience.getByTestId('fund-switch-note')).toHaveTextContent('Waits for F-M7')
-    expect(stateOfRow('qb.ai.site-profile.enabled')).toHaveAttribute('data-state', 'match')
-    expect(within(stateOfRow('qb.ai.site-profile.enabled') as HTMLElement).getByTestId('fund-switch-note'))
-      .toHaveTextContent('Waits for F-M9')
+    expect(KEY_BEFORE_MEANING_ROWS.map((r) => r.key)).toEqual(['qb.ai.site-profile.enabled'])
+    const site = within(stateOfRow('qb.ai.site-profile.enabled') as HTMLElement)
+    expect(stateOfRow('qb.ai.site-profile.enabled')).toHaveAttribute('data-state', 'differs')
+    expect(site.getByTestId('fund-switch-value')).toHaveTextContent('true')
+    expect(site.getByTestId('fund-switch-note')).toHaveTextContent('Waits for F-M9')
+    expect(stateOfRow('qb.audience.billing.enabled')).toHaveAttribute('data-state', 'match')
+    expect(within(stateOfRow('qb.audience.billing.enabled') as HTMLElement).queryByText(/Waits for/)).toBeNull()
   })
 
   it('says beside the Kudos reward rows that not set counts as off', async () => {

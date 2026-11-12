@@ -6,6 +6,7 @@ import { formatKudos, kudosName } from '../qb/kudos'
 import { problemText } from '../qb/problems'
 import { Link } from '../qb/router'
 import { FEE_ACCOUNT_PATH } from '../shell/paths'
+import { creditNotesQuery, searchCreditNotes } from '../wallet/api'
 import {
   distributionQuery,
   fundsCheckQuery,
@@ -129,6 +130,43 @@ export function PrepaymentsSection({ publicationId }: { publicationId: string })
         })}
       </ul>
       <p className="text-muted-foreground text-sm">{t('publishing.funds.help')}</p>
+    </section>
+  )
+}
+
+/**
+ * F-M7: the credit notes of this publication (`qb.sponsor.fee-credit-notes` filtered by it): the audience fee of the
+ * days it did not run, when the platform's setting gives them back; each with its days used, its total and what was
+ * given back. Nothing is shown while there are none; the documents are downloaded from the money area.
+ */
+export function CreditNotesSection({ publicationId }: { publicationId: string }) {
+  const { t } = useTranslation(SPONSOR)
+  const rows = useQuery({ queryKey: creditNotesQuery(publicationId),
+    queryFn: () => searchCreditNotes({ offset: 0, limit: 100, publicationId }) })
+  if (!rows.data || rows.data.items.length === 0) return null
+  return (
+    <section aria-labelledby="publication-credit-notes-title" className="flex flex-col gap-2"
+      data-testid="publication-credit-notes">
+      <h2 id="publication-credit-notes-title" className="text-sm font-medium">{t('publishing.creditNotes.title')}</h2>
+      <ul className="flex flex-col gap-2 text-sm">
+        {rows.data.items.map((row) => (
+          <li key={row.creditNoteId} className="flex flex-col gap-0.5 rounded-md border p-3"
+            data-testid="publication-credit-note" data-reason={row.reason}>
+            <span className="font-medium" data-testid="publication-credit-note-number">{row.creditNoteNo}</span>
+            <span>
+              {row.usedDays != null && `${t('publishing.creditNotes.usedDays', { days: row.usedDays })} · `}
+              {t('publishing.creditNotes.total', { total: formatKudos(row.total), amount: formatKudos(row.amount),
+                tax: formatKudos(row.tax) })}
+            </span>
+            <span className="text-muted-foreground" data-testid="publication-credit-note-given-back">
+              {t('publishing.creditNotes.givenBack', { cash: formatKudos(row.refundedCash),
+                credit: formatKudos(row.refundedCredit) })}
+            </span>
+            <span className="text-muted-foreground">{formatDateTime(row.issuedAt)}</span>
+          </li>
+        ))}
+      </ul>
+      <p className="text-muted-foreground text-sm">{t('publishing.creditNotes.help')}</p>
     </section>
   )
 }

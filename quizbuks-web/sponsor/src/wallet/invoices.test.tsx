@@ -27,13 +27,19 @@ interface Server {
   /** F-M1: the account's lots and payment parts. */
   lots?: Record<string, unknown>[]
   payments?: Record<string, unknown>[]
+  /** F-M7: the credit notes. */
+  creditNotes?: Record<string, unknown>[]
 }
 
 const WALLET = { balance: '2000', held: '0', pendingCount: 0, pendingAmount: '0', toppedUp: '6000', takenBack: '0',
   topUpCount: 1, spent: '1000', cashBalance: '4000', cashHeld: '0', unpaidTotal: '1100', unpaidCount: 1,
   overdueCount: 0, billingMode: 'PREPAID', creditLimit: '0' }
+const CREDIT_NOTE = { creditNoteId: 'cn1', creditNoteNo: 'QBC-2026-00001', invoiceNo: 'QBF-2026-00001',
+  publicationId: 'p1', reason: 'AUDIENCE_UNUSED', endReason: 'WITHDRAWN', usedDays: 3, amount: '400', tax: '40', total: '440',
+  refundedCash: '100', refundedCredit: '340', used: '0', creditLeft: '340', issuedAt: '2026-11-05T00:00:00Z',
+  documentNo: null }
 const INVOICE = { invoiceId: 'i1', invoiceNo: 'QBF-2026-00001', period: '2026-01', billingMode: 'PREPAID',
-  amount: '1000', tax: '100', total: '1100', paidAmount: '0', status: 'OPEN', issuedAt: '2026-01-02T00:00:00Z', dueOn: '2026-02-01',
+  amount: '1000', tax: '100', total: '1100', paidAmount: '0', creditApplied: '0', status: 'OPEN', issuedAt: '2026-01-02T00:00:00Z', dueOn: '2026-02-01',
   paidAt: null, documentRunId: null }
 
 function server(options: Server = {}) {
@@ -65,6 +71,14 @@ function server(options: Server = {}) {
           sellEnabled: false }], offset: 0, limit: 1 })
       case '/api/queries/qb.sponsor.fee-invoices':
         return json(200, { items: options.invoices ?? [INVOICE], offset: 0, limit: 10, total: options.invoices?.length ?? 1 })
+      case '/api/queries/qb.sponsor.fee-credit-notes':
+        return json(200, { items: options.creditNotes ?? [], offset: 0, limit: 10, total: options.creditNotes?.length ?? 0 })
+      case '/api/processes/QB_FEE_CREDIT_NOTE_DOCUMENT/latest':
+        return json(200, { output: { creditNoteId: 'cn1', creditNoteNo: 'QBC-2026-00001', documentRunId: 'd2',
+          documentNo: 'QBC-2026-00001' } })
+      case '/api/documents/runs/d2/pdf':
+        return new Response('%PDF-1.7', { status: 200, headers: { 'Content-Type': 'application/pdf',
+          'Content-Disposition': 'attachment; filename="QBC-2026-00001.pdf"' } })
       case '/api/queries/qb.sponsor.topups':
         return json(200, { items: [], offset: 0, limit: 20, total: 0 })
       case '/api/queries/qb.sponsor.bank-account':
@@ -218,6 +232,57 @@ describe("the platform's invoices", () => {
     const row = (await screen.findAllByTestId('invoice-row'))[0]
     expect(row).toHaveAttribute('data-status', 'PARTIAL')
     expect(within(row).getByTestId('invoice-row-paid')).toHaveTextContent('500 Kudos')
+  })
+})
+
+describe('credit notes (F-M7)', () => {
+  it('shows what credit notes paid of an invoice, and what is still owed on the button', async () => {
+    server({ wallet: { ...WALLET, cashBalance: '300', feeCreditBalance: '0' },
+      invoices: [{ ...INVOICE, status: 'PARTIAL', paidAmount: '200', creditApplied: '700' }] })
+    window.history.replaceState(null, '', '/money/bills')
+    render(<App />)
+    const row = (await screen.findAllByTestId('invoice-row'))[0]
+    expect(within(row).getByTestId('invoice-row-credit-applied')).toHaveTextContent('Paid by credit notes: 700 Kudos')
+    // 1,100 less 700 by credit notes and 200 paid leaves 200: the 300 in the account covers it.
+    expect(within(row).getByTestId('invoice-row-pay')).toHaveAttribute('data-covered', 'true')
+  })
+
+  it('lists the credit notes and downloads a credit note document as kept', async () => {
+    const { processCalls } = server({ creditNotes: [CREDIT_NOTE] })
+    URL.createObjectURL = vi.fn(() => 'blob:credit-note')
+    URL.revokeObjectURL = vi.fn()
+    const click = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {})
+    window.history.replaceState(null, '', '/money/bills')
+    const user = userEvent.setup()
+    render(<App />)
+    const section = await screen.findByTestId('wallet-credit-notes')
+    const row = (await within(section).findAllByTestId('credit-note-row'))[0]
+    expect(row).toHaveAttribute('data-reason', 'AUDIENCE_UNUSED')
+    expect(within(row).getByTestId('credit-note-number')).toHaveTextContent('QBC-2026-00001')
+    expect(within(row).getByTestId('credit-note-total')).toHaveTextContent('440 Kudos')
+    expect(within(row).getByTestId('credit-note-given-back')).toHaveTextContent('Cash 100 Kudos, credit 340 Kudos')
+    expect(within(row).getByTestId('credit-note-left')).toHaveTextContent('340 Kudos')
+    expect(row).toHaveTextContent('Audience fee of unused days')
+    expect(section.textContent).not.toMatch(/JPY|yen|円/)
+    await user.click(within(row).getByTestId('credit-note-document'))
+    await waitFor(() => expect(click).toHaveBeenCalled())
+    expect(processCalls()[0]).toEqual({ path: '/api/processes/QB_FEE_CREDIT_NOTE_DOCUMENT/latest',
+      body: { creditNoteId: 'cn1', language: 'en' } })
+    expect(click.mock.contexts[0]).toHaveProperty('download', 'QBC-2026-00001.pdf')
+    await expectAccessible(screen.getByTestId('bills'))
+  })
+
+  it('shows the credit of credit notes on the fee account only while there is some', async () => {
+    server({ wallet: { ...WALLET, creditNoteCredit: '340' } })
+    window.history.replaceState(null, '', '/money/account')
+    const view = render(<App />)
+    expect(await screen.findByTestId('fee-account-credit-note')).toHaveTextContent('340 Kudos')
+    view.unmount()
+    vi.restoreAllMocks()
+    server()
+    render(<App />)
+    await screen.findByTestId('fee-account-total')
+    expect(screen.queryByTestId('fee-account-credit-note')).toBeNull()
   })
 })
 
