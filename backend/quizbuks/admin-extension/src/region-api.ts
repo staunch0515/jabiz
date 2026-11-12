@@ -1,6 +1,6 @@
-import { runQuery, type Filter } from '@jabiz/admin'
+import { runProcess, runQuery, type Filter } from '@jabiz/admin'
 import type { Page, SortSpec } from './api'
-import { TEMPLATE } from './ids'
+import { REGION_PROCESS, TEMPLATE } from './ids'
 
 /*
  * F-S11: the exceptions to the rule on foreign videos and mainland China (headquarters every Sponsor's, an operator its
@@ -91,3 +91,12 @@ export async function readVideoSites(): Promise<string | null> {
   if (value === null) return null
   return value.length >= 2 && value.startsWith('"') && value.endsWith('"') ? value.slice(1, -1) : value
 }
+
+/** Sets an exception for a Sponsor or a publication (`QB_REGION_EXCEPTION_ADD`); the reason is required by the server. */
+export const addRegionException = (target: { kind: 'SPONSOR' | 'PUBLICATION'; id: string }, reason: string,
+  expiresOn: string | null) => runProcess<{ exceptionId: string }>(REGION_PROCESS.add, {
+  kind: target.kind,
+  ...(target.kind === 'SPONSOR' ? { sponsorId: target.id } : { publicationId: target.id }),
+  reason,
+  ...(expiresOn ? { expiresOn } : {}),
+})

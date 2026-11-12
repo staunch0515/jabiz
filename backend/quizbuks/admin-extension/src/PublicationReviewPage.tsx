@@ -45,6 +45,7 @@ import {
   type Version,
 } from './api'
 import { AfterDecision, LoadFailed, PublisherLink, Section, StatusBadge } from './components'
+import { RegionExceptionAction } from './RegionExceptionAction'
 import type { BackTo } from './PublicationsPage'
 import { forbidden, money, QUEUE, useAfterDecision, useLabels, when } from './hooks'
 import type { Snapshot } from './snapshot'
@@ -667,6 +668,7 @@ export default function PublicationReviewPage() {
               </Link>
             )}
             <StatusBadge code={p.status} label={statusLabel(p.status)} testId="publication-status" />
+            <RegionExceptionAction kind="PUBLICATION" id={p.publicationId} name={p.name} />
           </span>
         }
       />
