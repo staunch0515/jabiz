@@ -1399,9 +1399,9 @@ schema 中任何表上有则不复用读到的实例（第 4 条的前提）。�
 ⑥**引用检查**（T4）：目标为写集中的实例且值在目标默认视图的范围内（`withinScope`、未逻辑删除），或读集中经同一默认视图、同一解析范围读到的实例，即不再查；默认视图的范围中有经引用的数据期限时一律查。
 其余每个变更的目标一条语句（`queryMany`）；一次提交的插入有两个以上未知目标时，先以一条语句预取（只登记找到的；值或范围无法解析的不预取），各变更的检查再从读集取得——缺少的目标由其变更的检查再查一次并报告，错误码与参数不变。
 ⑦**合并的读取**（T5）：`DatasetEntityManager.queryMany(List<EntityRead>)` 与 `StorageEngine.executeQueries`。计划中的 `to_jsonb(r)` 包装改为**按列对齐**：
-`SELECT … FROM (VALUES (0), (1), …) k(jabiz_q) LEFT JOIN (第 0 个读取) b0 ON k.jabiz_q = 0 LEFT JOIN …`，每个读取的列各自取别名、保留数据库的类型，由驱动按原样解码，不经 JSON 还原
+`SELECT … FROM (VALUES (0), (1), …) k(jabiz_q) LEFT JOIN LATERAL (第 0 个读取 WHERE k.jabiz_q = 0) b0 ON true LEFT JOIN LATERAL …`（17zz20 起：编号的条件写在各读取之内，每个读取只在自己那一行执行，代价是各读取之和；原先的 `LEFT JOIN … ON k.jabiz_q = 0` 只能逐对检验，代价是乘积。只改写法，不改本条的规则），每个读取的列各自取别名、保留数据库的类型，由驱动按原样解码，不经 JSON 还原
 （没有数字小数位、时间、数组、`jsonb` 的还原问题）；每个读取照旧由 `QueryCompiler` 编译（范围、数据期限、逻辑删除、时间切片），参数按读取改名，各自的 `ORDER BY`/`LIMIT`/`OFFSET` 不变；读主引擎（如 `findById`），不读副本，所以流程中的读取看得到本事务的写入；只有查询时限相同的读取合成一条（各自的时限不放宽）。
-等价性由 `WriteCombiningIT.combinedReadsGiveExactlyWhatEachReadGivesAlone` 对应用的每个数据视图比较（同样的实例、每个值同样的类型、或同样的拒绝），代替计划中的 jqwik 属性测试。
+等价性由 `WriteCombiningIT.combinedReadsGiveExactlyWhatEachReadGivesAlone` 对应用的每个数据视图比较（同样的实例、每个值同样的类型、或同样的拒绝），代替计划中的 jqwik 属性测试；代价由 `CombinedReadCostIT` 以实际执行的计划检查（17zz20）。
 `CheckPosting` 先单独取科目锁，再以一条语句读取全部维度取值、来源单据与科目（原"读科目"步骤并入，`LEDGER_POST` 少一个步骤）；字典维度照旧取缓存；违规按原来的顺序（维度依次、再来源）报告。
 平台步骤 `QueryEntities.all(QueryEntities.query(…), …)` 开放给应用（P-12）。
 ⑧**按已知版本更新**（T7）：读集中有完整实例、读取的视图解析为同一张表、值在写入视图的范围内（且未逻辑删除）时不再读；`UPDATE … WHERE pk AND version` 与审计、事件以
