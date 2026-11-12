@@ -30,6 +30,8 @@ dependencies {
     testImplementation("com.icegreen:greenmail-junit5:2.1.3")
     // Timers of the platform's observations (docs/design/13-observability-ops.md).
     testImplementation("io.micrometer:micrometer-core")
+    // The application's own Flyway keeps its transactional lock (ROADMAP 17zz18).
+    testImplementation("org.flywaydb:flyway-core")
 }
 
 // Load test (ROADMAP phase 11, docs/perf/phase-11-load-test.md): drives a running application over HTTP. Not part of

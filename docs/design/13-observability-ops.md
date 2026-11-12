@@ -41,6 +41,7 @@ runtime `com.jabiz.runtime.observability.PlatformObservations` 把平台的工�
 | `jabiz.process.admission` | 根流程在热门命名锁之前的排队（06 §4.2，D45；`ProcessAdmission`，嵌在 `jabiz.process` 之内，计时即排队的时间） | `family` `process` `result`（`ADMITTED` / `QUEUE_FULL` / `WAIT_TIMEOUT` / `CANCELLED`），没有 `outcome` 与 `status`；不放准入键、主键、操作人 |
 | `jabiz.process.admission.waiting` / `.active`（仪表，不是观测） | 当前在队列中等待的、已取得许可的根流程数，按族合计 | `family` |
 | `jabiz.keys.undeclared-sealed`（仪表，不是观测） | 密钥轮换（D78 第 8 条）：最近一次扫描（启动或任务 `jabiz.key-rotation` 的一次运行）发现的、未声明为密封字段的字段中旧密封密钥下的值的个数；没有旧密封密钥时为 0 | 无 |
+| `jabiz.schema.invalid-indexes`（仪表，不是观测） | 启动检查 `SCHEMA`（17zz18）：最近一次检查（启动或 `platformCheck`）发现的、默认连接池当前 schema 中 INVALID 索引的个数，不计可能正在建的（半途失败留下的、`REINDEX CONCURRENTLY` 的临时索引）；不含索引名。手工删去或重建后到下次启动才归零 | 无 |
 | `jabiz.geoip.ranges` / `jabiz.geoip.stale`（仪表，不是观测） | 地址库（`ClientCountries`，10 §18、D74）：使用中的库的范围数（读不出为 0），文件比 `jabiz.geoip.max-age` 旧或启动时读不出为 1；与启动检查 `GEOIP` 同一判断，但运行中变旧也看得到。没有配置地址库不登记 | 无 |
 | `jabiz.process.rate_limited` | 流程接口的限流拒绝（10 §15.10；只计数，不记操作人与客户端地址） | `process` `scope`（`user` / `address` / `instance`） |
 | `jabiz.auth.rate_limited` | 登录类接口按地址限流的拒绝（10 §4.1，D47；只计数，不记客户端地址） | `kind`（`password` / `oidc_callback` / `second_factor` / `refresh`） |
@@ -138,6 +139,7 @@ Spring Boot 自动提供：WebFlux 服务端请求（`http.server.requests`）�
 | `jabiz-refresh-reuse-revoked` | 因重用而结束的会话异常多 | — | 同上；可能有人在重放令牌 |
 | `jabiz-geoip-stale` / `jabiz-geoip-empty` | 地址库比 `jabiz.geoip.max-age` 旧或读不出 / 没有范围（D74） | 1 小时 / 15 分钟 | 下载新的库替换文件（运行中自动重读，不必重启） |
 | `jabiz-keys-undeclared-sealed` | 轮换中（配置了旧的 `JABIZ_SEAL_KEY`），未声明为密封字段的字段里仍有旧密钥下的密封值（仪表 `jabiz.keys.undeclared-sealed`，D78 第 8 条） | — | 不要撤旧密钥；在应用中声明这些字段（`SealedFields`），让任务 `jabiz.key-rotation` 处理完（`docs/guide/key-rotation.md`） |
+| `jabiz-schema-invalid-indexes` | 启动检查 `SCHEMA` 发现 INVALID 索引（仪表 `jabiz.schema.invalid-indexes`，17zz18；检查本身只是警告，不阻止启动） | 15 分钟 | 启动日志列出索引名；正在建的等它完成，失败的 `DROP INDEX CONCURRENTLY` 后重建，平台迁移的见 `docs/guide/platform-operations.md` §6 |
 | `jabiz-disk-usage` | 应用测量的某个文件系统用量高于阈值 | 10 分钟 | 清理旧镜像与日志、扩容；上传文件的目录满了上传会失败 |
 
 数据库主机（WAL 归档、备份、数据库所在磁盘）不由应用测量，由数据库的托管方或主机监控告警。

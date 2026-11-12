@@ -150,6 +150,7 @@ fake() {  # uid
     jabiz-geoip-stale) push_gauge jabiz.geoip.stale "" 1 ;;
     jabiz-geoip-empty) push_gauge jabiz.geoip.ranges "" 0 ;;
     jabiz-keys-undeclared-sealed) push_gauge jabiz.keys.undeclared-sealed "" 1 ;;
+    jabiz-schema-invalid-indexes) push_gauge jabiz.schema.invalid-indexes "" 1 ;;
     jabiz-disk-usage)
       push_gauge disk.free bytes 1 path=/alert-test
       push_gauge disk.total bytes 100 path=/alert-test ;;
