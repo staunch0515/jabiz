@@ -976,6 +976,11 @@ export async function runImport({ document, hash, plan, checks, onProgress, now 
     view = await start(current.steps.length, view.batchSize, recorded)
   }
   const results: Record<string, Record<string, unknown>> = { ...view.done }
+  // Clearing steps of contents already done are skipped below and never reach the server, which counts the steps it is
+  // sent: the total it is given leaves them out, or the import would stay open for ever.
+  const skipped = (step: PlannedStep) => step.kind === 'clear' && !!results[step.content]
+  const sent = current.steps.filter((step) => !skipped(step)).length
+  if (sent !== current.steps.length) view = await start(sent, view.batchSize, recorded)
   let status: string = view.status
   for (const [i, step] of current.steps.entries()) {
     if (results[step.key]) {
@@ -985,7 +990,7 @@ export async function runImport({ document, hash, plan, checks, onProgress, now 
     // An import begun before the clearing steps existed has its contents made without them: where the content a step
     // clears the way for is done, the clearing must not run now, it would delete what that content imported (and the
     // content, being done, would not bring it back).
-    if (step.kind === 'clear' && results[step.content]) {
+    if (skipped(step)) {
       onProgress?.(step, i + 1, current.steps.length, 'done')
       continue
     }

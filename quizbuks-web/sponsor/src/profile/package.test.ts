@@ -464,13 +464,16 @@ describe('starting an import with the bytes (F-F11b)', () => {
 
 describe('going on with an import begun before the clearing steps (F-F11b review H1, M1)', () => {
   /** The server: the steps it has done, and every step it is asked to run. */
+  const starts: number[] = []
   function resumed(done: Record<string, Record<string, unknown>>) {
     const asked: string[] = []
+    starts.length = 0
     vi.spyOn(globalThis, 'fetch').mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
       const request = input instanceof Request ? input : new Request(new URL(String(input), window.location.origin), init)
       const path = decodeURIComponent(new URL(request.url).pathname)
       const body = request.method === 'POST' ? await request.clone().json().catch(() => null) : null
       if (path === '/api/processes/QB_PACKAGE_IMPORT_START/latest') {
+        starts.push(Number((body as { stepsTotal: number }).stepsTotal))
         return json(200, { output: { importId: 'imp', mode: 'FULL', status: 'RUNNING', batchSize: 2, batchBytes: null,
           stepsTotal: 3, stepsDone: Object.keys(done).length, resumed: true, done } })
       }
@@ -508,6 +511,15 @@ describe('going on with an import begun before the clearing steps (F-F11b review
     await run(twoVersions())
     // Only what is left is run; the clearing step of a content already done would delete what it imported.
     expect(asked).toEqual(['quiz:q1:v:q1v2:version'])
+  })
+
+  it('counts only the steps it will send in the steps total of the START it goes on with', async () => {
+    const asked = resumed({
+      'quiz:q1:v:q1v1:content': { quizId: 'Q1' }, 'quiz:q1:v:q1v1:version': { quizId: 'Q1', versionId: 'V1' },
+      'quiz:q1:v:q1v2:content': { quizId: 'Q1' } })
+    await run(twoVersions())
+    // The clearing steps of contents already done are skipped, never sent: counted, the server would never reach the total.
+    expect(starts.at(-1)).toBe(3 + asked.length)
   })
 
   it('still clears before a content that is not done, and not again once the clearing is done', async () => {
