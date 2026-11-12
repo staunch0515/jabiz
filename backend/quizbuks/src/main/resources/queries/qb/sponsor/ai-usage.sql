@@ -26,6 +26,7 @@ results:
   monthEnds:       { kind: { type: temporal, role: EVENT_TIME } }
   dayEnds:         { kind: { type: temporal, role: EVENT_TIME } }
   maxCount:        { kind: { type: numeric, precision: 4, scale: 0 } }
+  siteProfileEnabled: { kind: { type: bool } }
 permissions: [qb.ai.use]
 ---*/
 -- One row. The rules are QB_AI_QUESTIONS_REQUEST's (content.ai.AiLimits decides; this is for the page): the month's
@@ -55,13 +56,15 @@ params AS (
         max(CASE WHEN p.{{SysParam.paramKey}} = 'qb.ai.sponsor.monthly-tokens' THEN p.{{SysParam.value}} END)
             AS p_monthly,
         max(CASE WHEN p.{{SysParam.paramKey}} = 'qb.ai.sponsor.daily-jobs' THEN p.{{SysParam.value}} END) AS p_daily,
-        max(CASE WHEN p.{{SysParam.paramKey}} = 'qb.ai.effort' THEN p.{{SysParam.value}} END) AS p_effort
+        max(CASE WHEN p.{{SysParam.paramKey}} = 'qb.ai.effort' THEN p.{{SysParam.value}} END) AS p_effort,
+        max(CASE WHEN p.{{SysParam.paramKey}} = 'qb.ai.site-profile.enabled' THEN p.{{SysParam.value}} END) AS p_site
     FROM {{SysParam}} p
     WHERE p.{{SysParam.paramKey}} IN ('qb.ai.enabled', 'qb.ai.sponsor.monthly-tokens', 'qb.ai.sponsor.daily-jobs',
-        'qb.ai.effort')),
+        'qb.ai.effort', 'qb.ai.site-profile.enabled')),
 checked AS (
     SELECT
         p_enabled = 'true' AS v_enabled,
+        p_site = 'true' AS v_site,
         CASE WHEN p_monthly ~ '^[0-9]{1,15}$' THEN CAST(p_monthly AS numeric) END AS v_monthly,
         CASE WHEN p_daily ~ '^[0-9]{1,9}$' THEN CAST(p_daily AS numeric) END AS v_daily,
         CASE WHEN p_effort = 'high' THEN 10 ELSE 20 END AS v_max_count
@@ -99,7 +102,9 @@ SELECT
     j.v_today AS jobsToday,
     c.month_end AS monthEnds,
     c.day_end AS dayEnds,
-    CAST(k.v_max_count AS numeric(4, 0)) AS maxCount
+    CAST(k.v_max_count AS numeric(4, 0)) AS maxCount,
+    coalesce(k.v_enabled, false) AND coalesce(k.v_site, false) AND k.v_monthly IS NOT NULL AND k.v_daily IS NOT NULL
+        AS siteProfileEnabled
 FROM clock c
 CROSS JOIN checked k
 CROSS JOIN used u
