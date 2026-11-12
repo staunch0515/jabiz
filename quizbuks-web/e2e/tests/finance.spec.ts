@@ -1,5 +1,5 @@
 import { signInAdmin } from './admin'
-import { bookingMonthOf, transferInReview, transfersOf } from './finance'
+import { bookingMonthOf, expectOverviewAccounts, transferInReview, transfersOf } from './finance'
 import { expect, prepareQuizbuks, test } from './support'
 
 /*
@@ -23,9 +23,7 @@ test('finance reviews a large transfer and issues the monthly report', async ({ 
   const inReview = page.getByTestId('finance-in-review')
   await expect(inReview).toBeVisible()
   expect(Number(await inReview.getAttribute('data-count'))).toBeGreaterThanOrEqual(1)
-  // Q9c's eight accounts, Q87's four, Q88b's 2170 (entry fees unsettled), F-M1's 2190 (granted credit) and F-M2's
-  // 5140 (its promotion expenses).
-  await expect(page.getByTestId('finance-account')).toHaveCount(15)
+  await expectOverviewAccounts(page, request)
   // F-F10b: the first launch's money switches, one row for each parameter of the registry (setup.FirstLaunchSwitches):
   // the 22 rows from the server (20 active, and the 2 that wait for a feature but whose key exists), the 4 that wait for a
   // feature of the charge groups and the 2 set up by hand.

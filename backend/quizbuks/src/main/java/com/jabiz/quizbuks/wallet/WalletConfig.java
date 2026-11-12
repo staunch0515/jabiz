@@ -46,6 +46,16 @@ class WalletConfig {
             d -> d.entity(QbPublications.PUBLICATION, "publicationId"));
     }
 
+    /**
+     * F-M5: what a prepayment (2180) is for (its third dimension): the distribution fee, the exposure fee, the audience
+     * rules, the AI credit.
+     */
+    @Bean
+    LedgerDimension purposeDimension() {
+        return LedgerDimension.define(3, com.jabiz.quizbuks.fee.QbPrepayments.PURPOSE,
+            d -> d.dictionary(com.jabiz.quizbuks.fee.QbPrepayments.PURPOSE_DICTIONARY));
+    }
+
     @Bean
     EntityDefinition qbWalletEntity() {
         return QbWallets.WALLET_ENTITY;

@@ -58,6 +58,8 @@ export interface SponsorWallet {
   feeCreditBalance: number
   /** F-M4: what is left of the cash the Sponsor's operator moved to it: platform fees only, never Kudos. */
   cashFromOperator: number
+  /** F-M5: what the prepayments of the Sponsor's publications still hold (set aside, not yet charged or given back). */
+  prepaymentHeld: number
 }
 
 /** How the platform's fees are billed (Q87b): taken from the cash account at once, or invoiced monthly within a credit. */
@@ -138,6 +140,7 @@ export async function readWallet(): Promise<SponsorWallet> {
     entryFeesUnsettled: num(row.entryFeesUnsettled),
     feeCreditBalance: num(row.feeCreditBalance),
     cashFromOperator: num(row.cashFromOperator),
+    prepaymentHeld: num(row.prepaymentHeld),
   }
 }
 
