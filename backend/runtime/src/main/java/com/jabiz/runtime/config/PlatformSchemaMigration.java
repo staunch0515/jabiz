@@ -9,6 +9,7 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
@@ -46,6 +47,15 @@ public final class PlatformSchemaMigration implements FlywayMigrationStrategy {
     public static final Map<String, String> NON_TRANSACTIONAL_LOCK =
         Map.of("flyway.postgresql.transactional.lock", "false");
 
+    /**
+     * The Flyway placeholder {@code ${concurrently}} of the platform scripts: the keyword of an index built without
+     * blocking writers (V66). Production runs with {@code CONCURRENTLY} (the default set here); tests that migrate
+     * several schemas of one database at once set it empty, because CREATE INDEX CONCURRENTLY waits for the
+     * transactions of the whole database. A runner that runs the platform scripts without defining it fails fast on
+     * the unresolved placeholder instead of hanging.
+     */
+    public static final String CONCURRENTLY_PLACEHOLDER = "concurrently";
+
     /** Every table the platform scripts create; PlatformSchemaMigrationTest keeps this list honest. */
     public static final Set<String> PLATFORM_TABLES = Set.of(PLATFORM_HISTORY_TABLE, "sys_dict_item",
         "sys_dict_item_version", "op_process", "op_process_item", "op_process_result", "entity_registry",
@@ -77,8 +87,12 @@ public final class PlatformSchemaMigration implements FlywayMigrationStrategy {
         Configuration config = application.getConfiguration();
         boolean applicationIsNew = isNewToApplication(config);
 
+        Map<String, String> placeholders = new HashMap<>(config.getPlaceholders());
+        placeholders.putIfAbsent(CONCURRENTLY_PLACEHOLDER, "CONCURRENTLY");
+
         Flyway.configure()
             .configuration(config)
+            .placeholders(placeholders)
             .locations(PLATFORM_LOCATION)
             .table(PLATFORM_HISTORY_TABLE)
             .baselineOnMigrate(true)

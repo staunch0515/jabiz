@@ -12,6 +12,7 @@ import java.sql.SQLException;
 import java.sql.Statement;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
  * The startup check of INVALID indexes (ROADMAP 17zz18). In a class of its own: the invalid index stays in the test's
@@ -31,11 +32,9 @@ class SchemaIndexChecksIT extends PostgresIntegrationTest {
             statement.execute("CREATE TABLE it_si_dup (id integer, tag text)");
             statement.execute("INSERT INTO it_si_dup VALUES (1, 'a'), (2, 'a')");
             // Duplicate rows make the unique build fail after the index entry exists: PostgreSQL keeps it, INVALID.
-            try {
-                statement.execute("CREATE UNIQUE INDEX CONCURRENTLY it_si_dup_tag_uk ON it_si_dup (tag)");
-            } catch (SQLException expected) {
-                assertThat(expected.getSQLState()).isEqualTo("23505");
-            }
+            assertThatThrownBy(() -> statement.execute(
+                "CREATE UNIQUE INDEX CONCURRENTLY it_si_dup_tag_uk ON it_si_dup (tag)"))
+                .isInstanceOfSatisfying(SQLException.class, e -> assertThat(e.getSQLState()).isEqualTo("23505"));
             statement.execute("CREATE INDEX CONCURRENTLY it_si_dup_id_idx ON it_si_dup (id)");
         }
         assertThat(checks.check()).singleElement().satisfies(problem -> {

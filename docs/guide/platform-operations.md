@@ -52,11 +52,22 @@ GRAFANA_USER=… GRAFANA_PASSWORD=… tools/ops/alert-fire-test.sh disk /var/lib
 | 恢复核对（17zv） | `jabiz.ops.verify-restore.*`（只在演练时） | 演练记录 | 见 §3 |
 | 密钥轮换（D78，17zw） | `JABIZ_*_PREVIOUS`；`jabiz.key-rotation.cron`（每 10 分钟）、`.batch-size`（500） | 启动检查 `KEYS`；任务 `jabiz.key-rotation` 的输出 | 见 §4；`unreadable` 大于 0 先查应用的 `SealedFields` 声明 |
 
-## 6. 无效索引（INVALID，17zz18）
+## 6. 并发建索引与无效索引（INVALID，17zz18）
 
-平台迁移里的 `CREATE INDEX CONCURRENTLY`（目前是 `V66`）不阻塞写入，但中途失败（死锁、被取消、重复数据）会留下 INVALID 索引：它仍随每次写入维护，却从不被查询使用，
-而迁移的 `IF NOT EXISTS` 下次会跳过它。启动检查 `SCHEMA`（`SchemaIndexChecks`，检查当前 schema 的全部索引）把每个 INVALID 索引报为错误，`platformCheck` 也会列出。
+平台迁移里的 `CREATE INDEX CONCURRENTLY`（目前是 `V66`）不阻塞写入，但有几点要求：
 
-- 查看：`SELECT indexrelid::regclass, indrelid::regclass FROM pg_index WHERE NOT indisvalid;`
-- 处理：`DROP INDEX CONCURRENTLY <索引名>;`，再手工执行迁移里的那条 `CREATE INDEX CONCURRENTLY IF NOT EXISTS …`（Flyway 的历史表已记为成功，不会再跑）；失败的原因（锁冲突、重复行）先排除。
-- 部署新版本前对大表的并发建索引可能耗时较长：它在脚本自己的非事务连接中运行，Flyway 的启动在此期间等待。
+- **会话级咨询锁**：运行平台脚本的 Flyway 必须关闭事务级咨询锁（`flyway.postgresql.transactional.lock=false`，Boot 属性 `spring.flyway.postgresql.transactional-lock=false`），否则它在自己的连接上开着事务、并发建索引永远等它。
+  平台的 `PlatformSchemaMigration` 自己设置了，应用的 `application.yml` 也应写上；自己直接运行平台脚本的工具（Flyway CLI、测试夹具）必须同样设置。
+- **占位符 `${concurrently}`**：`PlatformSchemaMigration` 缺省为 `CONCURRENTLY`；不经它运行平台脚本而没有定义该占位符时，Flyway 立即报未解析的占位符（而不是卡住）。
+  同一数据库里并行迁移多个 schema（测试）时设为空（`spring.flyway.placeholders.concurrently=`），因为并发建索引要等整个数据库的旧事务。
+
+**失败与恢复**
+
+- 建索引语句失败（死锁、被取消、重复数据）：Flyway 把 `V66` 记为失败，下次启动在校验处停下。先排除原因，再对平台的历史表（`jabiz_schema_history`，与应用的 `flyway_schema_history` 分开）执行 repair，然后重启，
+  `V66` 会先 `DROP INDEX … IF EXISTS` 再重建。`tools/ops` 里没有 repair 工具，用 Flyway CLI：
+  `flyway -url=jdbc:postgresql://主机/库 -user=… -password=… -schemas=<schema> -table=jabiz_schema_history repair`；
+  或直接在库里：`DELETE FROM jabiz_schema_history WHERE version = '66' AND NOT success;`（repair 做的就是删去失败的记录）。
+- 进程在建索引时被杀：没有历史记录，重启时 `V66` 重跑，先删去留下的 INVALID 索引再重建，不需要 repair。
+- 启动检查 `SCHEMA`（`SchemaIndexChecks`，默认连接池当前 schema 的全部索引）把每个 INVALID 索引报为错误，`platformCheck` 也会列出；正在被建的索引（`pg_stat_progress_create_index`）与 `REINDEX CONCURRENTLY` 的临时索引（`*_ccnew`、`*_ccold`）只是警告。
+- 查看：`SELECT indexrelid::regclass, indrelid::regclass FROM pg_index WHERE NOT indisvalid;`；单个索引手工处理：`DROP INDEX CONCURRENTLY <索引名>;` 再重建。
+- 大表上建索引耗时较长，Flyway 的启动在此期间等待。

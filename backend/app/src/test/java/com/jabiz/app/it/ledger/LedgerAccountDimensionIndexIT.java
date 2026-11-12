@@ -11,6 +11,7 @@ import org.springframework.boot.test.context.SpringBootTest;
 
 import java.math.BigDecimal;
 import java.sql.Connection;
+import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
@@ -24,9 +25,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 /**
  * The index of V66 (ROADMAP 17zz18): the sum of one account's history for one {@code dimension_1} value is read
- * from {@code ledger_entry_version_account_dimension_1_idx}. The migration ran concurrently, outside a transaction,
- * in this class's own schema (the settings file {@code V66__....sql.conf}), so the index existing and valid here also
- * shows that path works per schema.
+ * from {@code ledger_entry_version_account_dimension_1_idx}. Here the migration builds the index plainly (the tests
+ * migrate their schemas side by side); {@code PlatformSchemaMigrationTest} runs the concurrent build.
  */
 @SpringBootTest
 class LedgerAccountDimensionIndexIT extends LedgerItSupport {
@@ -78,18 +78,23 @@ class LedgerAccountDimensionIndexIT extends LedgerItSupport {
             .satisfies(row -> assertThat(amount(row.get("sum"))).isEqualByComparingTo("60"));
 
         try (Connection connection = DB.connect(schema()); Statement statement = connection.createStatement()) {
-            statement.execute("ANALYZE ledger_entry_version");
+            // VACUUM (outside a transaction) sets the visibility map, which an index-only scan relies on.
+            statement.execute("VACUUM (ANALYZE) ledger_entry_version");
             // A table this small is cheaper to read whole whatever the indexes are, so the planner is held to indexes
             // to show which one serves the query; the plan's shape (equality on both columns, the columns of the sum
             // included) is what the test asserts, not the planner's cost model at this volume.
             statement.execute("SET enable_seqscan = off");
             statement.execute("SET enable_bitmapscan = off");
             String plan;
-            try (ResultSet rs = statement.executeQuery("EXPLAIN (FORMAT JSON) SELECT direction, sum(amount) FROM"
-                + " ledger_entry_version WHERE account_id = '" + account + "'::uuid AND dimension_1 = '" + owner + "'"
+            try (PreparedStatement explain = connection.prepareStatement("EXPLAIN (FORMAT JSON) SELECT direction,"
+                + " sum(amount) FROM ledger_entry_version WHERE account_id = ?::uuid AND dimension_1 = ?"
                 + " GROUP BY direction")) {
-                rs.next();
-                plan = rs.getString(1);
+                explain.setString(1, account);
+                explain.setString(2, owner);
+                try (ResultSet rs = explain.executeQuery()) {
+                    rs.next();
+                    plan = rs.getString(1);
+                }
             }
             assertThat(plan).contains("\"Index Only Scan\"", "\"Index Name\": \"" + INDEX + "\"");
         }

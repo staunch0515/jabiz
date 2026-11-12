@@ -10,6 +10,7 @@ import java.sql.Connection;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
+import java.util.Map;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
@@ -87,7 +88,10 @@ class PlatformSchemaMigrationTest {
     void platformTablesAreDeclared() {
         Flyway.configure().configuration(application()).locations(PlatformSchemaMigration.PLATFORM_LOCATION)
             .table(PlatformSchemaMigration.PLATFORM_HISTORY_TABLE)
-            .configuration(PlatformSchemaMigration.NON_TRANSACTIONAL_LOCK).load().migrate();
+            .configuration(PlatformSchemaMigration.NON_TRANSACTIONAL_LOCK)
+            // The production setting: V66 builds its index CONCURRENTLY, outside a transaction.
+            .placeholders(Map.of(PlatformSchemaMigration.CONCURRENTLY_PLACEHOLDER, "CONCURRENTLY"))
+            .load().migrate();
 
         assertThat(tables()).containsExactlyInAnyOrderElementsOf(PlatformSchemaMigration.PLATFORM_TABLES);
     }

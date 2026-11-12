@@ -9,6 +9,10 @@ spring:
     url: jdbc:postgresql://localhost:5436/app
     user: app
     password: ${DB_PASSWORD:app}
+    # The platform's V66 builds an index CONCURRENTLY, which Flyway's default transactional advisory lock would block
+    # forever (docs/guide/platform-operations.md section 6); PlatformSchemaMigration sets it as well.
+    postgresql:
+      transactional-lock: false
 
 jabiz:
   # The key signing the integrity seals (docs/design/21-audit-retention.md section 2), from the environment only:

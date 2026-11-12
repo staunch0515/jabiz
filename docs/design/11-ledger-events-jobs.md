@@ -71,8 +71,11 @@ ROADMAP 阶段 9 的四个通用业务基础模块。约束性细则见【决策
   `SELECT direction, sum(amount) FROM ledger_entry_version WHERE account_id = ? AND dimension_1 = ? GROUP BY direction`）由迁移 `V66` 的部分索引
   `ledger_entry_version_account_dimension_1_idx (account_id, dimension_1) INCLUDE (direction, amount) WHERE dimension_1 IS NOT NULL` 服务：两个等值条件直达匹配的分录，
   `INCLUDE` 使加总只读索引（账本只追加，页面保持全可见）。原有的 `_account_idx` 与 `_dimension_1_idx` 保留（科目余额与 `dimension_balances` 用）。
-  这是平台迁移中第一个 `CREATE INDEX CONCURRENTLY`（不阻塞过账）：脚本旁的 `V66__….sql.conf` 设 `executeInTransaction=false`，该文件因此只含这一条语句。
-  半途失败的并发建索引留下 INVALID 索引（`IF NOT EXISTS` 下次会跳过它）：启动检查 `SCHEMA`（`SchemaIndexChecks`，对全部索引通用）报错并给出处理办法，见 `docs/guide/platform-operations.md` §6。
+  这是平台迁移中第一个 `CREATE INDEX CONCURRENTLY`（不阻塞过账）：脚本先 `DROP INDEX … IF EXISTS` 再建（重跑即重建），关键字是 Flyway 占位符 `${concurrently}`
+  （`PlatformSchemaMigration` 缺省设为 `CONCURRENTLY`；同一数据库里并行迁移多个 schema 的测试设为空，因为并发建索引要等整个数据库的旧事务），
+  脚本旁的 `V66__….sql.conf` 设 `executeInTransaction=false`，运行平台脚本的 Flyway 还须用会话级咨询锁（默认的事务级锁会与之互相等待）。
+  建索引语句失败时 Flyway 把 V66 记为失败，下次启动在校验处停下：对 `jabiz_schema_history` 执行 `flyway repair` 后重启（V66 会删除并重建）；进程中途被杀则没有历史记录，重跑即重建。
+  半途失败留下的 INVALID 索引由启动检查 `SCHEMA`（`SchemaIndexChecks`，对默认连接池当前 schema 的全部索引通用）报错，见 `docs/guide/platform-operations.md` §6。
 - 启动检查 `LEDGER`（错误）：位置或名称重复；实体来源的实体、默认视图不存在，或字段不是文本、代码、身份、引用字段；身份字段不是主键；
   身份或引用的编号不是 UUID（实体不是时态实体）。告警：时态实体的来源字段可变（任何种类；只有按不可变字段的条件能缩小读取的版本，
   决策 D29，否则要读全部当前实例）；非时态实体不告警。字典可能由数据库提供，不在启动时检查。
