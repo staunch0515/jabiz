@@ -41,9 +41,11 @@ interface Server {
   open?: Record<string, unknown> | null
   /** Steps refused once (by key) with this message. */
   failOnce?: Record<string, string>
+  /** The question bank's limits the server gives (`qb.sponsor.quiz-limits`). */
+  limits?: Record<string, unknown>
 }
 
-function server({ submittedPublication = false, open = null, failOnce = {} }: Server = {}) {
+function server({ submittedPublication = false, open = null, failOnce = {}, limits = {} }: Server = {}) {
   const posted: { path: string; body: Record<string, unknown> }[] = []
   const done: Record<string, Record<string, unknown>> = {}
   const failing = { ...failOnce }
@@ -65,7 +67,7 @@ function server({ submittedPublication = false, open = null, failOnce = {} }: Se
         return json(200, { items: [{ submittedPublication, submittedTree: false, activeTrees: 0, maxTrees: 1,
           confirmBytes: 104857600 }] })
       case '/api/queries/qb.sponsor.quiz-limits':
-        return json(200, { items: [{ maxQuestions: 1000, maxPerAttempt: 100, importBatch: 200 }] })
+        return json(200, { items: [{ maxQuestions: 1000, maxPerAttempt: 100, importBatch: 200, ...limits }] })
       case '/api/queries/qb.sponsor.quizzes':
         return json(200, { items: [{ quizId: 'old', title: 'Coffee' }], total: 1 })
       case '/api/queries/qb.sponsor.shared-videos':
@@ -74,8 +76,8 @@ function server({ submittedPublication = false, open = null, failOnce = {} }: Se
         return json(200, { output: { formatVersion: 3, currentVersion: 3, readers: [3], kind: 'QUIZ', title: 'Coffee',
           questions: 1, materials: 0, files: [], language: 'en', languages: [] } })
       case '/api/processes/QB_PACKAGE_IMPORT_START/latest':
-        return json(200, { output: { importId: 'imp', mode: body?.mode, status: 'RUNNING', batchSize: 200,
-          stepsTotal: body?.stepsTotal, stepsDone: Object.keys(done).length, done: { ...done },
+        return json(200, { output: { importId: 'imp', mode: body?.mode, status: 'RUNNING', batchSize: body?.batchSize ?? 200,
+          batchBytes: body?.batchBytes ?? null, stepsTotal: body?.stepsTotal, stepsDone: Object.keys(done).length, done: { ...done },
           resumed: Object.keys(done).length > 0 } })
       case '/api/processes/QB_PACKAGE_IMPORT_STEP/latest': {
         const step = String(body?.step)
@@ -218,6 +220,115 @@ describe('the sponsor package card', () => {
     await userEvent.click(await screen.findByRole('button', { name: 'Give up' }))
     await waitFor(() => expect(posted.some((p) => p.path.endsWith('QB_PACKAGE_IMPORT_ABANDON/latest')
       && p.body.importId === 'imp')).toBe(true))
+  })
+})
+
+describe('large banks: the clearing steps and the byte limit (F-F11b)', () => {
+  const TWO_VERSIONS = { ...PACKAGE, quizzes: [{ key: 'q1', versions: [
+    { key: 'q1v1', label: 'v1', file: QUIZ_FILE }, { key: 'q1v2', label: 'v2', file: QUIZ_FILE }], current: null }] }
+
+  it('says what a step takes by questions and bytes, from the numbers the server gives', async () => {
+    server({ limits: { importBatchBytes: 3_145_728 } })
+    renderCard()
+    await userEvent.upload(screen.getByTestId('sponsor-package-file'), packageFile())
+    const dialog = await screen.findByTestId('sponsor-package-dialog')
+    expect(await within(dialog).findByTestId('sponsor-bank-batch-info'))
+      .toHaveTextContent('A step takes at most 200 questions or 3 MB of the file')
+    expect(within(dialog).queryByTestId('sponsor-package-oversized')).toBeNull()
+  })
+
+  it('says nothing of bytes when the server gives none (an older server)', async () => {
+    server()
+    renderCard()
+    await userEvent.upload(screen.getByTestId('sponsor-package-file'), packageFile())
+    const dialog = await screen.findByTestId('sponsor-package-dialog')
+    await within(dialog).findByTestId('sponsor-package-plan')
+    expect(within(dialog).queryByTestId('sponsor-bank-batch-info')).toBeNull()
+  })
+
+  it('clears the content a version replaces before the step that brings the next, and sends the bytes it was cut by', async () => {
+    const { steps, posted } = server({ limits: { importBatchBytes: 3_145_728 } })
+    renderCard()
+    await userEvent.upload(screen.getByTestId('sponsor-package-file'), packageFile(TWO_VERSIONS))
+    const dialog = await screen.findByTestId('sponsor-package-dialog')
+    await userEvent.click(await within(dialog).findByTestId('sponsor-package-confirm'))
+    await within(dialog).findByTestId('sponsor-package-done')
+    expect(steps()).toEqual(['tree:1', 'quiz:q1:v:q1v1:content', 'quiz:q1:v:q1v1:version', 'quiz:q1:v:q1v2:clear:1',
+      'quiz:q1:v:q1v2:content', 'quiz:q1:v:q1v2:version', 'publication:1'])
+    const clear = posted.find((p) => p.body.step === 'quiz:q1:v:q1v2:clear:1')!
+    expect(clear.body.clear).toEqual({ quizId: 'Q1', rows: 2000 })
+    const start = posted.find((p) => p.path.endsWith('QB_PACKAGE_IMPORT_START/latest'))!
+    expect(start.body).toMatchObject({ batchSize: 200, batchBytes: 3_145_728, stepsTotal: 7 })
+  })
+
+  it('tells that the draft is empty when the step that brings the new content is refused after the clearing', async () => {
+    const { steps } = server({ failOnce: { 'quiz:q1:v:q1v2:content': 'Not now' } })
+    renderCard()
+    await userEvent.upload(screen.getByTestId('sponsor-package-file'), packageFile(TWO_VERSIONS))
+    const dialog = await screen.findByTestId('sponsor-package-dialog')
+    await userEvent.click(await within(dialog).findByTestId('sponsor-package-confirm'))
+    const failed = await within(dialog).findByTestId('sponsor-package-failed')
+    expect(failed).toHaveTextContent('Not now')
+    expect(within(failed).getByTestId('sponsor-package-emptied')).toHaveTextContent('the draft is empty')
+    await expectAccessible()
+    // Continuing goes on from the content step: the clearing is not done again.
+    await userEvent.click(within(dialog).getByTestId('sponsor-package-continue'))
+    await within(dialog).findByTestId('sponsor-package-done')
+    expect(steps().filter((step) => step.includes(':clear:'))).toEqual(['quiz:q1:v:q1v2:clear:1'])
+  })
+
+  it('tells the same when a batch after the new content is refused: the draft has only the part before', async () => {
+    const two = { ...QUIZ_FILE, questions: [QUIZ_FILE.questions[0], { ...QUIZ_FILE.questions[0], stem: 'More?' }] }
+    const document = { ...PACKAGE, quizzes: [{ key: 'q1', versions: [
+      { key: 'q1v1', label: 'v1', file: QUIZ_FILE }, { key: 'q1v2', label: 'v2', file: two }], current: null }] }
+    // One question a step: the second version has a batch after its content.
+    server({ limits: { importBatch: 1 }, failOnce: { 'quiz:q1:v:q1v2:batch:2': 'Not now' } })
+    renderCard()
+    await userEvent.upload(screen.getByTestId('sponsor-package-file'), packageFile(document))
+    const dialog = await screen.findByTestId('sponsor-package-dialog')
+    await userEvent.click(await within(dialog).findByTestId('sponsor-package-confirm'))
+    const failed = await within(dialog).findByTestId('sponsor-package-failed')
+    expect(failed).toHaveTextContent('questions batch 2 of 2')
+    expect(within(failed).getByTestId('sponsor-package-emptied')).toBeInTheDocument()
+  })
+
+  it('has no such note for a batch of the first content, which replaced nothing', async () => {
+    const two = { ...QUIZ_FILE, questions: [QUIZ_FILE.questions[0], { ...QUIZ_FILE.questions[0], stem: 'More?' }] }
+    const document = { ...PACKAGE, quizzes: [{ key: 'q1', versions: [{ key: 'q1v1', label: 'v1', file: two }],
+      current: null }] }
+    server({ limits: { importBatch: 1 }, failOnce: { 'quiz:q1:v:q1v1:batch:2': 'Not now' } })
+    renderCard()
+    await userEvent.upload(screen.getByTestId('sponsor-package-file'), packageFile(document))
+    const dialog = await screen.findByTestId('sponsor-package-dialog')
+    await userEvent.click(await within(dialog).findByTestId('sponsor-package-confirm'))
+    const failed = await within(dialog).findByTestId('sponsor-package-failed')
+    expect(within(failed).queryByTestId('sponsor-package-emptied')).toBeNull()
+  })
+
+  it('has no such note when another step is refused', async () => {
+    server({ failOnce: { 'publication:1': 'Not now' } })
+    renderCard()
+    await userEvent.upload(screen.getByTestId('sponsor-package-file'), packageFile(TWO_VERSIONS))
+    const dialog = await screen.findByTestId('sponsor-package-dialog')
+    await userEvent.click(await within(dialog).findByTestId('sponsor-package-confirm'))
+    const failed = await within(dialog).findByTestId('sponsor-package-failed')
+    expect(within(failed).queryByTestId('sponsor-package-emptied')).toBeNull()
+  })
+
+  it('does not start while a question alone is more than a request takes, and names it', async () => {
+    const big = { ...QUIZ_FILE, questions: [QUIZ_FILE.questions[0], { ...QUIZ_FILE.questions[0],
+      stem: 'x'.repeat(100_000) }] }
+    const { posted } = server({ limits: { importBatchBytes: 65_536 } })
+    renderCard()
+    await userEvent.upload(screen.getByTestId('sponsor-package-file'), packageFile({ ...PACKAGE,
+      quizzes: [{ key: 'q1', versions: [{ key: 'q1v1', label: 'v1', file: big }], current: null }] }))
+    const dialog = await screen.findByTestId('sponsor-package-dialog')
+    const oversized = await within(dialog).findByTestId('sponsor-package-oversized')
+    expect(oversized).toHaveTextContent('Coffee')
+    expect(oversized).toHaveTextContent('question 2')
+    expect(within(dialog).getByTestId('sponsor-package-confirm')).toBeDisabled()
+    expect(posted.some((p) => p.path.endsWith('QB_PACKAGE_IMPORT_START/latest'))).toBe(false)
+    await expectAccessible()
   })
 })
 

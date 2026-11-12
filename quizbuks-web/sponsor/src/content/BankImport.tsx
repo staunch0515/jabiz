@@ -21,7 +21,7 @@ import { useTranslation } from 'react-i18next'
 import { SPONSOR } from '../messages'
 import { QB } from '../qb/messages'
 import { readImportBatches, undoImport, type BankLimits } from './api'
-import { BatchImportError, importInBatches, leftOutOf, questionCountOf, splitQuestions } from './bank'
+import { BatchImportError, importInBatches, leftOutOf, planBatches, questionCountOf } from './bank'
 import { useEditing } from './editing'
 import { QUIZZES_QUERY } from './paths'
 import { reasonsOf } from './QuizTransfer'
@@ -65,6 +65,9 @@ export function ImportQuestionsButton({ limits, count }: { limits: BankLimits | 
   const input = useRef<HTMLInputElement>(null)
   const [state, setState] = useState<State | null>(null)
   const size = limits?.importBatch ?? 0
+  // The numbers come from the server; none (an older server): only the questions are counted.
+  const maxBytes = limits?.importBatchBytes ?? 0
+  const megabytes = (bytes: number) => (bytes / 1_048_576).toLocaleString(undefined, { maximumFractionDigits: 1 })
 
   const chosen = async (file: File) => {
     setState({ kind: 'checking' })
@@ -86,7 +89,7 @@ export function ImportQuestionsButton({ limits, count }: { limits: BankLimits | 
     const last: { revision: number | null } = { revision: null }
     try {
       const done = await importInBatches({
-        quizId: editing.quizId, document, size, revision: editing.revision(),
+        quizId: editing.quizId, document, size, maxBytes, revision: editing.revision(),
         onProgress: (progress) => setState({ kind: 'importing', ...progress }),
         onImported: (output) => {
           last.revision = output.revision
@@ -137,10 +140,19 @@ export function ImportQuestionsButton({ limits, count }: { limits: BankLimits | 
             const questions = questionCountOf(state.document)
             const left = leftOutOf(state.document)
             const max = limits?.maxQuestions ?? 0
+            const plan = planBatches(state.document, size, maxBytes)
             return (
               <div className="flex flex-col gap-2 text-sm" data-testid="bank-import-summary">
                 <p>{t('bank.import.summary', { count: questions,
-                  batches: splitQuestions(state.document, size).length, files: state.check.files.length })}</p>
+                  batches: plan.batches.length, files: state.check.files.length })}</p>
+                {plan.maxBytes > 0 && (
+                  <p className="text-muted-foreground" data-testid="sponsor-bank-batch-info">
+                    {t('bank.import.byteLimit', { questions: size, megabytes: megabytes(plan.maxBytes) })}</p>
+                )}
+                {plan.tooLarge.length > 0 && (
+                  <p className="text-destructive" role="alert" data-testid="bank-import-too-large">
+                    {t('bank.import.tooLarge', { list: plan.tooLarge.join(', '), megabytes: megabytes(plan.maxBytes) })}</p>
+                )}
                 {left.materials > 0 && <p data-testid="bank-import-materials">
                   {t('bank.import.materialsLeft', { count: left.materials })}</p>}
                 {left.products && <p>{t('bank.import.productsLeft')}</p>}
@@ -186,7 +198,8 @@ export function ImportQuestionsButton({ limits, count }: { limits: BankLimits | 
               {state?.kind === 'done' || state?.kind === 'failed' ? t('bank.import.close') : t('common.cancel')}
             </Button>
             {state?.kind === 'checked' && (
-              <Button data-testid="bank-import-confirm" disabled={editing.stale}
+              <Button data-testid="bank-import-confirm"
+                disabled={editing.stale || planBatches(state.document, size, maxBytes).tooLarge.length > 0}
                 onClick={() => void start(state.document)}>
                 {t('bank.import.confirm')}
               </Button>

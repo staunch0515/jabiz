@@ -19,6 +19,7 @@ import {
   exportPackage,
   packageFile,
   packageHash,
+  mergeChecks,
   planImport,
   readAccountState,
   readOpenImport,
@@ -56,7 +57,7 @@ type State =
   | { kind: 'refused'; problems: string[] }
   | { kind: 'checked'; checked: Checked }
   | { kind: 'importing'; checked: Checked; label: string; index: number; total: number }
-  | { kind: 'failed'; checked: Checked; label: string; problems: string[] }
+  | { kind: 'failed'; checked: Checked; label: string; problems: string[]; emptied: boolean }
   | { kind: 'done'; checked: Checked; applyForm: boolean }
 
 const OPEN_IMPORT_QUERY = ['qb', 'package-import', 'open'] as const
@@ -71,6 +72,9 @@ export function stepLabel(step: PlannedStep, t: TFunction): string {
       return t('package.stepTree', { name: Object.values(step.tree.name).find(Boolean) ?? step.tree.key })
     case 'content':
       return t('package.stepContent', { title: step.title, label: label(step.label) })
+    case 'clear':
+      return t('package.stepClear', { title: step.title, label: label(step.label), clear: step.clear,
+        clears: step.clears })
     case 'batch':
       return t('package.stepBatch', { title: step.title, label: label(step.label), batch: step.batch,
         batches: step.batches })
@@ -80,6 +84,9 @@ export function stepLabel(step: PlannedStep, t: TFunction): string {
       return t('package.stepPublication', { name: step.name })
   }
 }
+
+/** Megabytes as the page says them (a request's limit is bytes). */
+const megabytes = (bytes: number) => (bytes / 1_048_576).toLocaleString(undefined, { maximumFractionDigits: 1 })
 
 /** Every title of the Sponsor's quizzes, page by page. */
 async function quizTitles(): Promise<string[]> {
@@ -109,7 +116,7 @@ async function checkPackage(document: SponsorPackageDocument, hash: string, t: T
     if (video?.status === 'APPROVED') sharedVideos.add(id)
   }
   const context: PlanContext = { mode: state.submittedPublication ? 'PROFILE' : 'FULL',
-    batchSize: limits.importBatch || 200, maxQuestions: limits.maxQuestions || 1000, state, quizTitles: titles,
+    batchSize: limits.importBatch || 200, batchBytes: limits.importBatchBytes || 0, maxQuestions: limits.maxQuestions || 1000, state, quizTitles: titles,
     ownNodes, sharedVideos }
   const plan = planImport(document, context)
   const problems: string[] = []
@@ -122,6 +129,14 @@ async function checkPackage(document: SponsorPackageDocument, hash: string, t: T
     }
   }
   const quizChecks: Record<string, ImportCheck> = {}
+  // With a byte limit a content is checked as the pieces it is imported in (the whole file may be more than a
+  // request takes); without one, as the one file, as it always was.
+  const pieces = new Map<string, Record<string, unknown>[]>()
+  if (plan.batchBytes > 0) {
+    for (const step of plan.steps) {
+      if (step.kind === 'content' || step.kind === 'batch') pieces.set(step.check, [...(pieces.get(step.check) ?? []), step.document])
+    }
+  }
   if (context.mode === 'FULL') {
     for (const quiz of document.quizzes) {
       const files: [string, string, Record<string, unknown>][] = quiz.versions.map((v) => [`${quiz.key}:${v.key}`,
@@ -131,7 +146,9 @@ async function checkPackage(document: SponsorPackageDocument, hash: string, t: T
         const title = typeof (file.quiz as { title?: unknown } | undefined)?.title === 'string'
           ? String((file.quiz as { title: string }).title) : quiz.key
         try {
-          quizChecks[id] = await checkImport(file)
+          const checks: ImportCheck[] = []
+          for (const piece of pieces.get(id) ?? [file]) checks.push(await checkImport(piece))
+          quizChecks[id] = mergeChecks(checks)
         } catch (e) {
           reasonsOf(e, t).forEach((reason) => problems.push(t('package.quizProblem', { title, label, reason })))
         }
@@ -223,7 +240,7 @@ export function SponsorPackage({ controls, onExporting }: {
     let last: PlannedStep | null = null
     try {
       const run = await runImport({ document: checked.document, hash: checked.hash, plan: checked.plan, checks,
-        replan: (batchSize) => planImport(checked.document, { ...checked.context, batchSize }),
+        replan: (batchSize, batchBytes) => planImport(checked.document, { ...checked.context, batchSize, batchBytes }),
         onProgress: (step, index, total) => {
           last = step
           setState({ kind: 'importing', checked, label: stepLabel(step, t), index, total })
@@ -236,8 +253,12 @@ export function SponsorPackage({ controls, onExporting }: {
       notify.success(t('package.done'))
     } catch (e) {
       const step = e instanceof PackageStepError ? e.step : last
+      // A step that clears the content a draft had, the one that brings the next or one of the batches after it
+      // stopped: the draft is empty (or has only the part before) until the import goes on.
+      const emptied = !!step && (step.kind === 'clear'
+        || ((step.kind === 'content' || step.kind === 'batch') && step.clears > 0))
       setState({ kind: 'failed', checked, label: step ? stepLabel(step, t) : t('package.title'),
-        problems: reasonsOf(e instanceof PackageStepError ? e.cause : e, t) })
+        problems: reasonsOf(e instanceof PackageStepError ? e.cause : e, t), emptied })
     } finally {
       await queryClient.invalidateQueries({ queryKey: ['qb'] })
     }
@@ -337,6 +358,19 @@ export function SponsorPackage({ controls, onExporting }: {
               {notices.map(([key, list, param]) => (
                 <p key={key} data-testid={`sponsor-package-${key}`}>{t(`package.${key}`, { [param]: list.join('、') })}</p>
               ))}
+              {plan.batchBytes > 0 && !profileOnly && (
+                <p className="text-muted-foreground" data-testid="sponsor-bank-batch-info">
+                  {t('package.batchInfo', { questions: plan.batchSize, megabytes: megabytes(plan.batchBytes) })}</p>
+              )}
+              {plan.oversized.length > 0 && (
+                <Alert variant="destructive" data-testid="sponsor-package-oversized">
+                  <AlertDescription>
+                    {t('package.oversized', { megabytes: megabytes(plan.batchBytes), items: plan.oversized
+                      .map((o) => o.question === null ? t('package.oversizedHead', { title: o.title })
+                        : t('package.oversizedQuestion', { title: o.title, n: o.question })).join('、') })}
+                  </AlertDescription>
+                </Alert>
+              )}
               {checked.problems.length > 0 && (
                 <Alert variant="destructive" data-testid="sponsor-package-problems">
                   <AlertDescription className="flex flex-col gap-1">
@@ -367,6 +401,7 @@ export function SponsorPackage({ controls, onExporting }: {
                 <span>{t('package.failed', { step: state.label })}</span>
                 <ul className="list-disc pl-5">{state.problems.map((p, i) => <li key={i}>{p}</li>)}</ul>
                 <span>{t('package.failedHint')}</span>
+                {state.emptied && <span data-testid="sponsor-package-emptied">{t('package.emptyDraft')}</span>}
               </AlertDescription>
             </Alert>
           )}
@@ -394,7 +429,8 @@ export function SponsorPackage({ controls, onExporting }: {
             </Button>
             {state?.kind === 'checked' && (
               <Button data-testid="sponsor-package-confirm"
-                disabled={state.checked.problems.length > 0 || (needsPassword && !password)}
+                disabled={state.checked.problems.length > 0 || state.checked.plan.oversized.length > 0
+                  || (needsPassword && !password)}
                 onClick={() => void start(state.checked)}>
                 {profileOnly ? t('package.confirmProfile') : t('package.confirm')}
               </Button>

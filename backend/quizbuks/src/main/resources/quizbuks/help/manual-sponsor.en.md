@@ -21,7 +21,7 @@ Once verified, the onboarding granted credit you received is topped up to the ve
 
 - A quiz is a template: edit its draft as often as you like (materials such as articles, images, videos or PDFs, and the questions), then save a version when it is complete. Publications use saved versions.
 - A quiz can be scored (pass mark) or a survey (no right answers).
-- Questions can be imported from a file, and large question banks can draw a set of questions for each Taker when you publish.
+- Questions can be imported from a file. When there are many, the page cuts them into batches by their number and by the size one request takes, so you do not split the file yourself. Large question banks can draw a set of questions for each Taker when you publish.
 - Translations: offer a version in several languages.
 - AI: AI can write candidate questions from the materials and translate texts; it uses your AI credit. You check every candidate before using it.
 - Topics: give quizzes and publications topics from the platform's list, so Takers who like them find them.
