@@ -120,6 +120,10 @@ class DistributionIT extends PrepaymentItSupport {
         assertThat(status(publicationId)).isEqualTo("ENDED");
     }
 
+    static BigDecimal dec(Object value) {
+        return new BigDecimal(String.valueOf(value));
+    }
+
     static void noUpdatesOrDeletes(String table) {
         assertThat(query("SELECT coalesce(n_tup_upd, 0) + coalesce(n_tup_del, 0) AS changed "
             + "FROM pg_stat_user_tables WHERE schemaname = current_schema() AND relname = ?", table))
@@ -187,6 +191,22 @@ class DistributionIT extends PrepaymentItSupport {
 
         // A start more, then the end; the final settlement after the grace gives the rest back.
         starts(publicationId, 1, "fm6-main-late");
+        // The Sponsor's page: the price, the starts since the last settlement and what they come to now.
+        assertThat(items("qb.sponsor.publication-distribution", sponsorToken(sponsor),
+            Map.of("params", Map.of("publicationId", publicationId)))).singleElement().satisfies(row -> {
+                assertThat(dec(row.get("unit"))).isEqualByComparingTo("5");
+                assertThat(((Number) row.get("pendingStarts")).longValue()).isEqualTo(1);
+                assertThat(dec(row.get("pendingEstimate"))).isEqualByComparingTo("5");
+                assertThat(dec(row.get("charged"))).isEqualByComparingTo("15");
+            });
+        assertThat(items("qb.sponsor.publication-distribution-settlements", sponsorToken(sponsor),
+            Map.of("params", Map.of("publicationId", publicationId)))).hasSize(1);
+        // Another Sponsor sees nothing of it.
+        assertThat(items("qb.sponsor.publication-distribution-settlements", sponsorToken(newSponsor(
+            unique("fm6-other"))), Map.of("params", Map.of("publicationId", publicationId)))).isEmpty();
+        assertThat(items("qb.admin.distribution-settlements", TestTokens.bearer(tokens, "fm6-finance",
+            QbPermissions.ADMIN_FINANCE_READ), Map.of("params", Map.of("publicationId", publicationId))))
+            .singleElement().satisfies(row -> assertThat(row).containsEntry("atFloor", false));
         end(publicationId);
         Instant endedAt = clock.instant();
         assertThat(finalRun(endedAt.plus(Duration.ofMinutes(30))).outcome()).isEqualTo(JobRunner.Outcome.SUCCEEDED);
@@ -360,6 +380,15 @@ class DistributionIT extends PrepaymentItSupport {
         assertThat(codes(refused(DistributionPrices.OPERATOR_SET, operatorSession(staff, operator), price, 422)))
             .containsExactly(OperatorCodes.NOT_LEAD);
         run(DistributionPrices.OPERATOR_SET, operatorSession(lead, operator), price);
+        assertThat(items("qb.operator.distribution-price", operatorSession(staff, operator), Map.of()))
+            .singleElement().satisfies(row -> {
+                assertThat(dec(row.get("unitCeiling"))).isEqualByComparingTo("20");
+                assertThat(String.valueOf(row.get("range"))).contains("qb.distribution.rate.max");
+            });
+        assertThat(items("qb.admin.distribution-prices", TestTokens.bearer(tokens, "fm6-billing",
+            QbPermissions.FEE_BILLING), Map.of("limit", 500)).stream()
+            .filter(row -> operator.equals(String.valueOf(row.get("operatorId"))))).singleElement()
+            .satisfies(row -> assertThat(dec(row.get("minimumDeposit"))).isEqualByComparingTo("500"));
         assertThat(query("SELECT rate FROM qb_distribution_price WHERE operator_id = ?", operator)).singleElement()
             .satisfies(row -> assertThat((BigDecimal) row.get("rate")).isEqualByComparingTo("0.05"));
         // Outside the headquarters' range (the rate at most 1, the floor at least 1).
