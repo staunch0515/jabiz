@@ -139,7 +139,7 @@
   - `EXPOSURE_UNPURCHASED`（只提示，不算差异，放 `ReconChecks.NOTES`）：进行中、用他人视频、却没有已购的发布（开关打开前提交的，或运营商没有价目的），供运营商与总部查看。
   - F-S13 的 `qb.exposure-check`（成功 ≤ 已购 + 容差）不变。
 - **月报**（`qb.admin.monthly`，`monthly.sql`，分类按参照 `prepay_exposure` / `fee_exposure_<月>` 分出，仿 `DISTRIBUTION_*`）：`EXPOSURE_DEPOSIT`（冻结与追加）、`EXPOSURE_RELEASED`、`EXPOSURE_CHARGED`；`PREPAYMENT_FROZEN / RELEASED` 不再含这些；`AdminFinanceIT` 逐行。
-- **`operations.md` 新小节**（"开 PR 时取下一个编号"；F-M7 用 §7.50，现在最大为 §7.49，所以暂为 §7.51）：价目与范围、开关只在提交时读、关掉不追溯、购买与追加、两个结算任务与账单任务的先后（00:37 配送月度、00:47 曝光月度、01:17 账单（1 日除外）、03:07 配送结束、03:12 曝光结束、03:23 释放）、补跑、月界按 `counted_at`、提醒、核对项处理、争议；§7.31 的"F-M8 的争议在那里处理"一句改为指向它。
+- **`operations.md` 新小节**（编号在开 PR 时取当时最大的小节号 + 1；F-M7 也会加一节，排在它后面）：价目与范围、开关只在提交时读、关掉不追溯、购买与追加、两个结算任务与账单任务的先后（00:37 配送月度、00:47 曝光月度、01:17 账单（1 日除外）、03:07 配送结束、03:12 曝光结束、03:23 释放）、补跑、月界按 `counted_at`、提醒、核对项处理、争议；§7.31 的"F-M8 的争议在那里处理"一句改为指向它。
 - **其他文档**：规格 F-M8 改写（读作的范围与追加购买不审核、未用的一律退回、月界按 `counted_at`、直营照付）；`first-launch-progress.md`、`F-F10.md` 的开关表（第 18、92 行）、上线检查清单一行；`backend/quizbuks/CLAUDE.md` 加一条；用词按 `glossary.md`（发起方、学者、运营商、视频提供方、平台管理系统，不写"后台""商户"）。
 
 ## 7. 测试清单
@@ -166,7 +166,7 @@
 
 读 `origin/1.3/quizbuks-FM7-audience`（草稿：受众规则费的上架后退回、贷项凭证 `QbFeeCreditNote`，迁移 V119）得到：
 1. **争议更正用手工贷项凭证**（`QB_FEE_REQUEST` 新种类 `CREDIT_NOTE`，规格是"适用于任何种类的费用"）：**依赖 F-M7（未合并）**；本项要加：`EXPOSURE` 费用可开凭证的测试（`CreditNoteIT` 加一例）、`FEE_CREDIT_NOTE` 月报分类对曝光费的反向分录。F-M7 不合入时，曝光费只能整张账单作废。
-2. **共用文件会冲突**（F-M7 已改）：`FeeConfig`、`FeeProcesses`（`QB_FEE_CHARGE` 加了"先用未用贷项"）、`FeeCodes`、`FeeRules`（`KINDS`）、`FeeSettlement`、`QbParams`（末尾追加）、`FirstLaunchSwitches`（`KEY_BEFORE_MEANING` 缩小、受众行改 `active`）、`monthly.sql`、`recon-fee-account.sql`、`recon-fee-receivable.sql`、`operator-fees.sql`、`sponsor/wallet.sql`、`ReconChecks`、`Reconciliation`、三语消息、`setup.snapshot.json`、`operations.md`（§7.50）、`first-launch-spec.md`、`F-M.md`。**依赖 F-M7（未合并）**：本项在它合入后的 `1.3/quizbuks` 上做；`setup.snapshot.json` 后合者合并基础并重生成。
+2. **共用文件会冲突**（F-M7 已改）：`FeeConfig`、`FeeProcesses`（`QB_FEE_CHARGE` 加了"先用未用贷项"）、`FeeCodes`、`FeeRules`（`KINDS`）、`FeeSettlement`、`QbParams`（末尾追加）、`FirstLaunchSwitches`（`KEY_BEFORE_MEANING` 缩小、受众行改 `active`）、`monthly.sql`、`recon-fee-account.sql`、`recon-fee-receivable.sql`、`operator-fees.sql`、`sponsor/wallet.sql`、`ReconChecks`、`Reconciliation`、三语消息、`setup.snapshot.json`、`operations.md`（F-M7 新加的小节）、`first-launch-spec.md`、`F-M.md`。**依赖 F-M7（未合并）**：本项在它合入后的 `1.3/quizbuks` 上做；`setup.snapshot.json` 后合者合并基础并重生成。
 3. **"欠款扣掉未用贷项"的统一读法**（F-M7 的 `FeeOwedIT`：所有读"欠多少"的地方口径一致）：本项后付发起方追加购买时的信用额检查读 `qb.system.fee-receivable`，须用 F-M7 合入后的口径。**依赖 F-M7（未合并）**。
 4. **迁移号**：V118 已被 F-F11a 用，F-M7 暂定 V119；本项在开 PR 时取当时的下一个空号，不预占。
 
