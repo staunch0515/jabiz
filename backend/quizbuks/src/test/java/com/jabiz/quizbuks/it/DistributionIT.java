@@ -447,6 +447,61 @@ class DistributionIT extends PrepaymentItSupport {
     }
 
     @Test
+    void theDirectSponsorPaysAFailedAndAnUnfinishedStartCountAndTheTakersReadTheSame() {
+        autoApprove(true);
+        // The operator's direct sponsor (its lead's own account) pays the fee like any other (the requester,
+        // 2026-11-12).
+        NewOperator operator = newOperatorWithLead(TestTokens.bearer(tokens, "fm6-ops3", QbPermissions.OPERATORS_WRITE,
+            QbPermissions.OPERATORS_READ), unique("fm6 direct"), null);
+        String direct = String.valueOf(query("SELECT direct_sponsor_id FROM qb_operator WHERE operator_id = ?",
+            operator.operatorId()).getFirst().get("direct_sponsor_id"));
+        distributionPrice(operator.operatorId());
+        credit(direct, 5_000);
+        cash(direct, 1_000);
+        distribution(false);
+        String free = publication(direct, "FM6 free", Map.of());
+        distribution(true);
+        String priced = publication(direct, "FM6 priced", Map.of());
+        assertThat(row(free).get("distribution_unit")).isNull();
+        assertThat((BigDecimal) row(priced).get("distribution_unit")).isEqualByComparingTo("5");
+
+        // What a taker reads of the two is the same but for which publication it is: the fee is not the taker's.
+        String reader = taker(newTaker(unique("fm6-reader"), null));
+        for (String template : List.of("qb.app.publication", "qb.app.publication-tiers")) {
+            assertThat(takerView(template, reader, priced)).as(template)
+                .isEqualTo(takerView(template, reader, free));
+        }
+
+        // A taker who answers wrong and one who never finishes: both are starts.
+        String failing = taker(newTaker(unique("fm6-wrong"), null));
+        String attemptId = String.valueOf(start(failing, priced).get("attemptId"));
+        assertThat(submit(failing, attemptId, answers(false, false))).containsEntry("passed", false);
+        starts(priced, 1, "fm6-unfinished");
+        assertThat(monthly().outcome()).isEqualTo(JobRunner.Outcome.SUCCEEDED);
+        assertThat(settlements(priced)).singleElement().satisfies(row -> {
+            assertThat(((Number) row.get("starts")).longValue()).isEqualTo(2);
+            assertThat((BigDecimal) row.get("amount")).isEqualByComparingTo("10");
+        });
+        assertThat(settlements(free)).isEmpty();
+        assertThat(query("SELECT 1 FROM qb_fee_charge_version WHERE sponsor_id = ? AND kind = 'DISTRIBUTION'",
+            direct)).hasSize(1);
+    }
+
+    /** A taker's rows of a publication's page, without what names the publication (its ids and names). */
+    private List<Map<String, Object>> takerView(String template, String token, String publicationId) {
+        Map<String, Object> params = new java.util.LinkedHashMap<>();
+        params.put("publicationId", publicationId);
+        params.put("at", clock.instant().toString());
+        params.put("country", "JP");
+        Set<String> naming = Set.of("publicationId", "name", "quizId", "quizTitle", "versionId", "title", "tierId");
+        return items(template, token, Map.of("params", params)).stream().map(row -> {
+            Map<String, Object> kept = new java.util.TreeMap<>(row);
+            kept.keySet().removeAll(naming);
+            return (Map<String, Object>) kept;
+        }).toList();
+    }
+
+    @Test
     void anOperatorNeitherSetsNorReadsAnotherOperatorsPrice() {
         // The operators hold qb.fee.billing (their sponsors' billing mode): headquarters' price process and every
         // operator's prices are headquarters' fee management, which they do not hold.
