@@ -5568,6 +5568,21 @@ QuizBuks 的 #545、#546、#547 用了 43.5–45 分钟，#545 到点被取消�
 
 **17zz18 状态**：📝 待评审（分支 `1.3/phase-17zz18-ledger-dimension-index`）。
 
+### 17zz19 对话框缺省的高度上限（2026-11-12，QuizBuks e2e 中发现）
+
+**缘由**：`@jabiz/ui` 的 `DialogContent` 没有高度上限，也不滚动：内容比屏幕高时，对话框（固定定位，背后的页面不滚动）末尾的确认按钮被挤出屏幕、无法到达。QuizBuks 的 e2e 中实际发生过，应用当时在 4 个对话框上临时加了类。
+
+| # | 内容 |
+|---|---|
+| 17zz19-1 | `DialogContent` 与 `AlertDialogContent` 的缺省类加上 `max-h-[calc(100dvh-2rem)] overflow-y-auto`（`cn` 即 tailwind-merge：调用者的 `max-h-*`、`overflow-*` 替换缺省，`CommandDialog` 的 `overflow-hidden` 照旧）；Javadoc 写明固定页脚的做法 |
+| 17zz19-2 | 核对现有对话框：平台前端与 `@jabiz/ui` 中没有自定义 `max-h` 或固定页脚的对话框（`FilePreview` 的图片 `max-h-[75vh]` 在框内，不冲突），示范应用（门户、扩展）不用 `Dialog` |
+| 17zz19-3 | 测试：Vitest `dialog.test.tsx`（缺省类、调用者替换、警示对话框，`expectAccessible` 亮暗两种）；Playwright `e2e/dialog-height.spec.ts`（320×420 窗口，会话页"结束会话"对话框填 30 行原因：确认与取消按钮都能滚动到并完整在视口内，框不超出视口，axe 亮暗两种）。去掉修改时该测试失败（确认按钮不在视口内），恢复后通过 |
+| 17zz19-4 | 文档：设计 12 §12 |
+
+**验收**：前端 lint、typecheck、全部 Vitest 绿；e2e 全绿。
+
+**17zz19 状态**：📝 待评审（分支 `1.3/phase-17zz19-dialog-max-height`）。
+
 ### 线 1.3 的候选（未排期，2026-11-08 总控：首次上线前不做）
 
 | 候选 | 缘由 | 粗估 |
