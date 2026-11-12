@@ -2,11 +2,13 @@ import type { APIRequestContext, Page } from '@playwright/test'
 import { signInAdmin, submittedPublication } from './admin'
 import { bookingMonthOf, expectOverviewAccounts } from './finance'
 import { completeQuiz, sponsor } from './content'
+import { operatorWithLead, signInOperatorDesk, sponsorOfOperator } from './operators'
 import { approvedSponsor, livePublication } from './publishing'
 import { rewardingPublication, startAttempt, submitRight } from './transactions'
 import { fundedSponsor, takerInJapan } from './wallet'
 import { contentAdmin, legalAdmin, publishVersion } from './legal'
 import {
+  accessibleInBoth,
   expect,
   expectAccessible,
   openArea,
@@ -19,6 +21,7 @@ import {
   takerArea,
   test,
   tokenOf,
+  unique,
   verifiedUser,
 } from './support'
 
@@ -737,3 +740,35 @@ async function whereTheStepOpens(page: Page) {
   await page.evaluate(() => window.scrollTo(0, 0))
   await expect.poll(() => page.evaluate(() => window.scrollY)).toBe(0)
 }
+
+/**
+ * F-F11b (docs/quizbuks/plans/impl/F-F11.md section 6.3): the operator's Sponsor list with Sponsors ticked for the
+ * onboarding Kudos' bulk confirm, and the dialog that sets a mainland China exception from a row, in both appearances.
+ * Nothing is confirmed or saved: the page as it stands is what axe looks at.
+ */
+test('the operator\'s Sponsor list with Sponsors ticked, and the exception dialog, pass axe (light and dark)',
+  async ({ browser, request }) => {
+    test.setTimeout(300_000)
+    const tag = unique('Axe ')
+    const operator = await operatorWithLead(request, 'Axe')
+    const first = await sponsorOfOperator(request, operator, 'Ann', `${tag} Ann Co`)
+    const second = await sponsorOfOperator(request, operator, 'Ben', `${tag} Ben Co`)
+    const context = await browser.newContext()
+    try {
+      const desk = await context.newPage()
+      await signInOperatorDesk(desk, operator)
+      await desk.goto(`/operator/qb/operator/sponsors?q=${encodeURIComponent(tag)}`)
+      const row = (s: { userId: string }) => desk.locator(`[data-testid="sponsor-row"][data-id="${s.userId}"]`)
+      for (const s of [first, second]) await row(s).getByTestId('sponsor-grant-select').click()
+      await expect(desk.getByTestId('operator-sponsors-confirm-selected')).toContainText('2 selected')
+      await accessibleInBoth(desk, 'operator sponsor list, ticked for the bulk confirm')
+
+      await row(first).getByTestId('region-add-for-sponsor').click()
+      const dialog = desk.getByTestId('region-exception-dialog')
+      await expect(dialog).toBeVisible()
+      await dialog.getByTestId('region-exception-reason').fill('Sample: test mainland China access')
+      await accessibleInBoth(desk, 'operator region exception dialog')
+    } finally {
+      await context.close()
+    }
+  })
