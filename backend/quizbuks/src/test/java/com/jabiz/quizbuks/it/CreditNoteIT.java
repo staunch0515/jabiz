@@ -265,4 +265,109 @@ class CreditNoteIT extends CreditNoteItSupport {
             .containsEntry("creditNoteCredit", 550).containsEntry("unpaidTotal", 0);
         assertThat(differences(sponsor)).isEmpty();
     }
+
+    /**
+     * C3: the operator gives back its share of the month's credit notes (before tax), at the platform's share of that
+     * month's plan; what its share that month does not cover is carried to the next, and the statement shows it.
+     */
+    @Test
+    void theOperatorGivesBackItsShareOfTheMonthsCreditNotes() {
+        clock.set(Instant.parse("2027-06-10T01:00:00Z"));
+        String hq = TestTokens.bearer(tokens, "fm7-ops-hq", QbPermissions.OPERATORS_WRITE,
+            QbPermissions.OPERATORS_READ);
+        String operatorId = newOperator(hq, unique("FM7 operator"));
+        String sponsor = newSponsor(unique("s-fm7-operator"));
+        run(com.jabiz.quizbuks.operator.OperatorProcesses.ASSIGN, hq, body("userId", sponsor, "operatorId",
+            operatorId, "reason", "F-M7"));
+        param(QbParams.FEE_MONTHLY, "1000");
+        cash(sponsor, 2_000);
+        assertThat(monthly(sponsor)).isEqualTo("CHARGED");
+        Object chargeId = monthlyCharge(sponsor).get("charge_id");
+
+        // June: 1000 of fees under plan 1 (the platform keeps half): 500 to the operator.
+        clock.set(Instant.parse("2027-07-02T00:00:00Z"));
+        systemRun(com.jabiz.quizbuks.operator.OperatorSettlements.RUN, body("operatorId", operatorId, "month",
+            "2027-06"));
+        assertThat(settlementOf(operatorId, "2027-06")).satisfies(row -> {
+            assertThat((BigDecimal) row.get("operator_share")).isEqualByComparingTo("500");
+            assertThat((BigDecimal) row.get("credit_note_deduction")).isEqualByComparingTo("0");
+        });
+        // July: the whole fee credited; nothing earned in July, so the 500 given back is carried.
+        creditNote(chargeId, 1_000);
+        clock.set(Instant.parse("2027-08-02T00:00:00Z"));
+        systemRun(com.jabiz.quizbuks.operator.OperatorSettlements.RUN, body("operatorId", operatorId, "month",
+            "2027-07"));
+        assertThat(settlementOf(operatorId, "2027-07")).satisfies(row -> {
+            assertThat((BigDecimal) row.get("credit_notes")).isEqualByComparingTo("1000");
+            assertThat((BigDecimal) row.get("credit_note_deduction")).isEqualByComparingTo("500");
+            assertThat((BigDecimal) row.get("operator_share")).isEqualByComparingTo("0");
+            assertThat((BigDecimal) row.get("payable")).isEqualByComparingTo("0");
+            assertThat((BigDecimal) row.get("carried_out")).isEqualByComparingTo("500");
+        });
+        assertThat(items("qb.admin.operator-settlements", finance(), Map.of("limit", 100))).filteredOn(row ->
+            operatorId.equals(String.valueOf(row.get("operatorId"))) && "2027-07".equals(row.get("month")))
+            .singleElement().satisfies(row -> assertThat(row).containsEntry("creditNoteDeduction", 500));
+    }
+
+    static Map<String, Object> settlementOf(String operatorId, String month) {
+        return query("SELECT * FROM qb_operator_settlement WHERE operator_id = ? AND month = ?", operatorId, month)
+            .getFirst();
+    }
+
+    /** Ends the publication by its one winner, two days after it went on; the item's reference. */
+    Map<String, Object> endEarly(String sponsor, String publicationId) {
+        clock.set(clock.instant().plus(Duration.ofDays(2)));
+        play(womanTaker("t-fm7-end"), publicationId, true, true);
+        assertThat(status(publicationId)).isEqualTo("ENDED");
+        return body("prepaymentId", String.valueOf(prepayments(publicationId).getFirst().get("prepayment_id")),
+            "publicationId", publicationId, "sponsorId", sponsor, "endedAt", clock.instant().toString());
+    }
+
+    /**
+     * The switch as it was when the publication ended decides (§10.3-1): off then and on later gives nothing back; on
+     * then and off later gives back. A prepayment frozen before F-M7 has no period of its own: the publication's as it
+     * was when the prepayment was frozen is read instead (N5).
+     */
+    @Test
+    void theSwitchAtTheEndDecidesAndAnOldPrepaymentTakesThePeriodItWasFrozenWith() {
+        autoApprove(true);
+        String sponsor = pricedSponsor("fm7-switch");
+        cash(sponsor, 3_000);
+        credit(sponsor, 20_000);
+
+        param(QbParams.AUDIENCE_REFUND_UNUSED_DAYS, "false");
+        String off = oneWinnerAudienceDraft(sponsor, "FM7 off");
+        submit(sponsorToken(sponsor), off);
+        goLive(off);
+        Map<String, Object> offRef = endEarly(sponsor, off);
+        clock.set(clock.instant().plus(Duration.ofMinutes(1)));
+        param(QbParams.AUDIENCE_REFUND_UNUSED_DAYS, "true");
+        assertThat(((FeeProcesses.ItemOutput) systemRun(AudienceRefundJob.ITEM, offRef)).outcome())
+            .isEqualTo("NONE_SWITCH_OFF");
+        assertThat(notes(sponsor)).isEmpty();
+        assertThat(prepayments(off).getFirst()).containsEntry("refund_outcome", "NONE_SWITCH_OFF");
+
+        String on = oneWinnerAudienceDraft(sponsor, "FM7 on");
+        submit(sponsorToken(sponsor), on);
+        goLive(on);
+        // As frozen before F-M7: the stored quote without its start and end.
+        execute("UPDATE qb_prepayment SET detail = regexp_replace(detail, ',\"startAt\":.*$', '}') "
+            + "WHERE publication_id = ?", on);
+        assertThat(String.valueOf(prepayments(on).getFirst().get("detail"))).doesNotContain("startAt");
+        Map<String, Object> onRef = endEarly(sponsor, on);
+        clock.set(clock.instant().plus(Duration.ofMinutes(1)));
+        param(QbParams.AUDIENCE_REFUND_UNUSED_DAYS, "false");
+        assertThat(((FeeProcesses.ItemOutput) systemRun(AudienceRefundJob.ITEM, onRef)).outcome())
+            .isEqualTo("REFUNDED");
+        assertThat(notes(sponsor)).singleElement().satisfies(note -> {
+            assertThat((BigDecimal) note.get("used_days")).isEqualByComparingTo("3");
+            assertThat((BigDecimal) note.get("amount")).isEqualByComparingTo("400");
+        });
+        // The daily release closes the two ended publications' prepayments (F-M5), as it does every day.
+        for (String publicationId : List.of(off, on)) {
+            systemRun(com.jabiz.quizbuks.fee.Prepayments.RELEASE_ITEM, body("publicationId", publicationId,
+                "sponsorId", sponsor, "purpose", "AUDIENCE"));
+        }
+        assertThat(differences(sponsor)).isEmpty();
+    }
 }
