@@ -227,6 +227,9 @@ export function OperatorDistributionPricePage() {
                 readOnly={!own.data?.lead} onSave={saveOwnDistributionPrice} />
             </Section>
           )}
+      <Section title={t('distribution.settlementsTitle')} testId="distribution-own-settlements">
+        <SettlementsList own />
+      </Section>
     </div>
   )
 }
@@ -236,18 +239,34 @@ const PERIOD = /^\d{4}-(0[1-9]|1[0-2])$/
 /** Finance: every settlement, by month and whether it was charged the floor; exported with the platform's export. */
 export function DistributionSettlementsPage() {
   const { t } = useTranslation(EXTENSION_NAMESPACE)
+  return (
+    <div className="flex flex-col gap-6">
+      <PageHeader title={t('distribution.settlementsTitle')} description={t('distribution.settlementsDescription')} />
+      <SettlementsList own={false} />
+    </div>
+  )
+}
+
+/**
+ * The settlements, by month and whether they were charged the floor: every one (finance) or the caller operator's
+ * own (`own`, review L5: the publications whose fee is the operator's, the floor marked). An operator does not read
+ * users' profiles, so its list shows the Sponsor's id.
+ */
+function SettlementsList({ own }: { own: boolean }) {
+  const { t } = useTranslation(EXTENSION_NAMESPACE)
   const id = useId()
   const [periodText, setPeriodText] = useState('')
   const [floorOnly, setFloorOnly] = useState(false)
   const filter: SettlementFilter = { period: PERIOD.test(periodText.trim()) ? periodText.trim() : null,
     atFloor: floorOnly ? true : null }
-  const list = usePaged([...DISTRIBUTION_KEY, 'settlements', filter.period, filter.atFloor],
-    (offset, limit) => readDistributionSettlements(filter, offset, limit).then((page) => ({
+  const list = usePaged([...DISTRIBUTION_KEY, own ? 'own-settlements' : 'settlements', filter.period, filter.atFloor],
+    (offset, limit) => readDistributionSettlements(filter, offset, limit, own).then((page) => ({
       items: page.items, total: page.total ?? undefined })))
   const columns = useMemo<ColumnDef<DistributionSettlementRow, unknown>[]>(() => [
     { id: 'period', header: t('distribution.period'), cell: ({ row }) => row.original.period },
     { id: 'publication', header: t('distribution.publication'), cell: ({ row }) => row.original.publicationId },
-    { id: 'sponsor', header: t('distribution.sponsor'), cell: ({ row }) => <UserName id={row.original.sponsorId} /> },
+    { id: 'sponsor', header: t('distribution.sponsor'), cell: ({ row }) => (own ? row.original.sponsorId
+      : <UserName id={row.original.sponsorId} />) },
     { id: 'starts', header: t('distribution.starts'), meta: right, cell: ({ row }) => row.original.starts },
     { id: 'unit', header: t('distribution.unit'), meta: right, cell: ({ row }) => (row.original.atFloor
       ? t('distribution.atFloor', { unit: row.original.unit }) : String(row.original.unit)) },
@@ -256,10 +275,9 @@ export function DistributionSettlementsPage() {
     { id: 'final', header: t('distribution.final'), cell: ({ row }) => (row.original.final
       ? t('distribution.yes') : '') },
     { id: 'settledAt', header: t('distribution.settledAt'), cell: ({ row }) => when(row.original.settledAt) },
-  ], [t])
+  ], [t, own])
   return (
-    <div className="flex flex-col gap-6">
-      <PageHeader title={t('distribution.settlementsTitle')} description={t('distribution.settlementsDescription')} />
+    <div className="flex flex-col gap-4">
       <div className="flex flex-wrap items-end gap-4">
         <div className="flex flex-col gap-2">
           <Label htmlFor={`${id}-period`}>{t('distribution.period')}</Label>

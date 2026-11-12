@@ -952,7 +952,7 @@ public final class QbParams {
                 + "aside), in yen"),
         new Param(DISTRIBUTION_FINAL_END_GRACE_SEC, Map.of("type", "numeric", "precision", 5, "scale", 0), "3600",
             "How many seconds after a publication ended its final distribution settlement waits, so that every "
-                + "start before the end is counted (0 to 86400)"),
+                + "start before the end is counted (60 to 86400; less counts as 60)"),
         new Param(DISTRIBUTION_UNSETTLED_AFTER_HOURS, Map.of("type", "numeric", "precision", 3, "scale", 0), "30",
             "After how many hours of a month a publication not settled for the month before is reported by the "
                 + "daily check (the monthly settlement runs on the 2nd at 00:37)"),

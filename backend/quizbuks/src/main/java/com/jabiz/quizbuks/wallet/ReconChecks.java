@@ -222,8 +222,9 @@ public final class ReconChecks {
             String check = text(row.get("checkCode"));
             if (check != null && ALL.contains(check)) {
                 String party = row.containsKey("userId") ? text(row.get("userId")) : text(row.get("sponsorId"));
+                // F-M6 (review M2, M4): the fee account's template names a publication or a month as its reference.
                 String reference = row.containsKey("transferId") ? text(row.get("transferId"))
-                    : text(row.get("topUpId"));
+                    : row.containsKey("reference") ? text(row.get("reference")) : text(row.get("topUpId"));
                 add(items, check, party, reference, row.get("expected"), row.get("actual"));
             }
         }

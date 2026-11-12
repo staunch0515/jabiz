@@ -48,7 +48,8 @@ beforeEach(() => {
   server.runProcess.mockReset().mockResolvedValue({})
   server.runQuery.mockReset().mockImplementation(async (template: string) => ({ items:
     template === DISTRIBUTION.pricesTemplate ? server.prices
-      : template === DISTRIBUTION.settlementsTemplate ? server.settlements : server.own }))
+      : template === DISTRIBUTION.settlementsTemplate || template === DISTRIBUTION.operatorSettlementsTemplate
+        ? server.settlements : server.own }))
 })
 
 function renderPage(page: React.ReactNode) {
@@ -120,6 +121,18 @@ describe('the distribution fee pages (F-M6)', () => {
     await waitFor(() => expect(server.runProcess).toHaveBeenCalledWith(DISTRIBUTION.operatorPriceSet,
       expect.objectContaining({ operatorId: null, rate: '2', minimumDeposit: 500 })))
     expect(await screen.findByRole('alert')).toBeInTheDocument()
+  })
+
+  it('lists the operator\'s own settlements below its price, the floor marked, without an operator filter', async () => {
+    server.own = [{ operatorId: NORTH, lead: false, priceId: 'p1', rate: 0.05, unitFloor: 1, unitCeiling: 20,
+      minimumDeposit: 500, reason: 'Launch', updatedAt: '2026-11-02T01:00:00Z', updatedBy: 'u2', range: '{}' }]
+    const { container } = renderPage(<OperatorDistributionPricePage />)
+    const row = await screen.findByTestId('distribution-settlement-row')
+    expect(row).toHaveAttribute('data-floor', 'true')
+    expect(row).toHaveTextContent('sp1')
+    expect(server.runQuery).toHaveBeenCalledWith(DISTRIBUTION.operatorSettlementsTemplate,
+      expect.objectContaining({ params: expect.not.objectContaining({ operatorId: null }) }))
+    await expectAccessible(container)
   })
 
   it('lists the settlements, marks those at the least price, and filters by month and the floor', async () => {

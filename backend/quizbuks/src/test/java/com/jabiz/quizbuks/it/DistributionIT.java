@@ -502,6 +502,29 @@ class DistributionIT extends PrepaymentItSupport {
     }
 
     @Test
+    void aSponsorWhoErasesTheirAccountIsStillSettledFromTheDeposit() {
+        // M3 (review): the onboarding row goes with the account (SponsorErasure), the publication ends with it; the
+        // deposit already holds the money, so the final settlement charges from it and gives the rest back.
+        autoApprove(true);
+        distribution(true);
+        String sponsor = distributionSponsor("fm6-erased");
+        cash(sponsor, 1_000);
+        String publicationId = publication(sponsor, "FM6 erased", Map.of());
+        starts(publicationId, 2, "fm6-erased");
+        runAsSystem("ACCOUNT_ERASE", Map.of("userId", sponsor, "requestedBy", "it-support"));
+        deliverEvents();
+        assertThat(status(publicationId)).isEqualTo("ENDED");
+        Instant endedAt = clock.instant();
+        assertThat(finalRun(endedAt.plus(Duration.ofHours(2))).outcome()).isEqualTo(JobRunner.Outcome.SUCCEEDED);
+        assertThat(settlements(publicationId)).singleElement().satisfies(row -> {
+            assertThat(row).containsEntry("final", true);
+            assertThat((BigDecimal) row.get("amount")).isEqualByComparingTo("10");
+        });
+        assertThat(distributionPrepayment(publicationId)).containsEntry("status", "RELEASED");
+        assertThat(ledger("2180", sponsor)).isEqualByComparingTo("0");
+    }
+
+    @Test
     void anOperatorNeitherSetsNorReadsAnotherOperatorsPrice() {
         // The operators hold qb.fee.billing (their sponsors' billing mode): headquarters' price process and every
         // operator's prices are headquarters' fee management, which they do not hold.

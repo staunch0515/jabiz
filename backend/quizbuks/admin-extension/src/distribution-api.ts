@@ -107,12 +107,15 @@ export interface SettlementFilter {
   atFloor: boolean | null
 }
 
-export const settlementParams = (filter: SettlementFilter) => ({ period: filter.period, sponsorId: null,
-  operatorId: null, publicationId: null, atFloor: filter.atFloor })
+/** The template's parameters: the operator's own list has no operator to filter by (its membership says which). */
+export const settlementParams = (filter: SettlementFilter, own = false) => ({ period: filter.period, sponsorId: null,
+  ...(own ? {} : { operatorId: null }), publicationId: null, atFloor: filter.atFloor })
 
-export async function readDistributionSettlements(filter: SettlementFilter, offset: number, limit: number) {
-  const answer = await runQuery<Row>(DISTRIBUTION.settlementsTemplate, { params: settlementParams(filter), offset,
-    limit })
+/** Every settlement (finance), or the caller operator's own (`own`, review L5). */
+export async function readDistributionSettlements(filter: SettlementFilter, offset: number, limit: number,
+  own = false) {
+  const answer = await runQuery<Row>(own ? DISTRIBUTION.operatorSettlementsTemplate : DISTRIBUTION.settlementsTemplate,
+    { params: settlementParams(filter, own), offset, limit })
   return {
     total: answer.total ?? null,
     items: (answer.items ?? []).map((row): DistributionSettlementRow => ({

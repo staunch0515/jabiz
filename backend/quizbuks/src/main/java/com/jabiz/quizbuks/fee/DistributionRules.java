@@ -26,9 +26,25 @@ public final class DistributionRules {
     /** An operator's price (the row of {@code QbDistributionPrice}). */
     public record Price(BigDecimal rate, BigDecimal unitFloor, BigDecimal unitCeiling, BigDecimal minimumDeposit) {}
 
-    /** The headquarters' range of the operators' prices (controlled parameters); a bound not set does not bound. */
+    /**
+     * The headquarters' range of the operators' prices (controlled parameters). Every bound is required (review L2):
+     * one not published refuses the price and the submission ({@link #complete}), rather than leaving it unbounded.
+     */
     public record Range(BigDecimal rateMin, BigDecimal rateMax, BigDecimal unitFloorMin, BigDecimal unitFloorMax,
-        BigDecimal unitCeilingMax, BigDecimal minimumDepositMax) {}
+        BigDecimal unitCeilingMax, BigDecimal minimumDepositMax) {
+
+        /** Whether every bound is published. */
+        public boolean complete() {
+            return rateMin != null && rateMax != null && unitFloorMin != null && unitFloorMax != null
+                && unitCeilingMax != null && minimumDepositMax != null;
+        }
+    }
+
+    /** The refusal of a price or a submission while the range is not complete. */
+    public static Violation rangeMissing() {
+        return new Violation(null, FeeCodes.DISTRIBUTION_RANGE_MISSING,
+            "The headquarters' range of the distribution prices is not published", java.util.Map.of());
+    }
 
     /** A price per start: the rate times the highest tier, kept between the floor and the ceiling (4 decimals). */
     public record Unit(BigDecimal unit, boolean atFloor) {}
@@ -91,6 +107,9 @@ public final class DistributionRules {
 
     /** An operator's price checked as it is saved: none negative, the floor not above the ceiling, all within range. */
     public static List<Violation> priceProblems(Price price, Range range) {
+        if (!range.complete()) {
+            return List.of(rangeMissing());
+        }
         List<Violation> problems = new ArrayList<>();
         check(problems, "rate", price.rate(), range.rateMin(), range.rateMax());
         check(problems, "unitFloor", price.unitFloor(), range.unitFloorMin(), range.unitFloorMax());

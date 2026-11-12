@@ -83,7 +83,9 @@ public final class PublicationPrepayments {
 
     /** The parameters the submission's funds read (optional: not published reads as off, as the fee gate's). */
     static final List<String> PARAM_KEYS = List.of(QbParams.AUDIENCE_BILLING_ENABLED, QbParams.FEE_TAX_RATE,
-        QbParams.FEE_DEFAULT_BILLING_MODE, QbParams.DISTRIBUTION_BILLING_ENABLED);
+        QbParams.FEE_DEFAULT_BILLING_MODE, QbParams.DISTRIBUTION_BILLING_ENABLED, QbParams.DISTRIBUTION_RATE_MIN,
+        QbParams.DISTRIBUTION_RATE_MAX, QbParams.DISTRIBUTION_UNIT_FLOOR_MIN, QbParams.DISTRIBUTION_UNIT_FLOOR_MAX,
+        QbParams.DISTRIBUTION_UNIT_CEILING_MAX, QbParams.DISTRIBUTION_MINIMUM_DEPOSIT_MAX);
 
     private PublicationPrepayments() {}
 
@@ -200,7 +202,11 @@ public final class PublicationPrepayments {
         com.jabiz.quizbuks.fee.DistributionRules.Unit unit = com.jabiz.quizbuks.fee.DistributionRules.unit(price,
             maxReward);
         Integer maxWinners = PublicationEditing.integer(publication.get("maxWinners"));
-        BigDecimal rate = params(ctx).find(QbParams.FEE_TAX_RATE, BigDecimal.class).orElse(BigDecimal.ZERO);
+        // Review L4: no tax rate of our own; check() refuses the submission without one.
+        BigDecimal rate = params(ctx).find(QbParams.FEE_TAX_RATE, BigDecimal.class).orElse(null);
+        if (rate == null) {
+            return null;
+        }
         return new DistributionQuote(unit.unit(), unit.atFloor(), maxReward, maxWinners,
             com.jabiz.quizbuks.fee.DistributionRules.deposit(maxWinners, unit.unit(), price.minimumDeposit(), rate),
             com.jabiz.quizbuks.fee.DistributionRules.depositBeforeTax(maxWinners, unit.unit(),
@@ -269,6 +275,11 @@ public final class PublicationPrepayments {
      */
     static void check(ProcessContext ctx, EntityInstance publication) {
         if (!ctx.contains(ITEMS)) {
+            return;
+        }
+        com.jabiz.entity.Violation unpriced = distributionProblem(ctx);
+        if (unpriced != null) {
+            ctx.reject(unpriced);
             return;
         }
         // F-M6 (N5): a cap on the winners whose distribution fee is more than any fee may be is refused here, not when
@@ -478,14 +489,16 @@ public final class PublicationPrepayments {
                         QbPublications.sponsorDataset(QbPublications.PUBLICATION), PublicationEditing.PUB_ID,
                         PublicationEditing.PUBLICATION))
                     .step("Load the fee parameters", com.jabiz.runtime.process.steps.LoadParams.<ProcessContext>optional(
-                        ProcessContext::opTime, PARAMS, QbParams.FEE_DEFAULT_BILLING_MODE,
-                        QbParams.AUDIENCE_BILLING_ENABLED, QbParams.FEE_TAX_RATE,
-                        QbParams.DISTRIBUTION_BILLING_ENABLED))
+                        ProcessContext::opTime, PARAMS, PARAM_KEYS.toArray(String[]::new)))
                     .steps(b -> FeeGate.load(b, ctx -> ctx.request().actorId()))
                     // F-M6: the highest tier sets the price per start.
                     .steps(PublicationEditing::loadTiers);
                 load(pb, ctx -> ctx.get(PublicationEditing.PUBLICATION, EntityInstance.class), ctx -> true, false);
                 pb.compute("Check", (metadata, ctx) -> {
+                    com.jabiz.entity.Violation unpriced = distributionProblem(ctx);
+                    if (unpriced != null) {
+                        throw new com.jabiz.runtime.BusinessRuleViolationException(List.of(unpriced));
+                    }
                     PrepaymentRules.Funds funds = ctx.contains(ITEMS) ? funds(ctx)
                         : PrepaymentRules.check(List.of(), new PrepaymentRules.Standing(FeeRules.PREPAID,
                             BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO));
@@ -499,6 +512,25 @@ public final class PublicationPrepayments {
                         funds.total(), funds.available(), funds.shortfall(), funds.billingMode(), funds.enough()));
                 });
             });
+    }
+
+    /**
+     * F-M6 (review L2, L4): with a distribution price to freeze, the headquarters' range and the tax rate must be
+     * published; either missing refuses the submission (and the wizard's check) rather than freezing a price no bound
+     * applies to, or a deposit without its tax.
+     */
+    static com.jabiz.entity.Violation distributionProblem(ProcessContext ctx) {
+        if (!distributionPriced(ctx) || FeeGate.first(ctx, DISTRIBUTION_PRICE) == null) {
+            return null;
+        }
+        if (!com.jabiz.quizbuks.fee.DistributionPrices.range(params(ctx)).complete()) {
+            return com.jabiz.quizbuks.fee.DistributionRules.rangeMissing();
+        }
+        if (params(ctx).find(QbParams.FEE_TAX_RATE, BigDecimal.class).isEmpty()) {
+            return new com.jabiz.entity.Violation(null, com.jabiz.quizbuks.fee.FeeCodes.FEE_PARAMS,
+                "The tax rate cannot be used", Map.of("rate", "null"));
+        }
+        return null;
     }
 
     static String sponsorOf(EntityInstance publication) {

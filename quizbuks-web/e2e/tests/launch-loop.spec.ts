@@ -546,7 +546,7 @@ test.describe.serial('the first launch\'s loop', () => {
       ])
       try {
         await setControlledParam(request, 'qb.distribution.billing.enabled', 'true')
-        await setControlledParam(request, 'qb.distribution.final.end-grace-sec', '0',
+        await setControlledParam(request, 'qb.distribution.final.end-grace-sec', '60',
           { type: 'numeric', precision: 5, scale: 0 })
         // Her operator's lead prices a start at 1 yen per Kudos of the highest tier, between 1 and 20: the reward of 10
         // comes to 0.1, so the floor of 1.

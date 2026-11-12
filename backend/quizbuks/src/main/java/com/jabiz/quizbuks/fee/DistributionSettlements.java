@@ -60,6 +60,13 @@ public final class DistributionSettlements {
     public static final String SETTLE = "QB_DISTRIBUTION_SETTLE";
     public static final String MONTHLY_JOB = "qb.distribution-fee";
     public static final String FINAL_JOB = "qb.distribution-final";
+
+    /**
+     * The bounds of qb.distribution.final.end-grace-sec (review L1): at least a minute, so that a start that began
+     * just before the end and is counted a moment later is in the final settlement; at most a day.
+     */
+    static final long MIN_END_GRACE_SEC = 60;
+    static final long MAX_END_GRACE_SEC = 86_400;
     public static final String DUE_TEMPLATE = "qb.system.distribution-due";
     public static final String FINAL_DUE_TEMPLATE = "qb.system.distribution-final-due";
 
@@ -157,8 +164,8 @@ public final class DistributionSettlements {
         // No grace parameter (QB_SETUP's proposal not published yet; SetupParamsCheck warns): not settled as ended,
         // the monthly job still settles its months and a later run its end.
         Optional<BigDecimal> graceParam = params.find(QbParams.DISTRIBUTION_FINAL_END_GRACE_SEC, BigDecimal.class);
-        boolean ended = endedAt != null && graceParam.isPresent() && !endedAt.plus(
-            Duration.ofSeconds(Math.clamp(graceParam.get().longValue(), 0, 86_400))).isAfter(ctx.opTime());
+        boolean ended = endedAt != null && graceParam.isPresent() && !endedAt.plus(Duration.ofSeconds(
+            Math.clamp(graceParam.get().longValue(), MIN_END_GRACE_SEC, MAX_END_GRACE_SEC))).isAfter(ctx.opTime());
         Set<String> periods = new HashSet<>();
         rows.forEach(row -> periods.add(String.valueOf((Object) row.get("period"))));
         String period;

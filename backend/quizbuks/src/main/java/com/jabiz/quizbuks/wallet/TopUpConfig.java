@@ -260,10 +260,10 @@ class TopUpConfig {
                 "zh", "预付款与其分摊", "ja", "前払金と内訳")
             .item(ReconChecks.PREPAYMENT_UNCHARGED, "en", "Audience fees not charged though the publication started",
                 "zh", "发布已开始但未记的受众规则费", "ja", "開始済みの掲載で未請求のオーディエンス料金")
-            .item(ReconChecks.DISTRIBUTION_DEPOSITS, "en", "Distribution fee deposits (2180)",
-                "zh", "配送费预付（2180）", "ja", "配信料の前払い（2180）")
-            .item(ReconChecks.DISTRIBUTION_UNSETTLED, "en", "Distribution fees not settled for the month before",
-                "zh", "上月未结算的配送费", "ja", "前月分が未精算の配信料")
+            .item(ReconChecks.DISTRIBUTION_DEPOSITS, "en", "Distribution fee deposits (2180, by publication)",
+                "zh", "配送费预付（2180，按发布）", "ja", "配信料の前払い（2180、掲載ごと）")
+            .item(ReconChecks.DISTRIBUTION_UNSETTLED, "en", "Distribution fees not settled for a month",
+                "zh", "某月未结算的配送费", "ja", "未精算の月がある配信料")
             .item(ReconChecks.DISTRIBUTION_FINAL_MISSING, "en", "Ended publications without their final distribution "
                 + "settlement", "zh", "已结束但无最终结算的配送费", "ja", "終了後に最終精算がない配信料")
             .item(ReconChecks.DISTRIBUTION_PRICE_OUT_OF_RANGE, "en", "Distribution prices outside the headquarters' "

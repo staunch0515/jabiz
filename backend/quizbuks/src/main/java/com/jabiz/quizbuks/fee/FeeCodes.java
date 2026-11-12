@@ -48,11 +48,14 @@ public final class FeeCodes {
     public static final String DISTRIBUTION_FLOOR_ABOVE_CEILING = "QB_DISTRIBUTION_FLOOR_ABOVE_CEILING";
     /** F-M6: the cap on the winners times the price per start is more than any fee may be. */
     public static final String DISTRIBUTION_DEPOSIT_RANGE = "QB_DISTRIBUTION_DEPOSIT_RANGE";
+    /** F-M6 (review L2): a bound of the headquarters' range (qb.distribution.*) is not published. */
+    public static final String DISTRIBUTION_RANGE_MISSING = "QB_DISTRIBUTION_RANGE_MISSING";
 
     public static final List<String> ALL = List.of(PUBLICATION_FUNDS, FEE_UNPAID, FEE_CASH_SHORT, FEE_INVOICE_STATE, FEE_SPONSOR,
         FEE_PERIOD, FEE_PARAMS, FEE_NO_REVIEW, FEE_BILLING_MODE, FEE_OWN, FEE_NOTHING_DUE, FEE_CREDIT_OFF,
         FEE_CREDIT_SPONSOR, FEE_CREDIT_GIVEN, FEE_CREDIT_MAX, FEE_CREDIT_LEAD, DISTRIBUTION_PRICE_REQUIRED,
-        DISTRIBUTION_PRICE_RANGE, DISTRIBUTION_FLOOR_ABOVE_CEILING, DISTRIBUTION_DEPOSIT_RANGE);
+        DISTRIBUTION_PRICE_RANGE, DISTRIBUTION_FLOOR_ABOVE_CEILING, DISTRIBUTION_DEPOSIT_RANGE,
+        DISTRIBUTION_RANGE_MISSING);
 
     private FeeCodes() {}
 }

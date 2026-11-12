@@ -226,6 +226,8 @@ public final class FeeProcesses {
     static final String BILLING_MODE = "billingMode";
     static final String MONTH_INVOICE = "monthInvoice";
     static final String TOTAL = "total";
+    /** The month the charge is written for (review L3: a late postpaid one is the current month, not the input's). */
+    static final String CHARGE_PERIOD = "chargePeriod";
     static final String PAID_NOW = "paidNow";
     static final String CASH_AFTER = "cashAfter";
     static final String OUTCOME = "outcome";
@@ -274,20 +276,20 @@ public final class FeeProcesses {
                     && chargeInput(ctx).prepaymentId() == null,
                 FeeSettlement.SETTLE, 1, ctx -> new FeeSettlement.SettleInput(chargeInput(ctx).sponsorId(),
                     QbFees.CHARGE, (String) ctx.get(CHARGE_ID), ctx.get(TOTAL, BigDecimal.class),
-                    reference(chargeInput(ctx))), SETTLEMENT))
+                    chargeReference(ctx)), SETTLEMENT))
             // F-M5: a publication's fee is paid from what its submission set aside (a postpaid sponsor's prepayment
             // only stops counting against the credit limit; the fee is owed as their other fees).
             .step("Pay the fee from its prepayment", CallProcess.<ProcessContext>when(
                 ctx -> chargeInput(ctx).prepaymentId() != null, Prepayments.USE, 1,
                 ctx -> new Prepayments.UseInput(chargeInput(ctx).prepaymentId(), (String) ctx.get(CHARGE_ID),
-                    ctx.get(TOTAL, BigDecimal.class), reference(chargeInput(ctx))), SETTLEMENT))
+                    ctx.get(TOTAL, BigDecimal.class), chargeReference(ctx)), SETTLEMENT))
             // M1 of the F-M5 review: what the prepayment does not cover (the tax rate changed while it waited) is
             // paid from the account in its order, as any prepaid fee; the rest stays owed on the same invoice.
             .step("Pay the rest from the account", CallProcess.<ProcessContext>when(
                 ctx -> FeeRules.PREPAID.equals(ctx.get(BILLING_MODE)) && chargeInput(ctx).prepaymentId() != null
                     && unpaid(ctx).signum() > 0,
                 FeeSettlement.SETTLE, 1, ctx -> new FeeSettlement.SettleInput(chargeInput(ctx).sponsorId(),
-                    QbFees.CHARGE, (String) ctx.get(CHARGE_ID), unpaid(ctx), reference(chargeInput(ctx))),
+                    QbFees.CHARGE, (String) ctx.get(CHARGE_ID), unpaid(ctx), chargeReference(ctx)),
                 SETTLEMENT_REST))
             .step("Number the invoice", AssignNumber.<ProcessContext>when(
                 ctx -> FeeRules.PREPAID.equals(ctx.get(BILLING_MODE)), QbFees.INVOICE_SEQUENCE,
@@ -303,7 +305,12 @@ public final class FeeProcesses {
         ParamValues params = ctx.get(PARAMS, ParamValues.class);
         List<Violation> problems = new ArrayList<>();
         EntityInstance sponsor = first(ctx, SPONSOR);
-        if (sponsor == null || !SponsorStatus.APPROVED.equals(sponsor.get("reviewStatus"))) {
+        // M3 of the F-M6 review: a fee charged from a prepayment is for what was bought with money already set aside
+        // (an audience fee at the start, a distribution fee at its settlement), and is billed as the prepayment was
+        // (below): it is charged whatever the onboarding is now. A sponsor who erased their account has none, and
+        // their ended publication's final settlement still charges its deposit and gives back the rest.
+        if (first(ctx, PREPAYMENT) == null
+            && (sponsor == null || !SponsorStatus.APPROVED.equals(sponsor.get("reviewStatus")))) {
             problems.add(new Violation("sponsorId", FeeCodes.FEE_SPONSOR, "Only an approved sponsor is charged",
                 Map.of()));
         }
@@ -335,6 +342,7 @@ public final class FeeProcesses {
         values.put("operatorId", operatorOf(ctx));
         values.put("billingMode", billingMode);
         values.put("kind", input.kind());
+        ctx.put(CHARGE_PERIOD, period);
         values.put("period", period);
         values.put("amount", input.amount());
         values.put("taxRate", rate);
@@ -371,8 +379,15 @@ public final class FeeProcesses {
         if (tax.signum() > 0) {
             lines.add(new LedgerProcesses.Line(QbLedger.TAX_PAYABLE, Direction.CREDIT, tax));
         }
-        return new LedgerProcesses.PostInput(ctx.opTime(), "Platform fee", reference(input), lines, QbFees.CHARGE,
+        return new LedgerProcesses.PostInput(ctx.opTime(), "Platform fee", chargeReference(ctx), lines, QbFees.CHARGE,
             (String) ctx.get(CHARGE_ID));
+    }
+
+    /** The charge's postings' reference: its kind and the month it is actually written for (review L3). */
+    static String chargeReference(ProcessContext ctx) {
+        ChargeInput input = chargeInput(ctx);
+        String period = ctx.contains(CHARGE_PERIOD) ? (String) ctx.get(CHARGE_PERIOD) : input.period();
+        return reference(input.kind(), period);
     }
 
     /** The posting's reference: {@code fee_<kind>_<period>}, so that the monthly report tells the kinds apart. */

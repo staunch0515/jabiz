@@ -101,9 +101,13 @@ class DistributionRulesTest {
         assertThat(problems).extracting(Violation::ruleCode).containsOnly(FeeCodes.DISTRIBUTION_PRICE_RANGE);
         assertThat(DistributionRules.priceProblems(price("0.05", "30", "20", 500), range))
             .extracting(Violation::ruleCode).containsExactly(FeeCodes.DISTRIBUTION_FLOOR_ABOVE_CEILING);
-        assertThat(DistributionRules.priceProblems(price("-1", "1", "20", 500),
-            new DistributionRules.Range(null, null, null, null, null, null)))
+        assertThat(DistributionRules.priceProblems(price("-1", "1", "20", 500), range))
             .extracting(Violation::field).containsExactly("rate");
+        // Review L2: a bound not published refuses every price, rather than leaving it unbounded.
+        DistributionRules.Range partial = new DistributionRules.Range(d("0"), d("1"), d("1"), d("100"), d("1000"), null);
+        assertThat(partial.complete()).isFalse();
+        assertThat(DistributionRules.priceProblems(price("0.05", "1", "20", 500), partial))
+            .extracting(Violation::ruleCode).containsExactly(FeeCodes.DISTRIBUTION_RANGE_MISSING);
         // Narrowed after it was saved: the daily check reports it.
         assertThat(DistributionRules.outOfRange(price("0.05", "1", "20", 500),
             new DistributionRules.Range(d("0.1"), d("1"), d("1"), d("100"), d("1000"), d("100000")))).isTrue();

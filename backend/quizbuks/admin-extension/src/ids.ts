@@ -809,6 +809,8 @@ export const DISTRIBUTION = {
   pricesTemplate: 'qb.admin.distribution-prices',
   operatorPriceTemplate: 'qb.operator.distribution-price',
   settlementsTemplate: 'qb.admin.distribution-settlements',
+  /** Review L5: the caller operator's own settlements (its frozen fees), through its membership. */
+  operatorSettlementsTemplate: 'qb.operator.distribution-settlements',
 } as const
 
 /**
