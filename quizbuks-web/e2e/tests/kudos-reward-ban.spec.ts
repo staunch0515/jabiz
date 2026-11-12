@@ -45,7 +45,7 @@ test('a publication with a Kudos reward is refused at submit while the switch is
     // The page: the draft's reward methods offer the other two, and not the platform's Kudos.
     await signIn(page, '/sponsor/', sponsor.email)
     await expect(page.getByTestId('dashboard-status')).toBeVisible()
-    await page.goto(`/sponsor/publications/${publicationId}/rewards`)
+    await page.goto(`/sponsor/publications/${publicationId}?step=1`)
     await expect(page.getByTestId('publication-method')).toBeVisible()
     await expect(page.getByTestId('publication-method-SPONSOR_CASH')).toBeVisible()
     await expect(page.getByTestId('publication-method-OFFLINE_REDEEM')).toBeVisible()
