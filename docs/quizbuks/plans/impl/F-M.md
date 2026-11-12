@@ -371,7 +371,7 @@
 - 删除（需求方 2026-11-09 确认）：`direct` 受众价目与 `qb.audience.price.fallback`（后端、管理系统扩展的价目页、测试；页面删去的项见扩展的 `audiencePricing` 改动）。
 - 页面：发起方向导确认步的"资金"一栏与"去充值"、发布页"预付款"、平台费账户"冻结在预付款中"；管理系统扩展的月报标签与 2180 列。
 - 测试：`PrepaymentIT`（5 例通过）、`PrepaymentRulesTest`；`AudiencePricingIT`、`AudienceBillingTest`、`NoDirectOwnerTest`、`SetupIT`、`ProcessAccessIT`、`AdminFinanceIT` 与 setup / publishing / payout / topup 场景快照已随之改（单独运行通过）；发起方页面 Vitest 1245、扩展 502 通过；`platformCheck` 无错误。
-- 文档：`operations.md` §7.46（原 §7.44，合并 F-C9 后顺延）、发起方手册底稿三语、`backend/quizbuks/CLAUDE.md`、规格与 §2.d 的删除说明、走查清单第 2′ 步；e2e `launch-loop.spec.ts` 第 2′ 步与 `wallet.ts` 的 `fund`（**未在本机运行**）。
+- 文档：`operations.md` §7.47（原 §7.44，合并 F-C9、F-C8、F-C7 后顺延）、发起方手册底稿三语、`backend/quizbuks/CLAUDE.md`、规格与 §2.d 的删除说明、走查清单第 2′ 步；e2e `launch-loop.spec.ts` 第 2′ 步与 `wallet.ts` 的 `fund`（**未在本机运行**）。
 
 **下一步（恢复后）**：
 1. 合并最新 `1.3/quizbuks`；跑模块全部测试与 `platformCheck`（暂停时全量运行被中止，未得结果）。

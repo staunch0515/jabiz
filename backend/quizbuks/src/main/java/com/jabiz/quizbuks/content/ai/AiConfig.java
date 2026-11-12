@@ -253,6 +253,11 @@ public class AiConfig {
     }
 
     @Bean
+    ProcessDefinition<SiteProfileProcesses.ReviewRef, AiProcesses.JobOutput, ProcessContext> qbSiteProfileReviewDone() {
+        return SiteProfileProcesses.reviewDone();
+    }
+
+    @Bean
     ProcessDefinition<SiteProfileProcesses.ReviewRef, AiProcesses.JobOutput, ProcessContext> qbSiteProfileReviewClose() {
         return SiteProfileProcesses.closeReview();
     }
