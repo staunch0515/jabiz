@@ -89,6 +89,11 @@ ALTER TABLE qb_fee_invoice ADD CONSTRAINT qb_fee_invoice_paid_amount CHECK (paid
     AND paid_amount + credit_applied <= total
     AND (status <> 'PAID' OR paid_amount + credit_applied = total)
     AND (status <> 'PARTIAL' OR (paid_amount + credit_applied > 0 AND paid_amount + credit_applied < total)));
+-- Paid by credit notes, in full or for the rest, an invoice is paid without a payment's posting (nothing was received).
+ALTER TABLE qb_fee_invoice DROP CONSTRAINT qb_fee_invoice_paid;
+ALTER TABLE qb_fee_invoice ADD CONSTRAINT qb_fee_invoice_paid CHECK ((status = 'PAID') = (paid_at IS NOT NULL
+        AND (payment_transaction_id IS NOT NULL OR credit_applied > 0))
+    OR status = 'VOID');
 
 -- A credit note's parts given back (negative) aim at it.
 ALTER TABLE qb_fee_payment_version DROP CONSTRAINT qb_fee_payment_version_target_entity_check;

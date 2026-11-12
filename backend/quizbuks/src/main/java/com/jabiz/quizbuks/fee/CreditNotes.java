@@ -422,10 +422,12 @@ public final class CreditNotes {
                 continue;
             }
             Object prepayment = payment.get("prepaymentId");
-            // Within one payment the fee credit was taken before the cash: the cash goes back first.
+            // At one time, a fee is paid from its prepayment before the account (QB_FEE_CHARGE), and within each the
+            // fee credit before the cash: the account's cash goes back first, the prepayment's fee credit last.
+            int order = (prepayment == null ? 2 : 0) + (credit ? 0 : 1);
             parts.add(new CreditNoteAllocation.Part(String.valueOf((Object) payment.get("subAccount")),
                 String.valueOf(lot), prepayment == null ? null : String.valueOf(prepayment),
-                FeeGate.money(payment.get("amount")), (Instant) payment.get("paidAt"), credit ? 0 : 1));
+                FeeGate.money(payment.get("amount")), (Instant) payment.get("paidAt"), order));
         }
         List<CreditNoteAllocation.Invoice> others = new ArrayList<>();
         for (EntityInstance other : FeeGate.list(ctx, UNPAID)) {
