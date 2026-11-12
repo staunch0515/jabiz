@@ -5962,7 +5962,7 @@
       "targetEntity" : "SysParam",
       "targetId" : null,
       "changeAction" : "UPSERT",
-      "changeValues" : "{\"paramKey\":\"qb.distribution.final.end-grace-sec\",\"valueKind\":{\"precision\":5,\"scale\":0,\"type\":\"numeric\"},\"value\":\"3600\",\"description\":\"How many seconds after a publication ended its final distribution settlement waits, so that every start before the end is counted (0 to 86400)\"}",
+      "changeValues" : "{\"paramKey\":\"qb.distribution.final.end-grace-sec\",\"valueKind\":{\"precision\":5,\"scale\":0,\"type\":\"numeric\"},\"value\":\"3600\",\"description\":\"How many seconds after a publication ended its final distribution settlement waits, so that every start before the end is counted (60 to 86400; less counts as 60)\"}",
       "targetKey" : "qb.distribution.final.end-grace-sec",
       "effectiveTime" : null,
       "reason" : "First value of the QuizBuks parameter, proposed by QB_SETUP",
