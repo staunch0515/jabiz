@@ -79,7 +79,7 @@ public final class FeeGate {
         return List.of(QbParams.FEE_OVERDUE_BLOCK, QbParams.FEE_DEFAULT_BILLING_MODE);
     }
 
-    static List<Object> ids(Object id) {
+    public static List<Object> ids(Object id) {
         List<Object> ids = new ArrayList<>();
         if (id != null) {
             ids.add(String.valueOf(id));
@@ -87,17 +87,17 @@ public final class FeeGate {
         return ids;
     }
 
-    static BigDecimal money(Object value) {
+    public static BigDecimal money(Object value) {
         return value == null ? BigDecimal.ZERO : new BigDecimal(value.toString());
     }
 
     @SuppressWarnings("unchecked")
-    static List<EntityInstance> list(ProcessContext ctx, String key) {
+    public static List<EntityInstance> list(ProcessContext ctx, String key) {
         List<EntityInstance> rows = (List<EntityInstance>) ctx.get(key);
         return rows == null ? List.of() : rows;
     }
 
-    static EntityInstance first(ProcessContext ctx, String key) {
+    public static EntityInstance first(ProcessContext ctx, String key) {
         List<EntityInstance> rows = list(ctx, key);
         return rows.isEmpty() ? null : rows.getFirst();
     }

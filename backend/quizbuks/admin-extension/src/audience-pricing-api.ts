@@ -1,10 +1,10 @@
 import { runProcess, runQuery } from '@jabiz/admin'
-import { AUDIENCE_DIRECT, AUDIENCE_PRICING, AUDIENCE_RULE_KEYS } from './ids'
+import { AUDIENCE_PRICING, AUDIENCE_RULE_KEYS } from './ids'
 
 /*
  * The audience rules and their price lists (Q47c, backend `audience.AudiencePricingProcesses`), typed by hand after
- * the records. Headquarters open, close and charge for the kinds of rule; each owner (headquarters' `direct`, an
- * operator) prices them by the day with a least fee. What a publication pays is the server's alone (its quote).
+ * the records. Headquarters open, close and charge for the kinds of rule; each operator (headquarters has no list of
+ * its own) prices them by the day with a least fee. What a publication pays is the server's alone (its quote).
  */
 
 type Row = Record<string, unknown>
@@ -78,7 +78,7 @@ function priceListOf(row: Row, owner: string): PriceList {
   }
 }
 
-/** Every owner's list (headquarters). */
+/** Every operator's list (headquarters). */
 export async function readPriceLists(): Promise<PriceList[]> {
   const answer = await runQuery<Row>(AUDIENCE_PRICING.pricesTemplate, { params: { owner: null }, limit: 500 })
   return (answer.items ?? []).map((row) => priceListOf(row, String(row.owner)))
@@ -98,9 +98,9 @@ export interface PricesInput {
   reason: string
 }
 
-/** Saves an owner's whole list (headquarters; `direct` for its own). */
+/** Saves an operator's whole list (headquarters; the owner is always an operator: headquarters has no list of its own). */
 export const savePriceList = (owner: string, input: PricesInput) =>
-  runProcess(AUDIENCE_PRICING.pricesSet, { owner: owner === AUDIENCE_DIRECT ? null : owner, ...input })
+  runProcess(AUDIENCE_PRICING.pricesSet, { owner, ...input })
 
 /** Saves the caller operator's whole list (its lead only: the server refuses the other members). */
 export const saveOwnPriceList = (input: PricesInput) =>

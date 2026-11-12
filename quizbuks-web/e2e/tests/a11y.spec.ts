@@ -1,6 +1,6 @@
 import type { APIRequestContext, Page } from '@playwright/test'
 import { signInAdmin, submittedPublication } from './admin'
-import { bookingMonthOf } from './finance'
+import { bookingMonthOf, expectOverviewAccounts } from './finance'
 import { completeQuiz, sponsor } from './content'
 import { approvedSponsor, livePublication } from './publishing'
 import { rewardingPublication, startAttempt, submitRight } from './transactions'
@@ -526,9 +526,7 @@ for (const appearance of ['light', 'dark'] as const) {
 
     await page.goto('/admin/qb/finance')
     await expect(page.getByTestId('finance-in-review')).toBeVisible()
-    // The extension's ACCOUNTS: Q9c's eight, Q87's four (cash accounts, fees receivable, fee revenue, tax), Q88b's
-    // entry fees unsettled (2170), F-M1's granted credit (2190) and F-M2's promotion expenses for it (5140).
-    await expect(page.getByTestId('finance-account')).toHaveCount(15)
+    await expectOverviewAccounts(page, request)
     await expect(page.getByTestId('finance-fee-account')).toHaveCount(2)
     if (appearance === 'dark') await expect(page.locator('html')).toHaveClass(/dark/)
     await expectAccessible(page, at('admin finance overview'))

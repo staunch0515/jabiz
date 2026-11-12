@@ -108,19 +108,30 @@ public final class FeeProcesses {
 
     /**
      * @param sponsorId the sponsor (their user id) charged
-     * @param kind      {@code MONTHLY} or {@code MANUAL}
+     * @param kind      {@code MONTHLY}, {@code MANUAL} or (F-M5) {@code AUDIENCE}
      * @param period    the month ({@code yyyy-MM}) the fee belongs to
      * @param amount    the fee before tax, in yen
      * @param reason    why (a manual fee); a monthly fee has none
      * @param sourceKey what the fee stands for (the monthly fee's month, a manual fee's request)
      * @param chargedBy who asked for it; null for a job
+     * @param operatorId F-M11: the operator the fee belongs to, given by the caller (a publication's fees: the one
+     *                  frozen at its submission); none: the sponsor's operator now
+     * @param prepaymentId F-M5: the prepayment it is paid from (a prepaid sponsor's; a postpaid one's only stops
+     *                  counting against the credit limit); none: paid from the account as fees arise
      */
     public record ChargeInput(@NotBlank @Size(max = 128) String sponsorId,
-        @NotBlank @Pattern(regexp = "MONTHLY|MANUAL") String kind,
+        @NotBlank @Pattern(regexp = "MONTHLY|MANUAL|AUDIENCE") String kind,
         @NotBlank @Pattern(regexp = "\\d{4}-\\d{2}") String period,
         @NotNull @DecimalMin("1") @DecimalMax(MAX_AMOUNT) @Digits(integer = 13, fraction = 0) BigDecimal amount,
         @Size(max = QbFees.REASON_LENGTH) String reason, @Size(max = QbFees.SOURCE_LENGTH) String sourceKey,
-        @Size(max = 128) String chargedBy) {}
+        @Size(max = 128) String chargedBy, @Size(max = 36) String operatorId, @Size(max = 36) String prepaymentId) {
+
+        /** A fee of the sponsor's current operator, paid from the account (the monthly fee, a fee by hand). */
+        public ChargeInput(String sponsorId, String kind, String period, BigDecimal amount, String reason,
+            String sourceKey, String chargedBy) {
+            this(sponsorId, kind, period, amount, reason, sourceKey, chargedBy, null, null);
+        }
+    }
 
     /** @param invoiceId the prepaid charge's invoice, if one was made; {@code paid} whether it is paid already */
     public record ChargeOutput(String chargeId, BigDecimal total, String billingMode, String invoiceId,
@@ -204,6 +215,8 @@ public final class FeeProcesses {
     static final String CHARGE_ID = "chargeId";
     static final String CHARGE_POSTING = "chargePosting";
     static final String SETTLEMENT = "settlement";
+    static final String PREPAYMENT = "prepayment";
+    static final String SETTLEMENT_REST = "settlementRest";
     static final String PAID_AMOUNT = "paidAmount";
     static final String CREDITS = "credits";
     static final String INVOICE_NO = "invoiceNo";
@@ -239,7 +252,10 @@ public final class FeeProcesses {
                 QueryEntities.query(QbAccounts.defaultDataset(QbAccounts.SPONSOR), ctx -> bySponsor("userId",
                     chargeInput(ctx).sponsorId()), SPONSOR),
                 QueryEntities.query(QbOperators.defaultDataset(QbOperators.ASSIGNMENT), ctx -> bySponsor("userId",
-                    chargeInput(ctx).sponsorId()), ASSIGNMENT)))
+                    chargeInput(ctx).sponsorId()), ASSIGNMENT),
+                // F-M5 (M2 of its review): a fee paid from a prepayment is paid as the prepayment was set aside.
+                QueryEntities.query(QbFeeAccount.defaultDataset(QbPrepayments.PREPAYMENT), ctx -> byId("prepaymentId",
+                    chargeInput(ctx).prepaymentId()), PREPAYMENT)))
             .compute("Check and record the charge", (metadata, ctx) -> insertCharge(ctx))
             // Written first: the posting names it as its source.
             .step("Save the charge", SaveChanges.now())
@@ -247,10 +263,25 @@ public final class FeeProcesses {
                 ctx -> chargePosting(ctx), CHARGE_POSTING))
             // D-Q87-5, F-M1: a prepaid sponsor pays as fees arise, from the fee credit and then the cash, as far as
             // they go (the rest stays owed on the charge's invoice).
-            .step("Pay the fee", CallProcess.<ProcessContext>when(ctx -> FeeRules.PREPAID.equals(ctx.get(BILLING_MODE)),
+            .step("Pay the fee", CallProcess.<ProcessContext>when(ctx -> FeeRules.PREPAID.equals(ctx.get(BILLING_MODE))
+                    && chargeInput(ctx).prepaymentId() == null,
                 FeeSettlement.SETTLE, 1, ctx -> new FeeSettlement.SettleInput(chargeInput(ctx).sponsorId(),
                     QbFees.CHARGE, (String) ctx.get(CHARGE_ID), ctx.get(TOTAL, BigDecimal.class),
                     reference(chargeInput(ctx))), SETTLEMENT))
+            // F-M5: a publication's fee is paid from what its submission set aside (a postpaid sponsor's prepayment
+            // only stops counting against the credit limit; the fee is owed as their other fees).
+            .step("Pay the fee from its prepayment", CallProcess.<ProcessContext>when(
+                ctx -> chargeInput(ctx).prepaymentId() != null, Prepayments.USE, 1,
+                ctx -> new Prepayments.UseInput(chargeInput(ctx).prepaymentId(), (String) ctx.get(CHARGE_ID),
+                    ctx.get(TOTAL, BigDecimal.class), reference(chargeInput(ctx))), SETTLEMENT))
+            // M1 of the F-M5 review: what the prepayment does not cover (the tax rate changed while it waited) is
+            // paid from the account in its order, as any prepaid fee; the rest stays owed on the same invoice.
+            .step("Pay the rest from the account", CallProcess.<ProcessContext>when(
+                ctx -> FeeRules.PREPAID.equals(ctx.get(BILLING_MODE)) && chargeInput(ctx).prepaymentId() != null
+                    && unpaid(ctx).signum() > 0,
+                FeeSettlement.SETTLE, 1, ctx -> new FeeSettlement.SettleInput(chargeInput(ctx).sponsorId(),
+                    QbFees.CHARGE, (String) ctx.get(CHARGE_ID), unpaid(ctx), reference(chargeInput(ctx))),
+                SETTLEMENT_REST))
             .step("Number the invoice", AssignNumber.<ProcessContext>when(
                 ctx -> FeeRules.PREPAID.equals(ctx.get(BILLING_MODE)), QbFees.INVOICE_SEQUENCE,
                 ctx -> yearOf(chargeInput(ctx).period()), INVOICE_NO))
@@ -281,12 +312,16 @@ public final class FeeProcesses {
         if (!problems.isEmpty()) {
             throw new BusinessRuleViolationException(problems);
         }
-        String billingMode = FeeRules.billingModeOf(sponsor.get("billingMode"),
-            params.get(QbParams.FEE_DEFAULT_BILLING_MODE, String.class));
-        EntityInstance assignment = first(ctx, ASSIGNMENT);
+        // M2 of the F-M5 review: a fee paid from a prepayment is billed as the prepayment was set aside (prepaid money,
+        // or postpaid credit), whatever the sponsor's billing is now: else a prepaid prepayment's fee would be on the
+        // month's postpaid invoice too, and a postpaid one's would be paid from the account.
+        EntityInstance prepayment = first(ctx, PREPAYMENT);
+        String billingMode = prepayment != null ? String.valueOf((Object) prepayment.get("mode"))
+            : FeeRules.billingModeOf(sponsor.get("billingMode"), params.get(QbParams.FEE_DEFAULT_BILLING_MODE,
+                String.class));
         Map<String, Object> values = new LinkedHashMap<>();
         values.put("sponsorId", input.sponsorId());
-        values.put("operatorId", assignment == null ? null : String.valueOf((Object) assignment.get("operatorId")));
+        values.put("operatorId", operatorOf(ctx));
         values.put("billingMode", billingMode);
         values.put("kind", input.kind());
         values.put("period", input.period());
@@ -301,6 +336,16 @@ public final class FeeProcesses {
         ctx.put(CHARGE_ID, String.valueOf(ctx.changes().insert(QbFees.CHARGE, values)));
         ctx.put(BILLING_MODE, billingMode);
         ctx.put(TOTAL, input.amount().add(tax));
+    }
+
+    /** F-M11: the operator given by the caller, else the sponsor's operator now. */
+    static String operatorOf(ProcessContext ctx) {
+        String given = chargeInput(ctx).operatorId();
+        if (given != null && !given.isBlank()) {
+            return given;
+        }
+        EntityInstance assignment = first(ctx, ASSIGNMENT);
+        return assignment == null ? null : String.valueOf((Object) assignment.get("operatorId"));
     }
 
     /** The fee as revenue owed: debit 1130 for the sponsor, credit 4120 the fee and 2150 the tax (none when 0). */
@@ -334,14 +379,33 @@ public final class FeeProcesses {
         }
         ChargeInput input = chargeInput(ctx);
         BigDecimal total = ctx.get(TOTAL, BigDecimal.class);
-        FeeSettlement.SettleOutput settled = ctx.get(SETTLEMENT, FeeSettlement.SettleOutput.class);
-        EntityInstance assignment = first(ctx, ASSIGNMENT);
-        Map<String, Object> values = chargeInvoice(ctx, input.sponsorId(),
-            assignment == null ? null : String.valueOf((Object) assignment.get("operatorId")), FeeRules.PREPAID,
+        FeeSettlement.SettleOutput settled = chargePaid(ctx);
+        Map<String, Object> values = chargeInvoice(ctx, input.sponsorId(), operatorOf(ctx), FeeRules.PREPAID,
             input.period(), (String) ctx.get(CHARGE_ID), input.amount(), total, settled,
             ctx.get(PARAMS, ParamValues.class).get(QbParams.FEE_DUE_DAYS, BigDecimal.class), zone);
         ctx.put(INVOICE_ID, String.valueOf(ctx.changes().insert(QbFees.INVOICE, values)));
         ctx.put(PAID_NOW, settled.paid().compareTo(total) >= 0);
+    }
+
+    /** What the prepayment's payment left unpaid of the charge. */
+    static BigDecimal unpaid(ProcessContext ctx) {
+        FeeSettlement.SettleOutput used = ctx.get(SETTLEMENT, FeeSettlement.SettleOutput.class);
+        return ctx.get(TOTAL, BigDecimal.class).subtract(used == null ? BigDecimal.ZERO : used.paid());
+    }
+
+    /**
+     * What paid the charge now: one payment, or (M1 of the F-M5 review) its prepayment's and the account's together,
+     * the later posting named.
+     */
+    static FeeSettlement.SettleOutput chargePaid(ProcessContext ctx) {
+        FeeSettlement.SettleOutput first = ctx.get(SETTLEMENT, FeeSettlement.SettleOutput.class);
+        if (!ctx.contains(SETTLEMENT_REST)) {
+            return first;
+        }
+        FeeSettlement.SettleOutput rest = ctx.get(SETTLEMENT_REST, FeeSettlement.SettleOutput.class);
+        return new FeeSettlement.SettleOutput(first.paid().add(rest.paid()), first.credit().add(rest.credit()),
+            first.cash().add(rest.cash()), rest.transactionId() != null ? rest.transactionId() : first.transactionId(),
+            rest.cashBalance(), rest.creditBalance());
     }
 
     /**

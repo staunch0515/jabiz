@@ -188,7 +188,7 @@ describe('FinanceOverviewPage', () => {
     expect(calledWith(TEMPLATE.financeSummary)[0][1].params.staleBefore).toMatch(/^\d{4}-\d{2}-\d{2}T/)
     const accounts = await screen.findAllByTestId('finance-account')
     expect(accounts.map((row) => row.dataset.code)).toEqual(['2110', '2120', '2130', '1110', '1120', '4110', '5110', '5120',
-      '2160', '1130', '4120', '2150', '2170', '2190', '5140'])
+      '2160', '1130', '4120', '2150', '2170', '2180', '2190', '5140'])
     expect(accounts[3]).toHaveTextContent('1110 Stripe balance')
     // Q88b: the entry fees paid and not yet settled.
     expect(screen.getByTestId('finance-entry-fees')).toHaveTextContent('120')
@@ -342,6 +342,18 @@ describe('ReconciliationPage', () => {
 })
 
 describe('ReportsPage', () => {
+  it('names the prepayment kinds and shows the 2180 column (F-M5)', async () => {
+    server.templates.set(TEMPLATE.monthly, [{ seq: 1, category: 'PREPAYMENT_FROZEN', transactionCount: 2, amount: 1650,
+      sponsorCash: 1650, feePrepayments: -1650 }])
+    renderAt('/qb/finance/reports?month=2026-10', '/qb/finance/reports', <ReportsPage />)
+    const monthly = screen.getByTestId('report-monthly')
+    const row = await within(monthly).findByTestId('monthly-row')
+    expect(row).toHaveAttribute('data-category', 'PREPAYMENT_FROZEN')
+    expect(row).toHaveTextContent('Prepayments set aside')
+    expect(within(monthly).getByText('2180')).toBeInTheDocument()
+    expect(row).toHaveTextContent('1,650')
+  })
+
   it('exports and issues the month of the address through the platform', async () => {
     renderAt('/qb/finance/reports?month=2026-10', '/qb/finance/reports', <ReportsPage />)
     expect(await screen.findByTestId('report-month')).toHaveValue('2026-10')

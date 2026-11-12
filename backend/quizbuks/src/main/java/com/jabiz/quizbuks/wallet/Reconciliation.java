@@ -163,7 +163,7 @@ public final class Reconciliation {
                 .step("Check the entry fees unsettled", RunTemplate.<ProcessContext>of(ENTRY_FEES_TEMPLATE,
                     ctx -> Map.of(), ENTRY_FEES))
                 .step("Compare the fee account", RunTemplate.<ProcessContext>of(FEE_ACCOUNT_TEMPLATE,
-                    ctx -> Map.of(), FEE_ACCOUNT))
+                    ctx -> Map.of("at", ctx.get(INPUT, ReconcileInput.class).scheduledTime()), FEE_ACCOUNT))
                 // The takers' cache follows by events: one found behind counts only when the previous run found them.
                 .step("Find the previous run", QueryEntities.<ProcessContext>of(defaultDataset(RUN_ENTITY_NAME),
                     ctx -> EntityQuery.builder().where(new QueryPredicate.Lt("scheduledTime",

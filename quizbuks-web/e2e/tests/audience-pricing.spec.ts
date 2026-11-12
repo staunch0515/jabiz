@@ -1,12 +1,13 @@
 import { signInAdmin } from './admin'
 import { contentAdmin } from './legal'
+import { ensureDefaultOperator } from './operators'
 import { fundedSponsor } from './play'
 import { expect, expectAccessible, PASSWORD, prepareQuizbuks, run, signIn, test, unique } from './support'
 
 /**
  * Audience rules as a product line (docs/quizbuks/plans/Q47c-audience-billing.md, Q47c-1): headquarters' rule
- * catalog and price lists in the administration, and the sponsor's wizard, which shows no prices while charging is
- * off (the end-to-end job never turns it on: the other tests' publications stay free).
+ * catalog and the operators' price lists in the administration, and the sponsor's wizard, which shows no prices
+ * while charging is off (the end-to-end job never turns it on: the other tests' publications stay free).
  */
 test.beforeEach(async ({ request }) => {
   await prepareQuizbuks(request)
@@ -25,8 +26,13 @@ test('headquarters manage the rules and their prices; the wizard stays free whil
   await page.getByTestId('audience-rules-save').click()
   await expect(page.getByText('The rules are saved.')).toBeVisible()
 
-  // Headquarters' own price list: a reason is required; the list is saved with it.
+  // An operator's price list, set by headquarters (F-M5 removed headquarters' own `direct` list): nothing is shown
+  // until an operator is chosen; a reason is required; the list is saved with it.
+  const operatorId = await ensureDefaultOperator(request)
   await page.goto('/admin/qb/audience/prices')
+  await expect(page.getByTestId('price-list-pick')).toBeVisible()
+  await expect(page.getByTestId('price-list-form')).toHaveCount(0)
+  await page.getByTestId('price-list-operator-id').fill(operatorId)
   await expect(page.getByTestId('price-list-form')).toBeVisible()
   await expectAccessible(page, 'admin audience prices')
   await page.getByTestId('price-list-reason').fill(unique('End-to-end prices '))

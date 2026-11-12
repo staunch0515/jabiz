@@ -14,14 +14,11 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 /**
  * F-S1: no "no operator is headquarters" owner is left. Every sponsor belongs to an operator, so nothing in the
- * backend owns rows as {@code "direct"} (prospecting, certifications). The audience price lists keep theirs until the
- * money part (F-M) replaces them, and only there.
+ * backend owns rows as {@code "direct"} (prospecting, certifications, and since F-M5 the audience price lists).
  */
 class NoDirectOwnerTest {
 
-    /** F-M removes these (the price lists of the audience rules and their fallback). */
-    private static final Set<String> UNTIL_F_M = Set.of("QbAudiencePricing.java", "AudiencePricingProcesses.java",
-        "AudienceBilling.java", "AudiencePricingConfig.java");
+    private static final Set<String> UNTIL_F_M = Set.of();
 
     @Test
     void theBackendHasNoDirectOwner() {
@@ -32,8 +29,7 @@ class NoDirectOwnerTest {
 
     @Test
     void theTemplatesHaveNoDirectOwner() {
-        assertThat(files(Path.of("src/main/resources/queries"), ".sql")).filteredOn(file -> !file.getFileName()
-            .toString().startsWith("audience-price")).allSatisfy(file -> assertThat(read(file)).as(file.toString())
+        assertThat(files(Path.of("src/main/resources/queries"), ".sql")).allSatisfy(file -> assertThat(read(file)).as(file.toString())
             .doesNotContain("'direct'").doesNotContainIgnoringCase("or direct (headquarters)"));
     }
 

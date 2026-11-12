@@ -364,6 +364,8 @@ export const ACCOUNTS = ['2110', '2120', '2130', '1110', '1120', '4110', '5110',
   '2160', '1130', '4120', '2150',
   // Q88b: the entry fees unsettled (until the daily job moves them to the sponsors' cash accounts).
   '2170',
+  // F-M5: the platform fees prepaid when a publication is submitted.
+  '2180',
   // F-M1: the sponsors' granted credit (platform fee Kudos); F-M2: its promotion expenses.
   '2190', '5140'] as const
 
@@ -784,9 +786,6 @@ export const SPONSOR_KIND = 'SPONSOR'
  * sponsor console's `qb/audience.ts`): a kind without a record is open and charged for.
  */
 export const AUDIENCE_RULE_KEYS = ['gender', 'age', 'occupation', 'interest'] as const
-
-/** The owner of headquarters' own price list (the sponsors no operator looks after). */
-export const AUDIENCE_DIRECT = 'direct'
 
 export const AUDIENCE_PRICING = {
   rulesSet: 'QB_AUDIENCE_RULES_SET',

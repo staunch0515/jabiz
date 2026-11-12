@@ -36,6 +36,8 @@ export const PUBLISHING_PROCESS = {
   delete: 'QB_PUBLICATION_DELETE',
   copy: 'QB_PUBLICATION_COPY',
   submit: 'QB_PUBLICATION_SUBMIT',
+  /** F-M5: what submitting would set aside, and whether the account holds it (writes nothing). */
+  fundsCheck: 'QB_PUBLICATION_FUNDS_CHECK',
   withdraw: 'QB_PUBLICATION_WITHDRAW',
   pause: 'QB_PUBLICATION_PAUSE',
   resume: 'QB_PUBLICATION_RESUME',
@@ -68,6 +70,8 @@ export const PUBLISHING_TEMPLATE = {
   rewardMethods: 'qb.sponsor.reward-methods',
   /** The sponsor's own mail server as the console shows it, never its password (Q29). */
   mailServer: 'qb.sponsor.mail-server',
+  /** F-M5: what a publication's submission set aside from the fee account, and what became of it. */
+  prepayments: 'qb.sponsor.publication-prepayments',
 } as const
 
 /** The sponsor's own rows of the publishing entities (read only; writing is the processes'). */
@@ -99,4 +103,6 @@ export const PUBLISHING_CODE = {
   changed: 'QB_PUBLICATION_CHANGED',
   /** It is no draft any more (submitted elsewhere): reload; it can no longer be changed. */
   notDraft: 'QB_PUBLICATION_NOT_DRAFT',
+  /** F-M5: the fee account does not hold what submitting sets aside. */
+  funds: 'QB_PUBLICATION_FUNDS',
 } as const

@@ -152,10 +152,13 @@ public final class QbFeeAccount {
         eb.field("paidAt", f -> f.physicalColumn("paid_at").immutable(true).required(true)
             .asTemporal(TemporalRole.EVENT_TIME));
         eb.field("transactionId", f -> f.physicalColumn("transaction_id").immutable(true).required(true).asText(64));
+        // F-M5: a charge paid from a prepayment names it (the part's lot is the one the prepayment was taken from).
+        eb.field("prepaymentId", f -> f.physicalColumn("prepayment_id").immutable(true).asText(36));
         eb.temporal(t -> t.allowScheduled(false).writeOnce());
         eb.listView("default", lv -> lv
             .columns("sponsorId", "targetEntity", "targetId", "subAccount", "amount", "paidAt")
-            .filters("sponsorId", "targetEntity", "targetId", "subAccount", "grantId", "cashLotId", "paidAt")
+            .filters("sponsorId", "targetEntity", "targetId", "subAccount", "grantId", "cashLotId", "prepaymentId",
+                "paidAt")
             .sorts("paidAt")
             .defaultSort("paidAt", false));
     });

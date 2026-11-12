@@ -50,6 +50,9 @@ export const financeMessages = {
       FEE_CREDIT_GRANTED: 'Platform fee Kudos granted',
       FEE_CREDIT_VOIDED: 'Platform fee Kudos expired and voided',
       OPERATOR_TRANSFER_TO_DIRECT: 'Operator account moved to its direct Sponsor',
+      PREPAYMENT_FROZEN: 'Prepayments set aside',
+      PREPAYMENT_USED: 'Fees paid from prepayments',
+      PREPAYMENT_RELEASED: 'Prepayments given back',
       OTHER: 'Other postings',
     },
     overview: {
@@ -367,6 +370,9 @@ export const financeMessages = {
       FEE_CREDIT_GRANTED: '赠送平台费 Kudos',
       FEE_CREDIT_VOIDED: '平台费 Kudos 到期作废',
       OPERATOR_TRANSFER_TO_DIRECT: '运营商账户转给直营发起方',
+      PREPAYMENT_FROZEN: '预付款冻结',
+      PREPAYMENT_USED: '自预付款支付的费用',
+      PREPAYMENT_RELEASED: '预付款退回',
       OTHER: '其他分录',
     },
     overview: {
@@ -684,6 +690,9 @@ export const financeMessages = {
       FEE_CREDIT_GRANTED: '利用料クドスの付与',
       FEE_CREDIT_VOIDED: '利用料クドスの期限切れ失効',
       OPERATOR_TRANSFER_TO_DIRECT: '運営パートナー口座から直営主催者への振替',
+      PREPAYMENT_FROZEN: '前払金の確保',
+      PREPAYMENT_USED: '前払金からの支払い',
+      PREPAYMENT_RELEASED: '前払金の返却',
       OTHER: 'その他の仕訳',
     },
     overview: {

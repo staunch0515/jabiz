@@ -69,6 +69,7 @@ Once verified, the onboarding granted credit you received is topped up to the ve
 
 - Wallet (/sponsor/wallet): your Kudos pay the rewards of your publications. Top up to keep them running (by card, or by bank transfer where it is offered). Your cash account holds money you turn into Kudos when needed; pay open invoices of fees from it.
 - Moved here by your operator (an operator's direct Sponsor only): your operator's lead may move money from the operator's account into your platform fee account, shown as "From the operator". It pays platform fees only (after any granted platform fee Kudos); it cannot be turned into Kudos or withdrawn.
+- Prepayments: when you submit a publication, the fees it will be charged (today the audience rules) are set aside from your platform fee account as a prepayment (granted credit first, then cash). If the account is short, the submission does not go through; the "Funds" part of the wizard's last step lists each amount and the shortfall, with a "Top up" link. A prepayment is not a fee: it all comes back when the publication returns to its draft (withdrawn, rejected or its review expired), and what is left comes back within a day after it ends; what goes back to granted credit that has expired is voided at once. The publication's "Prepayment" section and the "Held in prepayments" line of the platform fee account show what is set aside.
 - Transactions (/sponsor/transactions): every movement, receipts and invoices; exportable.
 
 ## Settings and messages
