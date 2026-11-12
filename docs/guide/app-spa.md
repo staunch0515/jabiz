@@ -124,6 +124,14 @@ export default defineConfig({
   版本与平台前端相同（`app:check` 检查）。辅助函数不加载 `@playwright/test`，用的是你交给它的 `expect`；只要违规列表时用 `accessibilityViolations(page)`。
   Vitest 中预设把 `vitest`、`vitest-axe` 指向 SPA 自己的副本。示范门户：`src/a11y.test.tsx`（Vitest）与 `e2e/a11y.spec.ts`（Playwright 示例，以 `tsconfig.e2e.json`
   做类型检查；Vitest 的 `include` 只取 `src/**/*.test.*`，不运行它）。
+  **浏览器的版本**：Playwright 只配套它自带的 Chromium（`@playwright/test` 1.56.1 配 build 1194，CI 用 `pnpm exec playwright install --with-deps chromium` 安装）。本机用 `E2E_CHROMIUM` 指向更新的 Chromium（如容器预装的 build 1243，Chromium 153）不是受支持的组合：在 `sandbox=""` 的邮件预览 frame 中（管理系统的 `/mail/layout`、`/mail/texts/edit`），注入的 `setTimeout` 与 `requestAnimationFrame` 永不触发，`AxeBuilder.analyze()` 一直等到测试超时，最后报的 `browserContext.newPage: Target page, context or browser has been closed` 只是超时之后的结果。本机应装配套的浏览器，不设 `E2E_CHROMIUM`；不想动预装的浏览器时装到单独的目录：
+
+  ```bash
+  export PLAYWRIGHT_BROWSERS_PATH=$HOME/.cache/ms-playwright-1.56   # 单独的目录，每次运行 e2e 前同样设置
+  pnpm exec playwright install chromium                             # 在 e2e 所在目录执行，装的是该目录 @playwright/test 配套的版本
+  unset E2E_CHROMIUM
+  pnpm e2e
+  ```
 
 ## 5. 入口、会话与页面
 
