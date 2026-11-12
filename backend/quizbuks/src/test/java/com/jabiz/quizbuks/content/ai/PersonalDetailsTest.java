@@ -37,7 +37,7 @@ class PersonalDetailsTest {
         "Size 10-20-300 mm", "2020-2021-2022 seasons", "price 1.200.500", "型番 AB 12-345-6789", "Date 2026-01-31",
         "Founded in 1998, 2004 and 2010", "Order 1234567890", "x0312345678y", "Version 0.9.1", "Weight 0.5 kg, 10 cm",
         "Code AB-0312345678", "https://example.com/0312345678", "¥1,200,500", "Room 301 and 302",
-        "2026.01.31 03.12.34", "2025.04.01-2026.03.31", "LINE: 毎日更新", "Twitter: フォロー歓迎"})
+        "2026.01.31 03.12.34", "03/04/2026 - 05/06/2026", "01.04.2026 - 30.09.2026", "Open 01.04.2026 - 30.09.2026 daily", "2025.04.01-2026.03.31", "LINE: 毎日更新", "Twitter: フォロー歓迎"})
     void ordinaryNumbersAreNotTouched(String text) {
         PersonalDetails.Cleaned cleaned = PersonalDetails.clean(text);
         assertThat(cleaned.changed()).isFalse();

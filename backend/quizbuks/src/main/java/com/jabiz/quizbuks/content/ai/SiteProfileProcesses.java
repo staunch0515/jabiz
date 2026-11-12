@@ -425,7 +425,7 @@ public final class SiteProfileProcesses {
         return ProcessDefinition.define(CLOSE_REVIEW, 1, ReviewRef.class, AiProcesses.JobOutput.class,
             ProcessContext.class, pb -> pb
                 .description("Closes the request to a sponsor to review the draft from their website.")
-                .permissions(QbPermissions.AI_USE)
+                .permissions(QbPermissions.AI_SYSTEM)
                 .subProcessOnly()
                 .contextFactory(AiProcesses::context)
                 .outputMapper(ctx -> new AiProcesses.JobOutput(ctx.get(AiProcesses.INPUT, ReviewRef.class).aiJobId(),

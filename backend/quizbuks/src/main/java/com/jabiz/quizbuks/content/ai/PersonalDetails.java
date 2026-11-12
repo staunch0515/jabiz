@@ -126,7 +126,7 @@ public final class PersonalDetails {
         int i = 0;
         while (i < text.length()) {
             int end = starts(text, i) ? phoneEnd(text, i) : -1;
-            if (end > i) {
+            if (end > i && !hasYear(text, i, end)) {
                 i = end;
             } else {
                 out.append(text.charAt(i++));
@@ -214,6 +214,25 @@ public final class PersonalDetails {
             i = j;
         }
         return best;
+    }
+
+    private static final Pattern YEAR = Pattern.compile("(?<!\\d)(?:19|20)\\d{2}(?!\\d)");
+
+    /**
+     * Whether the run holds a four-digit year (19xx, 20xx) written with slashes or dots, as in a date or a period
+     * ({@code 03/04/2026 - 05/06/2026}, {@code 01.04.2026 - 30.09.2026}): not a number.
+     */
+    private static boolean hasYear(String text, int from, int to) {
+        Matcher year = YEAR.matcher(text.substring(from, to));
+        while (year.find()) {
+            String run = text.substring(from, to);
+            boolean before = year.start() > 0 && "/.".indexOf(run.charAt(year.start() - 1)) >= 0;
+            boolean after = year.end() < run.length() && "/.".indexOf(run.charAt(year.end())) >= 0;
+            if (before || after) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private static boolean digit(char c) {
