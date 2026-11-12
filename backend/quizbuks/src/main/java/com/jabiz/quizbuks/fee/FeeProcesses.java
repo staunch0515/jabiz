@@ -224,6 +224,7 @@ public final class FeeProcesses {
     static final String INVOICE = "invoice";
     static final String FOUND = "found";
     static final String BILLING_MODE = "billingMode";
+    static final String MONTH_INVOICE = "monthInvoice";
     static final String TOTAL = "total";
     static final String PAID_NOW = "paidNow";
     static final String CASH_AFTER = "cashAfter";
@@ -255,8 +256,14 @@ public final class FeeProcesses {
                     chargeInput(ctx).sponsorId()), ASSIGNMENT),
                 // F-M5 (M2 of its review): a fee paid from a prepayment is paid as the prepayment was set aside.
                 QueryEntities.query(QbFeeAccount.defaultDataset(QbPrepayments.PREPAYMENT), ctx -> byId("prepaymentId",
-                    chargeInput(ctx).prepaymentId()), PREPAYMENT)))
-            .compute("Check and record the charge", (metadata, ctx) -> insertCharge(ctx))
+                    chargeInput(ctx).prepaymentId()), PREPAYMENT),
+                // F-M6 (§9.6, N3): the month's postpaid invoice, if issued already (in the same statement).
+                QueryEntities.query(QbFees.defaultDataset(QbFees.INVOICE), ctx -> EntityQuery.builder()
+                    .where(new QueryPredicate.And(List.of(
+                        new QueryPredicate.Eq("sponsorId", chargeInput(ctx).sponsorId()),
+                        new QueryPredicate.Eq("period", chargeInput(ctx).period()),
+                        new QueryPredicate.IsNull("chargeId")))).limit(1).build(), MONTH_INVOICE)))
+            .compute("Check and record the charge", (metadata, ctx) -> insertCharge(ctx, zone))
             // Written first: the posting names it as its source.
             .step("Save the charge", SaveChanges.now())
             .step("Post the fee", CallProcess.<ProcessContext>of(LedgerProcesses.POST, 1,
@@ -291,7 +298,7 @@ public final class FeeProcesses {
                 QbFees.INVOICE_ISSUED_EVENT, FeeProcesses::invoicePayload)));
     }
 
-    static void insertCharge(ProcessContext ctx) {
+    static void insertCharge(ProcessContext ctx, ZoneId zone) {
         ChargeInput input = chargeInput(ctx);
         ParamValues params = ctx.get(PARAMS, ParamValues.class);
         List<Violation> problems = new ArrayList<>();
@@ -319,12 +326,16 @@ public final class FeeProcesses {
         String billingMode = prepayment != null ? String.valueOf((Object) prepayment.get("mode"))
             : FeeRules.billingModeOf(sponsor.get("billingMode"), params.get(QbParams.FEE_DEFAULT_BILLING_MODE,
                 String.class));
+        // F-M6 (§9.6): a postpaid fee of a month whose invoice is out already (a settlement run late) goes on the
+        // invoice of the month it is charged in; the invoice is issued under the same wallet lock, so they never cross.
+        String period = FeeRules.POSTPAID.equals(billingMode) && first(ctx, MONTH_INVOICE) != null
+            ? FeeRules.period(ctx.opTime(), zone) : input.period();
         Map<String, Object> values = new LinkedHashMap<>();
         values.put("sponsorId", input.sponsorId());
         values.put("operatorId", operatorOf(ctx));
         values.put("billingMode", billingMode);
         values.put("kind", input.kind());
-        values.put("period", input.period());
+        values.put("period", period);
         values.put("amount", input.amount());
         values.put("taxRate", rate);
         values.put("tax", tax);

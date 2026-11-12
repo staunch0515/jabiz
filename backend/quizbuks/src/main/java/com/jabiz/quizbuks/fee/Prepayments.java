@@ -107,9 +107,19 @@ public final class Prepayments {
     /** @param chargeId the fee charged; none when nothing was set aside for it */
     public record ChargeOutput(String chargeId) {}
 
+    /**
+     * @param purpose F-M6 (§9.7): only the prepayment of this purpose; none: all of the publication's (back to its
+     *                draft). The distribution fee's goes back only once the publication has its final settlement.
+     */
     public record ReleaseInput(@NotBlank @Size(max = 128) String sponsorId,
         @NotBlank @Size(max = 36) String publicationId,
-        @NotBlank @Pattern(regexp = "WITHDRAWN|REJECTED|REVIEW_EXPIRED|ENDED") String reason) {}
+        @NotBlank @Pattern(regexp = "WITHDRAWN|REJECTED|REVIEW_EXPIRED|ENDED") String reason,
+        @Pattern(regexp = "DISTRIBUTION|EXPOSURE|AUDIENCE|AI") String purpose) {
+
+        public ReleaseInput(String sponsorId, String publicationId, String reason) {
+            this(sponsorId, publicationId, reason, null);
+        }
+    }
 
     /**
      * @param released what went back (credit and cash)
@@ -119,8 +129,10 @@ public final class Prepayments {
      */
     public record ReleaseOutput(BigDecimal released, BigDecimal credit, BigDecimal voided, BigDecimal cash) {}
 
+    /** One item of the daily job: a publication's prepayment of one purpose (F-M6, §9.7). */
     public record ReleaseRef(@NotBlank @Size(max = 36) String publicationId,
-        @NotBlank @Size(max = 128) String sponsorId) {}
+        @NotBlank @Size(max = 128) String sponsorId,
+        @NotBlank @Pattern(regexp = "DISTRIBUTION|EXPOSURE|AUDIENCE|AI") String purpose) {}
 
     static final String INPUT = "input";
     static final String CREDITS = "credits";
@@ -148,6 +160,7 @@ public final class Prepayments {
     static final String RELEASE_OUTPUT = "releaseOutput";
     static final String PUBLICATION = "publication";
     static final String RELEASE_CALL = "releaseCall";
+    static final String FINAL_SETTLEMENT = "finalSettlement";
 
     private Prepayments() {}
 
@@ -455,10 +468,15 @@ public final class Prepayments {
                 .outputMapper(ctx -> ctx.get(RELEASE_OUTPUT, ReleaseOutput.class))
                 .step("Read the prepayments and the wallets", QueryEntities.<ProcessContext>all(
                     QueryEntities.query(QbFeeAccount.defaultDataset(QbPrepayments.PREPAYMENT), ctx -> EntityQuery
-                        .builder().where(new QueryPredicate.And(List.of(
-                            new QueryPredicate.In("publicationId", List.of(releaseInput(ctx).publicationId())),
-                            new QueryPredicate.Eq("status", QbPrepayments.OPEN))))
+                        .builder().where(new QueryPredicate.And(releaseConditions(releaseInput(ctx))))
                         .limit(MAX_PER_PUBLICATION).build(), PREPAYMENTS),
+                    // F-M6 (§9.7): the distribution fee's deposit goes back only after the final settlement, read
+                    // again here under the lock (the settlement in this transaction wrote it first).
+                    QueryEntities.query(QbDistributions.defaultDataset(QbDistributions.SETTLEMENT), ctx -> EntityQuery
+                        .builder().where(new QueryPredicate.And(List.of(
+                            new QueryPredicate.In("publicationId", QbPrepayments.DISTRIBUTION.equals(
+                                releaseInput(ctx).purpose()) ? List.of(releaseInput(ctx).publicationId()) : List.of()),
+                            new QueryPredicate.Eq("final", true)))).limit(1).build(), FINAL_SETTLEMENT),
                     QueryEntities.query(QbWallets.defaultDataset(QbWallets.WALLET),
                         ctx -> QbWallets.query(QbWallets.CASH, releaseInput(ctx).sponsorId()), CASH_WALLET),
                     QueryEntities.query(QbWallets.defaultDataset(QbWallets.WALLET),
@@ -482,6 +500,17 @@ public final class Prepayments {
                 .step("Void what went back to expired fee credit", CallProcess.<ProcessContext>forEach(
                     LedgerProcesses.POST, 1, ctx -> ctx.contains(VOIDS) ? (List<?>) ctx.get(VOIDS) : List.of(),
                     VOIDED)));
+    }
+
+    /** The open prepayments a release reads: the publication's, of one purpose when given. */
+    static List<QueryPredicate> releaseConditions(ReleaseInput input) {
+        List<QueryPredicate> conditions = new ArrayList<>(List.of(
+            new QueryPredicate.In("publicationId", List.of(input.publicationId())),
+            new QueryPredicate.Eq("status", QbPrepayments.OPEN)));
+        if (input.purpose() != null) {
+            conditions.add(new QueryPredicate.Eq("purpose", input.purpose()));
+        }
+        return conditions;
     }
 
     static List<Object> prepaymentIds(ProcessContext ctx) {
@@ -510,6 +539,13 @@ public final class Prepayments {
         }
         List<Release> plan = new ArrayList<>();
         List<LedgerProcesses.PostInput> posts = new ArrayList<>();
+        if (QbPrepayments.DISTRIBUTION.equals(releaseInput(ctx).purpose())
+            && FeeGate.first(ctx, FINAL_SETTLEMENT) == null) {
+            // Not settled to its end yet: a settlement may still need it (§9.7).
+            ctx.put(PLAN, List.of());
+            ctx.put(POSTS, List.of());
+            return;
+        }
         for (EntityInstance prepayment : FeeGate.list(ctx, PREPAYMENTS)) {
             List<Held> back = new ArrayList<>();
             if (QbPrepayments.PREPAID.equals(prepayment.get("mode"))) {
@@ -677,7 +713,7 @@ public final class Prepayments {
                             publication.get("status"))
                         && releaseRef(ctx).sponsorId().equals(String.valueOf((Object) publication.get("publisherId")))) {
                         ctx.put(RELEASE_CALL, new ReleaseInput(releaseRef(ctx).sponsorId(),
-                            releaseRef(ctx).publicationId(), QbPrepayments.ENDED));
+                            releaseRef(ctx).publicationId(), QbPrepayments.ENDED, releaseRef(ctx).purpose()));
                     }
                 })
                 .step("Release", CallProcess.<ProcessContext>when(ctx -> ctx.contains(RELEASE_CALL), RELEASE, 1,

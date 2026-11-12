@@ -144,8 +144,9 @@ public class FeeConfig {
 
     /**
      * Every day ({@code quizbuks.prepayment.release-cron}, {@code QB_PREPAYMENT_RELEASE_CRON}; 03:23 in the fiscal
-     * year's zone): what ended publications' prepayments still hold goes back (F-M5: "within a day of the end"; F-M6
-     * adds "after its last settlement" to the template), at most {@code quizbuks.prepayment.release-max-items} a run.
+     * year's zone): what ended publications' prepayments still hold goes back (F-M5: "within a day of the end"; F-M6:
+     * one item a publication and purpose, the distribution fee's deposit only after its final settlement), at most
+     * {@code quizbuks.prepayment.release-max-items} a run.
      */
     @Bean
     JobDefinition<Prepayments.ReleaseRef> qbPrepaymentReleaseJob(
@@ -156,10 +157,10 @@ public class FeeConfig {
         int maxItems) {
         return JobDefinition.forEach(Prepayments.RELEASE_JOB, cron, zone,
                 JobItems.template(Prepayments.RELEASE_DUE_TEMPLATE, scheduledTime -> Map.of("at", scheduledTime),
-                    "publicationId"),
+                    "prepaymentId"),
                 qbPrepaymentReleaseItem,
                 (scheduledTime, row) -> new Prepayments.ReleaseRef(String.valueOf(row.get("publicationId")),
-                    String.valueOf(row.get("sponsorId"))))
+                    String.valueOf(row.get("sponsorId")), String.valueOf(row.get("purpose"))))
             .maxItems(maxItems);
     }
 
@@ -585,17 +586,65 @@ public class FeeConfig {
             .maxItems(10_000);
     }
 
-    /** The postpaid invoices, issued on the 2nd at 01:17 (Japan) for the month that ended. */
+    /**
+     * The postpaid invoices (F-M6, F-M.md §9.6): every day at 01:17 in the fiscal year's zone except the 1st (the monthly
+     * distribution settlement on the 2nd at 00:37 comes first), each sponsor's earliest month that ended with postpaid
+     * fees not invoiced and every distribution fee due for it settled.
+     */
     @Bean
     JobDefinition<FeeProcesses.InvoiceInput> qbFeeInvoiceJob(
         ProcessDefinition<FeeProcesses.InvoiceInput, FeeProcesses.ItemOutput, ProcessContext> qbFeeInvoiceItem) {
-        return JobDefinition.forEach(FeeProcesses.INVOICE_JOB, "0 17 16 1 * *", ZoneOffset.UTC,
+        return JobDefinition.forEach(FeeProcesses.INVOICE_JOB, "0 17 1 2-31 * *", zone,
                 JobItems.template(FeeProcesses.INVOICES_DUE_TEMPLATE,
-                    scheduledTime -> Map.of("period", previousPeriod(scheduledTime)), "sponsorId"),
+                    scheduledTime -> Map.of("current", FeeRules.period(scheduledTime, zone), "zone", zone.getId()),
+                    "sponsorId"),
                 qbFeeInvoiceItem,
                 (scheduledTime, row) -> new FeeProcesses.InvoiceInput(String.valueOf(row.get("sponsorId")),
-                    previousPeriod(scheduledTime)))
+                    String.valueOf(row.get("period"))))
             .maxItems(10_000);
+    }
+
+    /** F-M6: a publication's distribution fee settled for a month (the item of both jobs). */
+    @Bean
+    ProcessDefinition<DistributionSettlements.SettleRef, FeeProcesses.ItemOutput, ProcessContext>
+        qbDistributionSettle() {
+        return DistributionSettlements.settle(zone);
+    }
+
+    /** F-M6: the distribution fees of the month that ended, on the 2nd at 00:37 in the fiscal year's zone. */
+    @Bean
+    JobDefinition<DistributionSettlements.SettleRef> qbDistributionMonthlyJob(
+        ProcessDefinition<DistributionSettlements.SettleRef, FeeProcesses.ItemOutput, ProcessContext>
+            qbDistributionSettle,
+        @Value("${quizbuks.distribution.monthly-cron:0 37 0 2 * *}") String cron) {
+        return JobDefinition.forEach(DistributionSettlements.MONTHLY_JOB, cron, zone,
+                JobItems.template(DistributionSettlements.DUE_TEMPLATE, scheduledTime -> {
+                    String period = previousPeriod(scheduledTime);
+                    return Map.of("period", period, "periodStart", FeeRules.periodStart(period, zone),
+                        "periodEnd", FeeRules.periodStart(FeeRules.period(scheduledTime, zone), zone));
+                }, "publicationId"),
+                qbDistributionSettle,
+                (scheduledTime, row) -> new DistributionSettlements.SettleRef(String.valueOf(row.get("publicationId")),
+                    String.valueOf(row.get("sponsorId")), previousPeriod(scheduledTime), false))
+            .maxItems(100_000);
+    }
+
+    /**
+     * F-M6: the final settlement of the publications that ended, every day at 03:07 in the fiscal year's zone (before
+     * the prepayments' release at 03:23).
+     */
+    @Bean
+    JobDefinition<DistributionSettlements.SettleRef> qbDistributionFinalJob(
+        ProcessDefinition<DistributionSettlements.SettleRef, FeeProcesses.ItemOutput, ProcessContext>
+            qbDistributionSettle,
+        @Value("${quizbuks.distribution.final-cron:0 7 3 * * *}") String cron) {
+        return JobDefinition.forEach(DistributionSettlements.FINAL_JOB, cron, zone,
+                JobItems.template(DistributionSettlements.FINAL_DUE_TEMPLATE,
+                    scheduledTime -> Map.of("at", scheduledTime), "publicationId"),
+                qbDistributionSettle,
+                (scheduledTime, row) -> new DistributionSettlements.SettleRef(String.valueOf(row.get("publicationId")),
+                    String.valueOf(row.get("sponsorId")), null, true))
+            .maxItems(100_000);
     }
 
     /** Every day at 02:37 (Japan): the invoices past their due day whose reminder is due. */
