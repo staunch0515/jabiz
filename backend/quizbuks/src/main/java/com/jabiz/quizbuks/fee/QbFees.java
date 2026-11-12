@@ -43,6 +43,8 @@ public final class QbFees {
     public static final String REVIEW = "REVIEW";
     public static final String DONE = "DONE";
     public static final String REJECTED = "REJECTED";
+    /** F-M7 (N8): approved, but not done as approved (a credit note the fee no longer allows): finance asks again. */
+    public static final String FAILED = "FAILED";
     /** The approval subject of the requests, and its rule (proposed by {@code QB_SETUP}). */
     public static final String APPROVAL_SUBJECT = "qb.fee-request";
     public static final String REVIEW_RULE = "qb.fee-request.review";
@@ -212,7 +214,7 @@ public final class QbFees {
         eb.field("reason", f -> f.physicalColumn("reason").immutable(true).required(true).processOnly()
             .asText(REASON_LENGTH, true));
         eb.field("status", f -> f.physicalColumn("status").required(true).processOnly()
-            .asCode(REQUEST_STATUS_DICTIONARY, REVIEW, DONE, REJECTED));
+            .asCode(REQUEST_STATUS_DICTIONARY, REVIEW, DONE, REJECTED, FAILED));
         eb.field("requestedBy", f -> f.physicalColumn("requested_by").immutable(true).required(true).processOnly()
             .asText(128));
         eb.field("requestedAt", f -> f.physicalColumn("requested_at").immutable(true).required(true).processOnly()
@@ -226,7 +228,7 @@ public final class QbFees {
         eb.field("version", f -> f.physicalColumn("version").asVersion());
         eb.stateTransitions("status", st -> st
             .initial(REVIEW)
-            .from(REVIEW).to(DONE, REJECTED));
+            .from(REVIEW).to(DONE, REJECTED, FAILED));
         eb.listView("default", lv -> lv
             .columns("kind", "sponsorId", "amount", "invoiceId", "status", "requestedBy", "requestedAt")
             .filters("kind", "sponsorId", "status", "requestedAt", "invoiceId")

@@ -108,6 +108,11 @@ CREATE INDEX qb_prepayment_refund_due_idx ON qb_prepayment (purpose, charged_at)
 ALTER TABLE qb_fee_request DROP CONSTRAINT qb_fee_request_kind_check;
 ALTER TABLE qb_fee_request ADD CONSTRAINT qb_fee_request_kind_check
     CHECK (kind IN ('MANUAL', 'VOID', 'CREDIT', 'CREDIT_NOTE'));
+-- Approved but not done as approved (N8: a note the fee no longer allows; a void of an invoice a note was issued on
+-- since): finance asks again.
+ALTER TABLE qb_fee_request DROP CONSTRAINT qb_fee_request_status_check;
+ALTER TABLE qb_fee_request ADD CONSTRAINT qb_fee_request_status_check
+    CHECK (status IN ('REVIEW', 'DONE', 'REJECTED', 'FAILED'));
 ALTER TABLE qb_fee_request DROP CONSTRAINT qb_fee_request_kind;
 ALTER TABLE qb_fee_request
     ADD COLUMN credited_charge_id varchar(36),

@@ -176,6 +176,35 @@ public class FeeConfig {
             .maxItems(maxItems);
     }
 
+    /** F-M7: the item that decides an audience fee's unused days once. */
+    @Bean
+    ProcessDefinition<AudienceRefundJob.Ref, FeeProcesses.ItemOutput, ProcessContext> qbAudienceRefundItem() {
+        return AudienceRefundJob.item();
+    }
+
+    /**
+     * F-M7 (§10.3-6): every day ({@code quizbuks.audience-refund.cron}, {@code QB_AUDIENCE_REFUND_CRON}; 03:37 in the
+     * fiscal year's zone, after the distribution fee's final settlements at 03:07 and the prepayments' release at
+     * 03:23), the audience fees of publications that ended and are not decided yet, at most
+     * {@code quizbuks.audience-refund.max-items} a run.
+     */
+    @Bean
+    JobDefinition<AudienceRefundJob.Ref> qbAudienceRefundJob(
+        ProcessDefinition<AudienceRefundJob.Ref, FeeProcesses.ItemOutput, ProcessContext> qbAudienceRefundItem,
+        @org.springframework.beans.factory.annotation.Value("${quizbuks.audience-refund.cron:0 37 3 * * *}")
+        String cron,
+        @org.springframework.beans.factory.annotation.Value("${quizbuks.audience-refund.max-items:10000}")
+        int maxItems) {
+        return JobDefinition.forEach(AudienceRefundJob.JOB, cron, zone,
+                JobItems.template(AudienceRefundJob.DUE_TEMPLATE, scheduledTime -> Map.of("at", scheduledTime),
+                    "prepaymentId"),
+                qbAudienceRefundItem,
+                (scheduledTime, row) -> new AudienceRefundJob.Ref(String.valueOf(row.get("prepaymentId")),
+                    String.valueOf(row.get("publicationId")), String.valueOf(row.get("sponsorId")),
+                    AudienceRefundJob.instant(row.get("endedAt"))))
+            .maxItems(maxItems);
+    }
+
     /** F-M6: the operators' distribution prices and the publications' settlements. */
     @Bean
     EntityDefinition qbDistributionPriceEntity() {
@@ -416,7 +445,8 @@ public class FeeConfig {
         return StaticDictionary.define(QbFees.REQUEST_STATUS_DICTIONARY, d -> d
             .item(QbFees.REVIEW, "en", "Awaiting approval", "zh", "待批准", "ja", "承認待ち")
             .item(QbFees.DONE, "en", "Done", "zh", "已执行", "ja", "実行済み")
-            .item(QbFees.REJECTED, "en", "Rejected", "zh", "已拒绝", "ja", "却下"));
+            .item(QbFees.REJECTED, "en", "Rejected", "zh", "已拒绝", "ja", "却下")
+            .item(QbFees.FAILED, "en", "Not done", "zh", "未能执行", "ja", "実行できず"));
     }
 
     /** {@code QBF-2026-00001}: one count per year, without gaps. */
