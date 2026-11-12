@@ -64,6 +64,7 @@ WITH tx AS (
     SELECT t.{{LedgerTransaction.transactionId}}         AS tx_key,
            t.{{LedgerTransaction.sourceEntity}}          AS src,
            left(coalesce(t.{{LedgerTransaction.reference}}, ''), 3) AS ref_kind,
+           coalesce(t.{{LedgerTransaction.reference}}, '') AS ref,
            t.{{LedgerTransaction.reversesTransactionId}} IS NOT NULL AS reversal
     FROM {{LedgerTransaction}} t
     WHERE t.{{LedgerTransaction.bookingTime}} >= :from
@@ -71,7 +72,7 @@ WITH tx AS (
       AND (CAST(:knownAt AS timestamptz) IS NULL OR t.{{LedgerTransaction.createdTime}} <= :knownAt)
 ),
 moves AS (
-    SELECT tx.tx_key, tx.src, tx.ref_kind, tx.reversal,
+    SELECT tx.tx_key, tx.src, tx.ref_kind, tx.ref, tx.reversal,
            a.{{LedgerAccount.accountCode}} AS code,
            CASE WHEN e.{{LedgerEntry.direction}} = 'DEBIT' THEN e.{{LedgerEntry.amount}}
                 ELSE -e.{{LedgerEntry.amount}} END AS net,
@@ -81,7 +82,7 @@ moves AS (
     JOIN {{LedgerAccount}} a ON a.{{LedgerAccount.accountId}} = e.{{LedgerEntry.accountId}}
 ),
 per_tx AS (
-    SELECT tx_key, src, ref_kind, reversal,
+    SELECT tx_key, src, ref_kind, ref, reversal,
            sum(debit) AS gross,
            string_agg(DISTINCT code, ',' ORDER BY code) AS accts,
            coalesce(sum(net) FILTER (WHERE code = '1110'), 0) AS a1110,
@@ -103,7 +104,7 @@ per_tx AS (
            coalesce(sum(net) FILTER (WHERE code = '5140'), 0) AS a5140,
            coalesce(sum(net) FILTER (WHERE code = '2180'), 0) AS a2180
     FROM moves
-    GROUP BY tx_key, src, ref_kind, reversal
+    GROUP BY tx_key, src, ref_kind, ref, reversal
 ),
 kinds AS (
     SELECT p.*,
@@ -160,6 +161,10 @@ kinds AS (
                     AND p.a2160 > 0 AND p.a2110 < 0 THEN 'KUDOS_BOUGHT'
                WHEN p.src = 'QbKudosExchange' AND NOT p.reversal AND p.accts = '2110,2160'
                     AND p.a2110 > 0 AND p.a2160 < 0 THEN 'KUDOS_SOLD'
+               -- F-M6: the distribution fee charged (a fee of its kind: the reference fee_distribution_<month>).
+               WHEN p.src = 'QbFeeCharge' AND NOT p.reversal AND p.accts IN ('1130,4120', '1130,2150,4120')
+                    AND p.a1130 > 0 AND p.a4120 < 0 AND p.a2150 <= 0 AND left(p.ref, 17) = 'fee_distribution_'
+                    THEN 'DISTRIBUTION_CHARGED'
                -- Q87b: a platform fee charged (1130 against 4120 and the tax), paid from the cash account, voided.
                WHEN p.src = 'QbFeeCharge' AND NOT p.reversal AND p.accts IN ('1130,4120', '1130,2150,4120')
                     AND p.a1130 > 0 AND p.a4120 < 0 AND p.a2150 <= 0 THEN 'FEE_CHARGED'
@@ -188,6 +193,13 @@ kinds AS (
                -- F-M4: an operator's account (2140) moved to its direct Sponsor's cash (2160), the source the transfer.
                WHEN p.src = 'QbOperatorTransfer' AND NOT p.reversal AND p.accts = '2140,2160'
                     AND p.a2140 > 0 AND p.a2160 < 0 THEN 'OPERATOR_TRANSFER_TO_DIRECT'
+               -- F-M6: the distribution fee's deposit set aside and given back (the reference prepay_distribution).
+               WHEN p.src = 'QbPrepayment' AND NOT p.reversal AND p.ref = 'prepay_distribution'
+                    AND p.accts IN ('2160,2180', '2180,2190', '2160,2180,2190')
+                    AND p.a2180 < 0 AND p.a2160 >= 0 AND p.a2190 >= 0 THEN 'DISTRIBUTION_DEPOSIT'
+               WHEN p.src = 'QbPrepayment' AND NOT p.reversal AND p.ref = 'prepay_distribution'
+                    AND p.accts IN ('2160,2180', '2180,2190', '2160,2180,2190')
+                    AND p.a2180 > 0 AND p.a2160 <= 0 AND p.a2190 <= 0 THEN 'DISTRIBUTION_RELEASED'
                -- F-M5: what a publication's submission set aside of the fee credit and the cash (2190, 2160 to 2180,
                -- the source the prepayment), what was given back (2180 to them), and a fee paid from it (2180 to 1130).
                WHEN p.src = 'QbPrepayment' AND NOT p.reversal
@@ -233,7 +245,8 @@ FROM (VALUES (1, 'TOPUP'), (2, 'BANK_TOPUP'), (3, 'MANUAL_TOPUP'), (4, 'GRANT'),
              (24, 'KUDOS_SOLD'), (25, 'FEE_CHARGED'), (26, 'FEE_PAID'), (27, 'FEE_VOIDED'), (28, 'ENTRY_FEE'),
              (29, 'ENTRY_FEE_SETTLED'), (30, 'FEE_CREDIT_GRANTED'), (31, 'FEE_CREDIT_VOIDED'),
              (32, 'OPERATOR_TRANSFER_TO_DIRECT'), (33, 'PREPAYMENT_FROZEN'), (34, 'PREPAYMENT_USED'),
-             (35, 'PREPAYMENT_RELEASED'), (36, 'OTHER'))
+             (35, 'PREPAYMENT_RELEASED'), (36, 'DISTRIBUTION_CHARGED'), (37, 'DISTRIBUTION_DEPOSIT'),
+             (38, 'DISTRIBUTION_RELEASED'), (39, 'OTHER'))
          AS c (seq, kind)
 LEFT JOIN kinds k ON k.kind = c.kind
 GROUP BY c.seq, c.kind

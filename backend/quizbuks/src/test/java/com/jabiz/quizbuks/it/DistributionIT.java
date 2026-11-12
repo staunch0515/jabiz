@@ -206,6 +206,14 @@ class DistributionIT extends PrepaymentItSupport {
         assertThat(differences(sponsor)).isEmpty();
         noUpdatesOrDeletes("qb_distribution_settlement_version");
         noUpdatesOrDeletes("qb_fee_charge_version");
+        // The monthly report: the deposit, its charge and its release are each of their kind (none is OTHER).
+        everyPostingHasItsKind();
+        Instant from = Instant.parse("2000-01-01T00:00:00Z");
+        List<Map<String, Object>> monthly = items("qb.admin.monthly", TestTokens.bearer(tokens, "fm6-monthly",
+            QbPermissions.ADMIN_FINANCE_READ), Map.of("params", Map.of("from", from.toString(), "to",
+            clock.instant().plus(Duration.ofDays(1)).toString()), "limit", 100));
+        assertThat(monthly.stream().filter(row -> String.valueOf(row.get("category")).startsWith("DISTRIBUTION_"))
+            .map(row -> ((Number) row.get("transactionCount")).longValue()).toList()).allMatch(n -> n >= 1);
     }
 
     @Test

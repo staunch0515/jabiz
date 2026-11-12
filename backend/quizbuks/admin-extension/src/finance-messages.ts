@@ -53,6 +53,9 @@ export const financeMessages = {
       PREPAYMENT_FROZEN: 'Prepayments set aside',
       PREPAYMENT_USED: 'Fees paid from prepayments',
       PREPAYMENT_RELEASED: 'Prepayments given back',
+      DISTRIBUTION_CHARGED: 'Distribution fees charged',
+      DISTRIBUTION_DEPOSIT: 'Distribution fee deposits set aside',
+      DISTRIBUTION_RELEASED: 'Distribution fee deposits given back',
       OTHER: 'Other postings',
     },
     overview: {
@@ -373,6 +376,9 @@ export const financeMessages = {
       PREPAYMENT_FROZEN: '预付款冻结',
       PREPAYMENT_USED: '自预付款支付的费用',
       PREPAYMENT_RELEASED: '预付款退回',
+      DISTRIBUTION_CHARGED: '配送费记费',
+      DISTRIBUTION_DEPOSIT: '配送费预付冻结',
+      DISTRIBUTION_RELEASED: '配送费预付退回',
       OTHER: '其他分录',
     },
     overview: {
@@ -693,6 +699,9 @@ export const financeMessages = {
       PREPAYMENT_FROZEN: '前払金の確保',
       PREPAYMENT_USED: '前払金からの支払い',
       PREPAYMENT_RELEASED: '前払金の返却',
+      DISTRIBUTION_CHARGED: '配信料の請求',
+      DISTRIBUTION_DEPOSIT: '配信料の前払いの確保',
+      DISTRIBUTION_RELEASED: '配信料の前払いの返却',
       OTHER: 'その他の仕訳',
     },
     overview: {
