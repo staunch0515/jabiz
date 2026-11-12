@@ -55,17 +55,35 @@ public final class ClaudeWebResearch {
     /**
      * What to ask.
      *
-     * @param searches the most searches (0: no web search)
-     * @param fetches  the most fetches (0: no web fetch)
-     * @param country  where the search should look from (ISO 3166-1), or null
+     * @param searches       the most searches (0: no web search)
+     * @param fetches        the most fetches (0: no web fetch)
+     * @param country        where the search should look from (ISO 3166-1), or null
+     * @param allowedDomains the only domains the provider may fetch from (F-C7: a site's own pages), or empty for any
+     *                       the conversation names; given to the fetch tool as {@code allowed_domains}
+     * @param maxTokens      the output asked for (thinking included), or null for {@value #MAX_TOKENS}
      */
     public record Request(String model, String effort, String system, String user, String userKey, int searches,
-        int fetches, String country) {
+        int fetches, String country, List<String> allowedDomains, Integer maxTokens) {
+
+        public Request {
+            allowedDomains = allowedDomains == null ? List.of() : List.copyOf(allowedDomains);
+        }
+
+        /** A request that may fetch from any address the conversation names, with the usual output (prospecting). */
+        public Request(String model, String effort, String system, String user, String userKey, int searches,
+            int fetches, String country) {
+            this(model, effort, system, user, userKey, searches, fetches, country, List.of(), null);
+        }
+
+        /** The output asked for. */
+        public int outputTokens() {
+            return maxTokens == null ? MAX_TOKENS : maxTokens;
+        }
 
         @Override
         public String toString() {
             return "Request[model=" + model + ", effort=" + effort + ", user=" + user.length() + " chars, searches="
-                + searches + ", fetches=" + fetches + "]";
+                + searches + ", fetches=" + fetches + ", domains=" + allowedDomains.size() + "]";
         }
     }
 
@@ -91,7 +109,7 @@ public final class ClaudeWebResearch {
     public static ClaudeApi.Usage unanswered(Request request) {
         long text = (request.system().getBytes(StandardCharsets.UTF_8).length
             + request.user().getBytes(StandardCharsets.UTF_8).length) / 3 + 1_000;
-        return new ClaudeApi.Usage(Math.max(text, RESERVED_INPUT_TOKENS), MAX_TOKENS);
+        return new ClaudeApi.Usage(Math.max(text, RESERVED_INPUT_TOKENS), request.outputTokens());
     }
 
     /** What the search tools cost, in dollars. */
@@ -183,7 +201,7 @@ public final class ClaudeWebResearch {
     public static Map<String, Object> body(Request request, List<Object> messages) {
         Map<String, Object> body = new LinkedHashMap<>();
         body.put("model", request.model());
-        body.put("max_tokens", MAX_TOKENS);
+        body.put("max_tokens", request.outputTokens());
         body.put("thinking", Map.of("type", "adaptive"));
         body.put("output_config", Map.of("effort", request.effort()));
         body.put("system", request.system());
@@ -205,6 +223,10 @@ public final class ClaudeWebResearch {
             fetch.put("name", "web_fetch");
             fetch.put("max_uses", request.fetches());
             fetch.put("max_content_tokens", MAX_CONTENT_TOKENS);
+            if (!request.allowedDomains().isEmpty()) {
+                // F-C7: the provider fetches nothing outside the site it was asked to read.
+                fetch.put("allowed_domains", request.allowedDomains());
+            }
             fetch.put("response_inclusion", "excluded");
             tools.add(fetch);
         }

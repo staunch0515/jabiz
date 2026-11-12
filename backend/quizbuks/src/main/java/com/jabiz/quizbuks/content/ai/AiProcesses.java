@@ -330,7 +330,7 @@ public final class AiProcesses {
      * Under the caller's AI lock and everybody's, what the caller and everybody may still use, and the limits checked
      * against the request's estimate (every request of the AI: a sponsor's, and a reviewer's check, Q73d-2).
      */
-    private static <I> void limited(com.jabiz.process.ProcessDefinitionBuilder<I, RequestOutput, ProcessContext> pb,
+    static <I> void limited(com.jabiz.process.ProcessDefinitionBuilder<I, RequestOutput, ProcessContext> pb,
         ZoneId zone) {
         pb.step("Lock the sponsor's AI requests", HoldLock.<ProcessContext>exclusive(
                     ctx -> QbAi.lockName(ctx.request().actorId())))
@@ -398,10 +398,14 @@ public final class AiProcesses {
     }
 
     /** What every request checks before the kind's own: standing, settings, the notice. */
-    private record Common(List<Violation> problems, AiSettings settings, List<ConsentChecks.State> accept) {}
+    record Common(List<Violation> problems, AiSettings settings, List<ConsentChecks.State> accept) {}
 
-    private static Common common(ProcessContext ctx) {
-        Requested input = ctx.get(INPUT, Requested.class);
+    static Common common(ProcessContext ctx) {
+        return common(ctx, ctx.get(INPUT, Requested.class).aiNoticeVersionNo());
+    }
+
+    /** As {@link #common(ProcessContext)}, for a request that names no quiz (the site's draft, F-C7). */
+    static Common common(ProcessContext ctx, Integer aiNoticeVersionNo) {
         List<Violation> problems = new ArrayList<>(SponsorChecks.problems(ctx));
         AiSettings settings = settings(ctx);
         problems.addAll(settings.problems());
@@ -410,7 +414,7 @@ public final class AiProcesses {
         if (notice == null) {
             problems.add(new Violation(null, AiCodes.NOTICE_MISSING, "No AI notice is in effect", Map.of()));
         } else if (notice.mustAccept()) {
-            if (Objects.equals(input.aiNoticeVersionNo(), notice.currentVersionNo())) {
+            if (Objects.equals(aiNoticeVersionNo, notice.currentVersionNo())) {
                 accept = List.of(notice);
             } else {
                 problems.add(new Violation("aiNoticeVersionNo", AiCodes.NOTICE_REQUIRED, "Accept version "
@@ -422,7 +426,7 @@ public final class AiProcesses {
     }
 
     /** Refuses the request with every problem found; otherwise records the notice and what the next steps need. */
-    private static void prepared(ProcessContext ctx, Common common, String kind, Object job,
+    static void prepared(ProcessContext ctx, Common common, String kind, Object job,
         Map<String, Object> params, int size, long estimate, List<UUID> pdfs) {
         if (!common.problems().isEmpty()) {
             throw new BusinessRuleViolationException(common.problems());
@@ -776,12 +780,14 @@ public final class AiProcesses {
     }
 
     static void checkLimits(ProcessContext ctx, ZoneId zone) {
-        String quizId = String.valueOf((Object) ctx.get(QuizEditing.QUIZ_ID));
+        Object quizKey = ctx.get(QuizEditing.QUIZ_ID);
+        String quizId = String.valueOf(quizKey);
         List<EntityInstance> open = rows(ctx, OPEN);
-        // One job of each kind a quiz at a time: covers may be drawn while questions are written.
+        // One job of each kind a quiz at a time: covers may be drawn while questions are written. A request that names
+        // no quiz (the site's draft, F-C7) is not held by this; it is held to one at a time by its own check.
         String kind = (String) ctx.get(KIND);
-        boolean quizBusy = open.stream().anyMatch(job -> quizId.equals(String.valueOf((Object) job.get("quizId")))
-            && kind.equals(job.get("kind")));
+        boolean quizBusy = quizKey != null && open.stream().anyMatch(job ->
+            quizId.equals(String.valueOf((Object) job.get("quizId"))) && kind.equals(job.get("kind")));
         long openEstimate = 0;
         for (EntityInstance job : open) {
             openEstimate += QuizEditing.number(job.get("estimatedTokens"));
@@ -866,13 +872,13 @@ public final class AiProcesses {
                 .compute("Record the failure", (metadata, ctx) -> fail(ctx, zone)));
     }
 
-    private static ProcessContext context(com.jabiz.process.ProcessStart start, Object input) {
+    static ProcessContext context(com.jabiz.process.ProcessStart start, Object input) {
         ProcessContext ctx = new ProcessContext(start);
         ctx.put(INPUT, input);
         return ctx;
     }
 
-    private static JobOutput jobOutput(ProcessContext ctx) {
+    static JobOutput jobOutput(ProcessContext ctx) {
         JobOutput output = (JobOutput) ctx.get(OUTPUT);
         return output == null ? new JobOutput(null, null) : output;
     }
@@ -890,7 +896,7 @@ public final class AiProcesses {
     }
 
     /** The job of the outcome, when it is the requester's and not finished yet; null otherwise (nothing to do). */
-    private static EntityInstance unfinished(ProcessContext ctx, String requestedBy) {
+    static EntityInstance unfinished(ProcessContext ctx, String requestedBy) {
         EntityInstance job = first(ctx, JOB);
         if (job == null || !requestedBy.equals(job.get("sponsorId")) || job.get("finishedAt") != null) {
             return null;
@@ -906,6 +912,10 @@ public final class AiProcesses {
         }
         ClaudeApi.Usage usage = charged(completion.usage(), completion.unrecordedAttempts(), job);
         String month = AiLimits.month(completion.finishedTime(), zone);
+        if (QbAi.KIND_SITE_PROFILE.equals(job.get("kind"))) {
+            SiteProfileProcesses.completeSite(ctx, completion, job, usage, month);
+            return;
+        }
         if (QbAi.KIND_COVER.equals(job.get("kind"))) {
             completeCover(ctx, completion, job, usage, month);
             return;
@@ -1105,6 +1115,12 @@ public final class AiProcesses {
         Map<String, Object> params = params(job);
         long input = params.get("reservedInputTokens") instanceof Number reserved ? reserved.longValue()
             : AiLimits.reservedInput(QuizEditing.number(job.get("inputBytes")), 0);
+        if (QbAi.KIND_SITE_PROFILE.equals(job.get("kind"))) {
+            // F-C7: one call of the web reader, with the pages it may fetch and all the output it asks for.
+            int output = params.get("maxOutputTokens") instanceof Number asked ? asked.intValue()
+                : SiteProfileJob.MAX_OUTPUT_TOKENS;
+            return ClaudeCalls.priced(job.get("model"), ClaudeApi.unrecorded(input, output));
+        }
         if (QbAi.KIND_TRANSLATION.equals(job.get("kind")) || QbAi.KIND_PUBLICATION_TEXTS.equals(job.get("kind"))
             || QbAi.KIND_TRANSLATION_CHECK.equals(job.get("kind"))) {
             // Every batch's call (Q73d): its reserved input and all the output it asks for.
@@ -1119,7 +1135,7 @@ public final class AiProcesses {
         return ClaudeCalls.priced(job.get("model"), ClaudeApi.unrecorded(input, maxTokens));
     }
 
-    private static Map<String, Object> finished(ClaudeApi.Usage usage, BigDecimal cost, Integer attempts,
+    static Map<String, Object> finished(ClaudeApi.Usage usage, BigDecimal cost, Integer attempts,
         Instant at) {
         Map<String, Object> values = new LinkedHashMap<>();
         values.put("inputTokens", BigDecimal.valueOf(usage.inputTokens()));
@@ -1133,7 +1149,7 @@ public final class AiProcesses {
     }
 
     /** Adds a finished job to the sponsor's month and to everybody's (under both locks). */
-    private static void addUsage(ProcessContext ctx, String sponsorId, String month, ClaudeApi.Usage usage,
+    static void addUsage(ProcessContext ctx, String sponsorId, String month, ClaudeApi.Usage usage,
         BigDecimal cost, boolean failed) {
         long in = usage.inputTokens();
         long out = usage.outputTokens();
@@ -1402,7 +1418,7 @@ public final class AiProcesses {
             },
             pb -> pb
                 .step("Cancel the platform's job", CancelExternalJob.<ProcessContext>of(
-                    List.of(AiQuestionsJob.TYPE, AiCoverJob.TYPE), AiProcesses::platformJobId).ifOpen()));
+                    List.of(AiQuestionsJob.TYPE, AiCoverJob.TYPE, SiteProfileJob.TYPE), AiProcesses::platformJobId).ifOpen()));
     }
 
     /**
@@ -1740,11 +1756,11 @@ public final class AiProcesses {
         return candidates;
     }
 
-    private static int bytes(String text) {
+    static int bytes(String text) {
         return text.getBytes(StandardCharsets.UTF_8).length;
     }
 
-    private static String clip(String text, int max) {
+    static String clip(String text, int max) {
         if (text == null) {
             return null;
         }

@@ -62,6 +62,7 @@
     首页、收件箱按卡片 `languages` 与读者语言**有交集**筛选，文字按显示语言取；答题语言开始时定下（`QbAttempt.language`），之后一律经 `PlaySteps.inLanguage` 读快照、经 `PublicationLanguages.cardText` 取发布文字。
   - **AI 翻译**（Q73d-1，`content.ai.AiTranslateJob`、`AiTranslations`）：只发文字（正误、分数、图片、文件、元素键都不发），候选只在作业中保存，写入只经 `QB_AI_TRANSLATION_ACCEPT`（每段 `reviewed`，规则即 `TranslationProcesses.apply`），哈希取 AI 拿到的原文的；计入商家现有的 AI 限额。
     发布文字的翻译（`PUBLICATION_TEXTS`）只给候选，由向导填入、随 `QB_PUBLICATION_SAVE` 保存；审核人的对照检查（`QB_AI_TRANSLATION_CHECK_REQUEST`）只作参考、计在审核人名下，决定不等待它。
+  - **官网草稿**（F-C7a，`content.ai.SiteProfileJob` / `SiteProfileProcesses` / `SiteProfileAnswer`，作业类型 `qb.ai.site-profile`，种类 `SITE_PROFILE`，`quiz_id` 可为空）：只读发起方自己申报的 https 公开网站（不带账号、端口、IP、内网域名；抓取工具的 `allowed_domains` 限于该站），只发网址与已有资料，不发发起方身份；候选只在作业中保存，写入只经确认流程；处理器不下载图片（图片在确认时按 D75 取）；联系方式（邮箱、电话）在 `SiteProfileAnswer` 中一律剥除；开关 `qb.ai.site-profile.enabled`（受控参数，缺省关）、月额 `qb.ai.site-profile.monthly` 受控，其余数字为普通参数；权利声明必须勾选（`SITE_RIGHTS_REQUIRED`）；`input_summary` 只含网址。计入商家现有的 AI 限额，预留 F-M9 预付额度的挂钩点。
   - **商家的短文字**（Q73c，`content.TextTranslations`）：主页标语、入驻简介、商品的名称与说明的译文都带所译原文的哈希，过时的保存被拒，除非经 `confirmed` 确认；主页提供的语言（第一个为主要语言）中，其他语言的标语必填，简介与商品可选。公开页以 `languages` 选显示语言。
   - 按语言读快照只经 `QuizSnapshots.in`；前端照抄的是发起方页面的 `content/languages.ts`、`preview/model.ts` 和管理系统扩展的 `snapshot.ts`，改规则时几处一起改。
 - **发布方**（S0，`publishing.PublisherKind`，`docs/quizbuks/shopify/S0-publisher.md`）：引擎里"谁发布的"是一对不可变、必填的字段 `publisherKind`（`SPONSOR` / `SHOPIFY_SHOP`，字典 `urn:jabiz:dict:quizbuks:publisher-kind`）+ `publisherId`（`SPONSOR` 的编号就是商家的用户编号），
