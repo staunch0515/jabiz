@@ -52,4 +52,13 @@ class PackageImportRulesTest {
         assertThat(PackageImportRules.finished(3, 3)).isTrue();
         assertThat(PackageImportRules.finished(2, 3)).isFalse();
     }
+
+    @Test
+    void aClearingStepNamesTheContentItGoesBefore() {
+        assertThat(PackageImportRules.contentOfClear("quiz:q1:v:v2:clear:3")).isEqualTo("quiz:q1:v:v2:content");
+        assertThat(PackageImportRules.contentOfClear("quiz:q1:c:clear:12")).isEqualTo("quiz:q1:c:content");
+        assertThat(PackageImportRules.contentOfClear("quiz:q1:c:content")).isNull();
+        assertThat(PackageImportRules.contentOfClear("quiz:q1:c:clear:")).isNull();
+        assertThat(PackageImportRules.contentOfClear("quiz:q1:c:clear:x")).isNull();
+    }
 }
