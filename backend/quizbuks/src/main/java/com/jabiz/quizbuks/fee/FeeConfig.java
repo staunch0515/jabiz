@@ -626,7 +626,7 @@ public class FeeConfig {
                 qbDistributionSettle,
                 (scheduledTime, row) -> new DistributionSettlements.SettleRef(String.valueOf(row.get("publicationId")),
                     String.valueOf(row.get("sponsorId")), previousPeriod(scheduledTime), false))
-            .maxItems(100_000);
+            .maxItems(10_000);
     }
 
     /**
@@ -644,7 +644,7 @@ public class FeeConfig {
                 qbDistributionSettle,
                 (scheduledTime, row) -> new DistributionSettlements.SettleRef(String.valueOf(row.get("publicationId")),
                     String.valueOf(row.get("sponsorId")), null, true))
-            .maxItems(100_000);
+            .maxItems(10_000);
     }
 
     /** Every day at 02:37 (Japan): the invoices past their due day whose reminder is due. */

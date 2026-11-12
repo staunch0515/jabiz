@@ -173,7 +173,8 @@ class PrepaymentIT extends PrepaymentItSupport {
         clock.set(clock.instant().plus(Duration.ofDays(8)));
         runTick();
         assertThat(status(publicationId)).isEqualTo("ENDED");
-        systemRun(Prepayments.RELEASE_ITEM, body("publicationId", publicationId, "sponsorId", sponsor));
+        systemRun(Prepayments.RELEASE_ITEM, body("publicationId", publicationId, "sponsorId", sponsor,
+            "purpose", "AUDIENCE"));
         assertThat(prepayments(publicationId)).singleElement()
             .satisfies(row -> assertThat(row).containsEntry("status", "RELEASED")
             .containsEntry("release_reason", "ENDED"));
@@ -195,7 +196,8 @@ class PrepaymentIT extends PrepaymentItSupport {
             QbPermissions.ADMIN_CONTENT_WRITE), body("publicationId", publicationId, "reason", "F-M5 test"));
         assertThat(status(publicationId)).isEqualTo("ENDED");
         assertThat(query("SELECT 1 FROM qb_fee_charge_version WHERE sponsor_id = ?", sponsor)).isEmpty();
-        systemRun(Prepayments.RELEASE_ITEM, body("publicationId", publicationId, "sponsorId", sponsor));
+        systemRun(Prepayments.RELEASE_ITEM, body("publicationId", publicationId, "sponsorId", sponsor,
+            "purpose", "AUDIENCE"));
         assertThat(prepayments(publicationId)).singleElement().satisfies(row -> {
             assertThat(row).containsEntry("status", "RELEASED").containsEntry("release_reason", "ENDED");
             assertThat(row.get("charged_at")).isNull();
@@ -333,7 +335,8 @@ class PrepaymentIT extends PrepaymentItSupport {
             assertThat(row).containsEntry("checkCode", "PREPAYMENT_STALE");
             assertThat(new BigDecimal(String.valueOf(row.get("actual")))).isEqualByComparingTo(SET_ASIDE);
         });
-        systemRun(Prepayments.RELEASE_ITEM, body("publicationId", publicationId, "sponsorId", sponsor));
+        systemRun(Prepayments.RELEASE_ITEM, body("publicationId", publicationId, "sponsorId", sponsor,
+            "purpose", "AUDIENCE"));
         assertThat(differences(sponsor)).isEmpty();
 
         // A prepayment of no publication there.
@@ -466,7 +469,8 @@ class PrepaymentIT extends PrepaymentItSupport {
             + "qb_prepayment WHERE publication_id = ?) AND amount < 0", ended)).hasSize(1);
         // The item of a publication not ended does nothing.
         assertThat(((com.jabiz.quizbuks.fee.FeeProcesses.ItemOutput) systemRun(Prepayments.RELEASE_ITEM,
-            body("publicationId", running, "sponsorId", sponsor))).outcome()).isEqualTo("SKIPPED");
+            body("publicationId", running, "sponsorId", sponsor, "purpose", "AUDIENCE"))).outcome())
+            .isEqualTo("SKIPPED");
         assertThat(prepayments(running)).singleElement()
             .satisfies(row -> assertThat(row).containsEntry("status", "OPEN"));
         assertThat(differences(sponsor)).isEmpty();

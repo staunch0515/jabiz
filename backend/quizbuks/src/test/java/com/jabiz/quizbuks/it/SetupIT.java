@@ -543,6 +543,14 @@ class SetupIT extends QbItSupport {
             QbParams.SITE_PROFILE_DAILY, "3", QbParams.SITE_PROFILE_MAX_PAGES, "10",
             QbParams.SITE_PROFILE_QUESTIONS, "5", QbParams.SITE_PROFILE_OPTIONS, "4",
             QbParams.SITE_PROFILE_MATERIALS_MAX, "5", QbParams.SITE_PROFILE_HANDLE_ALTERNATIVES, "3"));
+        // F-M6: the distribution fee (off; the headquarters' range of the operators' prices; the final settlement's
+        // grace and the daily check's hours).
+        expected.putAll(Map.of(QbParams.DISTRIBUTION_BILLING_ENABLED, "false",
+            QbParams.DISTRIBUTION_RATE_MIN, "0.0000", QbParams.DISTRIBUTION_RATE_MAX, "1.0000",
+            QbParams.DISTRIBUTION_UNIT_FLOOR_MIN, "1.0000", QbParams.DISTRIBUTION_UNIT_FLOOR_MAX, "100.0000",
+            QbParams.DISTRIBUTION_UNIT_CEILING_MAX, "1000.0000", QbParams.DISTRIBUTION_MINIMUM_DEPOSIT_MAX, "100000",
+            QbParams.DISTRIBUTION_FINAL_END_GRACE_SEC, "3600", QbParams.DISTRIBUTION_UNSETTLED_AFTER_HOURS, "30",
+            QbParams.DISTRIBUTION_FINAL_MISSING_AFTER_HOURS, "48"));
         assertThat(values).containsExactlyInAnyOrderEntriesOf(expected);
     }
 
