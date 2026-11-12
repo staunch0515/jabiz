@@ -13,8 +13,11 @@ import com.jabiz.quizbuks.setup.QbParams;
 import com.jabiz.quizbuks.setup.QbRoles;
 import com.jabiz.quizbuks.wallet.KudosExchanges;
 import com.jabiz.runtime.test.TestTokens;
+import com.jabiz.job.JobDefinition;
+import com.jabiz.runtime.job.JobRunner;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 
@@ -39,6 +42,9 @@ import static org.assertj.core.api.Assertions.assertThat;
  * counts what they owe, invoiced or not, and what their other submissions set aside; the daily check agrees.
  */
 class PrepaymentIT extends PlayItSupport {
+
+    @Autowired
+    JobDefinition<Prepayments.ReleaseRef> qbPrepaymentReleaseJob;
 
     /** 100 a day for gender over a seven-day run: 700, and 10% tax: 770 set aside. */
     static final BigDecimal SET_ASIDE = new BigDecimal("770");
@@ -166,9 +172,30 @@ class PrepaymentIT extends PlayItSupport {
         assertThat(status(publicationId)).isEqualTo("DRAFT");
         assertThat(prepayments(publicationId)).isEmpty();
         assertThat(query("SELECT 1 FROM sys_approval_request_version WHERE entity_id = ?", publicationId)).isEmpty();
+        // M6 of the F-M5 review: nothing at all: no posting, no part, no new version of the publication.
+        assertThat(query("SELECT 1 FROM ledger_entry_version WHERE dimension_1 = ?", sponsor)).isEmpty();
+        assertThat(query("SELECT 1 FROM qb_fee_payment_version WHERE sponsor_id = ?", sponsor)).isEmpty();
+        assertThat(query("SELECT 1 FROM qb_publication_version WHERE publication_id = CAST(? AS uuid) AND "
+            + "billing_operator_id IS NOT NULL", publicationId)).isEmpty();
+        long versions = query("SELECT 1 FROM qb_publication_version WHERE publication_id = CAST(? AS uuid)",
+            publicationId).size();
+
+        refused("QB_PUBLICATION_SUBMIT", sponsorToken(sponsor), body("publicationId", publicationId), 422);
+        assertThat(query("SELECT 1 FROM qb_publication_version WHERE publication_id = CAST(? AS uuid)", publicationId))
+            .hasSize((int) versions);
 
         // Granted credit alone covers it: set aside from the grant, the rest still to spend.
         String grantId = grant(sponsor, 1_000, clock.instant().plus(Duration.ofDays(90)));
+        // Refused with a shortfall again: the grant is not touched.
+        execute("UPDATE qb_fee_credit_grant SET remaining = 700, version = version + 1 WHERE grant_id = ?", grantId);
+        execute("UPDATE qb_wallet SET balance = 700, version = version + 1 WHERE owner_id = ? AND kind = 'FEE_CREDIT'",
+            sponsor);
+        refused("QB_PUBLICATION_SUBMIT", sponsorToken(sponsor), body("publicationId", publicationId), 422);
+        assertThat(remainingOf(grantId)).isEqualByComparingTo("700");
+        assertThat(query("SELECT 1 FROM qb_fee_payment_version WHERE sponsor_id = ?", sponsor)).isEmpty();
+        execute("UPDATE qb_fee_credit_grant SET remaining = 1000, version = version + 1 WHERE grant_id = ?", grantId);
+        execute("UPDATE qb_wallet SET balance = 1000, version = version + 1 WHERE owner_id = ? AND kind = "
+            + "'FEE_CREDIT'", sponsor);
         assertThat(check(sponsor, publicationId)).containsEntry("enough", true);
         submit(sponsorToken(sponsor), publicationId);
         assertThat(status(publicationId)).isEqualTo("PENDING_REVIEW");
@@ -489,6 +516,132 @@ class PrepaymentIT extends PlayItSupport {
             second);
         assertThat(differences(sponsor)).extracting(row -> row.get("checkCode"))
             .containsExactlyInAnyOrder("PREPAYMENT_PARTS", "PREPAYMENTS");
+    }
+
+    /** One row of the monthly report: its count, its amount and what each account moved (debit less credit). */
+    record Row(String category, long count, long amount, Map<String, Long> moves) {}
+
+    @Test
+    void theMonthlyReportHasEveryPrepaymentMoveInItsRow() {
+        // M5 and M6 of the F-M5 review: set aside of the fee credit and the cash together, given back the same way,
+        // paid from, and given back to fee credit expired meanwhile (voided again at once): each in its row of a month
+        // of their own (no other test posts in it), nothing in OTHER.
+        java.time.ZoneId tokyo = java.time.ZoneId.of("Asia/Tokyo");
+        Instant from = java.time.LocalDate.of(2031, 3, 1).atStartOfDay(tokyo).toInstant();
+        Instant to = java.time.LocalDate.of(2031, 4, 1).atStartOfDay(tokyo).toInstant();
+        clock.set(from.plus(Duration.ofDays(1)));
+        String sponsor = pricedSponsor("fm5-month");
+        String lasting = grant(sponsor, 300, clock.instant().plus(Duration.ofDays(90)));
+        cash(sponsor, 1_000);
+
+        // Set aside 300 of the fee credit and 470 of the cash, and given back to them (withdrawn).
+        autoApprove(false);
+        String withdrawn = audienceDraft(sponsor, "FM5 month withdrawn");
+        submit(sponsorToken(sponsor), withdrawn);
+        assertThat(query("SELECT sub_account, sum(amount) AS n FROM qb_fee_payment_version WHERE target_id = (SELECT "
+            + "prepayment_id FROM qb_prepayment WHERE publication_id = ?) GROUP BY sub_account ORDER BY sub_account",
+            withdrawn)).extracting(row -> row.get("sub_account") + " " + ((BigDecimal) row.get("n")).toPlainString())
+            .containsExactly("CASH 470", "FEE_CREDIT 300");
+        run("QB_PUBLICATION_WITHDRAW", sponsorToken(sponsor), body("publicationId", withdrawn));
+        assertThat(remainingOf(lasting)).isEqualByComparingTo("300");
+        assertThat(ledger("2160", sponsor)).isEqualByComparingTo("1000");
+
+        // Set aside the same way again and paid from when it starts.
+        autoApprove(true);
+        String paid = audienceDraft(sponsor, "FM5 month paid");
+        submit(sponsorToken(sponsor), paid);
+        goLive(paid);
+
+        // Set aside of a grant that expires while it waits: given back, it is voided again at once (770 and the 30
+        // the lot still had).
+        autoApprove(false);
+        String expiring = grant(sponsor, 800, clock.instant().plus(Duration.ofDays(2)));
+        String voided = audienceDraft(sponsor, "FM5 month voided");
+        submit(sponsorToken(sponsor), voided);
+        clock.set(clock.instant().plus(Duration.ofDays(3)));
+        run("QB_PUBLICATION_WITHDRAW", sponsorToken(sponsor), body("publicationId", voided));
+        assertThat(query("SELECT voided_amount FROM qb_fee_credit_grant WHERE grant_id = ?", expiring).getFirst()
+            .get("voided_amount")).satisfies(n -> assertThat((BigDecimal) n).isEqualByComparingTo("800"));
+        assertThat(differences(sponsor)).isEmpty();
+
+        List<Row> expected = List.of(
+            new Row("FEE_CHARGED", 1, 770, Map.of("1130", 770L, "4120", -700L, "2150", -70L)),
+            new Row("FEE_CREDIT_VOIDED", 1, 800, Map.of("2190", 800L, "5140", -800L)),
+            new Row("PREPAYMENT_FROZEN", 3, 2_310, Map.of("2190", 1_370L, "2160", 940L, "2180", -2_310L)),
+            new Row("PREPAYMENT_USED", 1, 770, Map.of("2180", 770L, "1130", -770L)),
+            new Row("PREPAYMENT_RELEASED", 2, 1_540, Map.of("2180", 1_540L, "2190", -1_070L, "2160", -470L)));
+        Map<String, String> columns = Map.of("1130", "feesReceivable", "4120", "feeRevenue", "2150", "taxPayable",
+            "2190", "feeCredit", "5140", "feeCreditPromotion", "2160", "sponsorCash", "2180", "feePrepayments");
+        Map<String, Map<String, Object>> report = new java.util.HashMap<>();
+        items("qb.admin.monthly", TestTokens.bearer(tokens, "fm5-monthly", QbPermissions.ADMIN_FINANCE_READ),
+            Map.of("params", Map.of("from", from.toString(), "to", to.toString()), "limit", 100))
+            .forEach(row -> report.put((String) row.get("category"), row));
+        for (Row want : expected) {
+            Map<String, Object> got = report.get(want.category());
+            assertThat(((Number) got.get("transactionCount")).longValue()).as(want.category() + " count")
+                .isEqualTo(want.count());
+            assertThat(new BigDecimal(String.valueOf(got.get("amount")))).as(want.category() + " amount")
+                .isEqualByComparingTo(BigDecimal.valueOf(want.amount()));
+            for (Map.Entry<String, String> column : columns.entrySet()) {
+                assertThat(new BigDecimal(String.valueOf(got.get(column.getValue()))))
+                    .as(want.category() + " " + column.getKey())
+                    .isEqualByComparingTo(BigDecimal.valueOf(want.moves().getOrDefault(column.getKey(), 0L)));
+            }
+        }
+        // OTHER: only the development credit the test's cash came from (a posting of no source).
+        assertThat(((Number) report.get("OTHER").get("transactionCount")).longValue()).isEqualTo(((Number) query(
+            "SELECT count(*) AS n FROM ledger_transaction_version WHERE booking_time >= ? AND booking_time < ? AND "
+                + "source_entity IS NULL", Timestamp.from(from), Timestamp.from(to)).getFirst().get("n")).longValue());
+    }
+
+    @Test
+    void theDailyJobGivesBackWhatEndedPublicationsHoldOnceAndLeavesTheOthers() {
+        // M6 of the F-M5 review: the job as the scheduler runs it, twice; a publication not ended is skipped.
+        autoApprove(true);
+        String sponsor = pricedSponsor("fm5-job");
+        String grantId = grant(sponsor, 2_000, clock.instant().plus(Duration.ofDays(90)));
+        String ended = audienceDraft(sponsor, "FM5 job ended");
+        submit(sponsorToken(sponsor), ended);
+        String running = audienceDraft(sponsor, "FM5 job running");
+        submit(sponsorToken(sponsor), running);
+        run("QB_PUBLICATION_ADMIN_END", TestTokens.bearer(tokens, "fm5-content-admin",
+            QbPermissions.ADMIN_CONTENT_WRITE), body("publicationId", ended, "reason", "F-M5 test"));
+        assertThat(remainingOf(grantId)).isEqualByComparingTo("460");
+
+        execute("UPDATE jabiz_shedlock SET lock_until = locked_at");
+        JobRunner.JobRun first = jobRunner.execute(qbPrepaymentReleaseJob, clock.instant());
+        assertThat(first.items().failed()).isZero();
+        assertThat(prepayments(ended)).singleElement()
+            .satisfies(row -> assertThat(row).containsEntry("status", "RELEASED").containsEntry("release_reason",
+                "ENDED"));
+        assertThat(prepayments(running)).singleElement()
+            .satisfies(row -> assertThat(row).containsEntry("status", "OPEN"));
+        assertThat(remainingOf(grantId)).isEqualByComparingTo("1230");
+        BigDecimal held = ledger("2180", sponsor);
+        assertThat(held).isEqualByComparingTo(SET_ASIDE);
+
+        // Again (the next day's run, or a run asked again): nothing more is given back.
+        execute("UPDATE jabiz_shedlock SET lock_until = locked_at");
+        JobRunner.JobRun second = jobRunner.execute(qbPrepaymentReleaseJob, clock.instant().plus(Duration.ofDays(1)));
+        assertThat(second.items().failed()).isZero();
+        assertThat(remainingOf(grantId)).isEqualByComparingTo("1230");
+        assertThat(ledger("2180", sponsor)).isEqualByComparingTo(held);
+        assertThat(query("SELECT 1 FROM qb_fee_payment_version WHERE target_id IN (SELECT prepayment_id FROM "
+            + "qb_prepayment WHERE publication_id = ?) AND amount < 0", ended)).hasSize(1);
+        // The item of a publication not ended does nothing.
+        assertThat(((com.jabiz.quizbuks.fee.FeeProcesses.ItemOutput) systemRun(Prepayments.RELEASE_ITEM,
+            body("publicationId", running, "sponsorId", sponsor))).outcome()).isEqualTo("SKIPPED");
+        assertThat(prepayments(running)).singleElement()
+            .satisfies(row -> assertThat(row).containsEntry("status", "OPEN"));
+        assertThat(differences(sponsor)).isEmpty();
+        // The records written once are never changed (the ledger, the charges and the payment parts).
+        for (String table : List.of("ledger_transaction_version", "ledger_entry_version", "qb_fee_charge_version",
+            "qb_fee_payment_version")) {
+            assertThat(query("SELECT coalesce(n_tup_upd, 0) + coalesce(n_tup_del, 0) AS changed "
+                + "FROM pg_stat_user_tables WHERE schemaname = current_schema() AND relname = ?", table))
+                .as(table).singleElement()
+                .satisfies(row -> assertThat(((Number) row.get("changed")).longValue()).as(table).isZero());
+        }
     }
 
     @Test
