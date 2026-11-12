@@ -312,7 +312,7 @@ FROM pg_stat_statements ORDER BY total_exec_time DESC LIMIT 20;
 - [ ] `./gradlew :quizbuks:platformCheck` 以正式的设置（不含密钥值的同形假值）跑一遍；启动日志中没有 `Platform check failed`
 - [ ] 首次启动（§3）完成：两位管理员都有二次验证，提案已发布，开具方与科目映射已设
 - [ ] **首次上线的开关**（F-F10；`setup.FirstLaunchSwitches` 是唯一的清单，`JABIZ_WEB_ENVIRONMENT` 须为 `production`，测试系统为 `staging`：只有这两个环境的 `QB_SETUP` 提出首次上线的值，其他环境提出声明值，卡片上会显示"不同"）：
-  1. 执行 `QB_SETUP` 后，核对平台管理系统"数据 → SysControlChange"中待发布的提案，与"QuizBuks 财务"总览页的卡片"首次上线的资金开关"一致（每行：首次上线的值、现值、状态；读提案需要 `approval.read`，财务角色已有）；
+  1. 执行 `QB_SETUP` 后，核对平台管理系统"数据 → SysControlChange"中待发布的提案，与"QuizBuks 财务"总览页的卡片"首次上线的资金开关"一致（每行：首次上线的值、现值、状态；读提案需要 `approval.read`，财务角色已有）。卡片显示"待发布的值与首次上线的值不同"时**不要发布**：多半是 `JABIZ_WEB_ENVIRONMENT` 没设成 `production` 就执行了 `QB_SETUP`，改好环境变量重新部署，撤回这些提案后再执行一次 `QB_SETUP`；
   2. 发布的顺序：
      - 先发布 `qb.reward.kudos.enabled` 与 `qb.reward.default-methods` 这两个键，**再**发布审批规则（`qb.sponsor.review`、`qb.publication.review`）：正式环境里学分奖励的开关没有发布就算关，这样发起方入驻与发布的流程不会出现不一致的中间状态；
      - 法务相关的不打开：`qb.transfer.enabled`、`qb.withdrawal.bank.enabled` 保持 `false`（§1.3b、§1.3c）；`qb.kudos.buy.enabled`、`qb.kudos.sell.enabled`、`qb.reward.kudos.enabled`、`qb.play.entry-fee.enabled` 的首次上线的值也是 `false`（学分只显示、不使用，学分的帮助见 `help/fee-account.md`）；
@@ -320,7 +320,7 @@ FROM pg_stat_statements ORDER BY total_exec_time DESC LIMIT 20;
      - AI 使用说明发布、**且 AI 使用手册（`manual-sponsor.*.md`、`manual-app.*.md`）已按首次上线的状态（学分只显示、不使用，无报名费）改好并由内容管理员重新载入、发布**之后，才发布 `qb.ai.enabled` 与 `qb.help.enabled`（两条提案的值都是 `true`）；
      - 收费组尚未上线的行：已经存在的两个键 `qb.audience.billing.enabled`（F-M7）、`qb.ai.site-profile.enabled`（F-M9）由 `QB_SETUP` 提出 `false`，**照常发布**，卡片比较它们的现值（为开即"不同"，启动检查警告）；其余四个键（配送费 `qb.distribution.billing.enabled`、曝光费 `qb.exposure.billing.enabled`、AI 费 `qb.ai.fee.enabled`、自动付账单 `qb.fee.auto-pay.enabled`）尚不存在，卡片显示"等 F-Mx 上线"，不提案、不用管；它们的上线顺序见 `plans/impl/F-M.md` §4；
   3. 财务页卡片中可比较的行全部显示"一致"（金额类的行显示"金额，不比较"）。新建的测试系统（`staging`）同样应全部一致；只有此前已经建过参数的测试系统，以及本地环境（不是 `production` / `staging`，提出声明值），才会显示"不同"；
-  4. 启动日志没有 `FirstLaunchSwitchesCheck` 的警告（`production` 上：学分买卖、转账、提现、学分奖励、报名费的开关为开，或学分奖励的开关从未发布；Stripe 正式模式而环境不是 `production`）。
+  4. 启动日志没有 `FirstLaunchSwitchesCheck` 的警告（`production` 上：学分买卖、转账、提现、学分奖励、报名费的开关为开，受众规则费 `qb.audience.billing.enabled` 或网站资料的 AI `qb.ai.site-profile.enabled` 为开，或学分奖励的开关从未发布；Stripe 正式模式而环境不是 `production`）。
   运营商自己的提现（`qb.operator.withdrawal.*`）没有开关：那是运营商的收入，不是学分，不由本项挡住。
 - [ ] 小额实测：一位内部发起方用真实卡充值最小额（`qb.topup.min`），确认到账、手续费分录、收据；在 Stripe Dashboard 全额退款，确认扣回；次日核对为 `OK`
 - [ ] 资金调度：充值在 Stripe 上几天后才变为可用余额，转账从可用余额转出；定好打开转账前的余额与打款计划
