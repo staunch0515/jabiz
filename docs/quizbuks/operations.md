@@ -280,6 +280,7 @@ FROM pg_stat_statements ORDER BY total_exec_time DESC LIMIT 20;
 - **已有的安装**（16u 之前建立、已有两位以上超级管理员；16r 按 `*` 计管理员，它们一直处于建立期）：升级之后建立期立刻结束，`QB_SETUP` 给超级管理员的角色加 `security.protected-change.decide` 需要审批而无人能批（整个 `QB_SETUP` 被拒）。
   所以**升级前**，在旧版本上由超级管理员给角色 `QB_ADMIN_SUPER` 直接加上 `security.protected-change.decide` 与 `approval.read`（`SEC_ROLE_PERMISSION_ADD`：那时仍在建立期、它还只是普通的权限码，当即生效），
   升级后再执行 `QB_SETUP`（它只记下已有的授权）。来不及时，以 `JABIZ_SECURITY_PROTECTEDGRANTS_ENABLED=false` 启动一次、执行 `QB_SETUP`、再改回（关闭的时间留在操作记录中）。
+  另外，升级前先确认没有人同时持有内容管理员和财务管理员两个角色，否则 `QB_SETUP` 给内容管理员加 `control.propose` 时会被职责分离规则 `qb.sod.control-changes` 拒绝（整个 `QB_SETUP` 被拒）。
   检测性控制照旧：季度访问审查 `ACCESS_REVIEW_SIGN_OFF`、审计中逐条复核角色变更（Q10b M-c）。
 
 **会计年度的时区**：保留期自会计年度末起算，日期按日本时间判断（`application.yml` 的 `jabiz.fiscal-year-zone: Asia/Tokyo`，平台 D48 第 2 条；Q10b 评审 L7），不需另设。
@@ -1150,7 +1151,7 @@ Quiz 与发布有主题词（平台词表中的词与自定义词），学者可
 
 - **缺省信纸**来自品牌档案：打包时把品牌在各语言的名字、客服邮箱与官网写进 `application.yml` 的 `jabiz.mail.layout.<语言>.*`（页眉是品牌名，页脚是"品牌名 · 客服邮箱 · 官网"）。首次上线没有标志（`logo-url` 为空：多数邮件客户端不显示 SVG），也不写住所。品牌档案没有官网或客服邮箱时，页脚不放那一条链接。
 - **谁能改**：平台管理系统「邮件信纸」页（`/admin/mail/layout`）。内容管理员**提出**（受控变更 `mail-layout`），**财务管理员发布**（另一位；本人不能发布自己提出的）。两者都须持有 `mail.text.write`、邮箱已验证；超级管理员不持有。提出之后再改须重新提出（审批绑定内容）。恢复默认（`MAIL_LAYOUT_RESET`）由内容管理员即时生效，不需要审批。
-- **`mail.text.write` 由职责分离规则保护**：职责分离规则 `qb.sod.mail-texts`（`QB_SETUP` 提出、另一位管理员发布，和 `qb.sod.control-changes` 等同一做法）规定，管理角色与角色分配的人（`security.role.write`、`security.user-role.write`，即超级管理员）不能同时持有 `mail.text.write`，所以他们没法给自己加。持有 `mail.text.write` 的只有内容管理员与财务管理员。**规则发布之前**（`QB_SETUP` 刚运行、提案还没发布时）这一条只能靠季度访问审查（`ACCESS_REVIEW_SIGN_OFF`）：审查时查 `mail.text.write` 的持有人。
+- **`mail.text.write` 由职责分离规则保护**：职责分离规则 `qb.sod.mail-texts`（`QB_SETUP` 提出、另一位管理员发布，和 `qb.sod.control-changes` 等同一做法）规定，管理角色与角色分配的人（`security.role.write`、`security.user-role.write`，即超级管理员）不能同时持有 `mail.text.write`，所以他们没法给自己加。持有 `mail.text.write` 的只有内容管理员与财务管理员。**规则发布之前**（`QB_SETUP` 刚运行、提案还没发布时）这一条只能靠季度访问审查（`ACCESS_REVIEW_SIGN_OFF`）。规则发布之后访问审查**仍然**要查 `mail.text.write` 的持有人，不只是发布之前：超级管理员仍可把只含这个权限的角色分配给别的账号（规则只拦同一个人同时持有），审查时发现不是内容管理员或财务管理员的持有人即须撤销。
 - **`control.propose` 的副作用**：内容管理员为了提出信纸与邮件文字的修改，持有通用的受控变更提出权限 `control.propose`，因此也能提出别的受控变更（业务参数、审批规则等）。提出不生效，仍须财务管理员发布（四眼不变），但待发布的列表里会出现内容管理员提出的这类变更，发布前要看清是什么。
 - **规则**：标志只能是本站（`{baseUrl}/…`）的图片；页脚不能含令牌、登录链接与退订链接（退订行由平台自动加），不许原始 HTML 与图片；链接只许 `http`、`https`、`mailto`。页脚里的外部链接只许本站和 `jabiz.mail.texts.allowed-link-hosts` 中的主机。
 - **官网主机**：`JABIZ_MAIL_BASE_URL` 按部署而定（staging 是 `staging.quizbuks.com`），与官网主机不同；打包时把品牌档案 `siteUrl` 的主机写进 `allowed-link-hosts`，所以缺省页脚的官网链接在任何部署上都合格。**换品牌或改 `siteUrl` 必须重新打包**；在部署的环境变量里覆盖 `JABIZ_MAIL_TEXTS_ALLOWED_LINK_HOSTS` 时，要把官网主机保留在内，否则启动失败。
