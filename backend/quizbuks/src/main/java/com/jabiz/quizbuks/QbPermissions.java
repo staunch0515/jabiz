@@ -45,9 +45,10 @@ public final class QbPermissions {
      */
     public static final String SPONSOR_VIEW_WRITE = "qb.content.view.write";
     /**
-     * The content process run only as a sub-process: releasing the version files of a removed quiz
-     * ({@code QB_QUIZ_RELEASE_FILES}, the subprocess of {@code QB_QUIZ_DELETE}; {@code subProcessOnly()}, platform
-     * decision D41, so no sponsor starts it directly). Granted to no role (subprocesses are not checked for
+     * The content processes run only as sub-processes: releasing the version files of a removed quiz
+     * ({@code QB_QUIZ_RELEASE_FILES}, the subprocess of {@code QB_QUIZ_DELETE}) and clearing part of a quiz's content
+     * ({@code QB_QUIZ_CLEAR_CONTENT}, a step of a package import, F-F11a). Both are {@code subProcessOnly()}
+     * (platform decision D41), so no sponsor starts them directly. Granted to no role (subprocesses are not checked for
      * permissions).
      */
     public static final String CONTENT_SYSTEM = "qb.content.system";

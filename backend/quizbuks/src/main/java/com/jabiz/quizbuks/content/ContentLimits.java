@@ -17,6 +17,21 @@ public final class ContentLimits {
      * QuizBankLimits.maxQuestions}), never above this.
      */
     public static final int MAX_QUESTIONS_TECH = 2_000;
+    /**
+     * F-F11a: the technical ceiling of the bytes one import request carries. The business value is the parameter
+     * {@code qb.content.import.batch-bytes} (3 MiB by default, {@code QuizBankLimits.importBatchBytes}), never above
+     * this; it stays below {@code spring.http.codecs.max-in-memory-size} (4 MB) with room for the envelope and the
+     * field names, which the framework refuses a request above before any process sees it.
+     */
+    public static final int IMPORT_BATCH_BYTES_TECH = 3_500_000;
+    /** F-F11a: the smallest value {@code qb.content.import.batch-bytes} counts as (below it a batch could hold no question). */
+    public static final int IMPORT_BATCH_BYTES_MIN = 65_536;
+    /**
+     * F-F11a: the most parts one call of {@code QB_QUIZ_CLEAR_CONTENT} deletes. The platform deletes a row of a
+     * temporal entity with three statements (about 2 ms), so 2000 rows are a few seconds, far below what a proxy
+     * waits; it is also the write limit of the question dataset ({@link #MAX_QUESTIONS_TECH}).
+     */
+    public static final int CLEAR_ROWS_TECH = 2_000;
     /** Materials in one quiz. */
     public static final int MAX_MATERIALS = 10;
     /** Options of one question, in a draft; a version needs at least {@link #MIN_OPTIONS}. */
