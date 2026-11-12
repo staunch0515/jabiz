@@ -1,17 +1,25 @@
-import { formatDateTime } from '@jabiz/client'
+import { formatDateTime, i18n } from '@jabiz/client'
 import { useQuery } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import { SPONSOR } from '../messages'
-import { formatKudos } from '../qb/kudos'
+import { formatKudos, kudosName } from '../qb/kudos'
 import { problemText } from '../qb/problems'
 import { Link } from '../qb/router'
 import { FEE_ACCOUNT_PATH } from '../shell/paths'
 import {
+  distributionQuery,
   fundsCheckQuery,
   prepaymentsQuery,
+  readDistributionSettlements,
   readFundsCheck,
+  readPublicationDistribution,
   readPublicationPrepayments,
 } from './api'
+
+/** F-M6: a price per start (up to four decimals) as people read it, in the points' name: `0.4 Kudos`. */
+export function formatUnit(unit: number): string {
+  return `${new Intl.NumberFormat(i18n.language ?? 'en', { maximumFractionDigits: 4 }).format(unit)} ${kudosName()}`
+}
 
 /**
  * F-M5: what submitting sets aside from the fee account for this draft, as the server works it out
@@ -43,6 +51,12 @@ export function FundsPanel({ publicationId, revision }: { publicationId: string;
                 <li key={item.purpose} data-testid="publication-funds-item" data-purpose={item.purpose}>
                   {t('publishing.funds.item', { purpose: t(`publishing.funds.purpose.${item.purpose}`),
                     amount: formatKudos(item.amount) })}
+                  {item.unit != null && (
+                    <span className="text-muted-foreground" data-testid="publication-funds-unit">
+                      {' '}{t(item.atFloor ? 'publishing.funds.unitAtFloor' : 'publishing.funds.unit',
+                        { unit: formatUnit(item.unit) })}
+                    </span>
+                  )}
                 </li>
               ))}
             </ul>
@@ -115,6 +129,47 @@ export function PrepaymentsSection({ publicationId }: { publicationId: string })
         })}
       </ul>
       <p className="text-muted-foreground text-sm">{t('publishing.funds.help')}</p>
+    </section>
+  )
+}
+
+/**
+ * F-M6: this publication's distribution fee (`qb.sponsor.publication-distribution` and its settlements): the price
+ * per start frozen at its submission, the starts since the last settlement and what they come to now, and each month's
+ * settlement. Nothing is shown for a publication without a price per start.
+ */
+export function DistributionSection({ publicationId }: { publicationId: string }) {
+  const { t } = useTranslation(SPONSOR)
+  const summary = useQuery({ queryKey: distributionQuery(publicationId),
+    queryFn: () => readPublicationDistribution(publicationId) })
+  const settlements = useQuery({ queryKey: [...distributionQuery(publicationId), 'settlements'],
+    queryFn: () => readDistributionSettlements(publicationId), enabled: summary.data?.unit != null })
+  const data = summary.data
+  if (!data || data.unit == null) return null
+  return (
+    <section aria-labelledby="publication-distribution-title" className="flex flex-col gap-2"
+      data-testid="publication-distribution">
+      <h2 id="publication-distribution-title" className="text-sm font-medium">{t('publishing.distribution.title')}</h2>
+      <p className="text-sm" data-testid="publication-distribution-unit">
+        {t(data.atFloor ? 'publishing.funds.unitAtFloor' : 'publishing.funds.unit', { unit: formatUnit(data.unit) })}
+      </p>
+      {!data.finalSettled && (
+        <p className="text-sm" data-testid="publication-distribution-pending">
+          {t('publishing.distribution.pending', { starts: data.pendingStarts,
+            amount: formatKudos(data.pendingEstimate) })}
+        </p>
+      )}
+      {settlements.data && settlements.data.length > 0 && (
+        <ul className="flex flex-col gap-1 text-sm">
+          {settlements.data.map((row) => (
+            <li key={row.settlementId} data-testid="publication-distribution-settlement" data-period={row.period}>
+              {t(row.final ? 'publishing.distribution.finalRow' : 'publishing.distribution.row', {
+                period: row.period, starts: row.starts, amount: formatKudos(row.amount), tax: formatKudos(row.tax) })}
+            </li>
+          ))}
+        </ul>
+      )}
+      <p className="text-muted-foreground text-sm">{t('publishing.distribution.help')}</p>
     </section>
   )
 }

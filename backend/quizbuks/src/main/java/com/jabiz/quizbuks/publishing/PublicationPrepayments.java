@@ -440,8 +440,12 @@ public final class PublicationPrepayments {
     public static final String CHECK = "QB_PUBLICATION_FUNDS_CHECK";
     static final String CHECKED = "funds.checked";
 
-    /** One fee the publication would set aside: what for, with its tax, and the fee before tax. */
-    public record CheckItem(String purpose, BigDecimal amount, BigDecimal chargeAmount) {}
+    /**
+     * One fee the publication would set aside: what for, with its tax, and the fee before tax; F-M6: the distribution
+     * fee's price per start and whether it is the operator's floor (none for the other purposes).
+     */
+    public record CheckItem(String purpose, BigDecimal amount, BigDecimal chargeAmount, BigDecimal unit,
+        Boolean atFloor) {}
 
     /**
      * @param total     what submitting now would set aside
@@ -485,8 +489,13 @@ public final class PublicationPrepayments {
                     PrepaymentRules.Funds funds = ctx.contains(ITEMS) ? funds(ctx)
                         : PrepaymentRules.check(List.of(), new PrepaymentRules.Standing(FeeRules.PREPAID,
                             BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO));
+                    DistributionQuote distribution = ctx.contains(DISTRIBUTION)
+                        ? ctx.get(DISTRIBUTION, DistributionQuote.class) : null;
                     ctx.put(CHECKED, new CheckOutput(funds.items().stream()
-                        .map(item -> new CheckItem(item.purpose(), item.amount(), item.chargeAmount())).toList(),
+                        .map(item -> QbPrepayments.DISTRIBUTION.equals(item.purpose()) && distribution != null
+                            ? new CheckItem(item.purpose(), item.amount(), item.chargeAmount(), distribution.unit(),
+                                distribution.atFloor())
+                            : new CheckItem(item.purpose(), item.amount(), item.chargeAmount(), null, null)).toList(),
                         funds.total(), funds.available(), funds.shortfall(), funds.billingMode(), funds.enough()));
                 });
             });

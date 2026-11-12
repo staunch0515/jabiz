@@ -83,6 +83,8 @@ interface Server {
   /** F-M5: the funds check of a draft (nothing set aside by default) and a publication's prepayments. */
   funds?: Record<string, unknown>
   prepayments?: Record<string, unknown>[]
+  distribution?: Record<string, unknown>
+  distributionSettlements?: Record<string, unknown>[]
 }
 
 /** The server as the console sees it, for a signed-in, approved sponsor. Records what was posted. */
@@ -202,6 +204,10 @@ function server(options: Server = {}) {
       }
       case '/api/queries/qb.sponsor.publication-prepayments':
         return json(200, { items: options.prepayments ?? [], offset: 0, limit: 100 })
+      case '/api/queries/qb.sponsor.publication-distribution':
+        return json(200, { items: options.distribution ? [options.distribution] : [], offset: 0, limit: 1 })
+      case '/api/queries/qb.sponsor.publication-distribution-settlements':
+        return json(200, { items: options.distributionSettlements ?? [], offset: 0, limit: 120 })
       case '/api/queries/qb.sponsor.staff':
         return json(200, { items: options.staff ?? [], offset: 0, limit: 100 })
       case '/api/queries/qb.sponsor.cash-rewards':
@@ -829,7 +835,8 @@ describe('the publication wizard', () => {
   it('shows what submitting sets aside, the total and what is available (F-M5)', async () => {
     const { processCalls } = server({ processes: { QB_PUBLICATION_SAVE: [saved(4)] },
       funds: { items: [{ purpose: 'AUDIENCE', amount: 1100, chargeAmount: 1000 },
-        { purpose: 'DISTRIBUTION', amount: 550, chargeAmount: 500 }], total: 1650, available: 5000, shortfall: 0,
+        { purpose: 'DISTRIBUTION', amount: 550, chargeAmount: 0, unit: 0.4, atFloor: false }], total: 1650,
+      available: 5000, shortfall: 0,
       billingMode: 'PREPAID', enough: true } })
     window.history.replaceState(null, '', '/publications/p1?step=2')
     render(<App />)
@@ -839,6 +846,8 @@ describe('the publication wizard', () => {
     expect(items).toHaveLength(2)
     expect(items[0]).toHaveTextContent('Audience rules: 1,100 Kudos')
     expect(items[1]).toHaveTextContent('Distribution fee: 550 Kudos')
+    expect(within(items[1]).getByTestId('publication-funds-unit')).toHaveTextContent('(0.4 Kudos a start)')
+    expect(within(items[0]).queryByTestId('publication-funds-unit')).toBeNull()
     expect(within(funds).getByTestId('publication-funds-total')).toHaveTextContent('1,650 Kudos')
     expect(within(funds).getByTestId('publication-funds-available')).toHaveTextContent('5,000 Kudos')
     expect(within(funds).queryByTestId('publication-funds-short')).toBeNull()
@@ -1478,6 +1487,36 @@ describe('the tabs of a submitted publication (F-F3c)', () => {
     expect(within(rows[1]).getByTestId('publication-prepayment-state')).toHaveTextContent('Given back (you withdrew it)')
     expect(section).toHaveTextContent('A prepayment is not a fee')
     await expectAccessible()
+  })
+
+  it('shows the distribution fee: the price per start, the starts since the last settlement and each month (F-M6)',
+    async () => {
+      server({ publication: LIVE,
+        distribution: { unit: 1, atFloor: true, starts: 5, settledStarts: 3, pendingStarts: 2, charged: 3,
+          pendingEstimate: 2, settlements: 1, finalSettled: false },
+        distributionSettlements: [{ settlementId: 's1', period: '2026-10', starts: 3, toStarts: 3, unit: 1,
+          atFloor: true, amount: 3, tax: 0, total: 3, final: false, chargeId: 'c1',
+          settledAt: '2026-11-01T15:37:00Z' }] })
+      window.history.replaceState(null, '', '/publications/p1/fees')
+      render(<App />)
+      const section = await screen.findByTestId('publication-distribution')
+      expect(within(section).getByTestId('publication-distribution-unit')).toHaveTextContent(
+        '(1 Kudos a start, the least price)')
+      expect(within(section).getByTestId('publication-distribution-pending')).toHaveTextContent(
+        '2 people started since the last settlement: about 2 Kudos so far')
+      expect(await within(section).findByTestId('publication-distribution-settlement')).toHaveTextContent(
+        '2026-10: 3 people, 3 Kudos and tax 0 Kudos')
+      expect(section).toHaveTextContent('Takers get every reward you set')
+      await expectAccessible()
+    })
+
+  it('shows no distribution section for a publication without a price per start (F-M6)', async () => {
+    server({ publication: LIVE, distribution: { unit: null, atFloor: false, starts: 0, settledStarts: 0,
+      pendingStarts: 0, charged: 0, pendingEstimate: 0, settlements: 0, finalSettled: false } })
+    window.history.replaceState(null, '', '/publications/p1/fees')
+    render(<App />)
+    expect(await screen.findByTestId('publication-fees-hint')).toBeInTheDocument()
+    expect(screen.queryByTestId('publication-distribution')).toBeNull()
   })
 
   it('shows no prepayment section while there are no rows (F-M5)', async () => {
