@@ -253,9 +253,10 @@ export function SponsorPackage({ controls, onExporting }: {
       notify.success(t('package.done'))
     } catch (e) {
       const step = e instanceof PackageStepError ? e.step : last
-      // A step that clears the content a draft had, or the one that brings the next, stopped: the draft is empty (or
-      // half empty) until the import goes on.
-      const emptied = !!step && (step.kind === 'clear' || (step.kind === 'content' && step.clears > 0))
+      // A step that clears the content a draft had, the one that brings the next or one of the batches after it
+      // stopped: the draft is empty (or has only the part before) until the import goes on.
+      const emptied = !!step && (step.kind === 'clear'
+        || ((step.kind === 'content' || step.kind === 'batch') && step.clears > 0))
       setState({ kind: 'failed', checked, label: step ? stepLabel(step, t) : t('package.title'),
         problems: reasonsOf(e instanceof PackageStepError ? e.cause : e, t), emptied })
     } finally {

@@ -483,9 +483,11 @@ export type PlannedStep =
     /** The steps that clear the content this one replaces, before it (0 for the first content). */
     clears: number }
   | { kind: 'clear'; key: string; quiz: string; label: string; title: string; clear: number; clears: number;
-    quizStep: string }
+    quizStep: string; /** The step that brings the content these clear the way for. */ content: string }
   | { kind: 'batch'; key: string; quiz: string; label: string; title: string; check: string; batch: number;
-    batches: number; document: Record<string, unknown>; quizStep: string }
+    batches: number; document: Record<string, unknown>; quizStep: string;
+    /** The steps that cleared the content this one replaces: a batch refused after them leaves the draft part empty. */
+    clears: number }
   | { kind: 'version'; key: string; quiz: string; label: string; title: string; versionKey: string;
     quizStep: string }
   | { kind: 'publication'; key: string; index: number; name: string; publication: PackagePublication;
@@ -743,7 +745,7 @@ export function planImport(document: SponsorPackageDocument, context: PlanContex
       const clears = c === 0 ? 0 : Math.ceil(partsOf(contents[c - 1].file) / CLEAR_ROWS)
       for (let k = 1; k <= clears; k++) {
         steps.push({ kind: 'clear', key: `${base}:clear:${k}`, quiz: quiz.key, label: content.label, title, clear: k,
-          clears, quizStep: firstSteps.get(quiz.key)! })
+          clears, quizStep: firstSteps.get(quiz.key)!, content: contentKey })
       }
       const cut = planContent(content.file, size, bytes)
       cut.oversized.forEach((question) => planned.oversized.push({ title, question }))
@@ -751,7 +753,7 @@ export function planImport(document: SponsorPackageDocument, context: PlanContex
         document: cut.first, into: c === 0 ? null : firstSteps.get(quiz.key)!, topics: content.topics, clears })
       cut.batches.forEach((batch, b) => steps.push({ kind: 'batch', key: `${base}:batch:${b + 2}`, quiz: quiz.key,
         label: content.label, title, check, batch: b + 2, batches: cut.batches.length + 1, document: batch,
-        quizStep: firstSteps.get(quiz.key)! }))
+        quizStep: firstSteps.get(quiz.key)!, clears }))
       if (content.versionKey) {
         const versionKey = `${base}:version`
         versionSteps.set(content.versionKey, versionKey)
@@ -977,6 +979,13 @@ export async function runImport({ document, hash, plan, checks, onProgress, now 
   let status: string = view.status
   for (const [i, step] of current.steps.entries()) {
     if (results[step.key]) {
+      onProgress?.(step, i + 1, current.steps.length, 'done')
+      continue
+    }
+    // An import begun before the clearing steps existed has its contents made without them: where the content a step
+    // clears the way for is done, the clearing must not run now, it would delete what that content imported (and the
+    // content, being done, would not bring it back).
+    if (step.kind === 'clear' && results[step.content]) {
       onProgress?.(step, i + 1, current.steps.length, 'done')
       continue
     }

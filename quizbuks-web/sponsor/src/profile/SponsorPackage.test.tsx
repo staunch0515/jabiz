@@ -76,7 +76,7 @@ function server({ submittedPublication = false, open = null, failOnce = {}, limi
         return json(200, { output: { formatVersion: 3, currentVersion: 3, readers: [3], kind: 'QUIZ', title: 'Coffee',
           questions: 1, materials: 0, files: [], language: 'en', languages: [] } })
       case '/api/processes/QB_PACKAGE_IMPORT_START/latest':
-        return json(200, { output: { importId: 'imp', mode: body?.mode, status: 'RUNNING', batchSize: 200,
+        return json(200, { output: { importId: 'imp', mode: body?.mode, status: 'RUNNING', batchSize: body?.batchSize ?? 200,
           batchBytes: body?.batchBytes ?? null, stepsTotal: body?.stepsTotal, stepsDone: Object.keys(done).length, done: { ...done },
           resumed: Object.keys(done).length > 0 } })
       case '/api/processes/QB_PACKAGE_IMPORT_STEP/latest': {
@@ -275,6 +275,34 @@ describe('large banks: the clearing steps and the byte limit (F-F11b)', () => {
     await userEvent.click(within(dialog).getByTestId('sponsor-package-continue'))
     await within(dialog).findByTestId('sponsor-package-done')
     expect(steps().filter((step) => step.includes(':clear:'))).toEqual(['quiz:q1:v:q1v2:clear:1'])
+  })
+
+  it('tells the same when a batch after the new content is refused: the draft has only the part before', async () => {
+    const two = { ...QUIZ_FILE, questions: [QUIZ_FILE.questions[0], { ...QUIZ_FILE.questions[0], stem: 'More?' }] }
+    const document = { ...PACKAGE, quizzes: [{ key: 'q1', versions: [
+      { key: 'q1v1', label: 'v1', file: QUIZ_FILE }, { key: 'q1v2', label: 'v2', file: two }], current: null }] }
+    // One question a step: the second version has a batch after its content.
+    server({ limits: { importBatch: 1 }, failOnce: { 'quiz:q1:v:q1v2:batch:2': 'Not now' } })
+    renderCard()
+    await userEvent.upload(screen.getByTestId('sponsor-package-file'), packageFile(document))
+    const dialog = await screen.findByTestId('sponsor-package-dialog')
+    await userEvent.click(await within(dialog).findByTestId('sponsor-package-confirm'))
+    const failed = await within(dialog).findByTestId('sponsor-package-failed')
+    expect(failed).toHaveTextContent('questions batch 2 of 2')
+    expect(within(failed).getByTestId('sponsor-package-emptied')).toBeInTheDocument()
+  })
+
+  it('has no such note for a batch of the first content, which replaced nothing', async () => {
+    const two = { ...QUIZ_FILE, questions: [QUIZ_FILE.questions[0], { ...QUIZ_FILE.questions[0], stem: 'More?' }] }
+    const document = { ...PACKAGE, quizzes: [{ key: 'q1', versions: [{ key: 'q1v1', label: 'v1', file: two }],
+      current: null }] }
+    server({ limits: { importBatch: 1 }, failOnce: { 'quiz:q1:v:q1v1:batch:2': 'Not now' } })
+    renderCard()
+    await userEvent.upload(screen.getByTestId('sponsor-package-file'), packageFile(document))
+    const dialog = await screen.findByTestId('sponsor-package-dialog')
+    await userEvent.click(await within(dialog).findByTestId('sponsor-package-confirm'))
+    const failed = await within(dialog).findByTestId('sponsor-package-failed')
+    expect(within(failed).queryByTestId('sponsor-package-emptied')).toBeNull()
   })
 
   it('has no such note when another step is refused', async () => {

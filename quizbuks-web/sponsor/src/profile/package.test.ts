@@ -461,3 +461,86 @@ describe('starting an import with the bytes (F-F11b)', () => {
     expect(replan).toHaveBeenCalledWith(2, 0)
   })
 })
+
+describe('going on with an import begun before the clearing steps (F-F11b review H1, M1)', () => {
+  /** The server: the steps it has done, and every step it is asked to run. */
+  function resumed(done: Record<string, Record<string, unknown>>) {
+    const asked: string[] = []
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const request = input instanceof Request ? input : new Request(new URL(String(input), window.location.origin), init)
+      const path = decodeURIComponent(new URL(request.url).pathname)
+      const body = request.method === 'POST' ? await request.clone().json().catch(() => null) : null
+      if (path === '/api/processes/QB_PACKAGE_IMPORT_START/latest') {
+        return json(200, { output: { importId: 'imp', mode: 'FULL', status: 'RUNNING', batchSize: 2, batchBytes: null,
+          stepsTotal: 3, stepsDone: Object.keys(done).length, resumed: true, done } })
+      }
+      if (path === '/api/processes/QB_PACKAGE_IMPORT_STEP/latest') {
+        const step = String((body as { step: string }).step)
+        asked.push(step)
+        return json(200, { output: { importId: 'imp', step, status: 'RUNNING', stepsDone: 1, stepsTotal: 3,
+          result: step.endsWith(':version') ? { quizId: 'Q1', versionId: 'V' } : { quizId: 'Q1' }, repeated: false } })
+      }
+      return json(404, {})
+    })
+    return asked
+  }
+  const twoVersions = () => {
+    const document = packageOf()
+    document.quizzes[0].versions = [{ key: 'q1v1', label: 'v1', file: { ...quizFile('Coffee', 1) } },
+      { key: 'q1v2', label: 'v2', file: { ...quizFile('Coffee', 2) } }]
+    document.quizzes[0].current = null
+    document.trees = []
+    document.publications = []
+    return document
+  }
+  const run = (document: SponsorPackageDocument) => {
+    const plan = planImport(document, context())
+    return runImport({ document, hash: 'h', plan, now: new Date('2026-11-09T10:20:00Z'),
+      checks: { profile: null, mailPassword: '', sharedVideos: new Set(), quizzes: {
+        'q1:q1v1': { files: [] }, 'q1:q1v2': { files: [] } } as never } })
+  }
+
+  it('does not clear the content that is already there: an import begun before has no clearing step done, but its content', async () => {
+    // The first version is saved, and the second one's content is done: it was made without a clearing step.
+    const asked = resumed({
+      'quiz:q1:v:q1v1:content': { quizId: 'Q1' }, 'quiz:q1:v:q1v1:version': { quizId: 'Q1', versionId: 'V1' },
+      'quiz:q1:v:q1v2:content': { quizId: 'Q1' } })
+    await run(twoVersions())
+    // Only what is left is run; the clearing step of a content already done would delete what it imported.
+    expect(asked).toEqual(['quiz:q1:v:q1v2:version'])
+  })
+
+  it('still clears before a content that is not done, and not again once the clearing is done', async () => {
+    const first = resumed({ 'quiz:q1:v:q1v1:content': { quizId: 'Q1' }, 'quiz:q1:v:q1v1:version': { quizId: 'Q1',
+      versionId: 'V1' } })
+    await run(twoVersions())
+    expect(first).toEqual(['quiz:q1:v:q1v2:clear:1', 'quiz:q1:v:q1v2:content', 'quiz:q1:v:q1v2:version'])
+    vi.restoreAllMocks()
+    // Stopped after the clearing, the content refused: going on does not clear again.
+    const again = resumed({ 'quiz:q1:v:q1v1:content': { quizId: 'Q1' }, 'quiz:q1:v:q1v1:version': { quizId: 'Q1',
+      versionId: 'V1' }, 'quiz:q1:v:q1v2:clear:1': { cleared: 7 } })
+    await run(twoVersions())
+    expect(again).toEqual(['quiz:q1:v:q1v2:content', 'quiz:q1:v:q1v2:version'])
+  })
+
+  it('has a first step of no questions when the heading and the materials leave no room for one, and the batches after', () => {
+    const file = bigFile(6, 2, 100, { materials: [{ kind: 'ARTICLE', title: 'M', body: 'b'.repeat(4000) }] })
+    const headOnly = new TextEncoder().encode(JSON.stringify(firstBatch(file, 0))).length
+    const oneQuestion = new TextEncoder().encode(JSON.stringify(firstBatch(file, 1))).length
+    // Room for the heading and the materials, not for the first question with them.
+    const limit = headOnly + Math.floor((oneQuestion - headOnly) / 2)
+    const batchLimit = limit
+    const cut = planContent(file, 6, batchLimit)
+    expect((cut.first.questions as unknown[]).length).toBe(0)
+    expect((cut.first.materials as unknown[]).length).toBe(1)
+    expect(cut.oversized).toEqual([])
+    const count = (document: Record<string, unknown>) => (document.questions as unknown[]).length
+    expect(cut.batches.reduce((sum, batch) => sum + count(batch), 0)).toBe(6)
+    // The batches are numbered from 2 in the plan, the first step being the content's.
+    const plan = planImport({ ...packageOf(), quizzes: [{ ...packageOf().quizzes[0], versions: [], current: file as never }] },
+      context({ batchSize: 6, batchBytes: batchLimit }))
+    const keys = plan.steps.map((s) => s.key).filter((key) => key.startsWith('quiz:'))
+    expect(keys[0]).toBe('quiz:q1:c:content')
+    expect(keys.slice(1)).toEqual(cut.batches.map((_, i) => `quiz:q1:c:batch:${i + 2}`))
+  })
+})
