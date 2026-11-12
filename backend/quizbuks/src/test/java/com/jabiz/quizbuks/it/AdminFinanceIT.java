@@ -473,13 +473,27 @@ class AdminFinanceIT extends PayoutItSupport {
 
         List<Map<String, Object>> rows = items(id, TestTokens.bearer(tokens, "f-read-only-card",
             "qb.admin.finance.read"), Map.of("limit", 100));
-        List<FirstLaunchSwitches.Row> active = FirstLaunchSwitches.ALL.stream()
-            .filter(row -> row.status() == FirstLaunchSwitches.Status.ACTIVE).toList();
-        assertThat(rows).extracting(r -> r.get("paramKey")).containsExactlyElementsOf(active.stream()
-            .map(FirstLaunchSwitches.Row::key).toList());
-        // What the first launch proposes, as the registry has it (null for an amount).
-        assertThat(rows).extracting(r -> r.get("expected")).containsExactlyElementsOf(active.stream()
-            .map(row -> row.value() == null ? null : String.valueOf(row.value())).toList());
+        // The active rows, then the waiting ones whose key exists (the first launch has them off), in the registry's order.
+        List<String> keys = new java.util.ArrayList<>();
+        List<String> expectedValues = new java.util.ArrayList<>();
+        for (FirstLaunchSwitches.Row row : FirstLaunchSwitches.ALL) {
+            if (row.status() == FirstLaunchSwitches.Status.ACTIVE) {
+                keys.add(row.key());
+                expectedValues.add(row.value() == null ? null : String.valueOf(row.value()));
+            }
+        }
+        for (FirstLaunchSwitches.Row row : FirstLaunchSwitches.ALL) {
+            if (row.status() == FirstLaunchSwitches.Status.WAITING
+                && FirstLaunchSwitches.KEY_BEFORE_MEANING.contains(row.key())) {
+                keys.add(row.key());
+                expectedValues.add("false");
+            }
+        }
+        assertThat(rows).extracting(r -> r.get("paramKey")).containsExactlyElementsOf(keys);
+        // What the first launch proposes (null for an amount); the waiting rows with a key are off.
+        assertThat(rows).extracting(r -> r.get("expected")).containsExactlyElementsOf(expectedValues);
+        assertThat(rows).filteredOn(r -> QbParams.AUDIENCE_BILLING_ENABLED.equals(r.get("paramKey")))
+            .singleElement().satisfies(r -> assertThat(r).containsEntry("value", "false").containsEntry("grp", "audience"));
         // The install published the declared values: every parameter is there, and cash into Kudos is on.
         assertThat(rows).allSatisfy(r -> assertThat(r).containsEntry("paramExists", true));
         Map<String, Object> buy = rows.stream().filter(r -> QbParams.KUDOS_BUY_ENABLED.equals(r.get("paramKey")))

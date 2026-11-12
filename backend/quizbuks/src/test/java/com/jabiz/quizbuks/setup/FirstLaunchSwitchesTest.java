@@ -149,7 +149,19 @@ class FirstLaunchSwitchesTest {
     @Test
     void theSwitchesThatMustBeOffAreDerivedFromTheRegistry() {
         List<String> off = FirstLaunchSwitches.ALL.stream()
-            .filter(row -> row.status() == Status.ACTIVE && Boolean.FALSE.equals(row.value())).map(Row::key).toList();
+            .filter(row -> (row.status() == Status.ACTIVE && Boolean.FALSE.equals(row.value()))
+                || (row.status() == Status.WAITING && FirstLaunchSwitches.KEY_BEFORE_MEANING.contains(row.key())))
+            .map(Row::key).toList();
         assertThat(FirstLaunchSwitchesCheck.MUST_BE_OFF).isEqualTo(off).isNotEmpty();
+    }
+
+    @Test
+    void aWaitingRowWhoseKeyExistsIsDeclaredOffSoTheSetupProposesItOff() {
+        for (String key : FirstLaunchSwitches.KEY_BEFORE_MEANING) {
+            QbParams.Param param = QbParams.ALL.stream().filter(p -> p.key().equals(key)).findFirst().orElseThrow();
+            // valueFor ignores a waiting row's intent (true), so the declared value is what QB_SETUP proposes.
+            assertThat(param.value()).as(key).isEqualTo(false);
+            assertThat(FirstLaunchSwitches.valueFor(param, true)).as(key).isEqualTo(false);
+        }
     }
 }

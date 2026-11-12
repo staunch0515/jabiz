@@ -14,8 +14,10 @@ import {
 } from '@jabiz/admin'
 import { LoadFailed, Section } from './components'
 import {
+  KEY_BEFORE_MEANING_ROWS,
   MANUAL_ROWS,
   nameId,
+  NOT_SET_IS_OFF,
   readFundProposals,
   readFundSwitches,
   stateOf,
@@ -32,6 +34,7 @@ const TONE: Record<FundState | 'waiting' | 'manual', 'success' | 'warning' | 'se
   match: 'success',
   differs: 'warning',
   proposed: 'secondary',
+  proposedDiffers: 'warning',
   missing: 'warning',
   amount: 'outline',
   waiting: 'outline',
@@ -79,6 +82,16 @@ export function FundSwitches() {
           <>
             <div>{t(`fundSwitch.names.${nameId(row.original.key)}`)}</div>
             <code className="text-muted-foreground text-xs">{row.original.key}</code>
+            {row.original.feature && row.original.state !== 'waiting' && (
+              <p className="text-muted-foreground mt-1 text-xs" data-testid="fund-switch-note">
+                {t('fundSwitch.waitsNote', { feature: row.original.feature })}
+              </p>
+            )}
+            {NOT_SET_IS_OFF.has(row.original.key) && (
+              <p className="text-muted-foreground mt-1 text-xs" data-testid="fund-switch-note">
+                {t('fundSwitch.notSetIsOff')}
+              </p>
+            )}
           </>
         ) },
       { id: 'group', header: t('fundSwitch.columns.group'), enableSorting: false,
@@ -126,7 +139,8 @@ export function FundSwitches() {
     const lines: Line[] = [
       ...switches.data.map((row) => {
         const mine = open.filter((p) => p.key === row.key)
-        return { ...row, state: stateOf(row, mine), proposals: mine }
+        const waiting = KEY_BEFORE_MEANING_ROWS.find((w) => w.key === row.key)
+        return { ...row, state: stateOf(row, mine), proposals: mine, feature: waiting?.waitingFor }
       }),
       ...WAITING_ROWS.map((row) => ({ key: row.key, group: row.group, expected: null, value: null, exists: false,
         state: 'waiting' as const, feature: row.waitingFor, proposals: [] })),

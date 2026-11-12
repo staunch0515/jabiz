@@ -20,9 +20,10 @@ list:
   key: [paramKey]
 permissions: [qb.admin.finance.read]
 ---*/
--- The VALUES are the registry's active rows, in its order (key, group, first launch value as the parameter's text, seq):
--- FirstLaunchSwitchesTemplateTest compares them row by row, so the two cannot drift. The rows that wait for a feature
--- or are set up by hand are not here (the card lists them from the registry's names). paramExists is false until the
+-- The VALUES are the registry's active rows, in its order, then its waiting rows whose key already exists
+-- (KEY_BEFORE_MEANING: off until their feature is there) (key, group, first launch value as the parameter's text, seq):
+-- FirstLaunchSwitchesTemplateTest compares them row by row, so the two cannot drift. The other rows that wait for a
+-- feature, and the ones set up by hand, are not here (the card lists them from the registry's names). paramExists is false until the
 -- setup's proposal of a controlled parameter is published; expected is null for an amount (the declared value stands).
 WITH wanted (k, grp, expected, seq) AS (
     VALUES
@@ -45,7 +46,9 @@ WITH wanted (k, grp, expected, seq) AS (
         ('qb.withdrawal.bank.enabled', 'kudos', 'false', 17),
         ('qb.reward.kudos.enabled', 'kudos', 'false', 18),
         ('qb.reward.default-methods', 'kudos', '', 19),
-        ('qb.play.entry-fee.enabled', 'kudos', 'false', 20))
+        ('qb.play.entry-fee.enabled', 'kudos', 'false', 20),
+        ('qb.audience.billing.enabled', 'audience', 'false', 21),
+        ('qb.ai.site-profile.enabled', 'aifee', 'false', 22))
 SELECT
     CAST(w.k AS varchar(200))        AS paramKey,
     CAST(w.grp AS varchar(30))       AS grp,

@@ -7,7 +7,8 @@ import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vite
 import { ApiError, AppearanceProvider, EXTENSION_NAMESPACE } from '@jabiz/admin'
 import { expectAccessible } from '@jabiz/admin/testing'
 import { FundSwitches } from './FundSwitches'
-import { MANUAL_ROWS, nameId, sameValue, stateOf, WAITING_ROWS } from './first-launch-api'
+import { KEY_BEFORE_MEANING_ROWS, MANUAL_ROWS, nameId, sameValue, stateOf, WAITING_ROWS } from './first-launch-api'
+import { PAGE_LIMIT } from './ids'
 import { CONTROL, TEMPLATE } from './ids'
 import { messages } from './messages'
 
@@ -143,12 +144,64 @@ describe('FundSwitches', () => {
       expect(stateOfRow(waiting.key)).toHaveAttribute('data-state', 'waiting')
       expect(line.getByTestId('fund-switch-state')).toHaveTextContent(`Waits for ${waiting.waitingFor}`)
     }
-    expect(WAITING_ROWS.map((r) => r.key)).toContain('qb.audience.billing.enabled')
+    // A waiting row whose key exists is read from the server instead.
+    expect(WAITING_ROWS.map((r) => r.key)).not.toContain('qb.audience.billing.enabled')
     for (const manual of MANUAL_ROWS) {
       expect(stateOfRow(manual.key)).toHaveAttribute('data-state', 'manual')
       expect(within(stateOfRow(manual.key) as HTMLElement).getByTestId('fund-switch-state'))
         .toHaveTextContent('Proposed by maintenance staff through a controlled change')
     }
+  })
+
+  it('shows a waiting row whose key exists with its value in force and says what it waits for', async () => {
+    server.switches = [...(server.switches as Row[]), row('qb.audience.billing.enabled', 'audience', 'false', 'true', true),
+      row('qb.ai.site-profile.enabled', 'aifee', 'false', 'false', true)]
+    renderCard()
+    await screen.findByTestId('fund-switches')
+    await screen.findAllByTestId('fund-switch-proposal')
+    expect(KEY_BEFORE_MEANING_ROWS.map((r) => r.key)).toEqual(['qb.audience.billing.enabled', 'qb.ai.site-profile.enabled'])
+    const audience = within(stateOfRow('qb.audience.billing.enabled') as HTMLElement)
+    expect(stateOfRow('qb.audience.billing.enabled')).toHaveAttribute('data-state', 'differs')
+    expect(audience.getByTestId('fund-switch-value')).toHaveTextContent('true')
+    expect(audience.getByTestId('fund-switch-note')).toHaveTextContent('Waits for F-M7')
+    expect(stateOfRow('qb.ai.site-profile.enabled')).toHaveAttribute('data-state', 'match')
+    expect(within(stateOfRow('qb.ai.site-profile.enabled') as HTMLElement).getByTestId('fund-switch-note'))
+      .toHaveTextContent('Waits for F-M9')
+  })
+
+  it('says beside the Kudos reward rows that not set counts as off', async () => {
+    renderCard()
+    await screen.findByTestId('fund-switches')
+    for (const key of ['qb.reward.kudos.enabled', 'qb.reward.default-methods']) {
+      expect(within(stateOfRow(key) as HTMLElement).getByTestId('fund-switch-note'))
+        .toHaveTextContent('In production and staging, not set counts as off.')
+    }
+    expect(within(stateOfRow('qb.kudos.buy.enabled') as HTMLElement).queryByTestId('fund-switch-note')).toBeNull()
+  })
+
+  it('warns when what waits for a parameter that is not there is not the first launch value', async () => {
+    server.changes = [change('qb.ai.enabled', 'false'), change('qb.help.enabled', 'true')]
+    renderCard()
+    await screen.findByTestId('fund-switches')
+    await screen.findAllByTestId('fund-switch-proposal')
+    expect(stateOfRow('qb.ai.enabled')).toHaveAttribute('data-state', 'proposedDiffers')
+    expect(within(stateOfRow('qb.ai.enabled') as HTMLElement).getByTestId('fund-switch-state'))
+      .toHaveTextContent("The waiting value differs from the first launch's")
+    expect(stateOfRow('qb.help.enabled')).toHaveAttribute('data-state', 'proposed')
+  })
+
+  it('reads every page of the open proposals, not only the first', async () => {
+    const others = Array.from({ length: PAGE_LIMIT }, (_, i) => change(`qb.other.${i}`, 'true'))
+    server.post.mockReset().mockImplementation(async (_path: string, options: { body: { offset: number } }) => {
+      const all = [...others, change('qb.ai.enabled', 'true')]
+      return { items: all.slice(options.body.offset, options.body.offset + PAGE_LIMIT).map((attributes) => ({ attributes })) }
+    })
+    renderCard()
+    await screen.findByTestId('fund-switches')
+    await screen.findAllByTestId('fund-switch-proposal')
+    expect(server.post).toHaveBeenCalledTimes(2)
+    expect(server.post.mock.calls[1][1].body.offset).toBe(PAGE_LIMIT)
+    expect(stateOfRow('qb.ai.enabled')).toHaveAttribute('data-state', 'proposed')
   })
 
   it('says all match when they do, and links to the controlled changes', async () => {
@@ -230,6 +283,12 @@ describe('first launch values', () => {
     expect(stateOf(base, [])).toBe('differs')
     expect(stateOf(base, [{ ...proposal, value: 'false' }])).toBe('differs')
     expect(stateOf(base, [proposal])).toBe('proposed')
+    // Not there, and what waits is not the first launch's value (QB_SETUP ran without the production environment).
+    const gone = { ...base, exists: false, value: null }
+    expect(stateOf(gone, [{ ...proposal, value: 'false' }])).toBe('proposedDiffers')
+    expect(stateOf(gone, [{ ...proposal, value: 'false' }, proposal])).toBe('proposed')
+    // An amount has no value to compare: a proposal for it just waits.
+    expect(stateOf({ ...gone, expected: null }, [{ ...proposal, value: '5' }])).toBe('proposed')
     expect(stateOf({ ...base, value: 'true' }, [])).toBe('match')
     expect(stateOf({ ...base, expected: null }, [])).toBe('amount')
   })

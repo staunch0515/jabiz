@@ -57,6 +57,13 @@ class FirstLaunchSwitchesTemplateTest {
                 expected.add(new Tuple(row.key(), row.group(), text(row), expected.size() + 1));
             }
         }
+        // The waiting rows whose key exists are read like the active ones, with the value they have at the first launch:
+        // off (the declared value is false, which QB_SETUP proposes: valueFor ignores a waiting row's intent).
+        for (Row row : FirstLaunchSwitches.ALL) {
+            if (row.status() == Status.WAITING && FirstLaunchSwitches.KEY_BEFORE_MEANING.contains(row.key())) {
+                expected.add(new Tuple(row.key(), row.group(), "false", expected.size() + 1));
+            }
+        }
         assertThat(tuples).as("the template's rows, key by key").isEqualTo(expected);
         // And nothing in VALUES that the pattern did not read (a row written another way).
         assertThat(values.split("\\n(?= *\\(')").length - 1).as("one line for each row").isEqualTo(expected.size());
@@ -87,6 +94,12 @@ class FirstLaunchSwitchesTemplateTest {
         List<String> waiting = listed(api, "WAITING_ROWS", 3).stream()
             .map(row -> row[0] + "|" + row[1] + "|" + row[2]).toList();
         assertThat(waiting).isEqualTo(FirstLaunchSwitches.ALL.stream().filter(row -> row.status() == Status.WAITING)
+            .filter(row -> !FirstLaunchSwitches.KEY_BEFORE_MEANING.contains(row.key()))
+            .map(row -> row.key() + "|" + row.group() + "|" + row.waitingFor()).toList());
+        List<String> existing = listed(api, "KEY_BEFORE_MEANING_ROWS", 3).stream()
+            .map(row -> row[0] + "|" + row[1] + "|" + row[2]).toList();
+        assertThat(existing).isEqualTo(FirstLaunchSwitches.ALL.stream().filter(row -> row.status() == Status.WAITING)
+            .filter(row -> FirstLaunchSwitches.KEY_BEFORE_MEANING.contains(row.key()))
             .map(row -> row.key() + "|" + row.group() + "|" + row.waitingFor()).toList());
         List<String> manual = listed(api, "MANUAL_ROWS", 2).stream().map(row -> row[0] + "|" + row[1]).toList();
         assertThat(manual).isEqualTo(FirstLaunchSwitches.ALL.stream().filter(row -> row.status() == Status.MANUAL)

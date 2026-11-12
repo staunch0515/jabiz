@@ -76,6 +76,9 @@ class FirstLaunchSetupIT extends ContentItSupport {
             .containsEntry(QbParams.KUDOS_BUY_ENABLED, "false").containsEntry(QbParams.TOPUP_TARGETS, "CASH")
             .containsEntry(QbParams.TOPUP_DEFAULT_TARGET, "CASH")
             .containsEntry(QbParams.ENTRY_FEE_ENABLED, "false");
+        // The waiting rows whose key exists are proposed off (the declared value, which is false), not on.
+        assertThat(proposed).containsEntry(QbParams.AUDIENCE_BILLING_ENABLED, "false")
+            .containsEntry(QbParams.SITE_PROFILE_ENABLED, "false");
         // The three that are on at the first launch, each stated here and not through the registry, so that a row
         // turned off there (or a value read wrongly from it) cannot pass unnoticed. The proposals of AI and help are
         // only published once the AI notice is (operations.md); the test publishes them to see the platform take them.
@@ -92,7 +95,8 @@ class FirstLaunchSetupIT extends ContentItSupport {
         // value, while an ordinary one (user-daily of the AI help, say) was created by the setup itself.
         List<Map<String, Object>> before = cardRows();
         assertThat(before).hasSize((int) FirstLaunchSwitches.ALL.stream()
-            .filter(row -> row.status() == FirstLaunchSwitches.Status.ACTIVE).count());
+            .filter(row -> row.status() == FirstLaunchSwitches.Status.ACTIVE
+                || FirstLaunchSwitches.KEY_BEFORE_MEANING.contains(row.key())).count());
         for (Map<String, Object> row : before) {
             boolean controlled = QbParams.CONTROLLED.contains(String.valueOf(row.get("paramKey")));
             assertThat(row).as(String.valueOf(row.get("paramKey"))).containsEntry("paramExists", !controlled);

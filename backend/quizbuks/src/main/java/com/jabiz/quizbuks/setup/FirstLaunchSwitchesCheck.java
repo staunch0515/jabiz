@@ -43,11 +43,15 @@ public class FirstLaunchSwitchesCheck implements PlatformCheck {
     static final String LOCATION = "first launch";
 
     /**
-     * The switches that are off at the first launch: the registry's active rows whose first launch value is false (the
-     * registry is the one list, so a switch added there is checked without a second edit); on is a warning.
+     * The switches that are off at the first launch: the registry's active rows whose first launch value is false, and
+     * its waiting rows whose key already exists ({@link FirstLaunchSwitches#KEY_BEFORE_MEANING}: declared off, and not to
+     * be turned on before their feature is there); the registry is the one list, so a switch added there is checked
+     * without a second edit. On is a warning.
      */
     static final List<String> MUST_BE_OFF = FirstLaunchSwitches.ALL.stream()
-        .filter(row -> row.status() == FirstLaunchSwitches.Status.ACTIVE && Boolean.FALSE.equals(row.value()))
+        .filter(row -> (row.status() == FirstLaunchSwitches.Status.ACTIVE && Boolean.FALSE.equals(row.value()))
+            || (row.status() == FirstLaunchSwitches.Status.WAITING
+                && FirstLaunchSwitches.KEY_BEFORE_MEANING.contains(row.key())))
         .map(FirstLaunchSwitches.Row::key).toList();
 
     private final JabizWebProperties web;
