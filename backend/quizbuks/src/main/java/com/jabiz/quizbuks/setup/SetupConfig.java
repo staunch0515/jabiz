@@ -4,6 +4,7 @@ import com.jabiz.param.ControlledParams;
 import com.jabiz.process.ProcessContext;
 import com.jabiz.process.ProcessDefinition;
 import com.jabiz.quizbuks.country.CountryCatalog;
+import com.jabiz.runtime.web.JabizWebProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
@@ -13,8 +14,8 @@ class SetupConfig {
 
     @Bean
     ProcessDefinition<QbSetupProcesses.SetupInput, QbSetupProcesses.SetupOutput, ProcessContext> qbSetupProcess(
-        CountryCatalog countries) {
-        return QbSetupProcesses.process(countries);
+        CountryCatalog countries, JabizWebProperties web) {
+        return QbSetupProcesses.process(countries, FirstLaunchSwitches.appliesTo(web.environment()));
     }
 
     @Bean

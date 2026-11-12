@@ -121,7 +121,8 @@ public final class PublicationLifecycle {
 
     // ---- submit ----------------------------------------------------------------------------------------------------
 
-    public static ProcessDefinition<PublicationProcesses.PublicationRef, PublicationOutput, ProcessContext> submit() {
+    public static ProcessDefinition<PublicationProcesses.PublicationRef, PublicationOutput, ProcessContext> submit(
+        boolean firstLaunch) {
         return ProcessDefinition.define(SUBMIT, 1, PublicationProcesses.PublicationRef.class, PublicationOutput.class,
             ProcessContext.class, pb -> pb
                 .description("Submits a draft publication for review; it goes on at once when no review is needed.")
@@ -143,7 +144,7 @@ public final class PublicationLifecycle {
                 .steps(b -> PublicationNodes.load(b, ctx -> PublicationNodes.binding(
                     PublicationEditing.publication(ctx))))
                 .steps(PublicationEditing::loadSponsor)
-                .steps(PublicationEditing::loadSponsorMethods)
+                .steps(b -> PublicationEditing.loadSponsorMethods(b, firstLaunch))
                 .steps(b -> PublicationEditing.loadSponsorPublications(b, PublicationEditing::publication))
                 .steps(b -> PublicationEditing.loadSponsorProfile(b, PublicationEditing::publication))
                 .step("Load the review switch", LoadParams.<ProcessContext>of(ProcessContext::opTime, PARAMS,

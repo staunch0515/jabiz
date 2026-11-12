@@ -24,7 +24,7 @@ import { useTranslation } from 'react-i18next'
 import { BENEFITS_QUERY, readAccess } from './benefits/api'
 import { SPONSOR } from './messages'
 import { ACCOUNT_PATH } from './pages/AccountPage'
-import { readRewardSettings, REWARD_SETTINGS_QUERY } from './publishing/api'
+import { useRewardSettings } from './publishing/useRewardSettings'
 import { APP_BASE } from './publishing/paths'
 import { rememberSource } from './trial/claim'
 import TrialPage, { trialKeyOf } from './trial/TrialPage'
@@ -112,7 +112,7 @@ function SignedIn({ path }: { path: string }) {
   // decides what they may publish, this only hides the tab. Until the answer is in (or without one) it shows.
   // Q57: the sound effects follow the sponsor's switch.
   useSoundSetting()
-  const rewards = useQuery({ queryKey: REWARD_SETTINGS_QUERY, queryFn: readRewardSettings, staleTime: 60_000 })
+  const rewards = useRewardSettings()
   const kudos = rewards.data ? rewards.data.methods.includes('PLATFORM') : true
   // F-F3: the area of sponsored benefits only for a holder of one of the benefit roles (until the answer is in, none).
   const access = useQuery({ queryKey: [...BENEFITS_QUERY, 'access'], queryFn: readAccess, staleTime: 60_000,

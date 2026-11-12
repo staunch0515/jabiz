@@ -120,7 +120,12 @@ public final class QbSetupProcesses {
         return new ArrayList<>(items.stream().map(code).toList());
     }
 
-    public static ProcessDefinition<SetupInput, SetupOutput, ProcessContext> process(CountryCatalog catalog) {
+    /**
+     * @param firstLaunch whether the parameters are proposed with the first launch's values ({@link FirstLaunchSwitches},
+     *                    F-F10a; {@code jabiz.web.environment} production or staging) instead of the declared ones
+     */
+    public static ProcessDefinition<SetupInput, SetupOutput, ProcessContext> process(CountryCatalog catalog,
+        boolean firstLaunch) {
         return ProcessDefinition.define(SETUP, 1, SetupInput.class, SetupOutput.class, ProcessContext.class, pb -> pb
             .description("Creates the QuizBuks roles, ledger accounts, countries, business parameters and approval "
                 + "rules that have "
@@ -164,7 +169,7 @@ public final class QbSetupProcesses {
                 ctx -> all(new QueryPredicate.In("kind", new ArrayList<>(QbLegal.KINDS))), LEGAL_DOCS))
             .step("Load the AI help's manuals", QueryEntities.of(
                 QbHelpMaterials.defaultDataset(QbHelpMaterials.MANUAL), ctx -> all(), HELP_MANUALS))
-            .compute("Add what has never existed", (metadata, ctx) -> setup(ctx, catalog.countries()))
+            .compute("Add what has never existed", (metadata, ctx) -> setup(ctx, catalog.countries(), firstLaunch))
             .step("Open the ledger accounts", CallProcess.forEach(LedgerProcesses.OPEN_ACCOUNT, 1,
                 ctx -> listOf(ctx, OPEN), null))
             .step("Declare the parameters", CallProcess.forEach("PARAM_CREATE", 1,
@@ -183,7 +188,7 @@ public final class QbSetupProcesses {
             made.legalDraftsCreated(), made.legalDraftIds(), made.helpManualsCreated());
     }
 
-    static void setup(ProcessContext ctx, List<CountryData.Country> catalog) {
+    static void setup(ProcessContext ctx, List<CountryData.Country> catalog, boolean firstLaunch) {
         Set<String> seen = new HashSet<>();
         list(ctx, RECORDS).forEach(record -> seen.add(record.get("itemKey")));
         Set<String> found = new HashSet<>();
@@ -251,17 +256,19 @@ public final class QbSetupProcesses {
             if (!recorder.isNew(QbSetupRecords.param(param.key()))) {
                 continue;
             }
+            Object value = FirstLaunchSwitches.valueFor(param, firstLaunch);
             if (QbParams.CONTROLLED.contains(param.key())) {
                 Map<String, Object> values = new LinkedHashMap<>();
                 values.put(ParamEntities.KEY, param.key());
                 values.put(ParamEntities.KIND, param.valueKind());
-                values.put(ParamEntities.VALUE, param.value());
+                values.put(ParamEntities.VALUE, value);
                 values.put(ParamEntities.DESCRIPTION, param.description());
                 propose.add(new ControlChanges.ProposeInput(ParamEntities.ENTITY, null, false, values, null,
-                    "First value of the QuizBuks parameter, proposed by " + SETUP));
+                    (firstLaunch ? "First launch value" : "First value") + " of the QuizBuks parameter, proposed by "
+                        + SETUP));
                 proposed.add(param.key());
             } else {
-                create.add(new ParamProcesses.CreateInput(param.key(), param.valueKind(), param.value(),
+                create.add(new ParamProcesses.CreateInput(param.key(), param.valueKind(), value,
                     param.description()));
             }
         }

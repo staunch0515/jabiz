@@ -29,6 +29,15 @@ class TopUpTargetsTest {
     }
 
     @Test
+    void theFirstLaunchTopsUpIntoCashOnlyAndAnUnchosenTargetGoesThere() {
+        // F-F10a: targets CASH with the default CASH (FirstLaunchSwitches): nothing chosen is cash; Kudos is refused.
+        assertThat(TopUpTargets.choose(null, "CASH", "CASH")).isEqualTo("CASH");
+        assertThat(TopUpTargets.choose("CASH", "CASH", "CASH")).isEqualTo("CASH");
+        assertThat(TopUpTargets.choose("KUDOS", "CASH", "CASH")).isNull();
+        assertThat(TopUpTargets.problem("KUDOS", "CASH").ruleCode()).isEqualTo(WalletCodes.TOPUP_TARGET);
+    }
+
+    @Test
     void aTargetCreditsItsWalletAndAccount() {
         assertThat(TopUpTargets.walletKind(TopUpTargets.CASH)).isEqualTo(QbWallets.CASH);
         assertThat(TopUpTargets.account(TopUpTargets.CASH)).isEqualTo(QbLedger.SPONSOR_CASH);
