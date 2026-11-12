@@ -31,7 +31,7 @@ Once verified, the onboarding granted credit you received is topped up to the ve
 - A publication puts a saved quiz version in front of Takers. "New publication" opens the wizard: Quiz (the knowledge map node it lights, if any; name and version) → Time and rewards (period, marks, reward tiers) → Customer matching (who it is for) → Check and submit.
 - Customer matching aims a quiz at Takers whose profile matches. Some conditions are charged per day; the wizard shows the estimated fee. Counts of matching Takers are rounded, so nobody can be singled out.
 - Who may answer: everyone in the chosen regions, or only the e-mail addresses you invite (an invitation list; the invitations are sent from your own mail server, set up in the Sponsor profile).
-- Rewards are paid in cash at your place, as a prize collected at your place, or as a digital prize (codes, vouchers or links). At the first launch, Kudos are shown but not used: a publication cannot offer Kudos as its reward. Once Kudos open, rewards can also be paid in Kudos from your wallet.
+- Rewards are paid in cash at your place, as a prize collected at your place, or as a digital prize (codes, vouchers or links). At the first launch, Kudos are not in use yet: a publication cannot offer Kudos as its reward. Once Kudos open, rewards can also be paid in Kudos from your wallet.
 - Referrals and languages are set in the publication too. At the first launch there are no entry fees; once they open, they are set in the publication as well.
 - Submitted publications are reviewed before they go on. While in review you can withdraw one to change it; once approved it cannot be changed (copy it to publish it again with changes). A sent-back publication says why.
 - The page of a submitted publication has seven tabs, each with its own address: Overview, Quiz & version, Audience, Rewards, Fees, Statistics, and Share & QR code; the status and next steps (pause, copy, preview and more) are beside them. A draft still opens in the wizard.
@@ -68,7 +68,7 @@ Once verified, the onboarding granted credit you received is topped up to the ve
 ## Money
 
 - Platform fee account (/sponsor/money/account): your Granted credit and the cash you top up (by card, or by bank transfer where it is offered), which pay platform fees only. Invoices are in "Money → Invoices" (/sponsor/money/bills); unpaid ones are paid from here.
-- Kudos: at the first launch, Kudos are shown but not used: you cannot turn cash into Kudos or Kudos back into cash, publications do not pay rewards in Kudos, and the menu has no Wallet. Once Kudos open, the Kudos in your wallet (/sponsor/money/wallet) pay the publications with Kudos rewards, and you turn cash into Kudos when needed.
+- Kudos: at the first launch, Kudos are not in use yet: you cannot turn cash into Kudos or Kudos back into cash, publications do not pay rewards in Kudos, and the menu has no Wallet. Once Kudos open, the Kudos in your wallet (/sponsor/money/wallet) pay the publications with Kudos rewards, and you turn cash into Kudos when needed.
 - Moved here by your operator (an operator's direct Sponsor only): your operator's lead may move money from the operator's account into your platform fee account, shown as "From the operator". It pays platform fees only (after any Granted credit); it cannot be turned into Kudos or withdrawn.
 - Transactions (/sponsor/money/transactions): every movement, receipts and invoices; exportable.
 

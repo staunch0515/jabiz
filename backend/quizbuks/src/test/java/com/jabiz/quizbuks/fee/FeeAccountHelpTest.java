@@ -90,7 +90,7 @@ class FeeAccountHelpTest {
         }
         // The help names what the Sponsor cannot do now; a statement of the Taker's "coming soon" is the app's label.
         String help = text();
-        assertThat(help).contains("学分只显示、不使用", "クドスは表示のみで使用できません", "Kudos are shown but not used");
+        assertThat(help).contains("学分暂不使用", "クドスはまだ使用できません", "Kudos are not in use yet");
         // And it promises no date.
         assertThat(help).contains("不承诺", "お約束できません", "cannot promise a date");
         // The monthly fee and the commission it does not quote are zero at the first launch (it names no amount).

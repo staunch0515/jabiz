@@ -4,7 +4,7 @@
 用词照 `docs/quizbuks/glossary.md`；`tools/quizbuks/terms/terms.test.mjs` 扫描本目录。规则与运维见 `docs/quizbuks/plans/impl/F-F10.md` §1.6、`docs/quizbuks/plans/impl/F-M.md`、`operations.md` §4 与 §7.38、§7.39。
 
 - 文案不写具体金额：金额由运营商的价目表与平台的参数决定，写"见价目表"或点名参数；写进文案的缺省数字只有赠送额度的两档与有效期（`qb.fee-credit.grant.basic` 1,000、`.certified` 10,000、`.valid-days` 90，改了参数时同步改这里）。
-- 首次上线的状态（写进文案，`FirstLaunchSwitches` 的值）：学分只显示、不使用（不能用现金换学分、不能换回现金、不转账、不提现；发布不能设学分奖励）；赠送额度开；`qb.fee.monthly` 与抽成为 0。学分开放的日期不承诺；开放那天删去首次上线的句子，按开放后的功能改写本文案与 AI 使用手册（`manual-*.md`）。文案不承诺平台届时会单独通知（没有这样的通知功能），只请读者留意公告。
+- 首次上线的状态（写进文案，`FirstLaunchSwitches` 的值）：学分不使用（发起方的说法是"学分暂不使用"，学者的是"学分只显示、还不能使用"；不能用现金换学分、不能换回现金、不转账、不提现；发布不能设学分奖励）；赠送额度开；`qb.fee.monthly` 与抽成为 0。学分开放的日期不承诺；开放那天删去首次上线的句子，按开放后的功能改写本文案与 AI 使用手册（`manual-*.md`）。文案不承诺平台届时会单独通知（没有这样的通知功能），只请读者留意公告。
 - 页面：发起方页面"资金 → 平台费账户"（`/sponsor/money/account`）、"资金 → 账单"；学者 App"我的"最上面的"学分"（带"即将开放"）。
 
 ## 一、给发起方（FAQ 的 `audience` = `SPONSOR`，分类 `ACCOUNT`）
@@ -59,15 +59,15 @@ The top of "Money → Platform fee account" shows the total, the Granted credit 
 
 ### 中文 · 学分现在能用吗？
 
-**首次上线时学分只显示、不使用。** 现在发起方页面的菜单中没有"钱包"，不能用现金换学分，学分不能换回现金，也不能转账或提现；发布暂时不能把学分设为奖励（奖励方式是到店领取的奖品、电子奖品等）。支付平台费用的是"平台费账户"，不是学分钱包。学分何时开放使用，请留意平台的公告；此前请不要为学分充值。
+**首次上线时学分暂不使用。** 现在发起方页面的菜单中没有"钱包"，不能用现金换学分，学分不能换回现金，也不能转账或提现；发布暂时不能把学分设为奖励（奖励方式是到店领取的奖品、电子奖品等）。支付平台费用的是"平台费账户"，不是学分钱包。学分何时开放使用，请留意平台的公告；此前请不要为学分充值。
 
 ### 日本語 · クドスは今使えますか？
 
-**運用開始時、クドスは表示のみで使用できません。** 今は主催者ページのメニューに「ウォレット」はなく、現金からクドスへの交換、クドスから現金への交換、送金、出金はできません。公開でクドスを報酬に設定することもできません（報酬は、お店で受け取る景品やデジタル景品などです）。プラットフォーム利用料の支払いに使うのは「プラットフォーム利用料アカウント」で、クドスのウォレットではありません。クドスがいつ使えるようになるかは、プラットフォームのお知らせをご確認ください。それまでクドスのためのチャージはしないでください。
+**運用開始時、クドスはまだ使用できません。** 今は主催者ページのメニューに「ウォレット」はなく、現金からクドスへの交換、クドスから現金への交換、送金、出金はできません。公開でクドスを報酬に設定することもできません（報酬は、お店で受け取る景品やデジタル景品などです）。プラットフォーム利用料の支払いに使うのは「プラットフォーム利用料アカウント」で、クドスのウォレットではありません。クドスがいつ使えるようになるかは、プラットフォームのお知らせをご確認ください。それまでクドスのためのチャージはしないでください。
 
 ### English · Can I use Kudos now?
 
-**At the first launch, Kudos are shown but not used.** For now the Sponsor pages have no Wallet in the menu: you cannot turn cash into Kudos or Kudos back into cash, transfer them or withdraw them, and a publication cannot offer Kudos as its reward (rewards are prizes collected in store, digital prizes and the like). Platform fees are paid from the "Platform fee account", not from the Kudos wallet. Watch the platform's announcements for when Kudos open for use; until then please do not top up for Kudos.
+**At the first launch, Kudos are not in use yet.** For now the Sponsor pages have no Wallet in the menu: you cannot turn cash into Kudos or Kudos back into cash, transfer them or withdraw them, and a publication cannot offer Kudos as its reward (rewards are prizes collected in store, digital prizes and the like). Platform fees are paid from the "Platform fee account", not from the Kudos wallet. Watch the platform's announcements for when Kudos open for use; until then please do not top up for Kudos.
 
 ## 二、给学者（FAQ 的 `audience` = `TAKER`，分类 `REWARDS`）
 

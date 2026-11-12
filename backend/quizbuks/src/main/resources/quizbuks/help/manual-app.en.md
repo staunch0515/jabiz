@@ -40,7 +40,7 @@ Each quiz says how its reward is paid. At the first launch, Kudos are shown but 
 
 - At the first launch, Kudos are shown but cannot be used yet: the Kudos at the top of the Me page show 0 marked "Coming soon", and nothing can be transferred or withdrawn. What follows is how it works once Kudos open.
 - Your Kudos, what waits for Sponsors, what is held and what is on its way out. New rewards are held for a few days before they can be transferred.
-- Getting paid: Stripe (your Kudos are transferred to your Stripe account each day), or a bank account in Japan (/taker/wallet/bank: you ask for each withdrawal, a person checks it, and a fee is taken from each withdrawal). After you change the bank account, you can withdraw to it only after a waiting period.
+- (Once Kudos open) Getting paid: Stripe (your Kudos are transferred to your Stripe account each day), or a bank account in Japan (/taker/wallet/bank: you ask for each withdrawal, a person checks it, and a fee is taken from each withdrawal). After you change the bank account, you can withdraw to it only after a waiting period.
 
 ## Messages and people
 
