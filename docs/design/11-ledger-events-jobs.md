@@ -67,6 +67,12 @@ ROADMAP 阶段 9 的四个通用业务基础模块。约束性细则见【决策
   如 `d.entity("SecUser", "userId")` 以用户编号为维度；引用字段的取值是当前实例引用的编号。这两种来源的编号必须是 UUID，
   即来源实体（身份）或被引用的实体（引用）是时态实体。取值写成完整的 UUID（去掉首尾空白、大小写不限，分录上存小写的规范形式，
   校验与存储用同一个 `LedgerDimension.canonicalId`）；其他写法（如 `1-2-3-4-5`）或不存在的编号即 `LEDGER_DIMENSION_INVALID`。
+- **一个科目对一个第一维度取值的全部历史**（17zz18）：应用要加总某科目在某个 `dimension_1` 取值下的全部分录（如钱包按所有人的余额：
+  `SELECT direction, sum(amount) FROM ledger_entry_version WHERE account_id = ? AND dimension_1 = ? GROUP BY direction`）由迁移 `V66` 的部分索引
+  `ledger_entry_version_account_dimension_1_idx (account_id, dimension_1) INCLUDE (direction, amount) WHERE dimension_1 IS NOT NULL` 服务：两个等值条件直达匹配的分录，
+  `INCLUDE` 使加总只读索引（账本只追加，页面保持全可见）。原有的 `_account_idx` 与 `_dimension_1_idx` 保留（科目余额与 `dimension_balances` 用）。
+  这是平台迁移中第一个 `CREATE INDEX CONCURRENTLY`（不阻塞过账）：脚本旁的 `V66__….sql.conf` 设 `executeInTransaction=false`，该文件因此只含这一条语句。
+  半途失败的并发建索引留下 INVALID 索引（`IF NOT EXISTS` 下次会跳过它）：启动检查 `SCHEMA`（`SchemaIndexChecks`，对全部索引通用）报错并给出处理办法，见 `docs/guide/platform-operations.md` §6。
 - 启动检查 `LEDGER`（错误）：位置或名称重复；实体来源的实体、默认视图不存在，或字段不是文本、代码、身份、引用字段；身份字段不是主键；
   身份或引用的编号不是 UUID（实体不是时态实体）。告警：时态实体的来源字段可变（任何种类；只有按不可变字段的条件能缩小读取的版本，
   决策 D29，否则要读全部当前实例）；非时态实体不告警。字典可能由数据库提供，不在启动时检查。

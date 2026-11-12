@@ -5551,6 +5551,21 @@ QuizBuks 的 #545、#546、#547 用了 43.5–45 分钟，#545 到点被取消�
 
 **17zz17 状态**：📝 待评审（分支 `1.3/phase-17zz17-job-scheduler-shutdown`）。
 
+### 17zz18 账本：科目 + 第一维度的索引（2026-11-12，QuizBuks F-M5）
+
+**缘由**：应用要在钱包锁内加总某科目对某个 `dimension_1` 取值的全部历史（`WHERE account_id = ? AND dimension_1 = ? GROUP BY direction`）。现有的两个单列索引各读整个科目或整个取值的分录。
+
+| # | 内容 |
+|---|---|
+| 17zz18-1 | 迁移 `V66`：`CREATE INDEX CONCURRENTLY IF NOT EXISTS ledger_entry_version_account_dimension_1_idx ON ledger_entry_version (account_id, dimension_1) INCLUDE (direction, amount) WHERE dimension_1 IS NOT NULL`（加总只读索引）。平台迁移中第一个并发建索引：`V66__….sql.conf` 设 `executeInTransaction=false`，运行平台脚本的 Flyway 须用会话级咨询锁（`PlatformSchemaMigration.NON_TRANSACTIONAL_LOCK`；默认的事务级锁会与并发建索引互相等待）。不加列、不改名，封存与只追加触发器不受影响 |
+| 17zz18-2 | 启动检查 `SCHEMA`（`SchemaIndexChecks`）：当前 schema 的任何 INVALID 索引为错误，给出 `DROP INDEX CONCURRENTLY` 后重建的办法；运维要点 §6 |
+| 17zz18-3 | 测试：`LedgerAccountDimensionIndexIT`（索引有效；该加总的计划为该索引上的 Index Only Scan）、`SchemaIndexChecksIT`（并发建唯一索引失败留下 INVALID 索引 → 报告；健康的 schema 无问题） |
+| 17zz18-4 | 文档：设计 11 §1.5、运维要点 §6 |
+
+**验收**：`:runtime:check`、`:app:platformCheck` 绿；封存、`SealedColumnsHistory`、`StatementBudgetIT`、账本测试不变。
+
+**17zz18 状态**：📝 待评审（分支 `1.3/phase-17zz18-ledger-dimension-index`）。
+
 ### 线 1.3 的候选（未排期，2026-11-08 总控：首次上线前不做）
 
 | 候选 | 缘由 | 粗估 |

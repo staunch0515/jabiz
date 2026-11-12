@@ -128,7 +128,8 @@ public final class SealedColumnsHistory {
         try {
             FluentConfiguration platform = configure(schema).createSchemas(true)
                 .locations(PlatformSchemaMigration.PLATFORM_LOCATION)
-                .table(PlatformSchemaMigration.PLATFORM_HISTORY_TABLE);
+                .table(PlatformSchemaMigration.PLATFORM_HISTORY_TABLE)
+                .configuration(PlatformSchemaMigration.NON_TRANSACTIONAL_LOCK);
             if (location == null) {
                 platform.callbacks(snapshot);
             }

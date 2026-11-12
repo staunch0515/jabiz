@@ -10,6 +10,7 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.HashSet;
+import java.util.Map;
 import java.util.Set;
 
 /**
@@ -35,6 +36,15 @@ public final class PlatformSchemaMigration implements FlywayMigrationStrategy {
 
     public static final String PLATFORM_LOCATION = "classpath:db/jabiz";
     public static final String PLATFORM_HISTORY_TABLE = "jabiz_schema_history";
+
+    /**
+     * Whoever runs the platform scripts must set this (the test fixture {@code SealedColumnsHistory} does). A
+     * migration that runs outside a transaction (CREATE INDEX CONCURRENTLY, V66) waits for every older transaction to
+     * end; Flyway's default transactional advisory lock keeps one open on its connection for the whole run and the
+     * two would wait for each other forever. A session-level lock does the same job.
+     */
+    public static final Map<String, String> NON_TRANSACTIONAL_LOCK =
+        Map.of("flyway.postgresql.transactional.lock", "false");
 
     /** Every table the platform scripts create; PlatformSchemaMigrationTest keeps this list honest. */
     public static final Set<String> PLATFORM_TABLES = Set.of(PLATFORM_HISTORY_TABLE, "sys_dict_item",
@@ -73,6 +83,7 @@ public final class PlatformSchemaMigration implements FlywayMigrationStrategy {
             .table(PLATFORM_HISTORY_TABLE)
             .baselineOnMigrate(true)
             .baselineVersion("0")
+            .configuration(NON_TRANSACTIONAL_LOCK)
             .load()
             .migrate();
 

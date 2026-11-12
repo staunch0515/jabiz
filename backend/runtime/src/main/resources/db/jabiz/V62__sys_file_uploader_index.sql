@@ -4,5 +4,5 @@
 -- (uploaded_by, uploaded_time) serves both: the equality on the first column, and the order (either direction) or a
 -- time range on the second. The orphan sweep pages by (uploaded_time, file_id) without an uploader and keeps
 -- sys_file_uploaded_time_idx; no other platform query filters by uploader, so one index is enough.
--- Plain CREATE INDEX: platform migrations run in Flyway's transaction (no CONCURRENTLY anywhere).
+-- Plain CREATE INDEX, in Flyway's transaction (V66 is the first migration to run outside one, with CONCURRENTLY).
 CREATE INDEX IF NOT EXISTS sys_file_uploaded_by_idx ON sys_file (uploaded_by, uploaded_time);

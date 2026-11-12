@@ -86,7 +86,8 @@ class PlatformSchemaMigrationTest {
     @Test
     void platformTablesAreDeclared() {
         Flyway.configure().configuration(application()).locations(PlatformSchemaMigration.PLATFORM_LOCATION)
-            .table(PlatformSchemaMigration.PLATFORM_HISTORY_TABLE).load().migrate();
+            .table(PlatformSchemaMigration.PLATFORM_HISTORY_TABLE)
+            .configuration(PlatformSchemaMigration.NON_TRANSACTIONAL_LOCK).load().migrate();
 
         assertThat(tables()).containsExactlyInAnyOrderElementsOf(PlatformSchemaMigration.PLATFORM_TABLES);
     }
