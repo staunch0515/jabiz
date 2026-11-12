@@ -196,6 +196,8 @@ jabiz 是一个**元数据驱动的业务应用平台**：开发者声明实体�
   只追加表由平台逐行封存（21 §2：`INTEGRITY_SEAL` / `INTEGRITY_VERIFY`，HMAC 链，密钥只来自 `JABIZ_INTEGRITY_KEY`，非 dev 缺少即启动失败）；
   新的只追加表必须有主键（启动检查 `INTEGRITY`），不需要另外声明。迁移只能给只追加表加列，不改名、不删列、不改类型、不删表（封存过的列会被报告为被改，D58）：
   平台与每个应用以测试夹具 `SealedColumnsHistory` 检查自己的迁移，启动检查对封存过、已不存在的列给出警告。
+  已合并的迁移（及其 `.sql.conf`）不再修改（CI `migration-order` 检查；尚未上线的只可经 `.jabiz-migration-exceptions` 原样改名，见 `docs/guide/version-lines.md`）；大表上建索引不阻塞写入时用 `CREATE INDEX ${concurrently} IF NOT EXISTS` 加脚本旁 `.sql.conf` 的 `executeInTransaction=false`，
+  平台脚本由 `PlatformSchemaMigration` 以 Flyway 的会话级咨询锁运行（决策 D81，运维要点 §6）。
 - **账号删除与个人信息抹除**（见 10 §17、21 §2.5 与决策 D62）：申请删除只经入口的 `account-deletion` 与平台接口（本人 `/api/auth/account/deletion`，
   不装 App 的 `/api/auth/account-deletion` 邮件链接，管理员 `SEC_USER_DELETION_SCHEDULE`；冷静期 `jabiz.security.account-deletion.cooling-off`，
   到期由定时任务 `jabiz.account-deletion` 执行；前端积木 `AccountDeletion`、`AccountDeletionRequest` 与 `MailLinkPage` 的 `account-deletion` 页，10 §17.5），不自写删除申请或"注销"页。
