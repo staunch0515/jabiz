@@ -538,6 +538,8 @@ class SetupIT extends QbItSupport {
         expected.put(QbParams.VERIFICATION_LINK_HOURS, "48");
         // F-M5: when an ended publication's open prepayment is a difference (not controlled).
         expected.put(QbParams.PREPAYMENT_RELEASE_OVERDUE_DAYS, "2");
+        // F-M7 (N9): the daily check of the audience fees not decided.
+        expected.put(QbParams.AUDIENCE_REFUND_MISSING_AFTER_HOURS, "30");
         // F-C7: drafting from a website (the switch off; the limits of one request and of a month).
         expected.putAll(Map.of(QbParams.SITE_PROFILE_ENABLED, "false", QbParams.SITE_PROFILE_MONTHLY, "10",
             QbParams.SITE_PROFILE_DAILY, "3", QbParams.SITE_PROFILE_MAX_PAGES, "10",

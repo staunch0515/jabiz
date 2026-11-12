@@ -377,7 +377,7 @@ class AdminFinanceIT extends PayoutItSupport {
         // The export is the platform's, of the same rows; as known at the month's end, without the late posting,
         // and so is the run issued as known then (its archived rows, not run again).
         String csv = exportCsv(MONTHLY, period(from, to));
-        assertThat(csv.lines().count()).isEqualTo(40);
+        assertThat(csv.lines().count()).isEqualTo(41);
         assertThat(csv).contains("TRANSFER_REVERSED");
         String known = exportCsv(MONTHLY, period(from, to, to));
         assertThat(line(known, "OTHER")).isNotEqualTo(line(csv, "OTHER")).contains(",4,");
@@ -573,7 +573,8 @@ class AdminFinanceIT extends PayoutItSupport {
         // What the first launch proposes (null for an amount); the waiting rows with a key are off.
         assertThat(rows).extracting(r -> r.get("expected")).containsExactlyElementsOf(expectedValues);
         assertThat(rows).filteredOn(r -> QbParams.AUDIENCE_BILLING_ENABLED.equals(r.get("paramKey")))
-            .singleElement().satisfies(r -> assertThat(r).containsEntry("value", "false").containsEntry("grp", "audience"));
+            .singleElement().satisfies(r -> assertThat(r).containsEntry("value", "false").containsEntry("expected", "true")
+                .containsEntry("grp", "audience"));
         // The install published the declared values: every parameter is there, and cash into Kudos is on.
         assertThat(rows).allSatisfy(r -> assertThat(r).containsEntry("paramExists", true));
         Map<String, Object> buy = rows.stream().filter(r -> QbParams.KUDOS_BUY_ENABLED.equals(r.get("paramKey")))
