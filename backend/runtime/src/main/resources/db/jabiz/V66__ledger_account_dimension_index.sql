@@ -14,7 +14,7 @@
 -- executeInTransaction=false and each statement here commits by itself. The keyword is the placeholder ${concurrently}:
 -- PlatformSchemaMigration sets it to CONCURRENTLY; tests that migrate several schemas of one database side by side set it
 -- empty, since a concurrent build waits for every older transaction of the whole database. The run uses Flyway's
--- session-level advisory lock (PlatformSchemaMigration.NON_TRANSACTIONAL_LOCK): with the default transactional one,
+-- session-level advisory lock (PlatformScriptPlaceholders.NON_TRANSACTIONAL_LOCK): with the default transactional one,
 -- Flyway keeps a transaction open on a second connection for the whole run, the build waits for that transaction to
 -- end (pg_locks: a ShareLock on its virtualxid, not granted) and Flyway waits for the build, for ever.
 --
@@ -24,9 +24,11 @@
 -- in a DO block), which takes an ACCESS EXCLUSIVE lock on ledger_entry_version; that is brief only when no session is
 -- still building the index. After the migrating process is killed, its server backend may go on with the CREATE INDEX
 -- CONCURRENTLY until it has scanned the table, holding a SHARE UPDATE EXCLUSIVE lock on it; a DROP queued behind that
--- would hold up every read and write of the ledger. So the block first looks for another session holding that lock
--- (autovacuum aside, which gives way) and stops with an error instead, and it waits for the drop's lock at most
--- ${drop_lock_timeout} (placeholder, PlatformSchemaMigration sets 3s) before failing. Either failure records V66 as
+-- would hold up every read and write of the ledger. So the block first looks for a client session holding that lock
+-- and stops with an error instead (a manual VACUUM or another index build holds it too; autovacuum, which gives way,
+-- does not count). A holder whose kind this role cannot see (pg_stat_activity shows other roles' sessions in full only
+-- to pg_read_all_stats) is left to the backstop: the drop waits for its lock at most ${drop_lock_timeout} (placeholder,
+-- PlatformSchemaMigration sets 3s) before failing. Either failure records V66 as
 -- failed: once nothing builds the index any more, "flyway repair" removes that row and the next start drops and builds
 -- (docs/guide/platform-operations.md section 6). A killed process leaves no history row, so Flyway runs this file again
 -- at the next start. The startup check SCHEMA reports any index left INVALID, as a warning.
@@ -41,17 +43,18 @@ BEGIN
                  AND NOT x.indisvalid) THEN
         SELECT l.pid INTO builder
         FROM pg_locks l
-        LEFT JOIN pg_stat_activity a ON a.pid = l.pid
+        JOIN pg_stat_activity a ON a.pid = l.pid
         WHERE l.locktype = 'relation'
           AND l.database = (SELECT oid FROM pg_database WHERE datname = current_database())
           AND l.relation = (current_schema() || '.ledger_entry_version')::regclass
           AND l.mode = 'ShareUpdateExclusiveLock' AND l.granted
           AND l.pid <> pg_backend_pid()
-          AND a.backend_type IS DISTINCT FROM 'autovacuum worker'
+          AND a.backend_type = 'client backend'
         LIMIT 1;
         IF builder IS NOT NULL THEN
             RAISE EXCEPTION 'The INVALID index ledger_entry_version_account_dimension_1_idx is still being built by '
-                'another session (pid %): wait for it to finish (see pg_stat_activity), or cancel it with '
+                'another session, or a session is running VACUUM on the table or building another index (pid %): '
+                'wait for it to finish (see pg_stat_activity), or cancel it with '
                 'pg_cancel_backend(%), then run flyway repair on jabiz_schema_history and restart '
                 '(docs/guide/platform-operations.md section 6)', builder, builder;
         END IF;

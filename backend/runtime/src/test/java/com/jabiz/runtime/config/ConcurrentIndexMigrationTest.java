@@ -53,7 +53,7 @@ class ConcurrentIndexMigrationTest {
             .table(PlatformSchemaMigration.PLATFORM_HISTORY_TABLE)
             .baselineOnMigrate(true)
             .baselineVersion("0")
-            .configuration(PlatformSchemaMigration.NON_TRANSACTIONAL_LOCK)
+            .configuration(PlatformScriptPlaceholders.NON_TRANSACTIONAL_LOCK)
             .placeholders(PlatformScriptPlaceholders.defaults());
     }
 
@@ -94,7 +94,8 @@ class ConcurrentIndexMigrationTest {
             int pid = ((Number) single(builder, "SELECT pg_backend_pid()")).intValue();
             long started = System.nanoTime();
             assertThatThrownBy(() -> new PlatformSchemaMigration().migrate(application().load()))
-                .hasStackTraceContaining("is still being built by another session (pid " + pid + ")")
+                .hasStackTraceContaining("is still being built by another session, or a session is running VACUUM on the"
+                    + " table or building another index (pid " + pid + ")")
                 .hasStackTraceContaining("pg_cancel_backend(" + pid + ")");
             // At once, without waiting for any lock: the drop was never asked for.
             assertThat(Duration.ofNanos(System.nanoTime() - started)).isLessThan(Duration.ofSeconds(20));

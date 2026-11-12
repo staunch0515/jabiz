@@ -39,20 +39,6 @@ public final class PlatformSchemaMigration implements FlywayMigrationStrategy {
     public static final String PLATFORM_LOCATION = "classpath:db/jabiz";
     public static final String PLATFORM_HISTORY_TABLE = "jabiz_schema_history";
 
-    /**
-     * Flyway's session-level advisory lock, which whoever runs the platform scripts must set (the test fixture
-     * {@code SealedColumnsHistory} does). With the default transactional lock, Flyway takes {@code
-     * pg_advisory_xact_lock} on a second connection and keeps that connection's transaction open ("idle in
-     * transaction") until the whole run ends. A migration outside a transaction that builds an index CONCURRENTLY (V66)
-     * waits for every transaction older than its snapshots, that one included (a ShareLock on its virtualxid, never
-     * granted), while Flyway waits for the migration: neither ends, and PostgreSQL sees no deadlock, since one side
-     * waits in the client (observed on PostgreSQL 16 with Flyway 11, ROADMAP 17zz18). The session-level lock is held
-     * by the connection without a transaction. Applies to the platform's run only: the configuration is copied, and the
-     * application's own Flyway ({@code spring.flyway.*}) keeps its lock.
-     */
-    public static final Map<String, String> NON_TRANSACTIONAL_LOCK =
-        Map.of("flyway.postgresql.transactional.lock", "false");
-
     /** The placeholder {@code ${concurrently}} ({@link PlatformScriptPlaceholders#CONCURRENTLY}). */
     public static final String CONCURRENTLY_PLACEHOLDER = PlatformScriptPlaceholders.CONCURRENTLY;
 
@@ -130,7 +116,7 @@ public final class PlatformSchemaMigration implements FlywayMigrationStrategy {
             .table(PLATFORM_HISTORY_TABLE)
             .baselineOnMigrate(true)
             .baselineVersion("0")
-            .configuration(NON_TRANSACTIONAL_LOCK)
+            .configuration(PlatformScriptPlaceholders.NON_TRANSACTIONAL_LOCK)
             .load()
             .migrate();
 

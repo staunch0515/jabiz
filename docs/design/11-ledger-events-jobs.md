@@ -74,7 +74,7 @@ ROADMAP 阶段 9 的四个通用业务基础模块。约束性细则见【决策
   这是平台迁移中第一个 `CREATE INDEX CONCURRENTLY`（不阻塞过账；约定见决策 D81）：关键字是 Flyway 占位符 `${concurrently}`
   （`PlatformSchemaMigration` 缺省设为 `CONCURRENTLY`；同一数据库里并行迁移多个 schema 的测试设为空，因为并发建索引要等整个数据库的旧事务），
   脚本旁的 `V66__….sql.conf` 设 `executeInTransaction=false`，平台脚本的 Flyway 用会话级咨询锁（默认的事务级锁开着另一条连接上的事务，建索引等它、Flyway 等建索引，永远等下去）。
-  脚本可以重跑：同名索引存在且 INVALID 时先删去（普通 `DROP INDEX`，只有没有会话还在建该索引时锁表才是一瞬间：别的会话持有该表的 SHARE UPDATE EXCLUSIVE 锁即报错不排队，
+  脚本可以重跑：同名索引存在且 INVALID 时先删去（普通 `DROP INDEX`，只有没有会话还在建该索引时锁表才是一瞬间：别的客户端会话持有该表的 SHARE UPDATE EXCLUSIVE 锁即报错不排队，
   删除等锁至多 `${drop_lock_timeout}`，缺省 3 秒），有效的从不删，再 `CREATE INDEX … IF NOT EXISTS`。
   建索引语句失败时 Flyway 把 V66 记为失败，下次启动在校验处停下：对 `jabiz_schema_history` 执行 `flyway repair` 后重启；进程中途被杀则没有历史记录，重跑即修复。
   INVALID 索引由启动检查 `SCHEMA`（`SchemaIndexChecks`，对默认连接池当前 schema 的全部索引通用）报为警告并计入仪表 `jabiz.schema.invalid-indexes`（告警 `jabiz-schema-invalid-indexes`），

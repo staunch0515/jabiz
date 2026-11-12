@@ -4,9 +4,11 @@ import java.util.HashMap;
 import java.util.Map;
 
 /**
- * The Flyway placeholders of the platform scripts and their production values (ROADMAP 17zz18, decision D81).
- * {@link PlatformSchemaMigration} sets each one the application's configuration does not; a runner that runs the
- * platform scripts itself (a test fixture, a tool) starts from {@link #defaults()}. Kept apart from
+ * The Flyway settings every run of the platform scripts needs (ROADMAP 17zz18, decision D81): their placeholders with
+ * the production values, and the session-level lock {@link #NON_TRANSACTIONAL_LOCK}.
+ * {@link PlatformSchemaMigration} sets the lock and each placeholder the application's configuration does not; a
+ * runner that runs the platform scripts itself (a test fixture, a tool) sets the lock and starts from
+ * {@link #defaults()}. Kept apart from
  * {@link PlatformSchemaMigration} so that such a runner needs no Spring Boot on its classpath.
  */
 public final class PlatformScriptPlaceholders {
@@ -25,6 +27,20 @@ public final class PlatformScriptPlaceholders {
      * every posting would queue behind a drop that waits.
      */
     public static final String DROP_LOCK_TIMEOUT = "drop_lock_timeout";
+
+    /**
+     * Flyway's session-level advisory lock, which whoever runs the platform scripts must set (the test fixture
+     * {@code SealedColumnsHistory} does). With the default transactional lock, Flyway takes {@code
+     * pg_advisory_xact_lock} on a second connection and keeps that connection's transaction open ("idle in
+     * transaction") until the whole run ends. A migration outside a transaction that builds an index CONCURRENTLY (V66)
+     * waits for every transaction older than its snapshots, that one included (a ShareLock on its virtualxid, never
+     * granted), while Flyway waits for the migration: neither ends, and PostgreSQL sees no deadlock, since one side
+     * waits in the client (observed on PostgreSQL 16 with Flyway 11, ROADMAP 17zz18). The session-level lock is held
+     * by the connection without a transaction. Applies to the platform's run only: the configuration is copied, and the
+     * application's own Flyway ({@code spring.flyway.*}) keeps its lock.
+     */
+    public static final Map<String, String> NON_TRANSACTIONAL_LOCK =
+        Map.of("flyway.postgresql.transactional.lock", "false");
 
     private PlatformScriptPlaceholders() {
     }

@@ -2895,11 +2895,11 @@ D66 的"剩余风险"还写明"守卫要的数据须以用户编号能读到"。
 **决定**
 1. **写法**：要不阻塞写入地建索引的迁移写 `CREATE INDEX ${concurrently} IF NOT EXISTS …`，脚本旁放 `<脚本>.sql.conf`，内容 `executeInTransaction=false`；一个这样的脚本只做建索引与它的修复。
    脚本要能重跑：同名索引存在且 INVALID 时先删去（`DROP INDEX CONCURRENTLY` 不能放在 `DO` 块中，用普通 `DROP INDEX`，锁表只有在没有会话还在建该索引时才是一瞬间），有效的索引从不删。
-   进程被杀后其数据库后端可能还在建：删除之前若有别的会话（autovacuum 除外）对该表持有 SHARE UPDATE EXCLUSIVE 锁即报错而不排队；删除等锁至多 `${drop_lock_timeout}`（缺省 `3s`）。
+   进程被杀后其数据库后端可能还在建：删除之前若有别的客户端会话（`backend_type = 'client backend'`，看不到类型的不算）对该表持有 SHARE UPDATE EXCLUSIVE 锁即报错而不排队（迁移角色宜是 `pg_read_all_stats` 的成员）；删除等锁至多 `${drop_lock_timeout}`（缺省 `3s`）。
    两者都使迁移记为失败，确认后 repair。
 2. **占位符**：`${concurrently}` 由 `PlatformSchemaMigration` 缺省设为 `CONCURRENTLY`、`${drop_lock_timeout}` 缺省 `3s`（`PlatformScriptPlaceholders`）；同一数据库里并行迁移多个 schema 的测试（`PostgresIntegrationTest`、场景、`platformCheck` 启动器、`SealedColumnsHistory`）设为空。
    不经 `PlatformSchemaMigration` 运行平台脚本而没有定义它时，Flyway 立即报未解析的占位符。
-3. **锁**：平台脚本的 Flyway 用会话级咨询锁（`PlatformSchemaMigration.NON_TRANSACTIONAL_LOCK`）。它只作用于平台的那一次运行（配置是复制的），应用自己的 Flyway 不变；
+3. **锁**：平台脚本的 Flyway 用会话级咨询锁（`PlatformScriptPlaceholders.NON_TRANSACTIONAL_LOCK`）。它只作用于平台的那一次运行（配置是复制的），应用自己的 Flyway 不变；
    应用自己的迁移也要并发建索引时，应用设 `spring.flyway.postgresql.transactional-lock=false`。Flyway 必须直连数据库（不经事务模式的连接池）。
 4. **锁等待时限**：`jabiz.schema.migration.lock-timeout`（缺省 `0s` 即不限）对平台迁移的连接设 `lock_timeout`。缺省不开，因为并发建索引等旧事务也是等锁，超时即记为失败、要人工 repair。
 5. **发现**：启动检查 `SCHEMA` 把当前 schema 的 INVALID 索引报为警告（从不阻止启动），仪表 `jabiz.schema.invalid-indexes`（不计可能正在建的）、告警 `jabiz-schema-invalid-indexes`（持续 15 分钟）。

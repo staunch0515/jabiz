@@ -130,7 +130,7 @@ public final class SealedColumnsHistory {
             FluentConfiguration platform = configure(schema).createSchemas(true)
                 .locations(PlatformSchemaMigration.PLATFORM_LOCATION)
                 .table(PlatformSchemaMigration.PLATFORM_HISTORY_TABLE)
-                .configuration(PlatformSchemaMigration.NON_TRANSACTIONAL_LOCK)
+                .configuration(PlatformScriptPlaceholders.NON_TRANSACTIONAL_LOCK)
                 // Other test classes migrate their schemas at the same time: no CONCURRENTLY (V66).
                 .placeholders(PlatformScriptPlaceholders.with(Map.of(PlatformScriptPlaceholders.CONCURRENTLY, "")));
             if (location == null) {
