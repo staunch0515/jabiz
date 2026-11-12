@@ -555,6 +555,8 @@ final class PublicationEditing {
             next.put("approvalRequestId", null);
             next.put("billingOperatorId", null);
             next.put("prepaymentTotal", null);
+            next.put("distributionUnit", null);
+            next.put("distributionAtFloor", null);
         }
         if (status != null) {
             PublicationPrepayments.note(ctx, publication, values, status.toString());

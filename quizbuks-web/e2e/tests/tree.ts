@@ -25,6 +25,10 @@ export interface BoundOptions {
   prize?:
     | { method: 'DIGITAL_PRIZE'; description: string; link: string }
     | { method: 'OFFLINE_REDEEM'; description: string }
+  /** How long it runs from now (seven days by default). */
+  endInMs?: number
+  /** The cap on the winners (5 with a prize, 1,000 without, by default). */
+  maxWinners?: number
 }
 
 /** A publication made live by {@link boundPublicationOf}: the quiz and its version are the Sponsor's to read. */
@@ -53,8 +57,8 @@ export async function boundPublicationOf(request: APIRequestContext, token: stri
   const prize = options.prize
   const saved = await run(request, token, 'QB_PUBLICATION_SAVE', { versionId: version.versionId, name,
     regions: ['GLOBAL'], startAt: new Date(now - 60_000).toISOString(),
-    endAt: new Date(now + 7 * 86_400_000).toISOString(), passScore: count, budgetCap: 500,
-    maxWinners: prize ? 5 : 1000, treeId, treeNodeId: nodeId,
+    endAt: new Date(now + (options.endInMs ?? 7 * 86_400_000)).toISOString(), passScore: count, budgetCap: 500,
+    maxWinners: options.maxWinners ?? (prize ? 5 : 1000), treeId, treeNodeId: nodeId,
     ...(prize?.method === 'DIGITAL_PRIZE' ? { rewardMethod: 'DIGITAL_PRIZE', digitalDelivery: 'SHARED',
       digitalDescription: prize.description, digitalContent: prize.link } : {}),
     ...(prize?.method === 'OFFLINE_REDEEM' ? { rewardMethod: 'OFFLINE_REDEEM', redeemDescription: prize.description }

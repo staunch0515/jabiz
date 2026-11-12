@@ -47,8 +47,10 @@ WITH wanted (k, grp, expected, seq) AS (
         ('qb.reward.kudos.enabled', 'kudos', 'false', 18),
         ('qb.reward.default-methods', 'kudos', '', 19),
         ('qb.play.entry-fee.enabled', 'kudos', 'false', 20),
-        ('qb.audience.billing.enabled', 'audience', 'false', 21),
-        ('qb.ai.site-profile.enabled', 'aifee', 'false', 22))
+        ('qb.distribution.billing.enabled', 'distribution', 'true', 21),
+        ('qb.distribution.unit-floor.min', 'distribution', CAST(NULL AS text), 22),
+        ('qb.audience.billing.enabled', 'audience', 'false', 23),
+        ('qb.ai.site-profile.enabled', 'aifee', 'false', 24))
 SELECT
     CAST(w.k AS varchar(200))        AS paramKey,
     CAST(w.grp AS varchar(30))       AS grp,

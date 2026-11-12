@@ -317,7 +317,7 @@
 - **【低 2】补测试**（`OperatorTransferIT`）：转入 × 提现并发（一成一拒，合计 ≤ 余额）；`REQUESTED` 的提现减少可转额、转入减少可提现额；缺近期二次验证即 403 `MFA_REQUIRED`。
 - **【低 3】幂等键必填**：平台不能在流程上声明"必须有幂等键"，流程也读不到请求头，所以输入加必填的 `requestKey`（`@NotBlank`，≤ 128，缺少即 400）并记在转入上（列 `request_key`，V113 中 `UNIQUE (operator_id, request_key)`；锁内先查，重复即 422 `QB_OPERATOR_TRANSFER_REPEATED`）。页面每次确认生成新键，同时作为输入与 `Idempotency-Key`（重发同一次提交由平台回放第一次的回答）。测试：IT 缺键 400、同键换幂等键 422、别的运营商可用同一键；扩展 Vitest 断言键随输入与请求头、下一次提交换新键。
 
-## 8. F-M5 提交发布时的资金检查与预付款（S2，2026-11-10，待总控批准）
+## 8. F-M5 提交发布时的资金检查与预付款（S2，2026-11-10，总控 2026-11-10 批准；连同 F-M11 已合并 #640，迁移 V116）
 
 规格 F-M5（规则、运营闭合、验收）；§1 的 M4 把 F-M5、F-M11、F-M7、F-M13 贷项放在一起，总控 2026-11-10 定为先做 F-M5。分支 `1.3/quizbuks-FM5-funds-check`，迁移取开 PR 时的下一个号（现在最大 V113）。
 
@@ -433,7 +433,7 @@
   - **按累计取整**（总控决定 6）：累计应收 = ⌈累计人数 × 单价⌉（日元）；本次金额 = 累计应收 − 该发布此前各结算行的金额之和；税 = 本次金额 × `qb.fee.tax-rate` 向下取整（`FeeRules` 现有的 `FLOOR`）。
   - 预付 `deposit(maxWinners, unit, minimumDeposit)` = `maxWinners` 有值时 ⌈maxWinners × unit⌉ + 税，否则 `minimumDeposit`。
   - `priceProblems`：各值 ≥ 0、下限 ≤ 上限、都在总部范围内。
-- `QB_OPERATOR_DISTRIBUTION_PRICE_SET`（运营商负责人，`OperatorChecks.member` 且是负责人，锁 `qb.operator:<运营商>`）与 `QB_DISTRIBUTION_PRICE_SET`（总部 `qb.fee.billing`，为某个运营商设）。理由必填；只影响此后提交的发布（单价在提交时冻结）。
+- `QB_OPERATOR_DISTRIBUTION_PRICE_SET`（运营商负责人，`OperatorChecks.member` 且是负责人，锁 `qb.operator:<运营商>`）与 `QB_DISTRIBUTION_PRICE_SET`（总部的财务 `qb.fee.manage`，为某个运营商设；不用 `qb.fee.billing`：运营商持有它，用于本运营商发起方的计费方式）。理由必填；只影响此后提交的发布（单价在提交时冻结）。
 - 总部范围是受控参数（四眼）：`qb.distribution.rate.min|max`、`unit-floor.min|max`、`unit-ceiling.max`、`minimum-deposit.max`。
   - 保存价目时按当时的范围检查。范围改窄后已有价目不自动改，每日核对报 `DISTRIBUTION_PRICE_OUT_OF_RANGE`，给 `qb.admin.finance.read` 待办。
 - 规格补写定价规则（随本项提交）：单价按档位金额的最大值算，为 0 或没有档位即按下限。
@@ -502,7 +502,7 @@
   - 账单开出后补跑 M 的结算 → 费用进入当前月，没有无账单的应收（`AdminFinanceIT` / 核对 `FEE_RECEIVABLE` 无差异）；
   - 结算拖到两个月后 → 补上的下一次运行开出 M 的账单；
   - 1 日不开账单；
-  - 日本时间月界：3 月 31 日 23:59 JST 与 4 月 1 日 00:00 JST 开始的人数分属两期。
+  - 日本时间月界：~~3 月 31 日 23:59 JST 与 4 月 1 日 00:00 JST 开始的人数分属两期~~（M1，总控 2026-11-12 接受现在的行为：两人都在 3 月的行，因为月度结算记运行那一刻的计数器；见 §9.12 第 10 条）。
 - **`final` 的人数记到结算的月份**（N2，接受）：结束后的 `final` 行把结束所在月（或上月）最后一段的人数结在写 `final` 的那天；费用的 `period` 照 9.6 的规则（那个月的账单已开出即记当前月），所以可能晚一个月收。规格 F-M6 与 `operations.md` 写明这点；运营商结算（F-M12）按费用的 `period` 与归属运营商分成，所以这部分分成也在下一个月的结算里，不是差异。对账时以结算行的 `period`（人数的月份）与费用的 `period`（账单的月份）区分。
 - 每日核对报 `DISTRIBUTION_UNSETTLED` 给财务待办：月初之后超过 `qb.distribution.unsettled-after-hours`（受控，缺省 30，即 2 日 06:00）仍有该结算、没有行的（发布, 月份）。核对随日常对账任务（`quizbuks.reconcile.run-cron`）运行，晚于 2 日 00:37 的结算。
 
@@ -579,3 +579,43 @@
 10. 第二次复核（@115b56e）：N1 两个任务都能写 `final`、谁先谁写；N2 `final` 的人数晚一个月收，接受并写进规格与 `operations.md`（含 F-M12 的影响）；N3、N4、N5 照改；下限的缺省 > 0 并登记上线开关清单；切换版本不改单价（9.3、9.5–9.9）。
 11. 规格 F-M6 的改动（验收行"直营发起方照付"、规则行的单位与"按下限"、N2 的说明）随本项的代码提交。
 12. **总控 2026-11-12 批准**（Fable 第三次复核 @644a38b："可以批准"），采纳两条小建议：N1 的期间规则写成确定的一句；"月度先于每日"的测试造成"月度写了普通行之后才满足宽限"。顺序：F-M5 合格并开出草稿 PR 之后，从 F-M5 的分支拉出 `1.3/quizbuks-FM6-distribution`；迁移暂定 `V117`（#630 取了 V114、#633 取了 V115，F-M5 顺延为 V116），取开 PR 时的下一个空号。
+
+### 9.12 实施记录（分支 `1.3/quizbuks-FM6-distribution`，迁移 `V117`）
+照 9.1–9.11 做，下面是与计划写法不同或计划没有写到的地方：
+1. **写入顺序（N4 的细化）**：结算行只写一次、带费用编号（`amount = 0` 与没有费用编号互为条件），所以先记费、再写结算行，`final` 时 `SaveChanges` 写出后才调 `RELEASE`。`RELEASE` 在锁内重读 `final` 行，看得到本事务刚写的，N4 要保证的先后不变。
+2. **每日退回任务的项**：平台任务的项键只有一列（≤ 36 字），（发布, 用途）放不下，项键改为那一笔预付款的编号（一笔预付款就是一个发布的一种用途）。
+3. **账单任务的项**：同样只有一列，项键是发起方；一次运行开出该发起方最早一个已可开的月份，再早或更晚的由次日开。
+4. **`DISTRIBUTION_AT_FLOOR`** 是对账的提示（`ReconChecks.NOTES`，同 `TAKER_WALLET_LAG`）：列在对账结果中、不使运行为差异。
+5. **锁**：运营商负责人的流程先取成员共享锁，锁序要求 `qb.operator:<运营商>` 在它之前，所以价目用自己的锁 `qb.distribution-price:<运营商>`。
+6. **每次运行的上限**：平台任务一次至多 10000 项；月度任务余下的由每日核对 `DISTRIBUTION_UNSETTLED` 报出，以补跑处理（`operations.md` §7.48）。
+7. **费用种类的列宽**：`qb_fee_charge_version.kind` 原为 `varchar(10)`，放不下 `DISTRIBUTION`；迁移把它加宽到 20（只追加表只能加列，但文本列加宽读出的值不变，封存的摘要不变，同 V50；`SealedColumnsHistory` 认可）。
+8. **对账的时区**：`DISTRIBUTION_UNSETTLED` 要按会计时区的月份，对账流程把 `jabiz.fiscal-year-zone` 作参数 `zone` 交给 `qb.system.recon-fee-account`（没有 `zone` 即不查这一项）。
+9. **N5 的测试**：发布名额上限（`PublishingLimits.MAX_WINNERS`）乘范围内的单价到不了一笔费用的上限，测试直接在表中写一个超出范围的价目来触发 422，代码的检查作为防线保留。
+10. **M1（Fable 审查，总控 2026-11-12 决定接受）月份的边界**：月度结算记运行那一刻（次月 2 日 00:37）的计数器，M 月的行因此包含次月 1 日 0 时到结算运行之间开始的人（约一天；补跑晚则更长）。开始不按时间数：按时间数要在答题表上加索引，规格不允许。写入规格 F-M6 与 `operations.md` §7.48；对 F-M12 的影响是运营商按费用的 `period` 分成，月界后约一天的人数归上一个月。计划中"3/31 23:59 与 4/1 00:00 落在不同期间"的测试删去，改为断言现在的行为（`DistributionIT` 中 4/1 开始、4/2 结算前的人记在 3 月的行）。
+11. **M2 `DISTRIBUTION_UNSETTLED` 按（发起方，月份）**：从发布上架的月份到结束的月份（或上个月）逐月列出，过了 `qb.distribution.unsettled-after-hours` 仍没有该月或 `final` 行的即报，参照列为月份。审查要求的是"后付发起方的应开减已可开"；这里按发布逐月列出，后付发起方的账单在等的月份都在其中，另外也报预付发起方的（他们没有账单在等，但钱同样没有收），所以是它的超集，不另写一条只看后付的。补跑哪个时刻写在 §7.48。
+12. **M3 发起方不再是审核通过时，从预付款记费**：可以发生——发起方注销账号（`ACCOUNT_ERASE`）给入驻资料写墓碑，进行中的发布随之结束，结束结算记费时原来按"只有审核通过的发起方记费"拒绝，`final` 一直失败、预付款不退。先写复现的测试（`DistributionIT.aSponsorWhoErasesTheirAccountIsStillSettledFromTheDeposit`，修前 PARTIAL），修为：从预付款记费不看入驻状态（钱已在预付款中，提交时检查过）；不从预付款记的费用照旧要求审核通过。封禁不在此列：封禁使发布暂停而不是结束，记费本来就不看封禁，封禁的发起方照常结算。
+13. **L2 范围参数未发布**：`qb.distribution.*` 的六个范围参数有一个没有发布，保存价目与（开关打开时）提交都以 422 `QB_DISTRIBUTION_RANGE_MISSING` 拒绝，而不是当作没有限制；启动检查由已有的 `SetupParamsCheck` 报出缺少的 `QbParams.ALL` 参数（不另加检查）。
+14. **L1 结束宽限的界**：`qb.distribution.final.end-grace-sec` 小于 60 按 60、大于 86400 按 86400（`DistributionSettlements.MIN_END_GRACE_SEC` / `MAX_END_GRACE_SEC`）：至少一分钟，结束前一刻开始、稍后才计数的人也在 `final` 中。参数没有发布时不当作已结束（不结 `final`），由 `DISTRIBUTION_FINAL_MISSING` 报出。e2e 用 60。
+15. **L6 代码中写死的防线数字**（不是业务数字，超过即视为缺陷、拒绝而不少算，所以不作参数）：
+    - `DistributionSettlements.MAX_ROWS = 600`：一个发布的结算行至多 600 行（一月一行，50 年）；
+    - `PublicationPrepayments.MAX_POSTPAID = 1000`：一个发起方未关闭的后付预付款至多 1000 笔；
+    - 价目项的读取 `limit(101)`（同 F-M5 的受众价目）；
+    - 价目输入的 `@DecimalMax("99999999")` 与四位小数（列宽），最低预付不超过一笔费用的上限 `FeeProcesses.MAX_AMOUNT`；
+    - 任务每次至多 10000 项（平台 `JobDefinition.forEach` 的 `maxItems`，余下的由核对报出、补跑）；
+    - 结束宽限的界 60 / 86400 秒（上一条）。
+16. **L3 / L4 / L5**：分录的参照按费用实际的期间（`distribution:<发布>:<期间>` 与记费的 `period` 一致，晚记的费用参照的是记费当月）；核对模板中不再写缺省小时数，由对账流程把 `QbParams` 的两个参数交给模板（未发布即不报这两项，启动检查报缺参数）；运营商的结算列表 `qb.operator.distribution-settlements`（入口范围，按运营商成员资格读，标出按下限的），显示在运营商管理系统的配送费价目页下方（§9.3 所列）。
+17. **M4**：`DISTRIBUTION_DEPOSITS` 按（发起方，发布）比较 2180 用途 `DISTRIBUTION` 的余额与未关闭的预付款，参照列为发布，一个发布多一个少一个不再相互抵消。
+18. **H1 的测试放在哪里**（§9.9 的清单逐条，修后再审）：
+    - `DistributionIT`（21 例）：同一项并发两次只成一行；月度与 `final` 并发只成一行 `final`、只退一次；另一用途的预付款不提前释放、配送费的预付款等 `final`；预付、赠送、现金三个来源的分摊与即开账单 `PARTIAL` / `OPEN`；单价 0.4 跨三个月 1、0、1；改派运营商后仍按冻结的运营商、价目只影响此后提交的、切换题目版本后单价不变；日本时间月界（第 10 条的现在行为）；结算晚两个月、补上后开出该月账单，账单任务从不在 1 日运行；后付发起方再次提交不重复占用信用额。
+    - 语句数在 `DistributionStatementBudgetIT`（另开 `it.sql-log.enabled` 的上下文，同 `SubmitStatementBudgetIT`）：提交的四种组合（开关关 / 开 × 有无受众条件：31、38、37、42）；N3 月费（预付 18、后付 11）、手工费 25、`AUDIENCE` 记费 25，与 F-M6 之前的基线 13e484c24 上用同一段测试量得的相同。
+    - 挑战在 `DistributionChallengeIT`（挑战要用 `TreeItSupport` 的知识地图副本）：开关打开、运营商有价目，挑战提交后不冻结单价、不写预付款。
+    - 店面：店面的发布由店铺的流程建立，计费的 IT 中建不出；`PublicationPrepaymentsTest` 断言只有发起方的、非挑战的发布才冻结，两个结算任务的取项只取单价不为空且 `publisherKind = 'SPONSOR'` 的发布。
+    - `AdminFinanceIT.theDistributionFeesKindsAreTheirPostingsRowByRow`：一个月中冻结 165、结算 16（`DISTRIBUTION_CHARGED` 与从预付款付的 `PREPAYMENT_USED`）、退回 149，逐行逐科目非零。
+
+
+19. **N1（Fable 第二次审查）该结算的起点是上架的时刻**：三处判断"某月该不该结算"的地方原来都从卡片的 `startAt` 起算。三处是月度任务的取项 `qb.system.distribution-due`、后付账单的等待 `qb.system.fee-invoices-due` 与核对 `DISTRIBUTION_UNSETTLED`。批准可以晚于 `startAt` 并跨月，例如月末提交、次月 2 日才批准：那个月的月度结算早已跑过、永远不会有行，核对每天报差异、分录导出被挡、后付账单开不出来。
+    - 改为 `greatest(startAt, approvedAt)`（发布在批准时上架，`goingOn` 写 `approvedAt`；有卡片即已批准）。
+    - 三处写同一个表达式，`DistributionDueConditionTest` 检查三个模板各有且只有这一处读 `startAt`。
+    - 先写复现的测试 `DistributionIT.approvedInTheNextMonthItIsDueFromItsApprovalNotFromItsStart`：修前该月仍在取项中。
+    - 另加一行防线：`QB_FEE_CHARGE` 核对 `prepaymentId` 所指的预付款属于被记费的发起方。
+20. **已注销的发起方**：结束结算从预付款记费（第 12 条）；预付款不够付的余额从账户扣，账户已清空时成为收不回的未付。这部分随 F-M15（注销收尾：注销前结清）处理，本项不另做。

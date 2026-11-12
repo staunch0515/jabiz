@@ -134,6 +134,8 @@ export const publishingEn = {
       availablePostpaid: 'Still within your credit limit: {{amount}}',
       shortfall: 'Short by {{amount}}.',
       topUp: 'Top up',
+      unit: '({{unit}} a start)',
+      unitAtFloor: '({{unit}} a start, the least price)',
       help: 'A prepayment is not a fee: it all comes back if the publication returns to its draft, and what is left comes back within a day after it ends.',
       purpose: {
         AUDIENCE: 'Audience rules',
@@ -141,6 +143,13 @@ export const publishingEn = {
         EXPOSURE: 'Exposure fee',
         AI: 'AI credit',
       },
+    },
+    distribution: {
+      title: 'Distribution fee',
+      pending: '{{starts}} people started since the last settlement: about {{amount}} so far (before tax).',
+      row: '{{period}}: {{starts}} people, {{amount}} and tax {{tax}}',
+      finalRow: '{{period}} (last): {{starts}} people, {{amount}} and tax {{tax}}',
+      help: 'Takers get every reward you set. The distribution fee is charged by the platform for each person who starts your quiz, settled each month from what you set aside and then your platform fee account; what is left comes back after the last settlement.',
     },
     prepayments: {
       title: 'Prepayment',
@@ -780,6 +789,8 @@ export const publishingZh: typeof publishingEn = {
       availablePostpaid: '信用额度内尚可用：{{amount}}',
       shortfall: '还差 {{amount}}。',
       topUp: '去充值',
+      unit: '（每人 {{unit}}）',
+      unitAtFloor: '（每人 {{unit}}，按下限）',
       help: '预付款不是费用：发布回到草稿时全额退回，发布结束后一天内退回剩余。',
       purpose: {
         AUDIENCE: '受众规则费',
@@ -787,6 +798,13 @@ export const publishingZh: typeof publishingEn = {
         EXPOSURE: '曝光费',
         AI: 'AI 额度',
       },
+    },
+    distribution: {
+      title: '配送费',
+      pending: '上次结算以来有 {{starts}} 人开始答题：目前约 {{amount}}（不含税）。',
+      row: '{{period}}：{{starts}} 人，{{amount}}，税 {{tax}}',
+      finalRow: '{{period}}（最终）：{{starts}} 人，{{amount}}，税 {{tax}}',
+      help: '学者得到的奖励就是您设定的全部。配送费由平台按开始答题的人数收取，每月结算，先从提交时冻结的预付款扣，再从平台费账户扣；最终结算后退回剩余。',
     },
     prepayments: {
       title: '预付款',
@@ -1426,6 +1444,8 @@ export const publishingJa: typeof publishingEn = {
       availablePostpaid: '与信枠の残り：{{amount}}',
       shortfall: '{{amount}} 不足しています。',
       topUp: 'チャージする',
+      unit: '（1 人あたり {{unit}}）',
+      unitAtFloor: '（1 人あたり {{unit}}、下限）',
       help: '前払金は料金ではありません。下書きに戻ると全額、掲載終了後 1 日以内に残りが返却されます。',
       purpose: {
         AUDIENCE: '対象者ルール料',
@@ -1433,6 +1453,13 @@ export const publishingJa: typeof publishingEn = {
         EXPOSURE: '露出料',
         AI: 'AI クレジット',
       },
+    },
+    distribution: {
+      title: '配信料',
+      pending: '前回の精算以降に {{starts}} 人が回答を始めました：現在おおよそ {{amount}}（税抜）。',
+      row: '{{period}}：{{starts}} 人、{{amount}}、税 {{tax}}',
+      finalRow: '{{period}}（最終）：{{starts}} 人、{{amount}}、税 {{tax}}',
+      help: 'テイカーが受け取る報酬は、あなたが設定したものがすべてです。配信料は回答を始めた人数に応じてプラットフォームが受け取り、毎月、提出時に確保した前払金から、次にプラットフォーム料金口座から精算します。最終の精算の後、残りは返却されます。',
     },
     prepayments: {
       title: '前払金',

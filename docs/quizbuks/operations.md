@@ -118,6 +118,7 @@
 |---|---|---|
 | `QB_TRANSFER_RUN_CRON`、`QB_RECONCILE_RUN_CRON` | e2e 与 Stripe 测试模式：每分钟转账、每分钟核对 | `TransferScheduleCheck` |
 | `QB_ANALYTICS_RUN_CRON` | e2e：每分钟运行发起方分析（Q9e2）。**隐私控制**：概览是任务的快照，频率决定能把一个学者的作答定位到多细；缺省（每 10 分钟）以外的值**任何环境**都要同时设 `QB_E2E_ENABLED=true`，否则启动失败；**比每分钟更频繁的值一律拒绝**（评审 M1） | `TransferScheduleCheck` |
+| `QB_DISTRIBUTION_MONTHLY_CRON` / `QB_DISTRIBUTION_FINAL_CRON` | 配送费的月度结算（缺省每月 2 日 00:37）与结束结算（缺省每天 03:07），按 `jabiz.fiscal-year-zone`（F-M6，§7.48）。e2e 把结束结算设为每分钟（`'45 * * * * *'`）；项都可重复运行，更频繁只是多读几次 | — |
 | `QB_E2E_ENABLED`（`quizbuks.e2e.enabled`） | e2e 的开关（Q9e2 评审 M1）：允许改分析任务的时间；正式模式或正式密钥下设了即启动失败 | `TransferScheduleCheck` |
 | `QB_ADMIN_ROLES` 中的 `QB_E2E_*` | e2e 的无二次验证的测试角色 | `TransferScheduleCheck` |
 | 开发入账 `quizbuks.wallet.dev-credit.enabled`（`dev` 配置开启） | 不付款给发起方钱包入账 | `StripeModeCheck` |
@@ -1232,6 +1233,23 @@ Quiz 与发布有主题词（平台词表中的词与自定义词），学者可
 - **差异的处理**：`PREPAYMENTS` 有差异时，先查 `SELECT * FROM qb_prepayment WHERE sponsor_id = '<发起方>'` 与来源为 `QbPrepayment` 的分录、`qb_fee_payment_version` 中 `target_id` 或 `prepayment_id` 为该预付款的分摊是否对应；`PREPAYMENT_STALE` 多半是退回失败或每日任务没有运行，查该发布的操作记录与任务的运行；`PREPAYMENT_PARTS` 是缺陷（分摊与剩余不一致时付款与退回都会拒绝而不是少付），报开发。`ENDED` 的发布仍有预付款而任务已跑过：手工运行任务的补跑（`JOB_RUN_REQUEST` `qb.prepayment-release`，带原因）。不手工写分录或改表；报开发。
 - **常见询问**：发起方说提交被拒——向导最后一步的"资金"一栏写明各项与差额，充值或等赠送到账后再提交；发起方问钱去了哪里——发布页的"预付款"与平台费账户的"冻结在预付款中"一行；预付款不是费用，回到草稿时全额退回、结束后一天内退回剩余。
 - **受众规则价目**：需求方 2026-11-09 确认删除总部自己的 `direct` 价目表与参数 `qb.audience.price.fallback`：只有运营商的价目表（负责人或总部为它设置），运营商没有价目表即不收。已有安装中 `direct` 的价目行与该参数保留不读，下次清理时删除。
+
+### 7.48 配送费（F-M6）
+
+发起方按开始答题的人数向平台付配送费，由运营商定价、每月结算（`docs/quizbuks/plans/impl/F-M.md` §9）。学者读到的内容不变。
+
+- **价目与范围**：每个运营商一行价目（`QbDistributionPrice`）：比例（**日元 / Kudos**：发布最高档位每 1 Kudos、每人收多少日元，不是百分比）、单价下限、单价上限、最低预付（没有中奖名额上限的发布冻结它）。由运营商负责人在运营商管理系统的"配送费价目"页（`QB_OPERATOR_DISTRIBUTION_PRICE_SET`）或总部在平台管理系统的"配送费价目"页（`QB_DISTRIBUTION_PRICE_SET`，`qb.fee.manage`：只有总部的财务管理员，运营商没有）保存，理由必填；没有价目的运营商不收配送费。总部的范围是受控参数 `qb.distribution.rate.min|max`、`unit-floor.min|max`、`unit-ceiling.max`、`minimum-deposit.max`（一位管理员提出、另一位发布）；保存价目时按当时的范围检查，范围改窄后已有的价目不变，每日核对报 `DISTRIBUTION_PRICE_OUT_OF_RANGE`（`sponsorId` 一列是运营商），请运营商或总部改价。`qb.distribution.unit-floor.min` 的缺省值 1 日元是占位，**打开开关之前由需求方确认**。
+- **开关**：`qb.distribution.billing.enabled`（受控，缺省关）只在提交时读。打开后提交的发布冻结单价（clamp（比例 × 最高档位，下限，上限），四位小数）与预付（`⌈名额 × 单价⌉ + 税`，或最低预付），预付是 F-M5 的预付款，用途 `DISTRIBUTION`。**关掉不追溯**：已冻结单价的发布照常结算到结束。挑战与店面的发布不收；直营发起方照付。名额乘单价超过一笔费用的上限即 422 `QB_DISTRIBUTION_DEPOSIT_RANGE`。
+- **结算**（`QB_DISTRIBUTION_SETTLE`，逐项任务，每项一个事务，只取发起方的钱包锁）：
+  - 月度 `qb.distribution-fee`：每月 2 日 00:37（`jabiz.fiscal-year-zone`，部署设置 `QB_DISTRIBUTION_MONTHLY_CRON`），结算上个月该结算的发布（上架时间早于月末、月初之前没有结束、还没有 `final` 行）；已结束超过宽限的直接写成 `final` 并退回剩余。
+  - 结束 `qb.distribution-final`：每天 03:07（`QB_DISTRIBUTION_FINAL_CRON`），在 03:23 的预付款退回之前；结束超过宽限 `qb.distribution.final.end-grace-sec`（受控，缺省 3600 秒）而没有 `final` 行的发布写 `final`，期间是结束所在的月（该月已有行即其后第一个没有行的月），并退回剩余（按用途，`DISTRIBUTION` 只在有 `final` 行之后退回）。
+  - **月份的边界**：月度结算记的是运行那一刻的计数器，所以 M 月的行包含次月 1 日 0 时到 2 日 00:37 之间开始的人（约一天，不按开始时间数：答题表上不加索引；总控 2026-11-12 接受）。发起方或运营商问"10 月的人数为什么多于 10 月 31 日之前开始的人数"即此；运营商的分成（F-M12）按费用的月份，月界后约一天的人数在上一个月。月度补跑得晚，这一段就更长（补跑时刻的计数器）。
+  - 每行记累计的开始人数与金额，本次 = ⌈累计人数 × 单价⌉ − 此前已收，另加税（向下取整）；为 0 不记费。记费是 `QB_FEE_CHARGE` 种类 `DISTRIBUTION`，归属提交时冻结的运营商：预付的先从该发布的预付款扣（赠送先、现金后），不够从平台费账户扣，再不够成未付；后付的记应收，预付款按本次金额减少。
+  - 一次运行至多 10000 项；余下的由每日核对报出，用平台的补跑（`JOB_RUN_REQUEST`，带原因）再运行该时刻。
+- **账单的先后**：后付的月账单任务 `qb.fee-invoice` 改为每天 01:17（每月 1 日不运行），一个发起方某月的账单要等该月应结算的发布都有该月或 `final` 的结算行才开；结算晚了，补上后的下一次运行即开出。那个月的账单开出之后才记的费用（补跑的结算）进入记费当月的账单；`final` 行可能把结束所在月最后一段的人数晚一个月收（运营商结算按费用的月份分成，这部分在下一个月）。对账时区分结算行的 `period`（人数的月份）与费用的 `period`（账单的月份）。
+- **核对**（每日对账）：`DISTRIBUTION_DEPOSITS`（2180 用途 `DISTRIBUTION` 按发起方 = 未关闭的配送费预付款）；`DISTRIBUTION_UNSETTLED`（按（发起方，月份）列出：本月之前的每个月，月末之后过了 `qb.distribution.unsettled-after-hours` 小时（受控，缺省 30，即 2 日 06:00）仍没有该月或 `final` 结算行的发布个数，参照列是月份 `YYYY-MM`；包含后付发起方的账单在等的月份（`qb.system.fee-invoices-due` 的应开减已可开），也包含预付发起方的）；`DISTRIBUTION_FINAL_MISSING`（结束超过 `qb.distribution.final-missing-after-hours` 小时（受控，缺省 48）仍没有 `final` 行）；`DISTRIBUTION_PRICE_OUT_OF_RANGE`；`DISTRIBUTION_AT_FLOOR` 只提示（不算差异）：按下限计费的进行中的发布，非平台付奖的档位金额是发起方自报的，过低即落到下限，供运营商与总部查看。月报新类 `DISTRIBUTION_CHARGED`、`DISTRIBUTION_DEPOSIT`、`DISTRIBUTION_RELEASED`；全部结算在平台管理系统的"配送费结算"页（`qb.admin.distribution-settlements`，可按月份与"只看按下限"筛选，以平台的导出导出）。
+- **差异的处理**：`DISTRIBUTION_UNSETTLED` / `DISTRIBUTION_FINAL_MISSING` 多半是任务没有运行或该项失败：看任务的运行与失败的项，修好原因后补跑该时刻。补跑哪一个时刻：`DISTRIBUTION_UNSETTLED` 的月份 M 补跑 `qb.distribution-fee` 在 M 的次月 2 日 00:37 的计划时刻（`POST /api/jobs/qb.distribution-fee/runs`，带该时刻与原因；同一时刻幂等，已结的项不再写）；几个月都缺时从最早的月份起逐月补跑，一次只补一个月（期间由时刻决定）。`DISTRIBUTION_FINAL_MISSING` 补跑 `qb.distribution-final` 最近一次的计划时刻（任何一天的都结所有已过宽限的结束发布）。后付发起方的账单在补上之后的下一次 01:17 开出。`DISTRIBUTION_DEPOSITS` 有差异同 §7.47 的 `PREPAYMENTS`，报开发。不手工写结算行（只追加、只写一次）、分录或改表。
+- **常见询问**：发起方问配送费怎么算——发布页的"配送费"写明单价、上次结算以来开始的人数与目前约多少；"学者得到的奖励就是您设定的全部，配送费另由平台按开始答题的人数收取"。
 
 ## 8. 升级到线 1.3（S0 的迁移 V29、V30）
 

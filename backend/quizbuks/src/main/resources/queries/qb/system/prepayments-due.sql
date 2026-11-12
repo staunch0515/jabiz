@@ -1,26 +1,36 @@
 /*---
 id: qb.system.prepayments-due
-description: The ended publications whose prepayments still hold something (the items of the daily job qb.prepayment-release, F-M5)
-entities: [QbPrepayment, QbPublicationCard]
+description: The ended publications' prepayments that still hold something, one a publication and purpose (the items of the daily job qb.prepayment-release, F-M5, F-M6)
+entities: [QbPrepayment, QbPublicationCard, QbDistributionSettlement]
 datasets:
   QbPrepayment: urn:jabiz:dataset:default:QbPrepayment
   QbPublicationCard: urn:jabiz:dataset:default:QbPublicationCard
+  QbDistributionSettlement: urn:jabiz:dataset:default:QbDistributionSettlement
 params:
   at: { like: QbPrepayment.frozenAt, required: true, description: "The run's time" }
 results:
+  prepaymentId:  { kind: { type: text, maxLength: 36 } }
   publicationId: { kind: { type: text, maxLength: 36 } }
   sponsorId:     { kind: { type: text, maxLength: 128 } }
+  purpose:       { kind: { type: text, maxLength: 20 } }
 list:
-  sorts: [publicationId]
-  defaultSort: { field: publicationId, asc: true }
-  key: [publicationId]
+  sorts: [prepaymentId]
+  defaultSort: { field: prepaymentId, asc: true }
+  key: [prepaymentId]
 permissions: [qb.fee.system]
 ---*/
 -- An ended publication went on, so it has a card (its status kept with the publication's). The item reads the
--- publication again under the sponsor's wallet lock. F-M6 adds: only after the publication's last settlement.
-SELECT DISTINCT p.{{QbPrepayment.publicationId}} AS publicationId, p.{{QbPrepayment.sponsorId}} AS sponsorId
+-- publication again under the sponsor's wallet lock. F-M6 (§9.7): the distribution fee's deposit only after the
+-- publication's final settlement (the release reads that again under the lock); the other purposes once it ended.
+SELECT CAST(p.{{QbPrepayment.prepaymentId}} AS text) AS prepaymentId,
+       p.{{QbPrepayment.publicationId}} AS publicationId, p.{{QbPrepayment.sponsorId}} AS sponsorId,
+       p.{{QbPrepayment.purpose}} AS purpose
 FROM {{QbPrepayment}} p
 JOIN {{QbPublicationCard}} c ON CAST(c.{{QbPublicationCard.publicationId}} AS text) = p.{{QbPrepayment.publicationId}}
 WHERE p.{{QbPrepayment.status}} = 'OPEN'
   AND p.{{QbPrepayment.frozenAt}} <= :at
   AND c.{{QbPublicationCard.status}} = 'ENDED'
+  AND (p.{{QbPrepayment.purpose}} <> 'DISTRIBUTION'
+       OR EXISTS (SELECT 1 FROM {{QbDistributionSettlement}} s
+                  WHERE s.{{QbDistributionSettlement.publicationId}} = p.{{QbPrepayment.publicationId}}
+                    AND s.{{QbDistributionSettlement.final}}))

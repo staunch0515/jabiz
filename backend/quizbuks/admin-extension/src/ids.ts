@@ -768,6 +768,10 @@ export const PATH = {
   audienceRules: '/qb/audience/rules',
   audiencePrices: '/qb/audience/prices',
   operatorAudiencePrices: '/qb/operator/audience-prices',
+  /** F-M6: every operator's distribution price (headquarters), the operator's own, and the settlements (finance). */
+  distributionPrices: '/qb/distribution/prices',
+  operatorDistributionPrice: '/qb/operator/distribution-price',
+  distributionSettlements: '/qb/finance/distribution-settlements',
   /** The platform's own pages. */
   tasks: '/tasks',
   /** F-C10c: the AI help's conversations handed to a person (headquarters every one, an operator its own). */
@@ -796,6 +800,17 @@ export const AUDIENCE_PRICING = {
   rulesTemplate: 'qb.admin.audience-rules',
   pricesTemplate: 'qb.admin.audience-prices',
   operatorPricesTemplate: 'qb.operator.audience-prices',
+} as const
+
+/** F-M6 (backend `fee.DistributionPrices`, `qb.admin.distribution-*`): the distribution fee's prices and settlements. */
+export const DISTRIBUTION = {
+  priceSet: 'QB_DISTRIBUTION_PRICE_SET',
+  operatorPriceSet: 'QB_OPERATOR_DISTRIBUTION_PRICE_SET',
+  pricesTemplate: 'qb.admin.distribution-prices',
+  operatorPriceTemplate: 'qb.operator.distribution-price',
+  settlementsTemplate: 'qb.admin.distribution-settlements',
+  /** Review L5: the caller operator's own settlements (its frozen fees), through its membership. */
+  operatorSettlementsTemplate: 'qb.operator.distribution-settlements',
 } as const
 
 /**
