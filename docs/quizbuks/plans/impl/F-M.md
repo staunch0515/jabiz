@@ -379,6 +379,26 @@
 3. 补：提交的语句数（多一把钱包锁、一条合并读取，有受众条件时多两条价目读取，后付多一条 1130 读取，冻结子流程）写进 PR；`QbPrepayment` 的 `PersonalDataEraser` 照钱表随 F-M15。
 4. 报总控分支名，额外审查后开 PR（描述逐条对照验收、删除的功能逐项列出）；F-F12 的 2′ 随本项验收。
 
+### 8.10 Fable 的代码审查（@2a30c7ea，2026-11-12）与修改
+结论"修后再审"，高 1、中 7、低 7，全部改了：
+
+- **高 H1**：作废从预付款付的账单后，`QB_FEE_REFUND` 对带 `prepaymentId` 的分摊另过一笔借 2180、贷 2190 / 2160（来源为该预付款，月报 `PREPAYMENT_RELEASED`），负的分摊行带上 `prepaymentId`。`held()` 和核对只算费用取走的正数部分。付款冲正（1130 / 2180）在月报算 `FEE_VOIDED`。
+- **中**：
+  - M1：预付款不够付时，余额按账户顺序 `QB_FEE_SETTLE`，两段合成一张即开账单。
+  - M2：怎样付按预付款的 `mode`（读入 `QB_FEE_CHARGE` 的合并读取），两种切换各一例，月账单不重复。
+  - M3：`PREPAYMENT_STALE` 按发起方汇总，加上"结束超过 `qb.prepayment.release.overdue-days`"与"发布不存在"两种；新核对项 `PREPAYMENT_PARTS`。
+  - M4：检查与冻结都用 `FeeAllocation` 算可付额（读现金各笔），现金各笔与钱包不一致时提交得到 422 而不是 500。
+  - M5、M6：`PrepaymentIT` 在一个只有本例的月份里逐行断言 `PREPAYMENT_FROZEN`（赠送 + 现金）、`PREPAYMENT_USED`、`PREPAYMENT_RELEASED`、`FEE_CREDIT_VOIDED`、`FEE_CHARGED`；另补齐每日任务经 `JobRunner` 跑两次、未结束的发布跳过、"什么也没写"的全面检查、只追加表没有 UPDATE / DELETE 等用例。提交的语句数由新的 `SubmitStatementBudgetIT` 断言：什么也不冻结 31（原 29）、预付 38、后付 36。`AdminFinanceIT` 的月份没有平台费的活动，仍为 0，逐行的非零期望放在 `PrepaymentIT`。
+  - M7：开始时（进入 `LIVE`）记费，不在批准时；批准后、开始前就结束的不记费，由每日任务全额退回。
+- **低**：
+  - L1：发起方行放进锁内那一条读取。
+  - L2：赠送按到期日先用。
+  - L3：分摊少于剩余即报错。
+  - L4：`QB_PUBLICATION_FUNDS` 三语写明后付的是信用额。
+  - L5：不相关的发布不发读取的 SQL；后付预付款超过上限即报错。
+  - L6：索引改名为与列一致；每日任务的 cron 与上限是部署设置 `QB_PREPAYMENT_RELEASE_CRON` / `_MAX_ITEMS`。
+  - L7：新增 `(account_id, dimension_1)` 索引，供按发起方读 1130。
+
 ## 9. F-M6 配送费（S2，2026-11-11；第二稿 2026-11-12，按 Fable 的计划审查修改，待复核）
 
 规格 F-M6（规则、参数、运营闭合、验收）；§1 M5。在 F-M5 之上（提交时的项、2180、`QbPrepayment`、F-M11 的 `billingOperatorId`）。分支 `1.3/quizbuks-FM6-distribution`（从 F-M5 合入后的 `1.3/quizbuks` 拉出），迁移取开 PR 时的下一个空号。
