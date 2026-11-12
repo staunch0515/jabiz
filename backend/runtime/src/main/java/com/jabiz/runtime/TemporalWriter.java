@@ -221,15 +221,27 @@ final class TemporalWriter {
             rules.requireWritable(def);
             rules.requireChangeable(def, instance.id());
             UUID id = id(def, instance.id());
-            return timeline(w, id).flatMap(timeline -> {
-                EntityVersion base = requireBase(w, timeline, id, instance.version());
-                EntityInstance current = snapshot(def, base, base.processSeqId(), base.recordedAt());
-                VersionPlanner.Write write = VersionPlanner.Write.delete(base, w.effective(),
-                    Set.copyOf(def.changeableFields()));
-                return rules.ensureNotReferenced(def, current)
-                    .then(rules.ensureDeletable(w.engine(), def, current))
-                    .then(Mono.defer(() -> append(w, id, timeline, write, false)))
-                    .then();
+            return Mono.deferContextual(view -> {
+                // Read ahead with the deletions around it (ROADMAP 17zz21), or read now.
+                DeletePrefetch prefetch = view.getOrDefault(DeletePrefetch.KEY, null);
+                java.util.Optional<List<EntityVersion>> ahead = prefetch != null && prefetch.covers(def.name)
+                    ? prefetch.takeTimeline(id) : java.util.Optional.empty();
+                Mono<Timeline> read = ahead.isPresent() ? Mono.just(Timeline.of(ahead.get())) : timeline(w, id);
+                return read.flatMap(timeline -> {
+                    EntityVersion base = requireBase(w, timeline, id, instance.version());
+                    EntityInstance current = snapshot(def, base, base.processSeqId(), base.recordedAt());
+                    VersionPlanner.Write write = VersionPlanner.Write.delete(base, w.effective(),
+                        Set.copyOf(def.changeableFields()));
+                    return rules.ensureNotReferenced(def, current)
+                        .then(rules.ensureDeletable(w.engine(), def, current))
+                        .then(Mono.defer(() -> append(w, id, timeline, write, false)))
+                        .doOnSuccess(written -> {
+                            if (prefetch != null) {
+                                prefetch.deleted(id);
+                            }
+                        })
+                        .then();
+                });
             });
         });
     }
