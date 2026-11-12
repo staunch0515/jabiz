@@ -7,11 +7,8 @@ import com.jabiz.quizbuks.publishing.DigitalDelivery;
 import com.jabiz.quizbuks.publishing.RewardMethod;
 import com.jabiz.quizbuks.publishing.RewardMethodProcesses;
 import com.jabiz.quizbuks.sponsorpackage.PackageImportProcesses;
-import com.jabiz.runtime.storage.WriteBatching;
 import com.jabiz.runtime.test.TestTokens;
 import org.junit.jupiter.api.Test;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.SpringBootTest;
 
 import java.time.Duration;
 import java.time.Instant;
@@ -32,7 +29,6 @@ import static org.assertj.core.api.Assertions.assertThat;
  * page plans them, batches of 200 questions and 3 MiB; a stop half-way is gone on from. The times are printed for the
  * report (§10 of the plan); the assertions on them are wide, so that a slow machine does not fail the build.
  */
-@SpringBootTest(properties = "it.sql-log.enabled=true")
 class SampleRestoreIT extends TreeItSupport {
 
     private static final int BIG_BANK = 1000;
@@ -41,9 +37,6 @@ class SampleRestoreIT extends TreeItSupport {
     private static final int BATCH_BYTES = 3_145_728;
     /** Far above what any machine needs (a minute or two in the plan's measure): fails only for a hang. */
     private static final Duration WIDE_LIMIT = Duration.ofMinutes(20);
-
-    @Autowired
-    WriteBatching batching;
 
     /** A bank of 1000 questions takes a step longer than the other tests' minute: the report wants its time, not a timeout. */
     @org.junit.jupiter.api.BeforeEach
@@ -241,27 +234,16 @@ class SampleRestoreIT extends TreeItSupport {
         assertThat(submit(token, publicationId).get("status")).isIn("LIVE", "SCHEDULED");
         assertThat(sponsor).isNotBlank();
 
-        // Three Takers, each drawn exactly 20 of the 1000 and not the same 20 (Q81: drawn once per session).
+        // Three Takers, each drawn exactly 20 of the 1000 and not the same 20 (Q81: drawn once per session); the start's statements are counted in SampleDrawBudgetIT.
         List<List<?>> drawn = new ArrayList<>();
-        // No profile, as the budget's takers: a country in the profile adds a read to the start.
-        String warm = taker(newTaker(unique("t-ff11-warm"), null));
+        String warm = taker(newTaker(unique("t-ff11-warm"), "JP"));
         start(warm, publicationId);
         for (int i = 0; i < 3; i++) {
-            String taker = taker(newTaker(unique("t-ff11-draw"), null));
-            com.jabiz.quizbuks.it.SqlStatementLog.clear();
+            String taker = taker(newTaker(unique("t-ff11-draw"), "JP"));
             Map<String, Object> out = start(taker, publicationId);
-            List<List<String>> start = com.jabiz.quizbuks.it.SqlStatementLog.transactions();
             List<?> questions = (List<?>) out.get("questions");
             assertThat(questions).hasSize(PICK);
             drawn.add(questions.stream().map(q -> ((Map<?, ?>) q).get("stem")).toList());
-            // The start's statements are the budget's, whatever the size of the bank drawn from.
-            List<String> own = start.stream().filter(t -> t.stream().anyMatch(sql -> sql.startsWith(
-                "INSERT INTO op_process ("))).findFirst().orElseThrow();
-            assertThat(own).as("QB_ATTEMPT_START of a draw of " + PICK + " from " + BIG_BANK).hasSize(
-                batching.acrossTransaction() ? AttemptStatementBudgetIT.START_TOTAL.held()
-                    : AttemptStatementBudgetIT.START_TOTAL.perCommit());
-            assertThat(AttemptStatementBudgetIT.underLock(own)).hasSize(batching.acrossTransaction()
-                ? AttemptStatementBudgetIT.START_LOCKED.held() : AttemptStatementBudgetIT.START_LOCKED.perCommit());
         }
         assertThat(drawn.stream().map(l -> l.stream().map(String::valueOf).collect(Collectors.toSet())).distinct())
             .as("the draws are not all the same twenty").hasSizeGreaterThan(1);
