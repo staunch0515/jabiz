@@ -417,6 +417,14 @@ public final class PackageImportProcesses {
                 + "quiz the import made", Map.of("step", input.step())));
             return;
         }
+        // A clearing step goes before the content it makes room for: once that content is brought, clearing would empty
+        // it (a plan that gained clearing steps after it, F-F11b review H1), so the step is refused, not taken.
+        String content = actions.getFirst() == Action.CLEAR ? PackageImportRules.contentOfClear(input.step()) : null;
+        if (content != null && done.containsKey(content)) {
+            ctx.reject(new Violation("step", PackageImportCodes.STEP_INVALID, "A clearing step comes before its "
+                + "content, not after it", Map.of("step", input.step())));
+            return;
+        }
         ctx.put(ACTION, actions.getFirst());
     }
 

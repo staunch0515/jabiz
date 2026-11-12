@@ -85,6 +85,19 @@ public final class PackageImportRules {
         return new ArrayList<>(ids);
     }
 
+    /** A clearing step's key: {@code <content>:clear:<n>}, the content it clears for being {@code <content>:content}. */
+    private static final Pattern CLEAR_STEP = Pattern.compile("(.+):clear:[0-9]+");
+
+    /**
+     * The key of the content step a clearing step goes before ({@code quiz:q1:v:v2:clear:3} →
+     * {@code quiz:q1:v:v2:content}), or null for a key not of that shape (F-F11b review H1: a clearing step whose
+     * content is already brought would empty it).
+     */
+    public static String contentOfClear(String step) {
+        var match = CLEAR_STEP.matcher(step);
+        return match.matches() ? match.group(1) + ":content" : null;
+    }
+
     /** Whether a step of this key makes (rather than only names) a thing of the kind. */
     static boolean madeBy(String step, String kind) {
         return switch (kind) {

@@ -402,6 +402,42 @@ class PackageImportIT extends TreeItSupport {
         assertThat(stemsOf(quizId)).containsExactly("Only?");
     }
 
+    @Test
+    void aClearingStepAfterItsContentIsRefusedAndAFirstStepMayHoldNoQuestion() {
+        String token = sponsorToken(newSponsor(unique("s-ff11d")));
+        Object importId = start(token, HASH_A, "FULL", 30).get("importId");
+        // A first content step with the heading and materials alone (F-F11b: they nearly fill a request), then a batch.
+        Map<String, Object> heading = quizFile("Materials first");
+        heading.put("materials", List.of(body("no", 1, "kind", "ARTICLE", "title", "Read first", "body", "Paris.")));
+        String quizId = (String) result(step(token, importId, "quiz:q1:v:v1:content", "quiz", body("document", heading,
+            "files", body()))).get("quizId");
+        assertThat(stemsOf(quizId)).isEmpty();
+        assertThat(materialCount(quizId)).isEqualTo("1");
+        step(token, importId, "quiz:q1:v:v1:batch:2", "questions", body("quizId", quizId, "document",
+            quizFile("Materials first", "One?", "Two?"), "files", body()));
+        assertThat(stemsOf(quizId)).containsExactly("One?", "Two?");
+        assertThat(questionCount(quizId)).isEqualTo("2");
+
+        // The next version: cleared, then brought.
+        step(token, importId, "quiz:q1:v:v2:clear:1", "clear", body("quizId", quizId, "rows", 2000));
+        step(token, importId, "quiz:q1:v:v2:content", "quiz", body("document", quizFile("Second", "A?", "B?", "C?"),
+            "files", body(), "intoQuizId", quizId));
+        assertThat(stemsOf(quizId)).containsExactly("A?", "B?", "C?");
+        // A clearing step done again is answered as before (a page going on with the import repeats it, harmlessly).
+        assertThat(step(token, importId, "quiz:q1:v:v2:clear:1", "clear", body("quizId", quizId, "rows", 2000)))
+            .containsEntry("repeated", true);
+        // A clearing step not done whose content is (a plan that gained clearing steps after the content was brought,
+        // F-F11b review H1): refused, the content it would empty stays.
+        assertThat(codes(refused(PackageImportProcesses.STEP, token, body("importId", importId, "step",
+            "quiz:q1:v:v2:clear:2", "clear", body("quizId", quizId, "rows", 2000)), 422)))
+            .containsExactly(PackageImportCodes.STEP_INVALID);
+        assertThat(stemsOf(quizId)).containsExactly("A?", "B?", "C?");
+        assertThat(questionCount(quizId)).isEqualTo("3");
+        // A step of another key clearing the same quiz is not stopped by this (it is the next content's).
+        assertThat(result(step(token, importId, "quiz:q1:c:clear:1", "clear", body("quizId", quizId, "rows", 2000))))
+            .containsEntry("remaining", 0);
+    }
+
     /** A quiz file (version 3) in English with two articles, three questions and Chinese for some texts and the first article. */
     private static Map<String, Object> translatedFile() {
         Map<String, Object> file = quizFile("Cleared", "One?", "Two?", "Three?");
