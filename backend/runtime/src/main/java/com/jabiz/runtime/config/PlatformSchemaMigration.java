@@ -9,6 +9,7 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
+import java.time.Duration;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
@@ -39,10 +40,15 @@ public final class PlatformSchemaMigration implements FlywayMigrationStrategy {
     public static final String PLATFORM_HISTORY_TABLE = "jabiz_schema_history";
 
     /**
-     * Whoever runs the platform scripts must set this (the test fixture {@code SealedColumnsHistory} does). A
-     * migration that runs outside a transaction (CREATE INDEX CONCURRENTLY, V66) waits for every older transaction to
-     * end; Flyway's default transactional advisory lock keeps one open on its connection for the whole run and the
-     * two would wait for each other forever. A session-level lock does the same job.
+     * Flyway's session-level advisory lock, which whoever runs the platform scripts must set (the test fixture
+     * {@code SealedColumnsHistory} does). With the default transactional lock, Flyway takes {@code
+     * pg_advisory_xact_lock} on a second connection and keeps that connection's transaction open ("idle in
+     * transaction") until the whole run ends. A migration outside a transaction that builds an index CONCURRENTLY (V66)
+     * waits for every transaction older than its snapshots, that one included (a ShareLock on its virtualxid, never
+     * granted), while Flyway waits for the migration: neither ends, and PostgreSQL sees no deadlock, since one side
+     * waits in the client (observed on PostgreSQL 16 with Flyway 11, ROADMAP 17zz18). The session-level lock is held
+     * by the connection without a transaction. Applies to the platform's run only: the configuration is copied, and the
+     * application's own Flyway ({@code spring.flyway.*}) keeps its lock.
      */
     public static final Map<String, String> NON_TRANSACTIONAL_LOCK =
         Map.of("flyway.postgresql.transactional.lock", "false");
@@ -55,6 +61,9 @@ public final class PlatformSchemaMigration implements FlywayMigrationStrategy {
      * the unresolved placeholder instead of hanging.
      */
     public static final String CONCURRENTLY_PLACEHOLDER = "concurrently";
+
+    /** The setting of {@link #lockTimeout()}: how long a platform migration waits for a lock, 0 for ever. */
+    public static final String LOCK_TIMEOUT_PROPERTY = "jabiz.schema.migration.lock-timeout";
 
     /** Every table the platform scripts create; PlatformSchemaMigrationTest keeps this list honest. */
     public static final Set<String> PLATFORM_TABLES = Set.of(PLATFORM_HISTORY_TABLE, "sys_dict_item",
@@ -82,6 +91,35 @@ public final class PlatformSchemaMigration implements FlywayMigrationStrategy {
         "sys_account_deletion", "sys_account_deletion_end", "sys_public_counter_day", "sec_user_passkey",
         "sec_passkey_challenge", "sys_mail_text_version", "sys_mail_layout_version");
 
+    private final Duration lockTimeout;
+
+    /** Platform migrations wait for locks as long as it takes (PostgreSQL's default). */
+    public PlatformSchemaMigration() {
+        this(Duration.ZERO);
+    }
+
+    /**
+     * @param lockTimeout PostgreSQL's {@code lock_timeout} on the connections of the platform's migrations, 0 for none
+     */
+    public PlatformSchemaMigration(Duration lockTimeout) {
+        if (lockTimeout == null || lockTimeout.isNegative()) {
+            throw new IllegalArgumentException(LOCK_TIMEOUT_PROPERTY + " must be 0 or more, not " + lockTimeout);
+        }
+        this.lockTimeout = lockTimeout;
+    }
+
+    /**
+     * How long a statement of a platform migration waits for a lock before it fails ({@value #LOCK_TIMEOUT_PROPERTY};
+     * 0, the default, waits for ever). A plain migration's ALTER or CREATE INDEX waiting behind a long transaction
+     * also holds up every write queued behind it; a concurrent build (V66) waits for every older snapshot of the
+     * database without blocking anyone. A timeout fails the migration: a transactional one rolls back and runs again
+     * at the next start, a concurrent build is recorded as failed and needs {@code flyway repair}
+     * (docs/guide/platform-operations.md section 6), which is why it is not on by default.
+     */
+    public Duration lockTimeout() {
+        return lockTimeout;
+    }
+
     @Override
     public void migrate(Flyway application) {
         Configuration config = application.getConfiguration();
@@ -93,6 +131,7 @@ public final class PlatformSchemaMigration implements FlywayMigrationStrategy {
         Flyway.configure()
             .configuration(config)
             .placeholders(placeholders)
+            .initSql(initSql(config.getInitSql(), lockTimeout))
             .locations(PLATFORM_LOCATION)
             .table(PLATFORM_HISTORY_TABLE)
             .baselineOnMigrate(true)
@@ -105,6 +144,18 @@ public final class PlatformSchemaMigration implements FlywayMigrationStrategy {
             ? Flyway.configure().configuration(config).baselineOnMigrate(true).baselineVersion("0").load()
             : application;
         applicationMigration.migrate();
+    }
+
+    /**
+     * The SQL Flyway runs on each connection it opens for the platform's scripts: the application's own
+     * {@code initSql}, if any, then the lock timeout (a number of milliseconds, never text from outside).
+     */
+    static String initSql(String application, Duration lockTimeout) {
+        if (lockTimeout.isZero()) {
+            return application;
+        }
+        String set = "SET lock_timeout = " + Math.max(1, lockTimeout.toMillis());
+        return application == null || application.isBlank() ? set : application.strip() + ";\n" + set;
     }
 
     /** No application history and no tables other than the platform's in the application's schema. */

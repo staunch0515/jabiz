@@ -18,7 +18,15 @@
 # not charged with the branch's own migrations. The branch can still move on after the check ran: look at its highest
 # version again before merging (docs/guide/version-lines.md).
 #
-# Prints every problem with the version to use instead and exits 1; exits 0 when all is well; 2 on bad arguments.
+# A migration the base already has (merged) is never edited, deleted or renamed by <head>, nor is a .sql.conf of it
+# added, changed or deleted: Flyway
+# compares the checksum of every applied script with the file at each start, and a database that ran the old content
+# stops at validation ("Migration checksum mismatch"); the same for a migration that disappears. Explain or correct in a
+# new migration instead (17zz18: a comment edited in the merged V62). Migrations the pull request adds may be renamed
+# and edited freely: the base does not have them.
+#
+# Prints every problem (with the version to use instead, for the order) and exits 1; exits 0 when all is well; 2 on bad
+# arguments.
 set -euo pipefail
 
 if [[ $# -lt 2 ]]; then
@@ -48,6 +56,11 @@ sequence_of() {
       return 0
     fi
   done
+}
+
+# The sequence of a migration's own file: the script itself or its .sql.conf (Flyway's per-script settings).
+sequence_of_file() {
+  sequence_of "${1%.conf}"
 }
 
 version_of() {
@@ -82,6 +95,23 @@ while IFS=$'\t' read -r status first second; do
   fi
 done < <(git diff --name-status --find-renames --diff-filter=AR "$base...$head")
 
+# Merged migrations stay as they are: whatever <head> modifies, deletes or renames away that the base has.
+while IFS=$'\t' read -r status first second; do
+  [[ -z $(sequence_of_file "$first") ]] && continue
+  # A .sql.conf belongs to its script: adding, changing or deleting it changes how a merged script runs.
+  git cat-file -e "$base:${first%.conf}" 2>/dev/null || continue
+  case $status in
+    A*) what="adds settings ($first) to" ;;
+    D*) what="deletes" ;;
+    R*) what="renames (to $second)" ;;
+    *) what="modifies" ;;
+  esac
+  echo "migration-order: $first: the pull request $what a migration the base already has." \
+    "已合并的迁移不能修改、删除或改名（数据库按校验和核对已执行的脚本），请恢复原样，说明或更正写进新的迁移" \
+    "(restore it; put the change in a new migration)."
+  problems=$((problems + 1))
+done < <(git diff --name-status --find-renames --diff-filter=AMDRT "$base...$head")
+
 # No version twice within a sequence in what would be merged.
 declare -A seen=()
 while IFS= read -r path; do
@@ -106,4 +136,4 @@ summary=""
 for i in "${!sequences[@]}"; do
   summary+=" ${sequences[$i]}=V${max[$i]:-0}"
 done
-echo "migration-order: ok ($added new or renamed migration(s); the base has:$summary)"
+echo "migration-order: ok ($added new or renamed migration(s), no merged one changed; the base has:$summary)"

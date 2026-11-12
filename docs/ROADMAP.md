@@ -5553,14 +5553,16 @@ QuizBuks 的 #545、#546、#547 用了 43.5–45 分钟，#545 到点被取消�
 
 ### 17zz18 账本：科目 + 第一维度的索引（2026-11-12，QuizBuks F-M5）
 
-**缘由**：应用要在钱包锁内加总某科目对某个 `dimension_1` 取值的全部历史（`WHERE account_id = ? AND dimension_1 = ? GROUP BY direction`）。现有的两个单列索引各读整个科目或整个取值的分录。
+**缘由**：应用要在钱包锁内加总某科目对某个 `dimension_1` 取值的全部历史（经 SQL 模板，`WHERE accountId = ? AND dimension1 = ? GROUP BY direction`）。现有的两个单列索引各读整个科目或整个取值的分录。
 
 | # | 内容 |
 |---|---|
-| 17zz18-1 | 迁移 `V66`：先 `DROP INDEX ${concurrently} IF EXISTS`，再 `CREATE INDEX ${concurrently} ledger_entry_version_account_dimension_1_idx ON ledger_entry_version (account_id, dimension_1) INCLUDE (direction, amount) WHERE dimension_1 IS NOT NULL`（加总只读索引；重跑即重建）。平台迁移中第一个并发建索引：`V66__….sql.conf` 设 `executeInTransaction=false`；占位符 `concurrently` 由 `PlatformSchemaMigration` 缺省设为 `CONCURRENTLY`，并行迁移多个 schema 的测试设为空；运行平台脚本的 Flyway 须用会话级咨询锁（`PlatformSchemaMigration.NON_TRANSACTIONAL_LOCK`，`spring.flyway.postgresql.transactional-lock=false`）。失败的恢复（`flyway repair`）见运维要点 §6。不加列、不改名，封存与只追加触发器不受影响 |
-| 17zz18-2 | 启动检查 `SCHEMA`（`SchemaIndexChecks`）：默认连接池当前 schema 的 INVALID 索引为错误；正在建的与 `*_ccnew` / `*_ccold` 为警告；运维要点 §6 |
-| 17zz18-3 | 测试：`LedgerAccountDimensionIndexIT`（索引有效；该加总的计划为该索引上的 Index Only Scan）、`SchemaIndexChecksIT`（并发建唯一索引失败留下 INVALID 索引 → 报告；健康的 schema 无问题） |
-| 17zz18-4 | 文档：设计 11 §1.5、运维要点 §6 |
+| 17zz18-1 | 迁移 `V66`：同名索引存在且 INVALID 时先在 `DO` 块中删去（普通 `DROP INDEX`，只在恢复时短暂锁表；有效的从不删），再 `CREATE INDEX ${concurrently} IF NOT EXISTS ledger_entry_version_account_dimension_1_idx ON ledger_entry_version (account_id, dimension_1) WHERE dimension_1 IS NOT NULL`（不带 `INCLUDE`：模板的时态外壳另按 `is_deleted`、`effect_start_time` 过滤，总要读表）。平台迁移中第一个并发建索引（决策 D81）：`V66__….sql.conf` 设 `executeInTransaction=false`；占位符 `concurrently` 由 `PlatformSchemaMigration` 缺省设为 `CONCURRENTLY`，并行迁移多个 schema 的测试设为空；平台脚本的 Flyway 用会话级咨询锁（`PlatformSchemaMigration.NON_TRANSACTIONAL_LOCK`，只作用于平台那一次运行，应用不需设置）。实测：默认的事务级锁在另一条连接上开着事务，建索引等它的 virtualxid、Flyway 等建索引，永远等下去。不加列、不改名，封存与只追加触发器不受影响 |
+| 17zz18-2 | 平台迁移的锁等待时限 `jabiz.schema.migration.lock-timeout`（缺省 `0s` 不限；设了即以 Flyway 的 `initSql` 对平台迁移的连接 `SET lock_timeout`，接在应用的 `initSql` 之后） |
+| 17zz18-3 | 启动检查 `SCHEMA`（`SchemaIndexChecks`）：默认连接池当前 schema 的 INVALID 索引一律为警告（从不阻止启动），按"可能正在建"（`pg_stat_progress_create_index` 或另一会话持有该表的 SHARE UPDATE EXCLUSIVE 锁）、`REINDEX CONCURRENTLY` 的临时索引、失败留下的三种说法；仪表 `jabiz.schema.invalid-indexes` 与告警 `jabiz-schema-invalid-indexes`（13 §7，`alert-fire-test.sh` 的假数据） |
+| 17zz18-4 | 已合并的迁移不改：撤回对已合并的 `V62` 的注释修改（其校验和不变），`tools/check-migration-order.sh` 拒绝修改、删除、改名基线已有的迁移与增改删其 `.sql.conf`（PR 自己的迁移照旧可改） |
+| 17zz18-5 | 测试：`LedgerAccountDimensionIndexIT`（索引有效、不带 INCLUDE；以平台发出的模板语句与其绑定值 EXPLAIN，计划读该索引）、`ConcurrentIndexMigrationTest`（同名 INVALID 索引被重建、有效的保留；锁等待超时使 V66 记为失败 → 下次启动停在校验 → repair → 完成；`initSql` 的拼接）、`SchemaIndexChecksIT`（失败的并发建唯一索引 → 警告与仪表 1；持有表锁时为"可能正在建"；删去后为 0）、`check-migration-order.test.sh`、`alert-fire.test.sh` |
+| 17zz18-6 | 文档：设计 11 §1.5、13 §2 与 §7、决策 D81（待需求方确认）、运维要点 §6（直连数据库、长事务、锁等待时限、大表时放宽启动探针或先单独迁移、repair）、`CLAUDE.md` 第 4 节 |
 
 **验收**：`:runtime:check`、`:app:platformCheck` 绿；封存、`SealedColumnsHistory`、`StatementBudgetIT`、账本测试不变。
 

@@ -2,7 +2,8 @@
 # Tests of tools/check-migration-order.sh against throwaway repositories, offline: the platform's three sequences
 # (db/jabiz, the demo application's migrations and its test migrations) checked separately, a migration behind the
 # base, a rename, a version twice, the branch moving on after the pull request branched, fixtures outside every
-# sequence, and an application branch's own sequence given as an argument (the case of 2026-11-08: base V81, V80).
+# sequence, and an application branch's own sequence given as an argument (the case of 2026-11-08: base V81, V80);
+# merged migrations (and their .sql.conf) neither edited, deleted nor renamed, while the pull request's own may be (17zz18).
 set -euo pipefail
 
 root="$(cd "$(dirname "$0")/../.." && pwd)"
@@ -99,10 +100,62 @@ add "$d" "$testapp/V1016__old.sql"
 commit "$d" test-behind
 expect "test migration V1016 behind V1017" "$d" test-behind fail "请改为 V1018"
 
+# Renaming a merged migration: databases that ran V65 would find it missing.
 branch "$d" rename
 git -C "$d" mv "$jabiz/V65__key_rotation.sql" "$jabiz/V67__key_rotation.sql"
 commit "$d" rename
-expect "rename V65 to V67" "$d" rename pass ""
+expect "rename the merged V65 to V67" "$d" rename fail "renames (to $jabiz/V67__key_rotation.sql) a migration the base already has"
+
+# Editing a merged migration, even a comment, changes its checksum (the V62 of 17zz18).
+branch "$d" edit-merged
+echo "-- a comment" >>"$d/$jabiz/V64__a.sql"
+commit "$d" edit-merged
+expect "edit the merged V64" "$d" edit-merged fail "$jabiz/V64__a.sql: the pull request modifies a migration the base already has"
+
+branch "$d" delete-merged
+git -C "$d" rm -q "$app/V19__warehouse.sql"
+commit "$d" delete-merged
+expect "delete the merged demo V19" "$d" delete-merged fail "deletes a migration the base already has"
+
+branch "$d" conf-merged
+echo "executeInTransaction=false" >"$d/$jabiz/V65__key_rotation.sql.conf"
+commit "$d" conf-merged
+expect "a .sql.conf added to a merged migration" "$d" conf-merged fail "adds settings ($jabiz/V65__key_rotation.sql.conf) to"
+
+branch "$d" conf-base
+echo "executeInTransaction=false" >"$d/$jabiz/V65__key_rotation.sql.conf"
+commit "$d" conf-base
+git -C "$d" checkout -q base
+git -C "$d" merge -q --ff-only conf-base
+branch "$d" conf-edit
+echo "executeInTransaction=true" >"$d/$jabiz/V65__key_rotation.sql.conf"
+commit "$d" conf-edit
+expect "edit the .sql.conf of a merged migration" "$d" conf-edit fail "V65__key_rotation.sql.conf: the pull request modifies"
+git -C "$d" checkout -q base
+git -C "$d" reset -q --hard HEAD~1
+
+# The pull request's own migration may be renamed and edited across its commits: the base does not have it.
+branch "$d" own
+add "$d" "$jabiz/V66__own.sql"
+commit "$d" own
+echo "-- reworded" >>"$d/$jabiz/V66__own.sql"
+commit "$d" own-edit
+git -C "$d" mv "$jabiz/V66__own.sql" "$jabiz/V66__own_renamed.sql"
+commit "$d" own-rename
+expect "rename and edit the pull request's own V66" "$d" own pass ""
+
+# Other files of a migration directory are not migrations.
+branch "$d" readme
+echo "notes" >"$d/$jabiz/README"
+commit "$d" readme-add
+git -C "$d" checkout -q base
+git -C "$d" merge -q --ff-only readme
+branch "$d" readme-edit
+echo "more notes" >>"$d/$jabiz/README"
+commit "$d" readme-edit
+expect "a README next to the migrations may change" "$d" readme-edit pass ""
+git -C "$d" checkout -q base
+git -C "$d" reset -q --hard HEAD~1
 
 branch "$d" twice
 add "$d" "$jabiz/V66__one.sql"

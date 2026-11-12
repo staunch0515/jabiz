@@ -441,6 +441,33 @@ groups:
         annotations:
           summary: 'Values sealed under a retired seal key remain in fields not declared as sealed: the job jabiz.key-rotation does not reach them; do not remove the retired key (D78 item 8).'
           runbook: docs/guide/key-rotation.md (undeclared sealed fields)
+      - uid: jabiz-schema-invalid-indexes
+        title: INVALID index in the schema
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange: { from: 3600, to: 0 }
+            datasourceUid: prometheus
+            model:
+              refId: A
+              expr: 'max(jabiz_schema_invalid_indexes{job="$JABIZ_ALERT_SERVICE"}) > 0'
+              instant: true
+              range: false
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              refId: C
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator: { type: gt, params: [0] }
+        for: 0s
+        noDataState: OK
+        execErrState: Error
+        labels: { severity: warning, area: schema }
+        annotations:
+          summary: 'The startup check SCHEMA found an INVALID index (a concurrent build that failed half way, or one still being built): it slows every write and serves no query. The start log lists it.'
+          runbook: docs/guide/platform-operations.md section 6
       - uid: jabiz-disk-usage
         title: Disk usage above the threshold
         condition: C
