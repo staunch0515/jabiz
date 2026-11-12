@@ -5562,7 +5562,7 @@ QuizBuks 的 #545、#546、#547 用了 43.5–45 分钟，#545 到点被取消�
 | 17zz18-3 | 启动检查 `SCHEMA`（`SchemaIndexChecks`）：默认连接池当前 schema 的 INVALID 索引一律为警告（从不阻止启动），按"可能正在建"（`pg_stat_progress_create_index` 或另一会话持有该表的 SHARE UPDATE EXCLUSIVE 锁）、`REINDEX CONCURRENTLY` 的临时索引、失败留下的三种说法；仪表 `jabiz.schema.invalid-indexes`（不计可能正在建的）与告警 `jabiz-schema-invalid-indexes`（`for: 15m`；13 §7，`alert-fire-test.sh` 的假数据） |
 | 17zz18-4 | 已合并的迁移不改：撤回对已合并的 `V62` 的注释修改（其校验和不变），`tools/check-migration-order.sh` 拒绝修改、删除、改名基线已有的迁移与增改删其 `.sql.conf`（PR 自己的迁移照旧可改）；例外文件 `.jabiz-migration-exceptions` / `.jabiz-app-migration-exceptions`（每行 `<路径> <YYYY-MM-DD> <原因>`）只允许原样改名尚未上线的已合并迁移（`version-lines.md`） |
 | 17zz18-5 | 测试：`LedgerAccountDimensionIndexIT`（索引有效、不带 INCLUDE；以平台发出的模板语句与其绑定值 EXPLAIN，计划读该索引）、`ConcurrentIndexMigrationTest`（同名 INVALID 索引被重建、有效的保留；别的会话仍在建时立即报错、repair 后完成；删除等锁超过 `drop_lock_timeout` 即失败；锁等待超时使 V66 记为失败 → 下次启动停在校验 → repair → 完成；`initSql` 的拼接）、`SchemaIndexChecksIT`（失败的并发建唯一索引 → 警告与仪表 1；持有表锁时为"可能正在建"、仪表 0；删去后为 0；应用自己的 Flyway 仍用事务级锁）、`check-migration-order.test.sh`、`alert-fire.test.sh` |
-| 17zz18-6 | 文档：设计 11 §1.5、13 §2 与 §7、决策 D81（待需求方确认）、运维要点 §6（直连数据库、长事务、锁等待时限、大表时放宽启动探针或先单独迁移、repair）、`CLAUDE.md` 第 4 节 |
+| 17zz18-6 | 文档：设计 11 §1.5、13 §2 与 §7、决策 D81（已确认，需求方 2026-11-12）、运维要点 §6（直连数据库、长事务、锁等待时限、大表时放宽启动探针或先单独迁移、repair）、`CLAUDE.md` 第 4 节 |
 
 **验收**：`:runtime:check`、`:app:platformCheck` 绿；封存、`SealedColumnsHistory`、`StatementBudgetIT`、账本测试不变。
 
