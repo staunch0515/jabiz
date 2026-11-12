@@ -1017,7 +1017,8 @@ public final class FeeProcesses {
     static TaskSpec overdueTask(EntityInstance invoice, String permission) {
         Map<String, String> params = new LinkedHashMap<>();
         params.put("invoiceNo", String.valueOf((Object) invoice.get("invoiceNo")));
-        params.put("total", money(invoice.get("total")).toPlainString());
+        // F-M7: what it still owes (QbFees.owed, the one definition).
+        params.put("total", QbFees.owed(invoice).toPlainString());
         return TaskSpec.forPermission(QbFees.OVERDUE_TASK, QbFees.OVERDUE_TASK_TITLE, params, permission)
             .about(QbFees.INVOICE, String.valueOf(invoice.id())).source(QbFees.overdueTaskSource(invoice.id()));
     }

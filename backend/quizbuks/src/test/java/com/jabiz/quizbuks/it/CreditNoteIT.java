@@ -172,6 +172,7 @@ class CreditNoteIT extends PrepaymentItSupport {
             assertThat((BigDecimal) note.get("refunded_cash")).isEqualByComparingTo("0");
             assertThat((BigDecimal) note.get("total")).isEqualByComparingTo("550");
         });
+        // 1130 (credit less debit here): 1100 receivable less the note's 550, 550 owed.
         assertThat(ledger("1130", sponsor)).isEqualByComparingTo("-550");
 
         // The month's invoice takes it first: 550 of 1100.
@@ -188,7 +189,7 @@ class CreditNoteIT extends PrepaymentItSupport {
         assertThat(codes(refused(FeeRequests.RECORD, finance(), body("kind", QbFees.REQUEST_VOID, "invoiceId",
             String.valueOf(invoice.get("invoice_id")), "reason", "Charged by mistake"), 422)))
             .containsExactly(FeeCodes.INVOICE_HAS_CREDIT_NOTE);
-        assertThat(ledger("1130", sponsor)).isEqualByComparingTo("550");
+        assertThat(ledger("1130", sponsor)).isEqualByComparingTo("-550");
         assertThat(differences(sponsor)).isEmpty();
     }
 

@@ -74,6 +74,20 @@ public final class ReconChecks {
     public static final String DISTRIBUTION_PRICE_OUT_OF_RANGE = "DISTRIBUTION_PRICE_OUT_OF_RANGE";
     /** F-M6: publications whose price per start is the operator's floor: a note for the operators, not a difference. */
     public static final String DISTRIBUTION_AT_FLOOR = "DISTRIBUTION_AT_FLOOR";
+    /** F-M7 (N9): audience fees not decided {@code qb.audience.refund.missing-after-hours} after the end; how many. */
+    public static final String AUDIENCE_REFUND_MISSING = "AUDIENCE_REFUND_MISSING";
+    /** F-M7 (N5): audience fees decided without a period to count the days by (finance decides on a note by hand). */
+    public static final String AUDIENCE_REFUND_NO_PERIOD = "AUDIENCE_REFUND_NO_PERIOD";
+    /** F-M7: audience fees whose publication never went on. */
+    public static final String AUDIENCE_CHARGE_STATE = "AUDIENCE_CHARGE_STATE";
+    /** F-M7: a credit note that gave back and paid more than its total (by note). */
+    public static final String CREDIT_NOTE_USES = "CREDIT_NOTE_USES";
+    /** F-M7 (N7): a fee whose notes come to more than its amount or tax (by fee). */
+    public static final String CREDIT_NOTE_LIMITS = "CREDIT_NOTE_LIMITS";
+    /** F-M7: a note's credit used on a voided invoice. */
+    public static final String CREDIT_NOTE_USE_VOID = "CREDIT_NOTE_USE_VOID";
+    /** F-M7 (N4): credit left while an invoice is unpaid. */
+    public static final String CREDIT_UNUSED_WITH_DUE = "CREDIT_UNUSED_WITH_DUE";
     /** Account 2110 in all against all sponsors' cached balances. */
     public static final String TOTAL_2110 = "TOTAL_2110";
     /** Every posted line's debit less credit: 0. */
@@ -108,7 +122,9 @@ public final class ReconChecks {
         FEES_RECEIVABLE, ENTRY_FEES_UNSETTLED, FEE_CREDIT, CASH_LOTS, FEE_PAYMENTS, FEE_CREDIT_PROMOTION,
         LIGHT_GRANTS, LIGHT_VOIDS, CERTIFIED_GRANTS, OPERATOR_ACCOUNT, PREPAYMENTS, PREPAYMENT_STALE,
         PREPAYMENT_PARTS, PREPAYMENT_UNCHARGED, DISTRIBUTION_DEPOSITS, DISTRIBUTION_UNSETTLED,
-        DISTRIBUTION_FINAL_MISSING, DISTRIBUTION_PRICE_OUT_OF_RANGE, DISTRIBUTION_AT_FLOOR);
+        DISTRIBUTION_FINAL_MISSING, DISTRIBUTION_PRICE_OUT_OF_RANGE, DISTRIBUTION_AT_FLOOR, AUDIENCE_REFUND_MISSING,
+        AUDIENCE_REFUND_NO_PERIOD, AUDIENCE_CHARGE_STATE, CREDIT_NOTE_USES, CREDIT_NOTE_LIMITS, CREDIT_NOTE_USE_VOID,
+        CREDIT_UNUSED_WITH_DUE);
 
     /** The checks that only note something: a run with notes alone is {@code OK}. */
     public static final Set<String> NOTES = Set.of(TAKER_WALLET_LAG, DISTRIBUTION_AT_FLOOR);

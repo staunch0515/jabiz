@@ -283,6 +283,7 @@ class AdminFinanceIT extends PayoutItSupport {
             row("DISTRIBUTION_CHARGED", 0, 0),
             row("DISTRIBUTION_DEPOSIT", 0, 0),
             row("DISTRIBUTION_RELEASED", 0, 0),
+            row("FEE_CREDIT_NOTE", 0, 0),
             row("OTHER", 4, 3_870, "1110", 3_730, "1120", 70, "2110", -300, "2120", -3_500));
         // As recorded at the month's end: the late posting is not in it.
         List<Map<String, Object>> monthly = report(MONTHLY, from, to, to);
@@ -354,7 +355,7 @@ class AdminFinanceIT extends PayoutItSupport {
         // the archive reproduces it.
         Map<String, Object> issued = run("REPORT_ISSUE", finance(), body("templateId", MONTHLY, "params",
             period(from, to)));
-        assertThat(issued).containsEntry("rowCount", 39).containsEntry("recomputable", true);
+        assertThat(issued).containsEntry("rowCount", 40).containsEntry("recomputable", true);
         advance(Duration.ofMinutes(5));
         credit(sponsor, 25);
         Map<String, Object> again = run("REPORT_ISSUE", finance(), body("templateId", MONTHLY, "params",

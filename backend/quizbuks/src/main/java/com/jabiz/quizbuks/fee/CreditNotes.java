@@ -122,6 +122,7 @@ public final class CreditNotes {
     static final String POSTS = "posts";
     static final String POSTED = "posted";
     static final String BACK_INDEX = "backIndex";
+    static final String PREPAYMENT_INDEX = "prepaymentIndex";
     static final String OUTPUT = "output";
     static final String PAID_OVERDUE = "paidOverdue";
 
@@ -477,6 +478,13 @@ public final class CreditNotes {
             ctx.put(BACK_INDEX, posts.size());
             posts.add(new LedgerProcesses.PostInput(ctx.opTime(), GIVEN_BACK, reference, List.copyOf(back),
                 QbCreditNotes.CREDIT_NOTE, noteId));
+            // A part paid from a prepayment is recorded against the posting out of it, as a voided invoice's is (the
+            // daily check FEE_PAYMENTS matches the parts with the postings of 2160 and 2190 they name).
+            Map<String, Integer> byPosting = new LinkedHashMap<>();
+            for (String prepaymentId : byPrepayment.keySet()) {
+                byPosting.put(prepaymentId, posts.size() + byPosting.size());
+            }
+            ctx.put(PREPAYMENT_INDEX, byPosting);
             posts.addAll(FeeSettlement.prepaymentBack(ctx, sponsorId, byPrepayment, PREPAYMENT_GIVEN_BACK));
         }
         @SuppressWarnings("unchecked")
@@ -502,11 +510,15 @@ public final class CreditNotes {
         List<Object> posted = (List<Object>) ctx.get(POSTED);
         String transactionId = ((LedgerProcesses.PostOutput) posted.get((Integer) ctx.get(BACK_INDEX)))
             .transactionId();
+        @SuppressWarnings("unchecked")
+        Map<String, Integer> byPosting = (Map<String, Integer>) ctx.get(PREPAYMENT_INDEX);
         for (CreditNoteAllocation.Back back : decided.allocation().back()) {
             boolean credit = QbFeeAccount.FEE_CREDIT.equals(back.subAccount());
+            String posting = back.prepaymentId() == null ? transactionId
+                : ((LedgerProcesses.PostOutput) posted.get(byPosting.get(back.prepaymentId()))).transactionId();
             FeeSettlement.insertPayment(ctx, input(ctx).sponsorId(), QbCreditNotes.CREDIT_NOTE,
                 output.creditNoteId(), back.subAccount(), credit ? back.lotId() : null, credit ? null : back.lotId(),
-                back.amount().negate(), transactionId, back.prepaymentId());
+                back.amount().negate(), posting, back.prepaymentId());
         }
     }
 

@@ -362,6 +362,11 @@ public class FeeConfig {
         return own(QbCreditNotes.SPONSOR_CREDIT_NOTES, QbCreditNotes.CREDIT_NOTE);
     }
 
+    @Bean
+    DatasetDefinition qbSponsorFeeCreditNoteUseDataset() {
+        return own(QbCreditNotes.SPONSOR_USES, QbCreditNotes.USE);
+    }
+
     private DatasetDefinition processOnly(String entity) {
         return DatasetDefinition.define(QbFees.defaultDataset(entity), d -> d
             .targetEntityType(entity)

@@ -16,6 +16,7 @@ public final class QbCreditNotes {
     public static final String CREDIT_NOTE = "QbFeeCreditNote";
     public static final String USE = "QbFeeCreditNoteUse";
     public static final String SPONSOR_CREDIT_NOTES = "urn:jabiz:dataset:sponsor:" + CREDIT_NOTE;
+    public static final String SPONSOR_USES = "urn:jabiz:dataset:sponsor:" + USE;
     public static final String REASON_DICTIONARY = "urn:jabiz:dict:quizbuks:credit-note-reason";
     public static final String SEQUENCE = "qb.fee-credit-note";
 
