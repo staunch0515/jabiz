@@ -1,14 +1,18 @@
 package com.jabiz.app.it.fixture;
 
 import io.r2dbc.proxy.ProxyConnectionFactory;
+import io.r2dbc.proxy.core.Binding;
+import io.r2dbc.proxy.core.BoundValue;
 import io.r2dbc.proxy.core.QueryInfo;
 import io.r2dbc.spi.ConnectionFactory;
+import io.r2dbc.spi.Parameter;
 import org.springframework.beans.factory.config.BeanPostProcessor;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
@@ -35,6 +39,29 @@ public class SqlStatementLog {
 
     public static final List<Entry> ENTRIES = new CopyOnWriteArrayList<>();
 
+    /**
+     * A statement with what was bound to it, in the order of its parameters ({@code $1} first), so that a test can
+     * explain a statement as it ran, binding the same (ROADMAP 17zz18): each as the driver got it (Spring's typed
+     * {@link Parameter}, or a {@link NullValue}).
+     */
+    public record Execution(String sql, List<Object> bound) {
+
+        /** The values bound, unwrapped: null for a bound null. */
+        public List<Object> values() {
+            List<Object> values = new ArrayList<>();
+            for (Object value : bound) {
+                values.add(value instanceof Parameter parameter ? parameter.getValue()
+                    : value instanceof NullValue ? null : value);
+            }
+            return Collections.unmodifiableList(values);
+        }
+    }
+
+    /** A null bound with {@code bindNull}, of this type. */
+    public record NullValue(Class<?> type) {}
+
+    public static final List<Execution> EXECUTIONS = new CopyOnWriteArrayList<>();
+
     public static final String BEGIN = "BEGIN";
     public static final String COMMIT = "COMMIT";
     public static final String ROLLBACK = "ROLLBACK";
@@ -43,6 +70,7 @@ public class SqlStatementLog {
     public static void clear() {
         STATEMENTS.clear();
         ENTRIES.clear();
+        EXECUTIONS.clear();
     }
 
     /**
@@ -142,12 +170,12 @@ public class SqlStatementLog {
             public Object postProcessAfterInitialization(Object bean, String beanName) {
                 if (bean instanceof ConnectionFactory factory) {
                     return ProxyConnectionFactory.builder(factory)
-                        .onAfterQuery(execution -> execution.getQueries().stream()
-                            .map(QueryInfo::getQuery)
-                            .forEach(sql -> {
-                                STATEMENTS.add(sql);
-                                ENTRIES.add(new Entry(connection(execution.getConnectionInfo()), sql));
-                            }))
+                        .onAfterQuery(execution -> execution.getQueries().forEach(query -> {
+                            String sql = query.getQuery();
+                            STATEMENTS.add(sql);
+                            ENTRIES.add(new Entry(connection(execution.getConnectionInfo()), sql));
+                            executions(query).forEach(EXECUTIONS::add);
+                        }))
                         .onAfterMethod(method -> {
                             String boundary = switch (method.getMethod().getName()) {
                                 case "beginTransaction" -> BEGIN;
@@ -164,6 +192,21 @@ public class SqlStatementLog {
                 return bean;
             }
         };
+    }
+
+    /** One execution per set of bindings (a batch has several), or one without values. */
+    private static List<Execution> executions(QueryInfo query) {
+        if (query.getBindingsList().isEmpty()) {
+            return List.of(new Execution(query.getQuery(), List.of()));
+        }
+        return query.getBindingsList().stream().map(bindings -> {
+            List<Object> values = new ArrayList<>();
+            for (Binding binding : bindings.getIndexBindings()) {
+                BoundValue bound = binding.getBoundValue();
+                values.add(bound.isNull() ? new NullValue(bound.getNullType()) : bound.getValue());
+            }
+            return new Execution(query.getQuery(), Collections.unmodifiableList(values));
+        }).toList();
     }
 
     private static String connection(io.r2dbc.proxy.core.ConnectionInfo info) {

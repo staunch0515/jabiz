@@ -9,7 +9,10 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
+import java.time.Duration;
+import java.util.HashMap;
 import java.util.HashSet;
+import java.util.Map;
 import java.util.Set;
 
 /**
@@ -35,6 +38,12 @@ public final class PlatformSchemaMigration implements FlywayMigrationStrategy {
 
     public static final String PLATFORM_LOCATION = "classpath:db/jabiz";
     public static final String PLATFORM_HISTORY_TABLE = "jabiz_schema_history";
+
+    /** The placeholder {@code ${concurrently}} ({@link PlatformScriptPlaceholders#CONCURRENTLY}). */
+    public static final String CONCURRENTLY_PLACEHOLDER = PlatformScriptPlaceholders.CONCURRENTLY;
+
+    /** The setting of {@link #lockTimeout()}: how long a platform migration waits for a lock, 0 for ever. */
+    public static final String LOCK_TIMEOUT_PROPERTY = "jabiz.schema.migration.lock-timeout";
 
     /** Every table the platform scripts create; PlatformSchemaMigrationTest keeps this list honest. */
     public static final Set<String> PLATFORM_TABLES = Set.of(PLATFORM_HISTORY_TABLE, "sys_dict_item",
@@ -62,17 +71,52 @@ public final class PlatformSchemaMigration implements FlywayMigrationStrategy {
         "sys_account_deletion", "sys_account_deletion_end", "sys_public_counter_day", "sec_user_passkey",
         "sec_passkey_challenge", "sys_mail_text_version", "sys_mail_layout_version");
 
+    private final Duration lockTimeout;
+
+    /** Platform migrations wait for locks as long as it takes (PostgreSQL's default). */
+    public PlatformSchemaMigration() {
+        this(Duration.ZERO);
+    }
+
+    /**
+     * @param lockTimeout PostgreSQL's {@code lock_timeout} on the connections of the platform's migrations, 0 for none
+     */
+    public PlatformSchemaMigration(Duration lockTimeout) {
+        if (lockTimeout == null || lockTimeout.isNegative()) {
+            throw new IllegalArgumentException(LOCK_TIMEOUT_PROPERTY + " must be 0 or more, not " + lockTimeout);
+        }
+        this.lockTimeout = lockTimeout;
+    }
+
+    /**
+     * How long a statement of a platform migration waits for a lock before it fails ({@value #LOCK_TIMEOUT_PROPERTY};
+     * 0, the default, waits for ever). A plain migration's ALTER or CREATE INDEX waiting behind a long transaction
+     * also holds up every write queued behind it; a concurrent build (V66) waits for every older snapshot of the
+     * database without blocking anyone. A timeout fails the migration: a transactional one rolls back and runs again
+     * at the next start, a concurrent build is recorded as failed and needs {@code flyway repair}
+     * (docs/guide/platform-operations.md section 6), which is why it is not on by default.
+     */
+    public Duration lockTimeout() {
+        return lockTimeout;
+    }
+
     @Override
     public void migrate(Flyway application) {
         Configuration config = application.getConfiguration();
         boolean applicationIsNew = isNewToApplication(config);
 
+        Map<String, String> placeholders = new HashMap<>(config.getPlaceholders());
+        PlatformScriptPlaceholders.defaults().forEach(placeholders::putIfAbsent);
+
         Flyway.configure()
             .configuration(config)
+            .placeholders(placeholders)
+            .initSql(initSql(config.getInitSql(), lockTimeout))
             .locations(PLATFORM_LOCATION)
             .table(PLATFORM_HISTORY_TABLE)
             .baselineOnMigrate(true)
             .baselineVersion("0")
+            .configuration(PlatformScriptPlaceholders.NON_TRANSACTIONAL_LOCK)
             .load()
             .migrate();
 
@@ -80,6 +124,18 @@ public final class PlatformSchemaMigration implements FlywayMigrationStrategy {
             ? Flyway.configure().configuration(config).baselineOnMigrate(true).baselineVersion("0").load()
             : application;
         applicationMigration.migrate();
+    }
+
+    /**
+     * The SQL Flyway runs on each connection it opens for the platform's scripts: the application's own
+     * {@code initSql}, if any, then the lock timeout (a number of milliseconds, never text from outside).
+     */
+    static String initSql(String application, Duration lockTimeout) {
+        if (lockTimeout.isZero()) {
+            return application;
+        }
+        String set = "SET lock_timeout = " + Math.max(1, lockTimeout.toMillis());
+        return application == null || application.isBlank() ? set : application.strip() + ";\n" + set;
     }
 
     /** No application history and no tables other than the platform's in the application's schema. */

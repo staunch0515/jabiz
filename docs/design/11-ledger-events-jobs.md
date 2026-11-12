@@ -67,6 +67,18 @@ ROADMAP 阶段 9 的四个通用业务基础模块。约束性细则见【决策
   如 `d.entity("SecUser", "userId")` 以用户编号为维度；引用字段的取值是当前实例引用的编号。这两种来源的编号必须是 UUID，
   即来源实体（身份）或被引用的实体（引用）是时态实体。取值写成完整的 UUID（去掉首尾空白、大小写不限，分录上存小写的规范形式，
   校验与存储用同一个 `LedgerDimension.canonicalId`）；其他写法（如 `1-2-3-4-5`）或不存在的编号即 `LEDGER_DIMENSION_INVALID`。
+- **一个科目对一个第一维度取值的全部历史**（17zz18）：应用要加总某科目在某个 `dimension_1` 取值下的全部分录（如钱包按所有人的余额，经 SQL 模板：
+  `WHERE {{LedgerEntry.accountId}} = :account AND {{LedgerEntry.dimension1}} = :owner GROUP BY {{LedgerEntry.direction}}`）由迁移 `V66` 的部分索引
+  `ledger_entry_version_account_dimension_1_idx (account_id, dimension_1) WHERE dimension_1 IS NOT NULL` 服务：两个等值条件直达匹配的分录。
+  不带 `INCLUDE`：模板的时态外壳还按 `is_deleted`、`effect_start_time` 过滤每一行，无论索引带什么列都要读表。原有的 `_account_idx` 与 `_dimension_1_idx` 保留（科目余额与 `dimension_balances` 用）。
+  这是平台迁移中第一个 `CREATE INDEX CONCURRENTLY`（不阻塞过账；约定见决策 D81）：关键字是 Flyway 占位符 `${concurrently}`
+  （`PlatformSchemaMigration` 缺省设为 `CONCURRENTLY`；同一数据库里并行迁移多个 schema 的测试设为空，因为并发建索引要等整个数据库的旧事务），
+  脚本旁的 `V66__….sql.conf` 设 `executeInTransaction=false`，平台脚本的 Flyway 用会话级咨询锁（默认的事务级锁开着另一条连接上的事务，建索引等它、Flyway 等建索引，永远等下去）。
+  脚本可以重跑：同名索引存在且 INVALID 时先删去（普通 `DROP INDEX`，只有没有会话还在建该索引时锁表才是一瞬间：别的客户端会话持有该表的 SHARE UPDATE EXCLUSIVE 锁即报错不排队，
+  删除等锁至多 `${drop_lock_timeout}`，缺省 3 秒），有效的从不删，再 `CREATE INDEX … IF NOT EXISTS`。
+  建索引语句失败时 Flyway 把 V66 记为失败，下次启动在校验处停下：对 `jabiz_schema_history` 执行 `flyway repair` 后重启；进程中途被杀则没有历史记录，重跑即修复。
+  INVALID 索引由启动检查 `SCHEMA`（`SchemaIndexChecks`，对默认连接池当前 schema 的全部索引通用）报为警告并计入仪表 `jabiz.schema.invalid-indexes`（告警 `jabiz-schema-invalid-indexes`），
+  平台迁移的锁等待时限为 `jabiz.schema.migration.lock-timeout`（缺省不限），见 `docs/guide/platform-operations.md` §6。
 - 启动检查 `LEDGER`（错误）：位置或名称重复；实体来源的实体、默认视图不存在，或字段不是文本、代码、身份、引用字段；身份字段不是主键；
   身份或引用的编号不是 UUID（实体不是时态实体）。告警：时态实体的来源字段可变（任何种类；只有按不可变字段的条件能缩小读取的版本，
   决策 D29，否则要读全部当前实例）；非时态实体不告警。字典可能由数据库提供，不在启动时检查。
