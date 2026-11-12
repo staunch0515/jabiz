@@ -143,19 +143,24 @@ public class FeeConfig {
     }
 
     /**
-     * Every day at 03:23 in the fiscal year's zone: what ended publications' prepayments still hold goes back (F-M5:
-     * "within a day of the end"; F-M6 adds "after its last settlement" to the template).
+     * Every day ({@code quizbuks.prepayment.release-cron}, {@code QB_PREPAYMENT_RELEASE_CRON}; 03:23 in the fiscal
+     * year's zone): what ended publications' prepayments still hold goes back (F-M5: "within a day of the end"; F-M6
+     * adds "after its last settlement" to the template), at most {@code quizbuks.prepayment.release-max-items} a run.
      */
     @Bean
     JobDefinition<Prepayments.ReleaseRef> qbPrepaymentReleaseJob(
-        ProcessDefinition<Prepayments.ReleaseRef, FeeProcesses.ItemOutput, ProcessContext> qbPrepaymentReleaseItem) {
-        return JobDefinition.forEach(Prepayments.RELEASE_JOB, "0 23 3 * * *", zone,
+        ProcessDefinition<Prepayments.ReleaseRef, FeeProcesses.ItemOutput, ProcessContext> qbPrepaymentReleaseItem,
+        @org.springframework.beans.factory.annotation.Value("${quizbuks.prepayment.release-cron:0 23 3 * * *}")
+        String cron,
+        @org.springframework.beans.factory.annotation.Value("${quizbuks.prepayment.release-max-items:10000}")
+        int maxItems) {
+        return JobDefinition.forEach(Prepayments.RELEASE_JOB, cron, zone,
                 JobItems.template(Prepayments.RELEASE_DUE_TEMPLATE, scheduledTime -> Map.of("at", scheduledTime),
                     "publicationId"),
                 qbPrepaymentReleaseItem,
                 (scheduledTime, row) -> new Prepayments.ReleaseRef(String.valueOf(row.get("publicationId")),
                     String.valueOf(row.get("sponsorId"))))
-            .maxItems(10_000);
+            .maxItems(maxItems);
     }
 
     @Bean

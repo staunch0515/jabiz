@@ -25,9 +25,9 @@ CREATE TABLE qb_prepayment (
     CONSTRAINT qb_prepayment_released CHECK ((status = 'RELEASED') = (released_at IS NOT NULL))
 );
 -- At most one open prepayment a publication and purpose (a resubmission sets aside again only after the release).
-CREATE UNIQUE INDEX qb_prepayment_open_idx ON qb_prepayment (publication_id, purpose) WHERE status = 'OPEN';
+CREATE UNIQUE INDEX qb_prepayment_open_purpose_idx ON qb_prepayment (publication_id, purpose) WHERE status = 'OPEN';
 CREATE INDEX qb_prepayment_publication_idx ON qb_prepayment (publication_id);
-CREATE INDEX qb_prepayment_sponsor_idx ON qb_prepayment (sponsor_id, status);
+CREATE INDEX qb_prepayment_sponsor_status_idx ON qb_prepayment (sponsor_id, status);
 
 -- A payment part may be aimed at a prepayment (set aside, given back), and a charge's part may be paid from one.
 ALTER TABLE qb_fee_payment_version DROP CONSTRAINT qb_fee_payment_version_target_entity_check;
@@ -47,4 +47,9 @@ ALTER TABLE qb_publication_version ADD COLUMN billing_operator_id varchar(36);
 ALTER TABLE qb_publication_version ADD COLUMN prepayment_total numeric(19, 0);
 
 -- Finding the ended publications whose prepayments the daily job gives back.
-CREATE INDEX qb_prepayment_open_sponsor_idx ON qb_prepayment (frozen_at) WHERE status = 'OPEN';
+CREATE INDEX qb_prepayment_open_frozen_idx ON qb_prepayment (frozen_at) WHERE status = 'OPEN';
+
+-- What a postpaid sponsor owes (qb.system.fee-receivable: 1130 by sponsor, read by their submission under the wallet
+-- lock): by account and party, so that a sponsor's many other lines (2110 for every reward) are not read.
+CREATE INDEX qb_ledger_entry_account_party_idx ON ledger_entry_version (account_id, dimension_1)
+    WHERE dimension_1 IS NOT NULL;
