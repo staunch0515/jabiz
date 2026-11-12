@@ -1151,6 +1151,18 @@ Quiz 与发布有主题词（平台词表中的词与自定义词），学者可
 - **规则**：提交（`QB_PUBLICATION_SUBMIT`）在申请审核之后、发起方的钱包锁内检查一次：预付的发起方可用额（未到期的赠送额度 + 现金）≥ 合计；后付的发起方未付（1130，含未开账单的费用）+ 其他已提交发布占用的额度 + 本次 ≤ 信用额。不足即 422 `QB_PUBLICATION_FUNDS`（各项金额、合计、可用额、差额），整个提交什么也不写。通过时冻结（`QB_PREPAYMENT_FREEZE`）：按平台费账户的顺序取（赠送先、现金后），借 2190 / 2160、贷 2180（维度：发起方、发布、用途）；后付的只占信用额、不过账。同时在发布上冻结费用的归属运营商（F-M11，`billingOperatorId`）。
 - **记费**：发布**开始时**（进入 `LIVE`，不是审核通过时；开始前暂停、开始后恢复的，恢复时记）从预付款记受众规则费（`QB_PREPAYMENT_CHARGE` → `QB_FEE_CHARGE` 种类 `AUDIENCE`，归属冻结的运营商；借 2180、贷 1130）。批准后、开始前就结束的发布不记费，预付款由每日任务全额退回。怎样付按**预付款冻结时的方式**，不看发起方此刻的计费方式：预付的冻结了钱，开出即付的账单（不进入后付的月账单）；后付的只占过信用额，费用记为应收、进入当月的后付账单。审核期间税率变了、预付款不够时，余额按平台费账户的顺序（赠送先、现金后）从账户扣，同一张账单；仍不够即 `PARTIAL` / `OPEN`。
 - **退回**：撤回、驳回、审核过期时全额退回（`QB_PREPAYMENT_RELEASE`）：按原分摊退回各笔，赠送退回原笔；原笔已到期或已作废的，当即连同其剩余一起作废（2190 / 5140）。发布结束后由每日任务 `qb.prepayment-release` 退回剩余，即"结束后一天内退回"；时刻与每次的上限是部署设置 `QB_PREPAYMENT_RELEASE_CRON`（缺省 `0 23 3 * * *`，`jabiz.fiscal-year-zone` 的时间）与 `QB_PREPAYMENT_RELEASE_MAX_ITEMS`（缺省 10000，余下的下次运行）。
+- **记费失败时发布上不了架**：记费与"进入 `LIVE`"在同一个事务里。记费失败（如 `qb.fee.tax-rate` 缺失或不可用、发起方已不是审核通过的状态）时，整个上架回滚，发布停在 `SCHEDULED`（或 `PAUSED`）。每分钟的 `QB_PUBLICATION_ADVANCE` 都会再试，再失败。
+  - **怎样发现**：现有告警已经覆盖：
+    - "Job items failing"（`jabiz-job-item-failed`）：任务 `qb.publication-tick` 每次运行都有失败的项，规则拒绝（422）与意外错误都算；
+    - 意外错误（参数不可用等）同时触发 "Process errors"（`jabiz-process-errors`，流程 `QB_PUBLICATION_ADVANCE`）。
+
+    失败的项记在平台的任务项失败记录中（任务页可查）。
+
+    另外有两处可以看到：日志中该流程的错误带违规码（如 `QB_FEE_PARAMS`、`QB_FEE_SPONSOR`）；平台管理系统的发布列表里，开始时间已过仍是"已排期"的发布。不另加告警。
+  - **怎样处理**：
+    - 参数问题：以受控变更补上参数（另一位管理员发布），下一分钟自动上架，记费一次。
+    - 发起方状态问题：先由总部暂停该发布（`QB_PUBLICATION_ADMIN_PAUSE`，停止重试），处理发起方后再恢复（恢复时记费）。
+    - 不要改表、不要绕过记费。
 - **作废从预付款付的账单**：作废（`FeeRequests` 的 `VOID`，四眼）冲正付款分录后，把从预付款付的部分退回账户（不退回预付款）：另过一笔借 2180、贷 2190 / 2160（来源为该预付款，月报 `PREPAYMENT_RELEASED`），赠送退回原笔、原笔已作废即再作废；冲正本身在月报 `FEE_VOIDED`。
 - **核对与月报**：每日核对 `PREPAYMENTS`（2180 按发起方 = 未关闭预付款的剩余）、`PREPAYMENT_STALE`（按发起方：已回到草稿、结束超过 `qb.prepayment.release.overdue-days`（普通参数，缺省 2 天）或发布不存在，仍有未关闭的预付款）、`PREPAYMENT_PARTS`（预付的预付款的分摊——冻结、退回，减去费用取走的——与其剩余不符）与 `PREPAYMENT_UNCHARGED`（发布已开始——LIVE、`FUNDS_SHORT` 或已有学者开始——而受众规则费还没有记，多半是某条进入 LIVE 的路径漏了记费，报开发）；月报新类 `PREPAYMENT_FROZEN`、`PREPAYMENT_USED`、`PREPAYMENT_RELEASED`，新列 `feePrepayments`（2180）。分录导出需要映射 `qb.journal.account.2180`（受控，`QB_SETUP` 提出，另一位管理员发布）。
 - **差异的处理**：`PREPAYMENTS` 有差异时，先查 `SELECT * FROM qb_prepayment WHERE sponsor_id = '<发起方>'` 与来源为 `QbPrepayment` 的分录、`qb_fee_payment_version` 中 `target_id` 或 `prepayment_id` 为该预付款的分摊是否对应；`PREPAYMENT_STALE` 多半是退回失败或每日任务没有运行，查该发布的操作记录与任务的运行；`PREPAYMENT_PARTS` 是缺陷（分摊与剩余不一致时付款与退回都会拒绝而不是少付），报开发。`ENDED` 的发布仍有预付款而任务已跑过：手工运行任务的补跑（`JOB_RUN_REQUEST` `qb.prepayment-release`，带原因）。不手工写分录或改表；报开发。

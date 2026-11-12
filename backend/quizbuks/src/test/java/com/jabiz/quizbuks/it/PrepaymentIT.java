@@ -515,28 +515,45 @@ class PrepaymentIT extends PrepaymentItSupport {
     @Test
     void pausedBeforeItStartsAndResumedAfterIsChargedOnceAsAnyStart() {
         // N1 of the F-M5 recheck: a resume that puts it live is its start: the fee is charged then, once; a pause and
-        // a resume after it was charged charge nothing more. The Sponsor's own resume, and headquarters'.
+        // a resume after it was charged charge nothing more. The Sponsor's own resume, headquarters' and the
+        // operator's.
         autoApprove(true);
-        for (boolean byAdmin : List.of(false, true)) {
-            String sponsor = pricedSponsor(byAdmin ? "fm5-resume-hq" : "fm5-resume");
+        for (String by : List.of("SPONSOR", "HQ", "OPERATOR")) {
+            String sponsor = pricedSponsor("fm5-resume-" + by.toLowerCase(java.util.Locale.ROOT));
             grant(sponsor, 2_000, clock.instant().plus(Duration.ofDays(90)));
-            String publicationId = audienceDraft(sponsor, byAdmin ? "FM5 resumed by HQ" : "FM5 resumed");
+            String publicationId = audienceDraft(sponsor, "FM5 resumed by " + by);
             submit(sponsorToken(sponsor), publicationId);
             assertThat(status(publicationId)).isEqualTo("SCHEDULED");
-            if (byAdmin) {
-                run("QB_PUBLICATION_ADMIN_PAUSE", contentAdmin(), body("publicationId", publicationId, "reason", "F-M5 test"));
-            } else {
-                run("QB_PUBLICATION_PAUSE", sponsorToken(sponsor), body("publicationId", publicationId));
+            // An operator's member: of the operator the Sponsor belongs to (headquarters adds them).
+            String member = null;
+            if ("OPERATOR".equals(by)) {
+                String operatorId = String.valueOf(query("SELECT operator_id FROM qb_sponsor_operator WHERE user_id = "
+                    + "?", sponsor).getFirst().get("operator_id"));
+                member = verifiedUser(unique("fm5-resume-member"));
+                run(com.jabiz.quizbuks.operator.OperatorProcesses.MEMBER_ADD, TestTokens.bearer(tokens, "fm5-hq",
+                    QbPermissions.OPERATORS_WRITE, QbPermissions.OPERATORS_READ), body("operatorId", operatorId,
+                    "userId", member, "lead", false));
+            }
+            switch (by) {
+                case "HQ" -> run("QB_PUBLICATION_ADMIN_PAUSE", contentAdmin(), body("publicationId", publicationId,
+                    "reason", "F-M5 test"));
+                case "OPERATOR" -> run(com.jabiz.quizbuks.publishing.PublicationAdmin.OPERATOR_PAUSE,
+                    tokenOf(member, com.jabiz.quizbuks.setup.QbRoles.OPERATOR), body("publicationId", publicationId,
+                    "reason", "F-M5 test"));
+                default -> run("QB_PUBLICATION_PAUSE", sponsorToken(sponsor), body("publicationId", publicationId));
             }
             clock.set(clock.instant().plus(Duration.ofDays(1)).plus(Duration.ofMinutes(5)));
             runTick();
             assertThat(status(publicationId)).isEqualTo("PAUSED");
             // Paused before it started: not charged, and rightly so.
             assertThat(differences(sponsor)).isEmpty();
-            if (byAdmin) {
-                run("QB_PUBLICATION_ADMIN_RESUME", contentAdmin(), body("publicationId", publicationId, "reason", "F-M5 test"));
-            } else {
-                run("QB_PUBLICATION_RESUME", sponsorToken(sponsor), body("publicationId", publicationId));
+            switch (by) {
+                case "HQ" -> run("QB_PUBLICATION_ADMIN_RESUME", contentAdmin(), body("publicationId", publicationId,
+                    "reason", "F-M5 test"));
+                case "OPERATOR" -> run(com.jabiz.quizbuks.publishing.PublicationAdmin.OPERATOR_RESUME,
+                    tokenOf(member, com.jabiz.quizbuks.setup.QbRoles.OPERATOR), body("publicationId", publicationId,
+                    "reason", "F-M5 test"));
+                default -> run("QB_PUBLICATION_RESUME", sponsorToken(sponsor), body("publicationId", publicationId));
             }
             assertThat(status(publicationId)).isEqualTo("LIVE");
             assertThat(query("SELECT 1 FROM qb_fee_charge_version WHERE sponsor_id = ? AND kind = 'AUDIENCE'",
