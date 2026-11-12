@@ -113,6 +113,34 @@ class SiteProfileAnswerTest {
     }
 
     @Test
+    void theListOfWhatWasLeftOutIsShortAndItsPathsAreClipped() {
+        assertThat(new SiteProfileJob.Dropped("x".repeat(500), "y".repeat(500)).path()).hasSize(SiteProfileJob.Dropped.MAX_LENGTH);
+        assertThat(new SiteProfileJob.Dropped("x".repeat(500), "y".repeat(500)).reason()).hasSize(SiteProfileJob.Dropped.MAX_LENGTH);
+        // Sixty products with a price that is not a number: every one is left out, and only some are listed.
+        StringBuilder many = new StringBuilder();
+        for (int i = 0; i < 60; i++) {
+            many.append(i > 0 ? "," : "").append("{\"name\": {\"ja\": \"品").append(i).append("\", \"en\": \"P").append(i)
+                .append("\"}, \"price\": \"free\", \"currency\": \"JPY\"}");
+        }
+        String reply = "{\"failure\": null, \"package\": {\"basics\": {\"company\": \"Aini\"}, \"page\": {\"handle\": \"aini\", "
+            + "\"headline\": {\"ja\": \"a\", \"en\": \"a\"}}, \"products\": [" + many + "]}, \"sources\": {}, \"notFound\": [], "
+            + "\"translated\": [], \"materials\": [], \"questions\": []}";
+        SiteProfileJob.Input wide = new SiteProfileJob.Input("claude-opus-5-5", "medium", "https://www.aini.example/", SITE, "ja",
+            List.of("ja", "en"), true, true, false, 10, 80, 5, 2, 3, "key");
+        assertThat(SiteProfileAnswer.parse("m", false, reply, wide, JSON).dropped().size())
+            .isLessThanOrEqualTo(SiteProfileJob.Dropped.MAX_LISTED);
+    }
+
+    @Test
+    void anArticleWhoseAddressIsTooLongForADescriptionIsNotTaken() {
+        String reply = GOOD.replace("https://www.aini.example/about", "https://www.aini.example/" + "a".repeat(400));
+        SiteProfileJob.Result result = SiteProfileAnswer.parse("m", false, reply, input(true, true, true), JSON);
+        assertThat(result.materials()).extracting(SiteProfileJob.Material::url)
+            .allSatisfy(url -> assertThat(url.length()).isLessThanOrEqualTo(com.jabiz.quizbuks.content.ContentLimits.MATERIAL_DESCRIPTION_LENGTH));
+        assertThat(result.materials()).extracting(SiteProfileJob.Material::title).doesNotContain("About us");
+    }
+
+    @Test
     void whatWasNotAskedForIsNotInTheResult() {
         SiteProfileJob.Result result = SiteProfileAnswer.parse("m", false, GOOD, input(false, false, false), JSON);
         assertThat(result.profile()).doesNotContainKeys("basics", "page");

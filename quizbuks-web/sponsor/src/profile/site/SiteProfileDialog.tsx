@@ -87,7 +87,8 @@ export function SiteProfileDialog({ open, onClose, onReview, onPrompt }: {
     if (missing.length === 0) request.mutate()
   }
 
-  const showForm = !running && !ready
+  // A draft still queued after the page gave up waiting is not asked again: a second request would be refused.
+  const showForm = !running && !ready && latest?.status !== 'QUEUED'
   const reason = failed?.failureCode && (SITE_FAILURES as readonly string[]).includes(failed.failureCode)
     ? failed.failureCode : 'general'
   return (
@@ -123,7 +124,15 @@ export function SiteProfileDialog({ open, onClose, onReview, onPrompt }: {
           </div>
         )}
         {latest?.status === 'QUEUED' && !running && (
-          <Alert data-testid="site-slow"><AlertDescription>{t('site.slow')}</AlertDescription></Alert>
+          <Alert data-testid="site-slow">
+            <AlertDescription className="flex flex-col gap-2">
+              <span>{t('site.slow')}</span>
+              <span>
+                <Button variant="outline" size="sm" disabled={cancel.isPending} data-testid="site-cancel"
+                  onClick={() => cancel.mutate()}>{t('site.cancel')}</Button>
+              </span>
+            </AlertDescription>
+          </Alert>
         )}
         {failed && showForm && (
           <Alert variant="destructive" data-testid="site-failed" data-reason={reason}>

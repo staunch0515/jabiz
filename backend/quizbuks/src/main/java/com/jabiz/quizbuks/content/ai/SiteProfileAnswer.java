@@ -60,8 +60,9 @@ public final class SiteProfileAnswer {
         List<SiteProfileJob.Material> materials = input.quiz() ? materials(node.get("materials"), input, dropped) : List.of();
         AiCandidates.Checked questions = input.quiz() && !materials.isEmpty()
             ? questions(node.get("questions"), materials.size(), input, dropped) : new AiCandidates.Checked(List.of(), 0);
-        return new SiteProfileJob.Result(servedModel, fellBack, null, profile, sources, notFound, dropped, translated,
-            materials, questions.valid(), questions.invalid(), input.handleAlternatives());
+        return new SiteProfileJob.Result(servedModel, fellBack, null, profile, sources, notFound,
+            dropped.size() > SiteProfileJob.Dropped.MAX_LISTED ? dropped.subList(0, SiteProfileJob.Dropped.MAX_LISTED) : dropped,
+            translated, materials, questions.valid(), questions.invalid(), input.handleAlternatives());
     }
 
     // ---- the package -----------------------------------------------------------------------------------------------
