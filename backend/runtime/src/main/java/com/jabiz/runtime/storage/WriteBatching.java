@@ -29,31 +29,39 @@ public class WriteBatching {
 
     private final boolean acrossTransaction;
     private final int deletePrefetchChunk;
+    private final int deletePrefetchMaxReferrers;
 
     /** Defaults, as configured when nothing is: rows held for the whole transaction. */
     public WriteBatching() {
-        this(true, DEFAULT_DELETE_PREFETCH_CHUNK);
+        this(true, DEFAULT_DELETE_PREFETCH_CHUNK, DEFAULT_DELETE_PREFETCH_MAX_REFERRERS);
     }
 
-    /** As configured, with the default chunk of deletions read ahead. */
+    /** As configured, with the defaults of deletions read ahead. */
     public WriteBatching(boolean acrossTransaction) {
-        this(acrossTransaction, DEFAULT_DELETE_PREFETCH_CHUNK);
+        this(acrossTransaction, DEFAULT_DELETE_PREFETCH_CHUNK, DEFAULT_DELETE_PREFETCH_MAX_REFERRERS);
     }
 
     /**
      * @param acrossTransaction   whether rows are held for the whole transaction (T9), not only within one commit
      * @param deletePrefetchChunk most instances one statement reads ahead for the deletions of a commit (ROADMAP 17zz21)
+     * @param deletePrefetchMaxReferrers most referrers read ahead per instance of a self-reference
      */
     @Autowired
     public WriteBatching(@Value("${jabiz.storage.write-batching.enabled:true}") boolean acrossTransaction,
         @Value("${jabiz.storage.delete-prefetch.chunk-size:" + DEFAULT_DELETE_PREFETCH_CHUNK + "}")
-        int deletePrefetchChunk) {
+        int deletePrefetchChunk,
+        @Value("${jabiz.storage.delete-prefetch.max-referrers:" + DEFAULT_DELETE_PREFETCH_MAX_REFERRERS + "}")
+        int deletePrefetchMaxReferrers) {
         if (deletePrefetchChunk < 1 || deletePrefetchChunk > MAX_DELETE_PREFETCH_CHUNK) {
             throw new IllegalArgumentException("jabiz.storage.delete-prefetch.chunk-size must be between 1 and "
                 + MAX_DELETE_PREFETCH_CHUNK);
         }
+        if (deletePrefetchMaxReferrers < 1) {
+            throw new IllegalArgumentException("jabiz.storage.delete-prefetch.max-referrers must be at least 1");
+        }
         this.acrossTransaction = acrossTransaction;
         this.deletePrefetchChunk = deletePrefetchChunk;
+        this.deletePrefetchMaxReferrers = deletePrefetchMaxReferrers;
     }
 
     /** Default of {@code jabiz.storage.delete-prefetch.chunk-size}. */
@@ -71,6 +79,17 @@ public class WriteBatching {
      */
     public int deletePrefetchChunk() {
         return deletePrefetchChunk;
+    }
+
+    /** Default of {@code jabiz.storage.delete-prefetch.max-referrers}. */
+    public static final int DEFAULT_DELETE_PREFETCH_MAX_REFERRERS = 100;
+
+    /**
+     * Most referrers read ahead per instance through a self-reference (ROADMAP 17zz21): which of them a run deletes
+     * first decides the instance's deletion, so they are read by id; an instance with more asks for itself.
+     */
+    public int deletePrefetchMaxReferrers() {
+        return deletePrefetchMaxReferrers;
     }
 
     /** Whether rows are held for the whole transaction (phase 16p-2, T9) rather than only within one commit. */

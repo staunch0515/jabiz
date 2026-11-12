@@ -18,6 +18,7 @@ import com.jabiz.entity.ValidationContext;
 import com.jabiz.entity.ValidationException;
 import com.jabiz.entity.Violation;
 import com.jabiz.i18n.PlatformErrorCodes;
+import com.jabiz.query.BoundValue;
 import com.jabiz.query.EntityQuery;
 import com.jabiz.query.PhysicalQueryPlan;
 import com.jabiz.query.QueryCompiler;
@@ -378,8 +379,10 @@ public class DatasetEntityManager {
     /**
      * Who refers to the targets through one incoming reference, now and in scheduled versions, as {@link #isReferenced}
      * asks (the current slice of the referrer's dataset without the caller's scope, bounded by its timeout): by target,
-     * the referrers of a self-reference, which the run may delete before, otherwise only that someone does. Empty (the
-     * deletions ask for themselves) when the referrer has no dataset or its field cannot be asked for several values.
+     * whether someone does (each target probed as one deletion would, stopping at the first referrer), and for a
+     * self-reference, which the run may delete before, by whom, up to {@code jabiz.storage.delete-prefetch.max-referrers}
+     * ({@link DeletePrefetch#TOO_MANY} past it, and the deletion asks for itself). Empty (the deletions ask for
+     * themselves) when the referrer has no dataset or its field cannot be asked this way.
      */
     private Mono<Map<String, Set<String>>> referrers(EntityDefinitionRegistry.IncomingReference incoming,
         EntityDefinition target, List<List<UUID>> chunks) {
@@ -389,31 +392,25 @@ public class DatasetEntityManager {
             return Mono.empty();
         }
         boolean self = source.name.equals(target.name);
+        int most = batching.deletePrefetchMaxReferrers();
         StorageEngine engine = storageRegistry.getEngine(sourceDataset.storage().connectionPoolRef());
         String field = incoming.reference().sourceField();
-        String fieldColumn = SqlIdentifiers.require(source.physicalColumn(field));
-        String referrer = self ? SqlIdentifiers.require(source.primaryKeyColumn()) : "''";
-        List<PhysicalQueryPlan> plans = new ArrayList<>();
+        ReferrerProbe probe;
         try {
-            for (List<UUID> chunk : chunks) {
-                plans.add(queryCompiler.compile(sourceDataset, source, EntityQuery.builder()
-                    .where(new QueryPredicate.In(field, List.copyOf(chunk))).build(), Map.of(),
-                    currentSlice(source, null, null)));
-            }
+            probe = ReferrerProbe.of(queryCompiler, sourceDataset, source, field, currentSlice(source, null, null));
         } catch (ValidationException cannotAsk) {
             return Mono.empty();
         }
-        Mono<List<Object[]>> now = Flux.fromIterable(plans)
-            .filter(plan -> !plan.matchesNothing())
-            .concatMap(plan -> engine.executeRawQuery(new RawQueryPlan("SELECT DISTINCT " + referrer
-                + " AS jabiz_referrer, " + fieldColumn + " AS jabiz_target FROM " + plan.source()
-                + (plan.whereClause() == null || plan.whereClause().isBlank() ? "" : " WHERE " + plan.whereClause()),
-                plan.bindParams(), plan.timeout())))
+        if (probe == null) {
+            return Mono.empty();
+        }
+        Mono<List<Object[]>> now = Flux.fromIterable(chunks)
+            .concatMap(chunk -> engine.executeRawQuery(probe.plan(chunk, self, most)))
             .map(row -> new Object[] {row.get("jabiz_referrer"), row.get("jabiz_target")})
             .collectList();
         Mono<List<Object[]>> later = !source.temporal ? Mono.just(List.of()) : Flux.fromIterable(chunks)
             .concatMap(chunk -> temporalStore.referrersLater(engine, queryCompiler.resolveTable(sourceDataset, source),
-                source, field, chunk, self, clock.instant()).flatMapIterable(pairs -> pairs))
+                source, field, chunk, self, self ? most + 1 : 1, clock.instant()).flatMapIterable(pairs -> pairs))
             .collectList();
         return now.flatMap(current -> later.map(scheduled -> {
             Map<String, Set<String>> byTarget = new HashMap<>();
@@ -423,8 +420,78 @@ public class DatasetEntityManager {
                         .add(self ? String.valueOf(pair[0]) : DeletePrefetch.SOMEONE);
                 }
             }
+            if (self) {
+                // Past the bound, which referrers the run deletes first is not known: the deletion asks for itself.
+                byTarget.replaceAll((key, by) -> by.size() > most ? Set.of(DeletePrefetch.TOO_MANY) : by);
+            }
             return byTarget;
         }));
+    }
+
+    /**
+     * The statement asking who refers to a chunk of targets now, built from the plan {@link #isReferenced} reads for
+     * one target (compiled with a stand-in value, then that value replaced by each target in turn): where the referrer's
+     * current slice takes the condition inside (the reference does not change between versions, or the referrer is a
+     * plain entity), each target is probed on its own, stopping at the first referrer; otherwise the slice is read once
+     * for the chunk and only the targets found (with, for a self-reference, up to {@code most + 1} referrers each).
+     */
+    private record ReferrerProbe(PhysicalQueryPlan one, String standIn, String fieldColumn, String idColumn) {
+
+        /** The value the plan is compiled with, then replaced; fixed, so that nothing is drawn on a reactive thread. */
+        static final UUID STAND_IN = UUID.fromString("6a62697a-0000-4000-8000-0000177a2100");
+
+        static ReferrerProbe of(QueryCompiler compiler, DatasetDefinition dataset, EntityDefinition source,
+            String field, TimeSlice slice) {
+            UUID standIn = STAND_IN;
+            PhysicalQueryPlan one = compiler.compile(dataset, source, EntityQuery.builder()
+                .where(new QueryPredicate.Eq(field, standIn)).build(), Map.of(), slice);
+            String name = one.bindParams().entrySet().stream()
+                .filter(param -> standIn.equals(param.getValue().value())).map(Map.Entry::getKey)
+                .findFirst().orElse(null);
+            if (name == null || one.matchesNothing()) {
+                return null;
+            }
+            return new ReferrerProbe(one, name, SqlIdentifiers.require(source.physicalColumn(field)),
+                SqlIdentifiers.require(source.primaryKeyColumn()));
+        }
+
+        RawQueryPlan plan(List<UUID> targets, boolean self, int most) {
+            Map<String, BoundValue> params = new LinkedHashMap<>(one.bindParams());
+            params.remove(standIn);
+            params.put("jabiz_targets", BoundValue.of(targets.toArray(UUID[]::new)));
+            String where = one.whereClause() == null || one.whereClause().isBlank() ? "true" : one.whereClause();
+            String sql;
+            if (uses(one.source())) {
+                // The slice takes the condition: probe each target on its own.
+                String source = replaced(one.source(), "t.jabiz_target");
+                String condition = replaced(where, "t.jabiz_target") + (self ? " AND " + idColumn + " <> t.jabiz_target"
+                    : "");
+                sql = "SELECT t.jabiz_target AS jabiz_target, r.jabiz_referrer AS jabiz_referrer FROM unnest(:jabiz_targets)"
+                    + " AS t(jabiz_target) JOIN LATERAL (SELECT " + (self ? idColumn : "''") + " AS jabiz_referrer FROM "
+                    + source + " WHERE " + condition + " LIMIT " + (self ? most + 1 : 1) + ") r ON true";
+            } else {
+                // Read the slice once for the chunk: the targets referred to, and for a self-reference, by whom.
+                String condition = replaced(where, "ANY(:jabiz_targets)")
+                    + (self ? " AND " + idColumn + " <> " + fieldColumn : "");
+                sql = self
+                    ? "SELECT jabiz_target, jabiz_referrer FROM (SELECT " + fieldColumn + " AS jabiz_target, " + idColumn
+                        + " AS jabiz_referrer, row_number() OVER (PARTITION BY " + fieldColumn + ") AS jabiz_n FROM "
+                        + one.source() + " WHERE " + condition + ") r WHERE jabiz_n <= " + (most + 1)
+                    : "SELECT DISTINCT " + fieldColumn + " AS jabiz_target, '' AS jabiz_referrer FROM " + one.source()
+                        + " WHERE " + condition;
+            }
+            return new RawQueryPlan(sql, params, one.timeout());
+        }
+
+        private boolean uses(String text) {
+            return java.util.regex.Pattern.compile("(?<![:\\w]):" + java.util.regex.Pattern.quote(standIn)
+                + "(?!\\w)").matcher(text).find();
+        }
+
+        private String replaced(String text, String with) {
+            return java.util.regex.Pattern.compile("(?<![:\\w]):" + java.util.regex.Pattern.quote(standIn) + "(?!\\w)")
+                .matcher(text).replaceAll(java.util.regex.Matcher.quoteReplacement(with));
+        }
     }
 
     private static <T> List<List<T>> chunks(List<T> items, int size) {

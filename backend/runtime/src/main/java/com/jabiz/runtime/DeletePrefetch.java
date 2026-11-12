@@ -30,6 +30,9 @@ final class DeletePrefetch {
     /** Stands for "some other instance" where only whether a target is referred to was read, not by whom. */
     static final String SOMEONE = "";
 
+    /** Stands for "more referrers than were read" (a self-reference past the bound): the deletion asks for itself. */
+    static final String TOO_MANY = "\u0000too-many";
+
     private final String entityType;
     private final Set<String> ids;
     private final Map<UUID, List<EntityVersion>> timelines;
@@ -74,6 +77,9 @@ final class DeletePrefetch {
             return null;
         }
         Set<String> by = new HashSet<>(found.getOrDefault(key, Set.of()));
+        if (by.contains(TOO_MANY)) {
+            return null;
+        }
         if (self) {
             by.remove(key);
             if (by.stream().anyMatch(deleted::contains)) {

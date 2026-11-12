@@ -139,11 +139,11 @@ class StatementBudgetIT extends PostgresIntegrationTest {
      */
     static final Budget TEMPORAL_DELETES = new Budget(7, 19);
     /**
-     * Five deletions of a temporal entity another refers to and it refers to itself: as above, and for each of the two
-     * incoming references who refers to them now and in scheduled versions, 4 [the switch off: per deletion also the 4
-     * reference checks, 39].
+     * Five deletions of a temporal entity referred to by itself, by two other temporal entities and by a plain one
+     * ({@code ItPrice}): as above, and for each temporal reference who refers to them now and in scheduled versions, for
+     * the plain one now, 7 [the switch off: per deletion also the 7 reference checks, 54].
      */
-    static final Budget TEMPORAL_DELETES_REFERENCED = new Budget(11, 39);
+    static final Budget TEMPORAL_DELETES_REFERENCED = new Budget(14, 54);
 
     // ---- the cases ----------------------------------------------------------------------------------------------
 

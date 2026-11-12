@@ -305,12 +305,13 @@ public class TemporalStore {
     }
 
     /**
-     * {@link #referencedLater} for several targets at once (ROADMAP 17zz21): the targets a scheduled version will refer
-     * to, as pairs {@code [referrer, target]}; the referrer is named only when {@code byWhom} (otherwise an empty
-     * string, one pair per target).
+     * {@link #referencedLater} for several targets at once (ROADMAP 17zz21), each asked as one deletion asks it: the
+     * targets a scheduled version will refer to, as pairs {@code [referrer, target]}, at most {@code most} per target; the
+     * referrer is named only when {@code byWhom} (a self-reference, which also leaves the target itself out), otherwise
+     * an empty string.
      */
     public Mono<List<Object[]>> referrersLater(StorageEngine engine, String table, EntityDefinition def, String field,
-        java.util.Collection<UUID> targetIds, boolean byWhom, Instant now) {
+        java.util.Collection<UUID> targetIds, boolean byWhom, int most, Instant now) {
         if (targetIds.isEmpty()) {
             return Mono.just(List.of());
         }
@@ -322,13 +323,15 @@ public class TemporalStore {
         Map<String, BoundValue> params = new LinkedHashMap<>();
         params.put("now", BoundValue.of(now));
         params.put("targets", BoundValue.of(targetIds.toArray(UUID[]::new)));
-        String sql = "WITH cand AS (SELECT DISTINCT " + id + " AS cid FROM " + source + " WHERE " + column
-            + " = ANY(:targets) AND " + effective + " > :now)"
-            + " SELECT DISTINCT " + (byWhom ? "s." + id : "''") + " AS jabiz_referrer, s." + column
-            + " AS jabiz_target FROM cand JOIN LATERAL"
-            + " (SELECT DISTINCT ON (v." + effective + ") * FROM " + source + " v WHERE v." + id + " = cand.cid AND v."
-            + effective + " > :now ORDER BY v." + effective + ", v." + version + " DESC) s ON true WHERE NOT s."
-            + SqlIdentifiers.require(def.systemColumn(TemporalSpec.DELETED)) + " AND s." + column + " = ANY(:targets)";
+        String sql = "SELECT t.jabiz_target AS jabiz_target, r.jabiz_referrer AS jabiz_referrer"
+            + " FROM unnest(:targets) AS t(jabiz_target) JOIN LATERAL ("
+            + "SELECT " + (byWhom ? "s." + id : "''") + " AS jabiz_referrer FROM (SELECT DISTINCT " + id + " AS cid FROM "
+            + source + " WHERE " + column + " = t.jabiz_target AND " + effective + " > :now"
+            + (byWhom ? " AND " + id + " <> t.jabiz_target" : "") + ") cand"
+            + " JOIN LATERAL (SELECT DISTINCT ON (v." + effective + ") * FROM " + source + " v WHERE v." + id
+            + " = cand.cid AND v." + effective + " > :now ORDER BY v." + effective + ", v." + version + " DESC) s ON true"
+            + " WHERE NOT s." + SqlIdentifiers.require(def.systemColumn(TemporalSpec.DELETED)) + " AND s." + column
+            + " = t.jabiz_target LIMIT " + most + ") r ON true";
         return engine.select(sql, params)
             .map(row -> new Object[] {row.get("jabiz_referrer"), row.get("jabiz_target")})
             .collectList();
