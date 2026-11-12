@@ -1,19 +1,16 @@
 import { useQuery } from '@tanstack/react-query'
+import { useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Link } from 'react-router'
 import {
   Badge,
+  DataTable,
   EXTENSION_NAMESPACE,
   PageState,
   paths,
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
   UserName,
   useAuth,
+  type ColumnDef,
 } from '@jabiz/admin'
 import { LoadFailed, Section } from './components'
 import {
@@ -70,6 +67,57 @@ export function FundSwitches() {
   const proposals = useQuery({ queryKey: ['qb-ext', 'finance', 'fund-proposals', keys], enabled: readsChanges && keys.length > 0,
     queryFn: () => readFundProposals(keys) })
 
+  const columns = useMemo<ColumnDef<Line, unknown>[]>(() => {
+    const shown = (line: Line) => {
+      if (line.state === 'waiting' || line.state === 'manual') return '—'
+      if (!line.exists) return t('fundSwitch.notSet')
+      return line.value === null || line.value === '' ? t('fundSwitch.none') : <code>{line.value}</code>
+    }
+    return [
+      { id: 'name', header: t('fundSwitch.columns.name'), enableSorting: false,
+        cell: ({ row }) => (
+          <>
+            <div>{t(`fundSwitch.names.${nameId(row.original.key)}`)}</div>
+            <code className="text-muted-foreground text-xs">{row.original.key}</code>
+          </>
+        ) },
+      { id: 'group', header: t('fundSwitch.columns.group'), enableSorting: false,
+        cell: ({ row }) => t(`fundSwitch.group.${row.original.group}`) },
+      { id: 'expected', header: t('fundSwitch.columns.firstLaunch'), enableSorting: false,
+        cell: ({ row }) => {
+          const line = row.original
+          return (
+            <span data-testid="fund-switch-expected">
+              {line.state === 'waiting' || line.state === 'manual' ? '—'
+                : line.expected === null ? t('fundSwitch.declared')
+                  : line.expected === '' ? t('fundSwitch.none') : <code>{line.expected}</code>}
+            </span>
+          )
+        } },
+      { id: 'value', header: t('fundSwitch.columns.current'), enableSorting: false,
+        cell: ({ row }) => <span data-testid="fund-switch-value">{shown(row.original)}</span> },
+      { id: 'state', header: t('fundSwitch.columns.state'), enableSorting: false,
+        cell: ({ row }) => {
+          const line = row.original
+          return (
+            <>
+              <Badge variant={TONE[line.state]} className="h-auto max-w-full whitespace-normal text-left"
+                data-testid="fund-switch-state">
+                {line.state === 'waiting' ? t('fundSwitch.state.waiting', { feature: line.feature })
+                  : t(`fundSwitch.state.${line.state}`)}
+              </Badge>
+              {line.proposals.map((p) => (
+                <p key={p.changeId} className="text-muted-foreground mt-1 text-xs" data-testid="fund-switch-proposal">
+                  {t('fundSwitch.proposal', { value: p.value === null || p.value === '' ? t('fundSwitch.none') : p.value })}
+                  {' · '}<UserName id={p.proposedBy} />{p.reason ? ` · ${p.reason}` : ''}
+                </p>
+              ))}
+            </>
+          )
+        } },
+    ]
+  }, [t])
+
   let body
   if (switches.isError) body = <LoadFailed error={switches.error} onRetry={() => void switches.refetch()} />
   else if (switches.isPending) body = <PageState kind="loading" />
@@ -88,11 +136,6 @@ export function FundSwitches() {
     const comparable = lines.filter((line) => line.state !== 'amount' && line.state !== 'waiting'
       && line.state !== 'manual')
     const match = comparable.filter((line) => line.state === 'match').length
-    const shown = (line: Line) => {
-      if (line.state === 'waiting' || line.state === 'manual') return '—'
-      if (!line.exists) return t('fundSwitch.notSet')
-      return line.value === null || line.value === '' ? t('fundSwitch.none') : line.value
-    }
     body = (
       <>
         <p className="text-sm" role="status" data-testid="fund-switches-summary" data-match={match}
@@ -106,48 +149,11 @@ export function FundSwitches() {
           </p>
         )}
         {proposals.isError && <LoadFailed error={proposals.error} onRetry={() => void proposals.refetch()} />}
-        <Table aria-label={t('fundSwitch.table')} data-testid="fund-switches">
-          <TableHeader>
-            <TableRow>
-              <TableHead>{t('fundSwitch.columns.name')}</TableHead>
-              <TableHead>{t('fundSwitch.columns.group')}</TableHead>
-              <TableHead>{t('fundSwitch.columns.firstLaunch')}</TableHead>
-              <TableHead>{t('fundSwitch.columns.current')}</TableHead>
-              <TableHead>{t('fundSwitch.columns.state')}</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {lines.map((line) => (
-              <TableRow key={line.key} data-testid="fund-switch" data-key={line.key} data-state={line.state}>
-                <TableCell>
-                  <div>{t(`fundSwitch.names.${nameId(line.key)}`)}</div>
-                  <code className="text-muted-foreground text-xs">{line.key}</code>
-                </TableCell>
-                <TableCell>{t(`fundSwitch.group.${line.group}`)}</TableCell>
-                <TableCell data-testid="fund-switch-expected">
-                  {line.state === 'waiting' || line.state === 'manual' ? '—'
-                    : line.expected === null ? t('fundSwitch.declared')
-                      : line.expected === '' ? t('fundSwitch.none') : <code>{line.expected}</code>}
-                </TableCell>
-                <TableCell data-testid="fund-switch-value">
-                  {line.exists && line.value ? <code>{shown(line)}</code> : shown(line)}
-                </TableCell>
-                <TableCell>
-                  <Badge variant={TONE[line.state]} data-testid="fund-switch-state">
-                    {line.state === 'waiting' ? t('fundSwitch.state.waiting', { feature: line.feature })
-                      : t(`fundSwitch.state.${line.state}`)}
-                  </Badge>
-                  {line.proposals.map((p) => (
-                    <p key={p.changeId} className="text-muted-foreground mt-1 text-xs" data-testid="fund-switch-proposal">
-                      {t('fundSwitch.proposal', { value: p.value === null || p.value === '' ? t('fundSwitch.none') : p.value })}
-                      {' · '}<UserName id={p.proposedBy} />{p.reason ? ` · ${p.reason}` : ''}
-                    </p>
-                  ))}
-                </TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
+        <div data-testid="fund-switches">
+          <DataTable label={t('fundSwitch.table')} columns={columns} data={lines} getRowId={(line) => line.key}
+            cards={false} rowProps={(line) => ({ 'data-testid': 'fund-switch', 'data-key': line.key,
+              'data-state': line.state })} />
+        </div>
         {(can(PERMISSION.controlPropose) || can(PERMISSION.controlPublish) || readsChanges) && (
           <Link to={paths.dataset(CONTROL.changes)} className={linkClass} data-testid="fund-switches-changes">
             {t('fundSwitch.changes')}
