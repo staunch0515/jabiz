@@ -217,6 +217,8 @@ public final class QbParams {
     public static final String FEE_CREDIT_EXPIRY_NOTICE_DAYS = "qb.fee-credit.expiry-notice-days";
     /** F-M3: how many hours the link that proves a company's mailbox stays good (ordinary; 1 to 168). */
     public static final String VERIFICATION_LINK_HOURS = "qb.sponsor-verification.link-hours";
+    /** F-M5 (M3 of its review): days after its end an open prepayment is a difference of the daily check. */
+    public static final String PREPAYMENT_RELEASE_OVERDUE_DAYS = "qb.prepayment.release.overdue-days";
     /** The cap's kind, which the controlled change that first sets it gives (yen, whole). */
     public static final Map<String, Object> FEE_CREDIT_MANUAL_MAX_KIND = Map.of("type", "monetary", "currency", "JPY",
         "scale", 0);
@@ -855,7 +857,11 @@ public final class QbParams {
                 + "default)"),
         // F-M3: company verification (ordinary; last).
         new Param(VERIFICATION_LINK_HOURS, Map.of("type", "numeric", "precision", 3, "scale", 0), "48",
-            "How many hours the link mailed to a company address to verify a sponsor's company stays good (1 to 168)"));
+            "How many hours the link mailed to a company address to verify a sponsor's company stays good (1 to 168)"),
+        // F-M5 (M3 of its review): the daily check (ordinary; last).
+        new Param(PREPAYMENT_RELEASE_OVERDUE_DAYS, DAYS, "2",
+            "How many days after a publication ends a prepayment still open is reported by the daily check (1 to 30; "
+                + "the daily job gives it back within a day)"));
 
     /** The declared value of a parameter: what {@code QB_SETUP} writes. */
     public static String defaultOf(String key) {

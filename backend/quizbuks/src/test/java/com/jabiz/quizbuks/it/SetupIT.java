@@ -530,6 +530,8 @@ class SetupIT extends QbItSupport {
             QbParams.OPERATOR_WITHDRAWAL_COOLDOWN_HOURS, "24"));
         // F-M3: how long the company verification's link is good (not controlled).
         expected.put(QbParams.VERIFICATION_LINK_HOURS, "48");
+        // F-M5: when an ended publication's open prepayment is a difference (not controlled).
+        expected.put(QbParams.PREPAYMENT_RELEASE_OVERDUE_DAYS, "2");
         assertThat(values).containsExactlyInAnyOrderEntriesOf(expected);
     }
 

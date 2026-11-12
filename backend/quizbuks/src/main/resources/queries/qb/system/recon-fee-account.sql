@@ -1,7 +1,7 @@
 /*---
 id: qb.system.recon-fee-account
 description: Whether the account that pays the platform's fees agrees with its lots and payments, by sponsor (F-M1) - the fee credit (2190) with its wallet and grants, the cash (2160) with its lots, and the fee payments posted with their parts; by operator (F-M2) the promotion expenses of the grants (5140) with what was granted less what was voided; and (F-S4b) by sponsor the lighting grants with the lit records that earned them; and (F-M3) the top-ups of verified companies with their verifications and certified amounts; and (F-M4) by operator its account (2140) with its settlements, withdrawals and transfers; and (F-M5) by sponsor the prepayments (2180) with what their open prepayments hold, and no prepayment held for a publication back in its draft (the daily reconciliation; differences only)
-entities: [QbWallet, QbFeeCreditGrant, QbCashLot, QbFeePayment, LedgerEntry, LedgerAccount, LedgerTransaction, QbTreeLit, QbTreeLitRevocation, QbTree, QbSponsorVerification, QbSponsor, QbOperatorSettlement, QbOperatorWithdrawal, QbOperatorTransfer, QbPrepayment, QbPublication]
+entities: [QbWallet, QbFeeCreditGrant, QbCashLot, QbFeePayment, LedgerEntry, LedgerAccount, LedgerTransaction, QbTreeLit, QbTreeLitRevocation, QbTree, QbSponsorVerification, QbSponsor, QbOperatorSettlement, QbOperatorWithdrawal, QbOperatorTransfer, QbPrepayment, QbPublication, SysParam]
 datasets:
   QbWallet: urn:jabiz:dataset:default:QbWallet
   QbFeeCreditGrant: urn:jabiz:dataset:default:QbFeeCreditGrant
@@ -17,6 +17,9 @@ datasets:
   QbOperatorTransfer: urn:jabiz:dataset:default:QbOperatorTransfer
   QbPrepayment: urn:jabiz:dataset:default:QbPrepayment
   QbPublication: urn:jabiz:dataset:default:QbPublication
+  SysParam: urn:jabiz:dataset:now:SysParam
+params:
+  at: { like: QbPublication.endedAt, description: "The run's time: an ended publication's prepayment still open a while after it is a difference (none: not checked)" }
 results:
   checkCode: { kind: { type: text, maxLength: 30 } }
   sponsorId: { kind: { type: text, maxLength: 128 } }
@@ -55,8 +58,12 @@ permissions: [qb.wallet.system]
 --   every settlement's payable less those paid on their own (PAID, before accounts existed), the withdrawals paid and
 --   the transfers to its direct Sponsor.
 -- PREPAYMENTS (F-M5): 2180 for a sponsor (credit less debit) against what their open prepaid prepayments hold.
--- PREPAYMENT_STALE (F-M5): a publication back in its draft (withdrawn, rejected, its review expired) whose
---   prepayment is still open: expected 0, actual what it holds (a postpaid one: what it still counts).
+-- PREPAYMENT_STALE (F-M5): by sponsor, the open prepayments that should have been given back: of a publication back
+--   in its draft (withdrawn, rejected, its review expired), of one ended more than qb.prepayment.release.overdue-days
+--   before :at (the daily job gives it back within a day; 1 to 30, anything else or none: 2), or of a publication that
+--   is not there: expected 0, actual what they hold (a postpaid one: what it still counts).
+-- PREPAYMENT_PARTS (F-M5 review M3): by sponsor, the prepaid prepayments whose parts (set aside, given back, less
+--   what fees took of them) do not add up to what they hold: expected what they hold, actual what the parts say.
 WITH credit_ledger AS (
     SELECT e.{{LedgerEntry.dimension1}} AS r_party,
            sum(CASE WHEN e.{{LedgerEntry.direction}} = 'CREDIT' THEN e.{{LedgerEntry.amount}}
@@ -281,8 +288,36 @@ FULL OUTER JOIN prepayment_ledger pl ON pl.r_party = ph.r_party
 WHERE coalesce(ph.r_remaining, 0) <> coalesce(pl.r_balance, 0)
 UNION ALL
 SELECT CAST('PREPAYMENT_STALE' AS varchar(30)), CAST(pp.{{QbPrepayment.sponsorId}} AS varchar(128)),
-       CAST(0 AS numeric), pp.{{QbPrepayment.remaining}}
+       CAST(0 AS numeric), sum(pp.{{QbPrepayment.remaining}})
 FROM {{QbPrepayment}} pp
-JOIN {{QbPublication}} pub ON CAST(pub.{{QbPublication.publicationId}} AS text) = pp.{{QbPrepayment.publicationId}}
+LEFT JOIN {{QbPublication}} pub ON CAST(pub.{{QbPublication.publicationId}} AS text) = pp.{{QbPrepayment.publicationId}}
+CROSS JOIN (
+    SELECT coalesce(max(CASE WHEN p.{{SysParam.value}} ~ '^[0-9]{1,2}$'
+                                  AND CAST(p.{{SysParam.value}} AS int) BETWEEN 1 AND 30
+                             THEN CAST(p.{{SysParam.value}} AS int) END), 2) AS days
+    FROM {{SysParam}} p
+    WHERE p.{{SysParam.paramKey}} = 'qb.prepayment.release.overdue-days') params
 WHERE pp.{{QbPrepayment.status}} = 'OPEN'
-  AND pub.{{QbPublication.status}} = 'DRAFT'
+  AND pp.{{QbPrepayment.publicationId}} IS NOT NULL
+  AND (pub.{{QbPublication.publicationId}} IS NULL
+       OR pub.{{QbPublication.status}} = 'DRAFT'
+       OR (pub.{{QbPublication.status}} = 'ENDED' AND CAST(:at AS timestamptz) IS NOT NULL
+           AND pub.{{QbPublication.endedAt}} < CAST(:at AS timestamptz) - make_interval(days => params.days)))
+GROUP BY pp.{{QbPrepayment.sponsorId}}
+UNION ALL
+SELECT CAST('PREPAYMENT_PARTS' AS varchar(30)), CAST(pp.{{QbPrepayment.sponsorId}} AS varchar(128)),
+       sum(pp.{{QbPrepayment.remaining}}), sum(coalesce(own.r_amount, 0) - coalesce(taken.r_amount, 0))
+FROM {{QbPrepayment}} pp
+LEFT JOIN (SELECT f.{{QbFeePayment.targetId}} AS r_id, sum(f.{{QbFeePayment.amount}}) AS r_amount
+           FROM {{QbFeePayment}} f
+           WHERE f.{{QbFeePayment.targetEntity}} = 'QbPrepayment'
+           GROUP BY f.{{QbFeePayment.targetId}}) own ON own.r_id = pp.{{QbPrepayment.prepaymentId}}
+-- What fees took of it: its positive parts only (a voided invoice gives what it paid back to the account, not to the
+-- prepayment: its negative parts name the prepayment too).
+LEFT JOIN (SELECT f.{{QbFeePayment.prepaymentId}} AS r_id, sum(f.{{QbFeePayment.amount}}) AS r_amount
+           FROM {{QbFeePayment}} f
+           WHERE f.{{QbFeePayment.prepaymentId}} IS NOT NULL AND f.{{QbFeePayment.amount}} > 0
+           GROUP BY f.{{QbFeePayment.prepaymentId}}) taken ON taken.r_id = pp.{{QbPrepayment.prepaymentId}}
+WHERE pp.{{QbPrepayment.mode}} = 'PREPAID'
+  AND pp.{{QbPrepayment.remaining}} <> coalesce(own.r_amount, 0) - coalesce(taken.r_amount, 0)
+GROUP BY pp.{{QbPrepayment.sponsorId}}

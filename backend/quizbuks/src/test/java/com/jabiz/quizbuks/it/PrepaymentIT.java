@@ -140,7 +140,7 @@ class PrepaymentIT extends PlayItSupport {
     /** What the daily check finds about the Sponsor in the account that pays the platform's fees (none: agrees). */
     List<Map<String, Object>> differences(String sponsor) {
         return items("qb.system.recon-fee-account", TestTokens.bearer(tokens, "fm5-recon", QbPermissions.WALLET_SYSTEM),
-            Map.of()).stream().filter(row -> sponsor.equals(String.valueOf(row.get("sponsorId")))
+            Map.of("params", Map.of("at", clock.instant().toString()))).stream().filter(row -> sponsor.equals(String.valueOf(row.get("sponsorId")))
                 && !"FEE_CREDIT_PROMOTION".equals(row.get("checkCode"))).toList();
     }
 
@@ -449,6 +449,46 @@ class PrepaymentIT extends PlayItSupport {
             422))).containsExactly(FeeCodes.PUBLICATION_FUNDS);
         assertThat(prepayments(publicationId)).isEmpty();
         assertThat(differences(sponsor)).extracting(row -> row.get("checkCode")).contains("CASH_LOTS");
+    }
+
+    @Test
+    void theDailyCheckFindsPrepaymentsNotGivenBackAndPartsThatDoNotAddUp() {
+        // M3 of the F-M5 review.
+        autoApprove(true);
+        String sponsor = pricedSponsor("fm5-stale");
+        grant(sponsor, 2_000, clock.instant().plus(Duration.ofDays(90)));
+        String publicationId = audienceDraft(sponsor, "FM5 stale");
+        submit(sponsorToken(sponsor), publicationId);
+        run("QB_PUBLICATION_ADMIN_END", TestTokens.bearer(tokens, "fm5-content-admin",
+            QbPermissions.ADMIN_CONTENT_WRITE), body("publicationId", publicationId, "reason", "F-M5 test"));
+        // Within qb.prepayment.release.overdue-days (2) of its end: not yet a difference.
+        clock.set(clock.instant().plus(Duration.ofDays(1)));
+        assertThat(differences(sponsor)).isEmpty();
+        // Past it, the daily job not run: reported.
+        clock.set(clock.instant().plus(Duration.ofDays(2)));
+        assertThat(differences(sponsor)).singleElement().satisfies(row -> {
+            assertThat(row).containsEntry("checkCode", "PREPAYMENT_STALE");
+            assertThat(new BigDecimal(String.valueOf(row.get("actual")))).isEqualByComparingTo(SET_ASIDE);
+        });
+        systemRun(Prepayments.RELEASE_ITEM, body("publicationId", publicationId, "sponsorId", sponsor));
+        assertThat(differences(sponsor)).isEmpty();
+
+        // A prepayment of no publication there.
+        execute("INSERT INTO qb_prepayment (prepayment_id, sponsor_id, publication_id, purpose, mode, amount, remaining, "
+            + "charge_amount, status, frozen_at, version) VALUES (?, ?, ?, 'AUDIENCE', 'POSTPAID', 10, 10, 0, 'OPEN', ?, "
+            + "1)", UUID.randomUUID().toString(), sponsor, UUID.randomUUID().toString(), Timestamp.from(clock.instant()));
+        assertThat(differences(sponsor)).extracting(row -> row.get("checkCode")).containsExactly("PREPAYMENT_STALE");
+        execute("UPDATE qb_prepayment SET status = 'RELEASED', remaining = 0, released_at = ?, version = version + 1 "
+            + "WHERE sponsor_id = ? AND mode = 'POSTPAID'", Timestamp.from(clock.instant()), sponsor);
+
+        // What a prepayment holds against its parts.
+        String second = audienceDraft(sponsor, "FM5 parts");
+        submit(sponsorToken(sponsor), second);
+        assertThat(differences(sponsor)).isEmpty();
+        execute("UPDATE qb_prepayment SET remaining = remaining - 1, version = version + 1 WHERE publication_id = ?",
+            second);
+        assertThat(differences(sponsor)).extracting(row -> row.get("checkCode"))
+            .containsExactlyInAnyOrder("PREPAYMENT_PARTS", "PREPAYMENTS");
     }
 
     @Test
