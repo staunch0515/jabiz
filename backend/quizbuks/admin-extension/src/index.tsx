@@ -48,6 +48,7 @@ import FeeRequestPage from './FeeRequestPage'
 import ManualCreditsPage from './ManualCreditsPage'
 import BroadcastsPage from './BroadcastsPage'
 import { AudiencePricesPage, AudienceRulesPage, OperatorAudiencePricesPage } from './AudiencePricingPages'
+import { DistributionPricesPage, DistributionSettlementsPage, OperatorDistributionPricePage } from './DistributionPages'
 import ReferralsPage from './ReferralsPage'
 import RegionPage from './RegionPage'
 import SharedVideosPage from './SharedVideosPage'
@@ -214,6 +215,9 @@ export default defineExtension({
     { path: PATH.audienceRules, element: <AudienceRulesPage /> },
     { path: PATH.audiencePrices, element: <AudiencePricesPage /> },
     { path: PATH.operatorAudiencePrices, element: <OperatorAudiencePricesPage /> },
+    { path: PATH.distributionPrices, element: <DistributionPricesPage /> },
+    { path: PATH.operatorDistributionPrice, element: <OperatorDistributionPricePage /> },
+    { path: PATH.distributionSettlements, element: <DistributionSettlementsPage /> },
   ],
   menu: [
     // F-S1b: the operator's own pages (only its members hold qb.operator.use): what an operator runs for its sponsors
@@ -241,6 +245,9 @@ export default defineExtension({
           icon: PiggyBank, permission: PERMISSION.operatorUse },
         // Q47c: the operator's own prices of the audience rules.
         { key: 'qb-operator-audience-prices', label: 'menu.audiencePrices', path: PATH.operatorAudiencePrices,
+          icon: Tags, permission: PERMISSION.operatorUse },
+        // F-M6: the operator's own distribution price (its lead changes it).
+        { key: 'qb-operator-distribution-price', label: 'menu.distributionPrices', path: PATH.operatorDistributionPrice,
           icon: Tags, permission: PERMISSION.operatorUse },
         // F-S2b3a: the operator's and its Sponsors' knowledge maps, and their reviews.
         { key: 'qb-operator-trees', label: 'menu.operatorTrees', path: PATH.trees, icon: Network,
@@ -345,6 +352,11 @@ export default defineExtension({
           permission: PERMISSION.audienceRulesWrite },
         { key: 'qb-audience-prices', label: 'menu.audiencePrices', path: PATH.audiencePrices, icon: Tags,
           permission: PERMISSION.audiencePricesWrite },
+        // F-M6: every operator's distribution price (headquarters' billing) and the settlements (finance).
+        { key: 'qb-distribution-prices', label: 'menu.distributionPrices', path: PATH.distributionPrices, icon: Tags,
+          permission: PERMISSION.feeBilling },
+        { key: 'qb-distribution-settlements', label: 'menu.distributionSettlements', path: PATH.distributionSettlements,
+          icon: Tags, permission: PERMISSION.financeRead },
         // F-S2b3a: every knowledge map, its versions' reviews and its lit nodes.
         { key: 'qb-trees', label: 'menu.trees', path: PATH.trees, icon: Network, permission: PERMISSION.treesRead },
         // F-S5b: support checks a certificate a verifier asks about, by its number or its holder.
