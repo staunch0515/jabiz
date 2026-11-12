@@ -128,6 +128,9 @@ jabiz:
       "[QB_AI_PUBLICATION_TRANSLATE_REQUEST]": { per-user: 5, period: 1m }
       "[QB_AI_PUBLICATION_TEXTS_ACCEPT]": { per-user: 30, period: 1m }
       "[QB_AI_TRANSLATION_CHECK_REQUEST]": { per-user: 5, period: 1m }
+      # F-C7: drafting from a website reads up to ten pages (the daily and monthly counts are parameters, under the lock).
+      "[QB_SITE_PROFILE_REQUEST]": { per-user: 5, period: 1m }
+      "[QB_SITE_PROFILE_QUIZ]": { per-user: 5, period: 1m }
       # F-C10: the AI help (free to its users, the platform pays): a person asks a few questions a minute; per address
       # as well, so that many accounts behind one address do not add up (the daily count per person is qb.help.user-daily).
       "[QB_HELP_ASK]": { per-user: 6, per-address: 30, period: 1m }
@@ -268,6 +271,25 @@ jabiz:
     unsubscribe-paths:
       sponsor: mail/unsubscribe
       app: mail/unsubscribe
+    # F-C9: the default letterhead of every mail (platform decision D72 item 6), from the brand profile when the
+    # resources are packaged: the brand's name in each language, and under the mail its name, support address and site
+    # (a link is left out when the profile has none). No logo yet (logo-url empty: mail clients do not show SVG). The
+    # footer is in every mail, so it links no entry. Administrators change it through a controlled change another
+    # administrator publishes; MAIL_LAYOUT_RESET returns to these values (docs/quizbuks/plans/impl/F-C9.md).
+    layout:
+      en:
+        display-name: "@QB_BRAND_NAME_en@"
+        footer: "@QB_BRAND_NAME_en@@QB_BRAND_FOOTER_SUPPORT@@QB_BRAND_FOOTER_SITE@"
+      ja:
+        display-name: "@QB_BRAND_NAME_ja@"
+        footer: "@QB_BRAND_NAME_ja@@QB_BRAND_FOOTER_SUPPORT@@QB_BRAND_FOOTER_SITE@"
+      zh:
+        display-name: "@QB_BRAND_NAME_zh@"
+        footer: "@QB_BRAND_NAME_zh@@QB_BRAND_FOOTER_SUPPORT@@QB_BRAND_FOOTER_SITE@"
+    texts:
+      # The brand's site is linked from the footer; it is not the host of base-url (staging has its own). Empty when the
+      # brand has no site.
+      allowed-link-hosts: "@QB_BRAND_SITE_HOST@"
     # The sponsors' own mail servers (Q29, platform decision D56): the platform checks a public host, a mail port and
     # TLS. The switch accepts a server on this machine with any certificate: for the end-to-end tests only, never set
     # in production (docs/quizbuks/operations.md section 1.4; a startup warning outside dev).
@@ -515,6 +537,9 @@ quizbuks:
   # requests and, through the job types' enabledBy (platform D52 item 4), holds queued and retrying jobs everywhere.
   ai:
     request-timeout: ${QB_AI_REQUEST_TIMEOUT:PT2M}
+    # F-C7: one call of the website reader waits request-timeout above unless quizbuks.ai.site-profile.request-timeout
+    # (QB_AI_SITE_PROFILE_REQUEST_TIMEOUT) is set shorter (at most two minutes, the platform's longest: a call without
+    # streaming cannot have more; docs/quizbuks/plans/impl/F-C7.md, "Timing"). Left unset here on purpose.
     max-concurrency: ${QB_AI_MAX_CONCURRENCY:4}
     # Q8b: PDF materials go to Claude as the files themselves: each at most max-bytes (at most 20 MiB). A request
     # reserves max-pages pages (at most 600) of its sponsor's monthly tokens until its job ends; no PDF is parsed here:

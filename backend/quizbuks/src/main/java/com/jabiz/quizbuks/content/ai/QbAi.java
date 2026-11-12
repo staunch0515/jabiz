@@ -51,6 +51,8 @@ public final class QbAi {
     /** Q73d-2: candidate translations of a publication's own texts, and a reviewer's check of its translations. */
     public static final String KIND_PUBLICATION_TEXTS = "PUBLICATION_TEXTS";
     public static final String KIND_TRANSLATION_CHECK = "TRANSLATION_CHECK";
+    /** F-C7: a draft of a profile package and a "get to know us" quiz from the sponsor's website; it names no quiz. */
+    public static final String KIND_SITE_PROFILE = "SITE_PROFILE";
 
     /**
      * The fields holding a cover job's candidate pictures while they wait for the sponsor's choice: files of
@@ -94,11 +96,16 @@ public final class QbAi {
             .processOnly().asText(36));
         eb.field("sponsorId", f -> f.physicalColumn("sponsor_id").immutable(true).required(true).processOnly()
             .asText(128));
-        eb.field("quizId", f -> f.physicalColumn("quiz_id").immutable(true).required(true).processOnly()
+        // Absent for a site's draft (F-C7), which names no quiz; present for every other kind.
+        eb.field("quizId", f -> f.physicalColumn("quiz_id").immutable(true).processOnly()
             .asReference(QbContent.QUIZ));
+        // F-C7b-2: the quiz made from a site draft (kind SITE_PROFILE), once; empty for every other job.
+        eb.field("siteQuizId", f -> f.physicalColumn("site_quiz_id").processOnly().asReference(QbContent.QUIZ));
+        // F-C7b-2: the website draft a QUESTIONS job was made from (it is not a request of the day: see AiProcesses.limited).
+        eb.field("fromSiteDraftId", f -> f.physicalColumn("from_site_draft_id").immutable(true).processOnly().asText(36));
         eb.field("kind", f -> f.physicalColumn("kind").immutable(true).required(true).processOnly()
             .asCode(KIND_DICTIONARY, KIND_QUESTIONS, KIND_COVER, KIND_TRANSLATION,
-                KIND_PUBLICATION_TEXTS, KIND_TRANSLATION_CHECK));
+                KIND_PUBLICATION_TEXTS, KIND_TRANSLATION_CHECK, KIND_SITE_PROFILE));
         // What was asked, as canonical JSON: the count, difficulty, language and materials (not their text).
         eb.field("params", f -> f.physicalColumn("params").immutable(true).required(true).processOnly()
             .asText(2_000));
@@ -149,7 +156,9 @@ public final class QbAi {
         eb.field("version", f -> f.physicalColumn("version").asVersion());
         eb.unique("uk_qb_ai_job_external", "externalJobId");
         eb.stateTransitions("status", st -> st
-            .initial(QUEUED)
+            // READY too: the questions of a website draft are kept, already drafted, for a new quiz's review (F-C7b-2,
+            // SiteQuizProcesses is the only process that starts a job there).
+            .initial(QUEUED, READY)
             .from(QUEUED).to(READY, FAILED, CANCELLED)
             .from(READY).to(ACCEPTED, DISCARDED, EXPIRED));
         eb.listView("default", lv -> lv

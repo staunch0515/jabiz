@@ -103,9 +103,7 @@ class AnalyticsVersionsMigrationIT {
     private String schemaAt(String target) {
         String schema = "it_q51b_" + UUID.randomUUID().toString().replace("-", "").substring(0, 12);
         schemas.add(schema);
-        Flyway.configure().dataSource(DB.jdbcUrl(), DB.username(), DB.password()).schemas(schema)
-            .defaultSchema(schema).createSchemas(true).locations("classpath:db/jabiz").table("jabiz_schema_history")
-            .baselineOnMigrate(true).baselineVersion("0").load().migrate();
+        PlatformScripts.migrate(DB, schema);
         migrate(schema, target);
         return schema;
     }

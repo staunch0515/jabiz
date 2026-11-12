@@ -88,6 +88,9 @@ public final class ContentCodes {
     /** F-C4: a quiz's content is replaced ({@code intoQuizId}) only while it has no publication. */
     public static final String IMPORT_HAS_PUBLICATIONS = "QB_QUIZ_IMPORT_HAS_PUBLICATIONS";
 
+    /** F-C7b-2: the AI mark goes on a new draft only; a file replacing a quiz's content cannot carry it. */
+    public static final String IMPORT_AI_INTO_QUIZ = "QB_QUIZ_IMPORT_AI_INTO_QUIZ";
+
     /** Every code above. */
     public static final List<String> ALL = List.of(QUIZ_TITLE_BLANK, QUIZ_TIME_LIMIT_RANGE, QUESTION_POINTS_RANGE,
         MATERIAL_URL_FORMAT, QUIZ_CHANGED, CONTENT_NOT_IN_QUIZ, TOO_MANY_QUESTIONS, TOO_MANY_MATERIALS, ORDER_MISMATCH,
@@ -97,7 +100,8 @@ public final class ContentCodes {
         LANGUAGE_IS_BASE, TRANSLATION_LANGUAGE, TRANSLATION_KEY, TRANSLATION_NO_SOURCE, TRANSLATION_TOO_LONG,
         TRANSLATION_FIELD, MATERIAL_VARIANT_EXISTS, MATERIAL_VARIANT_FIXED, MATERIAL_DURATION_REQUIRED,
         MATERIAL_DURATION_RANGE, VIDEO_LINK_NOT_RESOLVED, SURVEY_POINTS_FIXED,
-        IMPORT_BATCH_TOO_LARGE, IMPORT_QUESTIONS_ONLY, IMPORT_LANGUAGE, IMPORT_UNDONE, IMPORT_HAS_PUBLICATIONS);
+        IMPORT_BATCH_TOO_LARGE, IMPORT_QUESTIONS_ONLY, IMPORT_LANGUAGE, IMPORT_UNDONE, IMPORT_HAS_PUBLICATIONS,
+        IMPORT_AI_INTO_QUIZ);
 
     private ContentCodes() {}
 }

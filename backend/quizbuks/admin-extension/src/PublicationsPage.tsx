@@ -17,6 +17,7 @@ import { EmptyState, LoadFailed, PublisherLink, StatusBadge } from './components
 import { StatusFilter } from './finance-components'
 import { useLabels, usePaged, when } from './hooks'
 import { operatorColumn, useOperatorFilter } from './operator-filter'
+import { RegionExceptionAction } from './RegionExceptionAction'
 import { useMoreFilters } from './moreFilters'
 import { DICTIONARY, PATH, PERMISSION } from './ids'
 import { publicationFilterOf, readPublications, type PublicationListRow } from './overview-api'
@@ -112,6 +113,13 @@ export default function PublicationsPage() {
         </span>
       ),
     },
+    // F-F11b: a mainland China exception for this publication, or the note that one is in force.
+    ...(can(PERMISSION.regionWrite) ? [{
+      id: 'region',
+      header: t('region.title'),
+      cell: ({ row }: { row: { original: PublicationListRow } }) => (
+        <RegionExceptionAction kind="PUBLICATION" id={row.original.publicationId} name={row.original.name} />),
+    } satisfies ColumnDef<PublicationListRow, unknown>] : []),
     {
       id: 'period',
       header: t('publications.period'),
@@ -136,7 +144,7 @@ export default function PublicationsPage() {
       )),
     },
     { id: 'editedAt', header: t('publications.editedAt'), cell: ({ row }) => when(row.original.editedAt) },
-  ], [t, statusLabel, quizzes, here, operators.across])
+  ], [t, statusLabel, quizzes, here, operators.across, can])
 
   return (
     <div className="flex flex-col gap-4" data-testid="qb-publications">

@@ -2883,3 +2883,41 @@ D66 的"剩余风险"还写明"守卫要的数据须以用户编号能读到"。
 - global 预读读的是与用户无关的行，应用要自己保证这些行不含不该让守卫依据的个人数据：守卫只得到行，不把行返回给调用者。
 
 **实施**：阶段 17zz15（10 §15.18）。
+
+## D81 平台迁移中的并发建索引
+
+**状态**：已确认（需求方 2026-11-12；17zz18 提出）。
+
+**背景**：账本分录表是平台最大的表，`V66` 要在其上加 `(account_id, dimension_1)` 索引。普通 `CREATE INDEX` 在建的全过程中阻塞过账；`CREATE INDEX CONCURRENTLY` 不阻塞写入，
+但不能在事务中运行，而平台此前的迁移都在 Flyway 的事务中。实测（PostgreSQL 16、Flyway 11）：Flyway 默认的事务级咨询锁由另一条连接以 `pg_advisory_xact_lock` 取得、事务开到整次迁移结束，
+并发建索引要等它（对其 virtualxid 的 `ShareLock` 未授予），Flyway 又等建索引，永远等下去。
+
+**决定**
+1. **写法**：要不阻塞写入地建索引的迁移写 `CREATE INDEX ${concurrently} IF NOT EXISTS …`，脚本旁放 `<脚本>.sql.conf`，内容 `executeInTransaction=false`；一个这样的脚本只做建索引与它的修复。
+   脚本要能重跑：同名索引存在且 INVALID 时先删去（`DROP INDEX CONCURRENTLY` 不能放在 `DO` 块中，用普通 `DROP INDEX`，锁表只有在没有会话还在建该索引时才是一瞬间），有效的索引从不删。
+   进程被杀后其数据库后端可能还在建：删除之前若有别的客户端会话（`backend_type = 'client backend'`，看不到类型的不算）对该表持有 SHARE UPDATE EXCLUSIVE 锁即报错而不排队（迁移角色宜是 `pg_read_all_stats` 的成员）；删除等锁至多 `${drop_lock_timeout}`（缺省 `3s`）。
+   两者都使迁移记为失败，确认后 repair。
+2. **占位符**：`${concurrently}` 由 `PlatformSchemaMigration` 缺省设为 `CONCURRENTLY`、`${drop_lock_timeout}` 缺省 `3s`（`PlatformScriptPlaceholders`）；同一数据库里并行迁移多个 schema 的测试（`PostgresIntegrationTest`、场景、`platformCheck` 启动器、`SealedColumnsHistory`）设为空。
+   不经 `PlatformSchemaMigration` 运行平台脚本而没有定义它时，Flyway 立即报未解析的占位符。
+3. **锁**：平台脚本的 Flyway 用会话级咨询锁（`PlatformScriptPlaceholders.NON_TRANSACTIONAL_LOCK`）。它只作用于平台的那一次运行（配置是复制的），应用自己的 Flyway 不变；
+   应用自己的迁移也要并发建索引时，应用设 `spring.flyway.postgresql.transactional-lock=false`。Flyway 必须直连数据库（不经事务模式的连接池）。
+4. **锁等待时限**：`jabiz.schema.migration.lock-timeout`（缺省 `0s` 即不限）对平台迁移的连接设 `lock_timeout`。缺省不开，因为并发建索引等旧事务也是等锁，超时即记为失败、要人工 repair。
+5. **发现**：启动检查 `SCHEMA` 把当前 schema 的 INVALID 索引报为警告（从不阻止启动），仪表 `jabiz.schema.invalid-indexes`（不计可能正在建的）、告警 `jabiz-schema-invalid-indexes`（持续 15 分钟）。
+6. **已合并的迁移不改**：CI 的 `migration-order` 检查（`tools/check-migration-order.sh`）拒绝修改、删除或改名目标分支已有的迁移，以及增改删其 `.sql.conf`；说明与更正写进新的、可重跑的迁移。
+   唯一的例外：还没有在任何正式环境执行过的已合并迁移，登记在根目录的 `.jabiz-migration-exceptions`（平台）或 `.jabiz-app-migration-exceptions`（应用）中，每行 `<路径> <YYYY-MM-DD> <原因>`，
+   只可原样改名（`docs/guide/version-lines.md`）。
+
+**理由**：大表上的普通建索引等于停止写入数分钟；并发建索引只在开始与结束时等旧事务。占位符让测试在同一数据库里并行迁移时不互相等待，又让生产的写法与测试的一致。
+会话级锁是 Flyway 为这种情况提供的设置。可重跑的脚本让"进程被杀"不需要人工处理，INVALID 索引由检查与告警发现而不是拖慢写入而无人知道。
+
+**放弃的方案**：
+- Flyway 的 Java 迁移（查 `indisvalid` 后 `DROP INDEX CONCURRENTLY`）：迁移不再出现在 SQL 目录中，迁移顺序检查、`SealedColumnsHistory` 与 Flyway CLI 都要另行处理，在打包的应用中还依赖类扫描；
+  只为恢复时少锁一瞬间不值得。
+- 无条件先 `DROP INDEX CONCURRENTLY IF EXISTS` 再建：每次重跑（包括有效索引时）都要重建整个索引。
+- 把 INVALID 索引报为错误：一次失败的建索引会让所有实例都起不来，比慢一点的写入更糟。
+
+**剩余风险**：
+- 并发建索引等整个数据库的旧事务：长报表、`pg_dump`、`idle in transaction` 的会话会让迁移（从而启动）等很久；大表上要放宽启动探针或先单独迁移（运维要点 §6）。
+- 失败的建索引要人工 `flyway repair`；进程被杀后遗留的建索引要人工确认或取消（`pg_cancel_backend`）后才能重启成功。仪表只在启动时更新，手工处理后到下次启动才归零。
+
+**实施**：阶段 17zz18（11 §1.5、13 §7、运维要点 §6）。

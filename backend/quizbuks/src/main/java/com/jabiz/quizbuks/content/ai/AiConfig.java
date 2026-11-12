@@ -174,7 +174,8 @@ public class AiConfig {
             .item(QbAi.KIND_COVER, "en", "Cover", "zh", "封面", "ja", "カバー")
             .item(QbAi.KIND_TRANSLATION, "en", "Translation", "zh", "翻译", "ja", "翻訳")
             .item(QbAi.KIND_PUBLICATION_TEXTS, "en", "Publication texts", "zh", "发布文字", "ja", "公開の文言")
-            .item(QbAi.KIND_TRANSLATION_CHECK, "en", "Translation check", "zh", "译文对照检查", "ja", "訳文の照合"));
+            .item(QbAi.KIND_TRANSLATION_CHECK, "en", "Translation check", "zh", "译文对照检查", "ja", "訳文の照合")
+            .item(QbAi.KIND_SITE_PROFILE, "en", "Draft from a website", "zh", "官网草稿", "ja", "公式サイトの下書き"));
     }
 
     /** The values the model parameter may take (its kind lists them; the dictionary labels them). */
@@ -231,6 +232,34 @@ public class AiConfig {
     ProcessDefinition<AiProcesses.CheckRequestInput, AiProcesses.RequestOutput, ProcessContext> qbAiCheckRequest(
         AiUserKeys userKeys) {
         return AiProcesses.checkRequest(zone, userKeys);
+    }
+
+    /** F-C7: a profile package and a quiz drafted from the sponsor's website. */
+    @Bean
+    ExternalJobType<SiteProfileJob.Input, SiteProfileJob.Result> qbAiSiteProfileJob(
+        @Value("${quizbuks.ai.max-concurrency:" + AiQuestionsJob.DEFAULT_CONCURRENCY + "}") int maxConcurrency) {
+        return SiteProfileJob.type(maxConcurrency);
+    }
+
+    @Bean
+    ProcessDefinition<SiteProfileProcesses.RequestInput, AiProcesses.RequestOutput, ProcessContext>
+        qbSiteProfileRequest(AiUserKeys userKeys) {
+        return SiteProfileProcesses.request(zone, userKeys);
+    }
+
+    @Bean
+    ProcessDefinition<SiteQuizProcesses.QuizInput, SiteQuizProcesses.QuizOutput, ProcessContext> qbSiteProfileQuiz() {
+        return SiteQuizProcesses.quiz();
+    }
+
+    @Bean
+    ProcessDefinition<SiteProfileProcesses.ReviewRef, AiProcesses.JobOutput, ProcessContext> qbSiteProfileReviewDone() {
+        return SiteProfileProcesses.reviewDone();
+    }
+
+    @Bean
+    ProcessDefinition<SiteProfileProcesses.ReviewRef, AiProcesses.JobOutput, ProcessContext> qbSiteProfileReviewClose() {
+        return SiteProfileProcesses.closeReview();
     }
 
     @Bean

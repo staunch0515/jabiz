@@ -8,7 +8,7 @@ import { useTranslation } from 'react-i18next'
 import { SPONSOR } from '../messages'
 import { readMySponsorPage } from '../page/api'
 import { SPONSOR_PAGE_QUERY } from '../page/SponsorPageEditor'
-import { readRewardSettings, REWARD_SETTINGS_QUERY } from '../publishing/api'
+import { useRewardSettings } from '../publishing/useRewardSettings'
 import { qrFileName, qrImageUrl, qrPng, qrSvg } from '../publishing/qr'
 import { useRewardMethodLabel } from '../publishing/shared'
 import { formatKudos } from '../qb/kudos'
@@ -43,7 +43,7 @@ export function OverviewPage() {
   const page = useQuery({ queryKey: SPONSOR_PAGE_QUERY, queryFn: readMySponsorPage })
   const { items } = useChecklist()
   const abandonImport = useAbandonImport()
-  const rewards = useQuery({ queryKey: REWARD_SETTINGS_QUERY, queryFn: readRewardSettings, staleTime: 60_000 })
+  const rewards = useRewardSettings()
   if (sponsor.isPending) return <PageState kind="loading" />
   if (sponsor.isError) return <PageState kind="error" description={tQb('failed')} />
   const status = sponsor.data?.reviewStatus ?? 'NONE'

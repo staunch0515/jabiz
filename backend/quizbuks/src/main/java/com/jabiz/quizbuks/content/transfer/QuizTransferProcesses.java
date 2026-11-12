@@ -75,12 +75,20 @@ public final class QuizTransferProcesses {
      * @param intoQuizId F-C4: instead of a new draft, the caller's own quiz whose whole content the file replaces;
      *                   only a quiz without publications (422 {@code QB_QUIZ_IMPORT_HAS_PUBLICATIONS}); another's or
      *                   a removed one: 404
+     * @param aiGenerated F-C7b-2: a new draft is marked as made with AI (the label only ever goes on, never off:
+     *                   a file's own claim is not taken, only the caller's)
      */
-    public record ImportInput(@NotNull Map<String, Object> document, Map<String, UUID> files, UUID intoQuizId) {
+    public record ImportInput(@NotNull Map<String, Object> document, Map<String, UUID> files, UUID intoQuizId,
+        Boolean aiGenerated) {
+
+        /** As before F-C7b-2: not marked as made with AI. */
+        public ImportInput(Map<String, Object> document, Map<String, UUID> files, UUID intoQuizId) {
+            this(document, files, intoQuizId, null);
+        }
 
         /** As before F-C4: a new draft. */
         public ImportInput(Map<String, Object> document, Map<String, UUID> files) {
-            this(document, files, null);
+            this(document, files, null, null);
         }
     }
 
@@ -256,6 +264,11 @@ public final class QuizTransferProcesses {
 
     static void imported(ProcessContext ctx) {
         ImportInput input = ctx.get(INPUT, ImportInput.class);
+        if (input.intoQuizId() != null && Boolean.TRUE.equals(input.aiGenerated())) {
+            ctx.reject(new Violation("aiGenerated", ContentCodes.IMPORT_AI_INTO_QUIZ,
+                "The AI mark goes on a new draft, not on a quiz whose content a file replaces", Map.of()));
+            return;
+        }
         QuizFile file = read(ctx, input.document());
         if (file == null) {
             return;
@@ -268,7 +281,7 @@ public final class QuizTransferProcesses {
         Map<String, Map<String, String>> hashes = new LinkedHashMap<>();
         file.translations().forEach((language, t) -> hashes.put(language, t.hashes()));
         Object quizId = input.intoQuizId() == null
-            ? QuizProcesses.insertContent(ctx, snapshot(file, ids), file.title(), false, null, file.language(), hashes)
+            ? QuizProcesses.insertContent(ctx, snapshot(file, ids), file.title(), Boolean.TRUE.equals(input.aiGenerated()), null, file.language(), hashes)
             : QuizProcesses.replaceContent(ctx, snapshot(file, ids), file.title(), file.language(), hashes);
         if (quizId == null) {
             return;

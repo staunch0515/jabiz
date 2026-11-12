@@ -425,6 +425,20 @@ class ShopifyStorefrontIT extends ShopifyItSupport {
     }
 
     @Test
+    void aCampaignPublishesWhileTheKudosRewardSwitchIsOff() {
+        // F-F10a: the switch closes the Sponsors' Kudos reward (PLATFORM); a channel's publication never has it.
+        setControlledParam(com.jabiz.quizbuks.setup.QbParams.REWARD_KUDOS_ENABLED, "false");
+        try {
+            LiveShop live = liveShop("kudosoff");
+            assertThat(query("SELECT reward_method FROM qb_publication_card WHERE publication_id = ?::uuid",
+                live.publicationId())).singleElement()
+                .satisfies(row -> assertThat(row).containsEntry("reward_method", "CHANNEL"));
+        } finally {
+            setControlledParam(com.jabiz.quizbuks.setup.QbParams.REWARD_KUDOS_ENABLED, "true");
+        }
+    }
+
+    @Test
     void theRefillRetiresAndDeletesBatches() {
         LiveShop live = liveShop("refill");
         refill();

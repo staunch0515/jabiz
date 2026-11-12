@@ -62,7 +62,7 @@ class SetupIT extends QbItSupport {
             com.jabiz.quizbuks.setup.QbApprovalRules.TREE_LIT_REVOKE_REVIEW.code(),
             com.jabiz.quizbuks.setup.QbApprovalRules.SHARED_VIDEO_REVIEW.code(),
             com.jabiz.quizbuks.setup.QbApprovalRules.VERIFICATION_REVIEW.code(),
-            QbSodRules.CONTROL.code(), QbSodRules.SECURITY.code()));
+            QbSodRules.CONTROL.code(), QbSodRules.SECURITY.code(), QbSodRules.MAIL_TEXTS.code()));
         assertThat((List<?>) first.get("proposals")).hasSize(QbParams.CONTROLLED.size() + QbApprovalRules.ALL.size()
             + QbSodRules.ALL.size());
         // Q7b: a draft of each legal text, a marked test placeholder; nothing published.
@@ -94,6 +94,10 @@ class SetupIT extends QbItSupport {
                 rule -> assertThat(rule).containsEntry("rule_code", QbSodRules.CONTROL.code())
                     .containsEntry("left_permissions", "control.propose")
                     .containsEntry("right_permissions", "control.publish").containsEntry("enabled", true),
+                // F-C8, F-C9: nobody who manages roles writes the mail texts and the letterhead.
+                rule -> assertThat(rule).containsEntry("rule_code", QbSodRules.MAIL_TEXTS.code())
+                    .containsEntry("left_permissions", "security.role.write,security.user-role.write")
+                    .containsEntry("right_permissions", "mail.text.write").containsEntry("enabled", true),
                 rule -> assertThat(rule).containsEntry("rule_code", QbSodRules.SECURITY.code())
                     .containsEntry("left_permissions", "security.role.write,security.user-role.write")
                     .containsEntry("right_permissions", "control.publish,approval.decide")
@@ -497,6 +501,8 @@ class SetupIT extends QbItSupport {
         // F-S4b: empty, none (a new Sponsor gets what a lit node opens).
         expected.put(QbParams.REWARD_DEFAULT_METHODS, "");
         expected.put(QbParams.REWARD_MAX_PER_ATTEMPT, "0");
+        // F-F10a: declared on; the first launch (production, staging) proposes false, which SetupIT does not run as.
+        expected.put(QbParams.REWARD_KUDOS_ENABLED, "true");
         // Q48: AI prospecting off, its model and effort, the operators' cost cap and rate.
         expected.putAll(Map.of(QbParams.PROSPECT_ENABLED, "false", QbParams.PROSPECT_MODEL, "claude-opus-5-5",
             QbParams.PROSPECT_EFFORT, "medium", QbParams.PROSPECT_OPERATOR_MONTHLY_CAP, "100.0000",
@@ -529,6 +535,11 @@ class SetupIT extends QbItSupport {
             QbParams.OPERATOR_WITHDRAWAL_COOLDOWN_HOURS, "24"));
         // F-M3: how long the company verification's link is good (not controlled).
         expected.put(QbParams.VERIFICATION_LINK_HOURS, "48");
+        // F-C7: drafting from a website (the switch off; the limits of one request and of a month).
+        expected.putAll(Map.of(QbParams.SITE_PROFILE_ENABLED, "false", QbParams.SITE_PROFILE_MONTHLY, "10",
+            QbParams.SITE_PROFILE_DAILY, "3", QbParams.SITE_PROFILE_MAX_PAGES, "10",
+            QbParams.SITE_PROFILE_QUESTIONS, "5", QbParams.SITE_PROFILE_OPTIONS, "4",
+            QbParams.SITE_PROFILE_MATERIALS_MAX, "5", QbParams.SITE_PROFILE_HANDLE_ALTERNATIVES, "3"));
         assertThat(values).containsExactlyInAnyOrderEntriesOf(expected);
     }
 

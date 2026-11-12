@@ -140,6 +140,30 @@ tasks.named("check") {
 // Q55b: the brand profile QB_BRAND chooses (quizbuks-web/brands/<brand>/brand.json, docs/quizbuks/plans/Q54-brand-profile.md)
 // is written into the resources when they are packaged: @QB_BRAND_NAME@ (and the support address and site) in the
 // messages, quizbuks/brand.properties and application.yml. A brand is deployed on its own, so the jar is the brand's.
+/**
+ * F-C9: the tokens of the mail layout's footer and of the link hosts it needs. The site's host is not the host of
+ * jabiz.mail.base-url (staging has its own), so it is listed in jabiz.mail.texts.allowed-link-hosts by its own token;
+ * a brand without a site or a support address gets a footer without that link instead of a footer that fails to start.
+ */
+fun qbBrandMailTokens(supportEmail: String, siteUrl: String): Map<String, String> {
+    // The same rules as quizbuks-web/brands/brand.mjs (tested in brand.test.mjs): the values become Markdown links in
+    // every mail's footer, so nothing that could end a link, start another or name more than a host gets through.
+    val site = siteUrl.trim()
+    val email = supportEmail.trim()
+    require(site.isEmpty() || Regex("https://[A-Za-z0-9-]+(\\.[A-Za-z0-9-]+)*").matches(site)) {
+        "the brand profile's siteUrl must be https://host, without a path, port or user information, was \"$site\""
+    }
+    require(email.isEmpty() || Regex("[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(\\.[A-Za-z0-9-]+)*\\.[A-Za-z]{2,}").matches(email)) {
+        "the brand profile's supportEmail must be an e-mail address of plain characters, was \"$email\""
+    }
+    val host = if (site.isEmpty()) "" else site.removePrefix("https://")
+    return mapOf(
+        "QB_BRAND_SITE_HOST" to host,
+        "QB_BRAND_FOOTER_SITE" to if (site.isEmpty()) "" else " · [$site]($site)",
+        "QB_BRAND_FOOTER_SUPPORT" to if (email.isEmpty()) "" else " · [$email](mailto:$email)",
+    )
+}
+
 val qbBrandTokens: Provider<Map<String, String>> = providers.environmentVariable("QB_BRAND")
     .map { it.trim() }.filter { it.isNotEmpty() }.orElse("quizbuks")
     .map { id ->
@@ -158,7 +182,7 @@ val qbBrandTokens: Provider<Map<String, String>> = providers.environmentVariable
             "QB_BRAND_NAME_ja" to names["ja"].toString(),
             "QB_BRAND_SUPPORT_EMAIL" to profile["supportEmail"].toString(),
             "QB_BRAND_SITE_URL" to profile["siteUrl"].toString(),
-        )
+        ) + qbBrandMailTokens(profile["supportEmail"].toString(), profile["siteUrl"].toString())
     }
 
 

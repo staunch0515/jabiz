@@ -89,6 +89,8 @@ run fire
 check "fire: made-up data for every platform rule but the absent metrics (${#platform[@]} rules)" $r
 grep -q '"name":"jabiz.keys.undeclared-sealed"' "$work/pushed" && r=yes || r=no
 check "fire: the undeclared sealed values' gauge (17zzz)" $r
+grep -q '"name":"jabiz.schema.invalid-indexes"' "$work/pushed" && r=yes || r=no
+check "fire: the INVALID indexes' gauge (17zz18)" $r
 
 ALERT_FOLDERS="jabiz quizbuks" ALERT_FAKES="$work/fakes" run fire qb-diff qb-busy qb-error qb-two
 [ "$status" -eq 0 ] && grep -q "all 4 rules are pending or firing" <<<"$out" && r=yes || r=no
