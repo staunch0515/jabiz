@@ -62,7 +62,7 @@ class SetupIT extends QbItSupport {
             com.jabiz.quizbuks.setup.QbApprovalRules.TREE_LIT_REVOKE_REVIEW.code(),
             com.jabiz.quizbuks.setup.QbApprovalRules.SHARED_VIDEO_REVIEW.code(),
             com.jabiz.quizbuks.setup.QbApprovalRules.VERIFICATION_REVIEW.code(),
-            QbSodRules.CONTROL.code(), QbSodRules.SECURITY.code()));
+            QbSodRules.CONTROL.code(), QbSodRules.SECURITY.code(), QbSodRules.MAIL_TEXTS.code()));
         assertThat((List<?>) first.get("proposals")).hasSize(QbParams.CONTROLLED.size() + QbApprovalRules.ALL.size()
             + QbSodRules.ALL.size());
         // Q7b: a draft of each legal text, a marked test placeholder; nothing published.
@@ -94,6 +94,10 @@ class SetupIT extends QbItSupport {
                 rule -> assertThat(rule).containsEntry("rule_code", QbSodRules.CONTROL.code())
                     .containsEntry("left_permissions", "control.propose")
                     .containsEntry("right_permissions", "control.publish").containsEntry("enabled", true),
+                // F-C8, F-C9: nobody who manages roles writes the mail texts and the letterhead.
+                rule -> assertThat(rule).containsEntry("rule_code", QbSodRules.MAIL_TEXTS.code())
+                    .containsEntry("left_permissions", "security.role.write,security.user-role.write")
+                    .containsEntry("right_permissions", "mail.text.write").containsEntry("enabled", true),
                 rule -> assertThat(rule).containsEntry("rule_code", QbSodRules.SECURITY.code())
                     .containsEntry("left_permissions", "security.role.write,security.user-role.write")
                     .containsEntry("right_permissions", "control.publish,approval.decide")

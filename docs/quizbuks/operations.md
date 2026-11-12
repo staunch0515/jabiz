@@ -218,7 +218,7 @@ FROM pg_stat_statements ORDER BY total_exec_time DESC LIMIT 20;
    建立期结束后，平台不把受保护的权限给一个由别人设过密码的账号（批准后生效时 `TARGET_CREDENTIALS_NOT_OWN`，本人之后自己改过也不算；平台 10 §16.2），以后给这些角色增加受保护的权限也会因此失败。
    邀请要求邮件已开启（`JABIZ_MAIL_ENABLED=true`，否则 422 `MAIL_DISABLED`），只寄到建号时填写、之后没改过的邮箱：邮箱填错时重新建号。
    已用临时密码建好、尚未经邮件设定密码的管理员账号，同样对其执行"发送邀请"（替换已有密码另需 `security.user.password`，首个管理员持有）。
-5. 财务管理员在平台管理系统**发布** `QB_SETUP` 的提案（`CONTROL_CHANGE_PUBLISH`，四眼：提出人不能发布自己的），**包括两条职责分离规则**。发布之前发起方入驻与提交发布一律被拒。
+5. 财务管理员在平台管理系统**发布** `QB_SETUP` 的提案（`CONTROL_CHANGE_PUBLISH`，四眼：提出人不能发布自己的），**包括三条职责分离规则**（含 F-C8、F-C9 的 `qb.sod.mail-texts`）。发布之前发起方入驻与提交发布一律被拒。
    操作：平台管理系统"数据 → SysControlChange"列出提案，在状态为待发布（`PROPOSED`）的一行执行行操作 `CONTROL_CHANGE_PUBLISH`。财务角色以 `approval.read` 读这个视图；
    这项权限在 2026-10-29 才加入财务角色，此前建好的系统要由超级管理员再执行一次 `QB_SETUP` 补上（不是受保护的权限，当即生效），财务管理员重新登录后才看得到。
    职责分离规则须在建立期结束（下一步）之前发布：之后任命内容或财务管理员要由一位超级管理员审批，而超级管理员不持有、也不能持有 `approval.decide` 与 `control.publish`，
@@ -276,10 +276,11 @@ FROM pg_stat_statements ORDER BY total_exec_time DESC LIMIT 20;
 - **任命内容与财务管理员**：给出的 `approval.decide`、`control.publish` 不要求审批人持有，因为已发布的职责分离规则 `qb.sod.security-administration` 禁止超级管理员持有它们（D51 修订 H1）；
   该规则被撤下或停用时这类任命无法批准。
 - **以后的 `QB_SETUP`**：它直接写入角色的权限。建立期结束后，若新版本给已有持有人的角色增加受保护的权限，平台以 422 `PROTECTED_CHANGE_REQUIRES_APPROVAL` 拒绝整个 `QB_SETUP`；
-  这时由一位超级管理员以 `SEC_ROLE_PERMISSION_ADD` 申请、另一位审批，之后再执行 `QB_SETUP`（它把已存在的授权只记下，不再写）。迄今各阶段新增的权限中只有 16u 的 `security.protected-change.decide` 受保护。
+  这时由一位超级管理员以 `SEC_ROLE_PERMISSION_ADD` 申请、另一位审批，之后再执行 `QB_SETUP`（它把已存在的授权只记下，不再写）。迄今各阶段新增的权限中，受保护的只有 16u 的 `security.protected-change.decide`；F-C8、F-C9 新增的 `mail.text.read|write` 与内容管理员的 `control.propose` 不受保护（`mail.text.write` 由职责分离规则 `qb.sod.mail-texts` 隔离，见 §7.44），所以它们加进角色时 `QB_SETUP` 当即生效，不需要审批。
 - **已有的安装**（16u 之前建立、已有两位以上超级管理员；16r 按 `*` 计管理员，它们一直处于建立期）：升级之后建立期立刻结束，`QB_SETUP` 给超级管理员的角色加 `security.protected-change.decide` 需要审批而无人能批（整个 `QB_SETUP` 被拒）。
   所以**升级前**，在旧版本上由超级管理员给角色 `QB_ADMIN_SUPER` 直接加上 `security.protected-change.decide` 与 `approval.read`（`SEC_ROLE_PERMISSION_ADD`：那时仍在建立期、它还只是普通的权限码，当即生效），
   升级后再执行 `QB_SETUP`（它只记下已有的授权）。来不及时，以 `JABIZ_SECURITY_PROTECTEDGRANTS_ENABLED=false` 启动一次、执行 `QB_SETUP`、再改回（关闭的时间留在操作记录中）。
+  另外，升级前先确认没有人同时持有内容管理员和财务管理员两个角色，否则 `QB_SETUP` 给内容管理员加 `control.propose` 时会被职责分离规则 `qb.sod.control-changes` 拒绝（整个 `QB_SETUP` 被拒）。
   检测性控制照旧：季度访问审查 `ACCESS_REVIEW_SIGN_OFF`、审计中逐条复核角色变更（Q10b M-c）。
 
 **会计年度的时区**：保留期自会计年度末起算，日期按日本时间判断（`application.yml` 的 `jabiz.fiscal-year-zone: Asia/Tokyo`，平台 D48 第 2 条；Q10b 评审 L7），不需另设。
@@ -1143,6 +1144,36 @@ Quiz 与发布有主题词（平台词表中的词与自定义词），学者可
 - **核对与月报**：每日核对 `OPERATOR_ACCOUNT`（`qb.system.recon-fee-account`，`sponsorId` 一列此处是运营商）比较 2140（经来源单据：结算、提现、转入）与"各结算的应付 − 单独付清的结算 − 已付的提现 − 转入"；`CASH_LOTS` 照旧比较 2160 与各笔。月报新类 `OPERATOR_TRANSFER_TO_DIRECT`。
 - **差异的处理**：`OPERATOR_ACCOUNT` 出现差异时，先查 `SELECT * FROM qb_operator_transfer_version WHERE operator_id = '<运营商>'` 与来源为 `QbOperatorTransfer` 的分录是否一一对应（每笔转入恰有一笔借 2140 / 贷 2160），再查该运营商的结算与提现。不手工写分录或改表；报开发。
 - **常见询问**：负责人说按钮不出现——运营商没有直营发起方（每日核对 `qb.admin.operator-health`），或登录的不是负责人；发起方说现金不能换学分——见页面的"运营商转入"一行。
+
+### 7.44 统一信纸：所有邮件共用的页眉与页脚（F-C9）
+
+所有邮件（含验证邮箱、找回密码、待办通知与单据邮件）都套同一张信纸：页眉是显示名（可加标志），页脚是一段 Markdown。每种语言各一份（平台决策 D72 第 6 条，`docs/quizbuks/plans/impl/F-C9.md`）。邮件文字本身的定制见紧随其后的一节（F-C8）。
+
+- **缺省信纸**来自品牌档案：打包时把品牌在各语言的名字、客服邮箱与官网写进 `application.yml` 的 `jabiz.mail.layout.<语言>.*`（页眉是品牌名，页脚是"品牌名 · 客服邮箱 · 官网"）。首次上线没有标志（`logo-url` 为空：多数邮件客户端不显示 SVG），也不写住所。品牌档案没有官网或客服邮箱时，页脚不放那一条链接。
+- **谁能改**：平台管理系统「邮件信纸」页（`/admin/mail/layout`）。内容管理员**提出**（受控变更 `mail-layout`），**财务管理员发布**（另一位；本人不能发布自己提出的）。两者都须持有 `mail.text.write`、邮箱已验证；超级管理员不持有。提出之后再改须重新提出（审批绑定内容）。恢复默认（`MAIL_LAYOUT_RESET`）由内容管理员即时生效，不需要审批。
+- **`mail.text.write` 由职责分离规则保护**：职责分离规则 `qb.sod.mail-texts`（`QB_SETUP` 提出、另一位管理员发布，和 `qb.sod.control-changes` 等同一做法）规定，管理角色与角色分配的人（`security.role.write`、`security.user-role.write`，即超级管理员）不能同时持有 `mail.text.write`，所以他们没法给自己加。持有 `mail.text.write` 的只有内容管理员与财务管理员。**规则发布之前**（`QB_SETUP` 刚运行、提案还没发布时）这一条只能靠季度访问审查（`ACCESS_REVIEW_SIGN_OFF`）。规则发布之后访问审查**仍然**要查 `mail.text.write` 的持有人，不只是发布之前：超级管理员仍可把只含这个权限的角色分配给别的账号（规则只拦同一个人同时持有），审查时发现不是内容管理员或财务管理员的持有人即须撤销。
+- **`control.propose` 的副作用**：内容管理员为了提出信纸与邮件文字的修改，持有通用的受控变更提出权限 `control.propose`，因此也能提出别的受控变更（业务参数、审批规则等）。提出不生效，仍须财务管理员发布（四眼不变），但待发布的列表里会出现内容管理员提出的这类变更，发布前要看清是什么。
+- **规则**：标志只能是本站（`{baseUrl}/…`）的图片；页脚不能含令牌、登录链接与退订链接（退订行由平台自动加），不许原始 HTML 与图片；链接只许 `http`、`https`、`mailto`。页脚里的外部链接只许本站和 `jabiz.mail.texts.allowed-link-hosts` 中的主机。
+- **官网主机**：`JABIZ_MAIL_BASE_URL` 按部署而定（staging 是 `staging.quizbuks.com`），与官网主机不同；打包时把品牌档案 `siteUrl` 的主机写进 `allowed-link-hosts`，所以缺省页脚的官网链接在任何部署上都合格。**换品牌或改 `siteUrl` 必须重新打包**；在部署的环境变量里覆盖 `JABIZ_MAIL_TEXTS_ALLOWED_LINK_HOSTS` 时，要把官网主机保留在内，否则启动失败。
+- **出了问题**：缺省信纸不合格（启动检查 `MAIL`）即启动失败，信息指出是哪种语言、哪条规则。已存的信纸后来不合格（例如缩小了允许的主机）时，邮件改用缺省信纸发出，日志告警并计入观测 `jabiz.mail.layout.fallback`；管理员在「邮件信纸」页看到"已失效"，改正后重新提出，或恢复默认。
+- **看寄出的是哪一版**：投递记录写明所用的信纸版本（`sys_mail_attempt.layout_version_no`，空 = 缺省）。
+- **试发**：「邮件信纸」页的预览用一封示例邮件，"发一封测试信给我"只发给自己已验证的邮箱，标题带 `[TEST]`。
+- **页脚不写公司住所**（需求方 2026-11-11 确认）。以后若要加，由管理员按上面的方式在线提出，不必改程序。
+
+### 7.45 邮件文字的定制（F-C8）
+
+系统发出的所有邮件（模版邮件、待办通知、单据邮件）的标题与正文，按（模版，语言）由总部在平台管理系统「邮件模版」页修改，不必改程序、不必重新部署（平台决策 D72，`docs/quizbuks/plans/impl/F-C8.md`）。所有邮件共用的页眉页脚见前一节（统一信纸）。
+
+- **谁能改**：内容管理员保存与提出，财务管理员发布；两者都须持有 `mail.text.write`、邮箱已验证。超级管理员不持有。
+  - **普通通知**（发布与入驻结果、充值到账、获客等）：内容管理员保存即生效。
+  - **须另一位管理员发布的**：带令牌或登录链接的邮件（验证邮箱、找回密码、邀请、企业实名认证的确认链接……，自动判定），加上声明了 `protectedText()` 的：`qb.bank-account.changed`（提现银行账户已变更）、`qb.payout.action-needed`（收款账户受限）、`qb.transfer.sent` / `qb.transfer.failed`（转账完成、失败）、`qb.fee.invoice-issued` / `qb.fee.invoice-overdue`（平台费账单与催缴）、`qb.topup.paid-cash`（现金充值到账，写到用现金账户付账单）、`qb.publication.funds-short`（预算不足，要充值）。**判定原则：凡是让收件人付款、转账，或讲到收款账户、付款方式的邮件，一律受保护**，文字被改坏就可能诱导用户付款、转账或改账户；新增的邮件模版照此原则判断。内容管理员在页面点「提出修改」，财务管理员在受控变更的待办里发布；本人不能发布自己提出的，提出之后再改须重新提出，发布时再校验一次。不涉及付款方式的确认类（`qb.topup.paid`、`qb.topup.granted`、`qb.fee-credit.expiring`）、发布结果与入驻结果仍是普通通知。
+- **规则**（保存、提出、发布时一次报全部问题）：只能用模版声明的占位符，声明的参数与令牌都要用到，通知要保留退订链接；令牌、登录链接、退订链接只能放在以 `{entryUrl…}` 或 `{baseUrl}` 开头的链接目标中，标题和正文文字里不行；链接只许 `http`、`https`、`mailto`，网页链接只许本站和 `jabiz.mail.texts.allowed-link-hosts` 的主机；正文不能有图片（防追踪像素）与原始 HTML；标题一行，长度不超过 `jabiz.mail.texts.max-subject-length`（缺省 300），正文不超过 `max-body-length`（缺省 20000）。
+- **遇到 409**：别人刚改过。重新读取页面再改，或"以此版为草稿"。
+- **缺省文字与已改的文字**：程序里的文字永远是缺省，改动只是覆盖。程序升级改了缺省文字时，列表标「缺省已更新」，管理员对照后决定是否跟进。已改的文字后来不合格（参数被删、令牌改名、允许的主机缩小）时，邮件改用缺省文字发出，日志告警并计入观测 `jabiz.mail.text.fallback`，启动检查 `MAIL` 告警，列表标「已失效，正在使用缺省」；改正后重新保存（或提出），或恢复默认。
+- **出了误导内容的邮件怎么办**：在「邮件模版」页点「恢复默认」。**恢复默认两类都即时生效**（缺省文字随程序评审过，不需要第二个人），之后寄出的邮件就是缺省文字。已寄出的邮件收不回；需要时由客服另行通知用户。
+- **试发**：「邮件模版」页的预览用模版的示例值，令牌换成不能用的示例；"发一封测试信给我"只发给自己已验证的邮箱，标题带 `[TEST]`，不生成令牌，每人每小时有次数限制（`jabiz.process.rate-limits`，缺省 10 次）。
+- **看寄出的是哪一版**：投递记录写明所用的文字版本（`sys_mail_attempt`、`sys_notification`、`sys_document_delivery` 的 `text_version_no`，空 = 缺省）。
+- **新增模版的开发规则**：每个模版必须有三语的 `mail.<名>.name` 与每个参数的 `.sample(…)`（`MailTemplatesCoverageTest`）；让收件人付款、转账或讲到收款账户、付款方式的、又没有令牌的通知，一律加 `protectedText()`（见上面的判定原则）。
 
 ## 8. 升级到线 1.3（S0 的迁移 V29、V30）
 
