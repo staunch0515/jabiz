@@ -18,6 +18,8 @@ import com.jabiz.runtime.job.JobRunner;
 import com.jabiz.runtime.test.TestTokens;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
 
 import java.math.BigDecimal;
 import java.time.Duration;
@@ -55,7 +57,7 @@ class DistributionIT extends PrepaymentItSupport {
 
     /** Headquarters set the operator's distribution price: 0.05 yen a Kudos, 1 to 20 a start, 500 least deposit. */
     void distributionPrice(String operator) {
-        run(DistributionPrices.SET, TestTokens.bearer(tokens, "fm6-hq", QbPermissions.FEE_BILLING),
+        run(DistributionPrices.SET, TestTokens.bearer(tokens, "fm6-hq", QbPermissions.FEE_MANAGE),
             body("operatorId", operator, "rate", "0.05", "unitFloor", "1", "unitCeiling", "20", "minimumDeposit", 500,
                 "reason", "F-M6"));
     }
@@ -386,7 +388,7 @@ class DistributionIT extends PrepaymentItSupport {
                 assertThat(String.valueOf(row.get("range"))).contains("qb.distribution.rate.max");
             });
         assertThat(items("qb.admin.distribution-prices", TestTokens.bearer(tokens, "fm6-billing",
-            QbPermissions.FEE_BILLING), Map.of("limit", 500)).stream()
+            QbPermissions.FEE_MANAGE), Map.of("limit", 500)).stream()
             .filter(row -> operator.equals(String.valueOf(row.get("operatorId"))))).singleElement()
             .satisfies(row -> assertThat(dec(row.get("minimumDeposit"))).isEqualByComparingTo("500"));
         assertThat(query("SELECT rate FROM qb_distribution_price WHERE operator_id = ?", operator)).singleElement()
@@ -442,6 +444,22 @@ class DistributionIT extends PrepaymentItSupport {
             userId);
         run(OperatorProcesses.MEMBER_ADD, hq, body("operatorId", operatorId, "userId", userId, "lead", lead));
         return userId;
+    }
+
+    @Test
+    void anOperatorNeitherSetsNorReadsAnotherOperatorsPrice() {
+        // The operators hold qb.fee.billing (their sponsors' billing mode): headquarters' price process and every
+        // operator's prices are headquarters' fee management, which they do not hold.
+        String hq = TestTokens.bearer(tokens, "fm6-ops2", QbPermissions.OPERATORS_WRITE, QbPermissions.OPERATORS_READ);
+        String mine = newOperator(hq, unique("fm6 mine"));
+        String other = newOperator(hq, unique("fm6 other"));
+        String lead = member(hq, mine, unique("fm6-lead2"), true);
+        refused(DistributionPrices.SET, operatorSession(lead, mine), body("operatorId", other, "rate", "0.05",
+            "unitFloor", "1", "unitCeiling", "20", "minimumDeposit", 500, "reason", "F-M6"), 403);
+        assertThat(query("SELECT 1 FROM qb_distribution_price WHERE operator_id = ?", other)).isEmpty();
+        client.post().uri("/api/queries/qb.admin.distribution-prices").contentType(MediaType.APPLICATION_JSON)
+            .header(HttpHeaders.AUTHORIZATION, operatorSession(lead, mine)).bodyValue(Map.of("limit", 500))
+            .exchange().expectStatus().isForbidden();
     }
 
     private String operatorSession(String userId, String operatorId) {
