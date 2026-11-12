@@ -12,7 +12,11 @@ export const LANGUAGES = ['en', 'zh', 'ja']
 export const FILES = ['brand.css', 'site.css', 'mark.svg', 'public/icon-192.png', 'public/icon-512.png', 'public/icon-maskable-512.png']
 
 const COLOUR = /^#[0-9a-f]{6}$/
-const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+// The support address and the site go into the footer of every mail as Markdown links (F-C9): only characters that
+// cannot end a link or start another (no ), ], \\, quotes, spaces or line breaks), and the site is a host alone,
+// with no user information or port. build.gradle.kts (qbBrandMailTokens) checks the same when the build starts.
+const EMAIL = /^[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,}$/
+const SITE = /^https:\/\/[A-Za-z0-9-]+(\.[A-Za-z0-9-]+)*$/
 
 /** The profiles there are (each a directory with a brand.json). */
 export function brandIds() {
@@ -44,7 +48,7 @@ export function problems(id, profile, exists = (path) => existsSync(join(BRANDS_
     if (!COLOUR.test(profile[key] ?? '')) found.push(`${key}: a colour #rrggbb in lower case`)
   }
   if (!EMAIL.test(profile.supportEmail ?? '')) found.push('supportEmail: an e-mail address')
-  if (!/^https:\/\/[^\s/]+$/.test(profile.siteUrl ?? '')) found.push('siteUrl: https://host, without a path')
+  if (!SITE.test(profile.siteUrl ?? '')) found.push('siteUrl: https://host, without a path, port or user information')
   for (const file of FILES) {
     if (!exists(file)) found.push(`${file}: missing`)
   }

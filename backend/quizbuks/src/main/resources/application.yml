@@ -271,6 +271,25 @@ jabiz:
     unsubscribe-paths:
       sponsor: mail/unsubscribe
       app: mail/unsubscribe
+    # F-C9: the default letterhead of every mail (platform decision D72 item 6), from the brand profile when the
+    # resources are packaged: the brand's name in each language, and under the mail its name, support address and site
+    # (a link is left out when the profile has none). No logo yet (logo-url empty: mail clients do not show SVG). The
+    # footer is in every mail, so it links no entry. Administrators change it through a controlled change another
+    # administrator publishes; MAIL_LAYOUT_RESET returns to these values (docs/quizbuks/plans/impl/F-C9.md).
+    layout:
+      en:
+        display-name: "@QB_BRAND_NAME_en@"
+        footer: "@QB_BRAND_NAME_en@@QB_BRAND_FOOTER_SUPPORT@@QB_BRAND_FOOTER_SITE@"
+      ja:
+        display-name: "@QB_BRAND_NAME_ja@"
+        footer: "@QB_BRAND_NAME_ja@@QB_BRAND_FOOTER_SUPPORT@@QB_BRAND_FOOTER_SITE@"
+      zh:
+        display-name: "@QB_BRAND_NAME_zh@"
+        footer: "@QB_BRAND_NAME_zh@@QB_BRAND_FOOTER_SUPPORT@@QB_BRAND_FOOTER_SITE@"
+    texts:
+      # The brand's site is linked from the footer; it is not the host of base-url (staging has its own). Empty when the
+      # brand has no site.
+      allowed-link-hosts: "@QB_BRAND_SITE_HOST@"
     # The sponsors' own mail servers (Q29, platform decision D56): the platform checks a public host, a mail port and
     # TLS. The switch accepts a server on this machine with any certificate: for the end-to-end tests only, never set
     # in production (docs/quizbuks/operations.md section 1.4; a startup warning outside dev).

@@ -21,7 +21,9 @@ const CONTENT_PERMISSIONS = ['qb.admin.content.write', 'qb.admin.users.read', 'q
   // F-S4c: the platform's map templates (as QB_ADMIN_CONTENT), and moving a Sponsor to another operator.
   'qb.tree.edit', 'qb.tree.platform.write', 'qb.admin.trees.read', 'approval.scope.move',
   // F-S5b: asking for a lit node to be revoked (certificates.spec; another administrator approves).
-  'qb.tree.lit.revoke']
+  'qb.tree.lit.revoke',
+  // F-C8, F-C9: the mail texts and the letterhead are proposed by content administrators (mail-layout.spec).
+  'mail.text.read', 'mail.text.write', 'control.propose']
 
 const ROLES = 'urn:jabiz:dataset:platform:SecRole'
 const ROLE_PERMISSIONS = 'urn:jabiz:dataset:platform:SecRolePermission'
@@ -52,16 +54,24 @@ export function totp(secret: string, time = Date.now()): string {
  * administrator has none) and no second factor yet: one who signs in at the administration's page (Q7c).
  */
 export async function contentAdmin(request: APIRequestContext, name = 'Lena'): Promise<string> {
+  return adminOfRole(request, name, CONTENT_ROLE, 'E2E content', CONTENT_PERMISSIONS)
+}
+
+/**
+ * A verified user of a role of the tests' own, which holds (at least) these permissions: the role and the missing
+ * permissions are made as needed, so a database from an earlier run with fewer of them is brought up to date.
+ */
+export async function adminOfRole(request: APIRequestContext, name: string, roleCode: string, label: string,
+  permissions: string[]): Promise<string> {
   const email = await verifiedUser(request, 'sponsor', name)
   const admin = await adminToken(request)
-  let roleId = (await rows(request, admin, ROLES, [{ field: 'roleCode', op: 'eq', value: CONTENT_ROLE }], 1))[0]?.id
+  let roleId = (await rows(request, admin, ROLES, [{ field: 'roleCode', op: 'eq', value: roleCode }], 1))[0]?.id
   if (!roleId) {
-    roleId = (await insert(request, admin, ROLES, { roleCode: CONTENT_ROLE, labels: { en: 'E2E content' },
-      enabled: true })).id
+    roleId = (await insert(request, admin, ROLES, { roleCode, labels: { en: label }, enabled: true })).id
   }
   const held = (await rows(request, admin, ROLE_PERMISSIONS, [{ field: 'roleId', op: 'eq', value: roleId }]))
     .map((row) => row.attributes.permission)
-  for (const permission of CONTENT_PERMISSIONS.filter((p) => !held.includes(p))) {
+  for (const permission of permissions.filter((p) => !held.includes(p))) {
     await insert(request, admin, ROLE_PERMISSIONS, { roleId, permission })
   }
   const userId = (await rows(request, admin, USERS, [{ field: 'userName', op: 'eq', value: email }], 1))[0].id
