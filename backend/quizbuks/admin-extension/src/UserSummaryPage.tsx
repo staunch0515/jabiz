@@ -37,6 +37,7 @@ import {
 import { useCertificateName } from './certificate-state'
 import { CertificateStateBadge } from './certificate-view'
 import { DICTIONARY, isUserId, PATH, PERMISSION } from './ids'
+import { RegionExceptionAction } from './RegionExceptionAction'
 import { EmptyState, LoadFailed, Section, StatusBadge } from './components'
 import { PayoutPanel } from './PayoutPanel'
 import { money, textIn, useLabels, usePaged, when } from './hooks'
@@ -86,6 +87,7 @@ function Profile({ user }: { user: UserRow }) {
                 {t('menu.publications')}
               </Link>
             )}
+            <RegionExceptionAction kind="SPONSOR" id={user.userId} name={user.company || user.displayName || user.userId} />
           </span>
         )
         : t('user.noSponsor'),
