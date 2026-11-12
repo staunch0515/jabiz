@@ -65,10 +65,48 @@ public class DeletionGuard {
             return holds(engine, def.name)
                 .filter(named -> named.hold().covers(def.name, id, attributes))
                 .next()
-                .map(named -> new Violation(null, PlatformErrorCodes.LEGAL_HOLD, def.name + " [ID: " + id
-                    + "] is under legal hold " + named.name(), Map.of("hold", named.name(),
-                        "holdId", named.hold().holdId())));
+                .map(named -> held(def, id, named));
         });
+    }
+
+    /**
+     * The holds in force on an entity type, read once for several deletions in one transaction (ROADMAP 17zz21): what
+     * {@link #check(StorageEngine, EntityDefinition, Object, Map, Holds)} then asks instead of reading them again.
+     */
+    public Mono<Holds> holdsInForce(StorageEngine engine, String entity) {
+        return holds(engine, entity).collectList().map(list -> new Holds(entity, list));
+    }
+
+    /** As {@link #check(StorageEngine, EntityDefinition, Object, Map)}, with the holds read ahead. */
+    public Mono<Void> check(StorageEngine engine, EntityDefinition def, Object id, Map<String, ?> attributes,
+        Holds holds) {
+        if (!holds.entity.equals(def.name)) {
+            return check(engine, def, id, attributes);
+        }
+        return Mono.defer(() -> {
+            Violation refused = retention(def, attributes);
+            if (refused == null) {
+                refused = holds.list.stream().filter(named -> named.hold().covers(def.name, id, attributes))
+                    .findFirst().map(named -> held(def, id, named)).orElse(null);
+            }
+            return refused == null ? Mono.<Void>empty() : Mono.<Void>error(new BusinessRuleViolationException(refused));
+        });
+    }
+
+    /** The holds in force on one entity type, in the order a deletion asks them. */
+    public static final class Holds {
+        private final String entity;
+        private final List<NamedHold> list;
+
+        private Holds(String entity, List<NamedHold> list) {
+            this.entity = entity;
+            this.list = List.copyOf(list);
+        }
+    }
+
+    private static Violation held(EntityDefinition def, Object id, NamedHold named) {
+        return new Violation(null, PlatformErrorCodes.LEGAL_HOLD, def.name + " [ID: " + id
+            + "] is under legal hold " + named.name(), Map.of("hold", named.name(), "holdId", named.hold().holdId()));
     }
 
     private Violation retention(EntityDefinition def, Map<String, ?> attributes) {

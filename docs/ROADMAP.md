@@ -5597,6 +5597,24 @@ QuizBuks 的 #545、#546、#547 用了 43.5–45 分钟，#545 到点被取消�
 
 **17zz20 状态**：📝 待评审（分支 `1.3/phase-17zz20-combined-read-lateral`）。
 
+### 17zz21 时态实体的连续删除先预读（2026-11-12，QuizBuks 替换题库时发现）
+
+**缘由**：删除时态实体时，平台每行读一次它的版本、每种指向它的引用读两次（当前与以后生效的版本）、读一次法律保全，墓碑在下一行读同一张表之前逐行写出。没有引用的实体每行 3 条语句，1.9 万行约 39 秒（S3 实测）。
+
+| # | 内容 |
+|---|---|
+| 17zz21-1 | `DatasetEntityManager` 把一次提交中连续删除同一时态实体的变更分为一段，第一个删除之前预读（`DeletePrefetch`，只在这一段的 Reactor 上下文中）：`TemporalStore.loadAll`（这些实例的版本，`= ANY`）、每种引用一条"当前"（逐行检查所用的计划，以 `unnest(:targets) JOIN LATERAL (… LIMIT 1)` 逐个目标探测，找到第一个引用者即止；引用者视图的当前切片不能带入条件时，一次读切片、只取被引用的目标）与一条"以后生效"（`TemporalStore.referrersLater`，同样逐个目标、带上限）、`DeletionGuard.holdsInForce`（法律保全，一次）。自引用要知道引用者是谁，每个目标至多读 `jabiz.storage.delete-prefetch.max-referrers`（缺省 100）个，超出即该行照旧查库。按 `jabiz.storage.delete-prefetch.chunk-size`（缺省 1000，上限 30000）分块。只读或只写一次的实体、没有数据视图或字段不能这样问的引用不预读 |
+| 17zz21-2 | `TemporalWriter.delete` 先取预读的版本（每个实例取一次，同一实例再删一次时照旧查库）；引用检查与保全检查先问预读：自引用的引用者在同一段中先被删除时，该行照旧查库，所以结果与逐行时相同。删除照旧逐行经 `VersionAppender` 规划、检查、追加墓碑与审计 |
+| 17zz21-3 | 应急开关 `jabiz.storage.write-batching.enabled=false`（以及 `WriteBatching.statementByStatement`）时不预读，与原来逐行相同 |
+| 17zz21-4 | 语句数（`StatementBudgetIT`）：一次删 5 个没有引用的实例 7 条（开关关闭时 19 条）；被自身、另两个时态实体与一个普通实体引用的（`ItPrice`）14 条（54 条），在分块之内与行数无关。预读出错（如引用者的查询超时）会先于这一段中前面各行自己的错误报出，只在异常情况下可见 |
+| 17zz21-5 | 测试 `TemporalDeleteBatchIT`（块大小 3、自引用上限 2；`TemporalDeleteBatchWithoutHeldWritesIT` 在开关关闭时再跑一遍）与测试夹具 `ItDeleteFixtures`（`ItTag`：时态、可预定、发布变更事件；`ItPriceMark`：普通实体；测试迁移 V1020）：版本按块读、墓碑一条语句写出、表上没有 UPDATE / DELETE；`ItNote`、`ItPrice`、`ItTag` 与逐行删除的版本（含生效时间）、操作项、审计（含前值）、事件逐项相同，事件确有，墓碑只有一个操作号且与操作项一致；拒绝与逐行时相同（同一行、同一违规、整批不写入）：被时态实体引用、被普通实体引用、自身与另一实体以后生效的版本中的引用、自引用（两种顺序，以及超过上限的引用者）、法律保全、同一实例在一段中出现两次、一段中间版本过期（409）、经带范围的视图越界（404）；一个目标被 50,000 行引用时 422 照旧，语句数有界，引用探测的执行计划中任何一步处理的行少于 100；同一提交中先插入、先更新再删除；封存与校验完好。去掉预读时语句数的断言失败 |
+| 17zz21-6 | 实测（`TemporalDeleteTimingIT`，按需运行：`JABIZ_TEST_DELETE_TIMING=19000`；本机 PostgreSQL 16，190 次提交、每次 100 行）：19,000 行的删除，预读前 43.3 秒，预读后 7.4 秒 |
+| 17zz21-7 | 文档：决策 D46 后加一行带日期的说明（不改变 D46 的规则）、设计 06 §3.1、`CLAUDE.md` 第 4 节"语句数" |
+
+**验收**：`:runtime:check`、`TemporalDeleteBatchIT`、`StatementBudgetIT`、`WriteCombiningIT` 绿。
+
+**17zz21 状态**：📝 待评审（分支 `1.3/phase-17zz21-batched-temporal-deletes`）。
+
 ### 线 1.3 的候选（未排期，2026-11-08 总控：首次上线前不做）
 
 | 候选 | 缘由 | 粗估 |
