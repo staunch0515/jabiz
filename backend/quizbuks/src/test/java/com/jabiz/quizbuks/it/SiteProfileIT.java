@@ -133,8 +133,14 @@ class SiteProfileIT extends AiItSupport {
 
     @Test
     void aSwitchedOffDeploymentRefusesTheRequest() {
+        String sponsorToken = sponsorFull(SPONSOR_B);
+        // The sponsor's page reads the switch with the AI usage: it shows the way in only where it is on.
+        assertThat(items("qb.sponsor.ai-usage", sponsorToken, body("params", Map.of("at", clock.instant().toString())))
+            .getFirst()).containsEntry("siteProfileEnabled", true);
         param(QbParams.SITE_PROFILE_ENABLED, "false");
         try {
+            assertThat(items("qb.sponsor.ai-usage", sponsorToken, body("params",
+                Map.of("at", clock.instant().toString()))).getFirst()).containsEntry("siteProfileEnabled", false);
             String token = sponsorFull(SPONSOR_B);
             var refused = call(SiteProfileProcesses.REQUEST, token, ask(token, "https://www.aini.example/", true))
                 .expectBody(MAP).returnResult();

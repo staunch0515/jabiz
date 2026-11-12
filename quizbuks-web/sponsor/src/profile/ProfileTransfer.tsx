@@ -13,6 +13,9 @@ import { readMailServer } from '../publishing/api'
 import { contentLanguageOf, readMySponsor } from '../qb/api'
 import { navigate } from '../qb/router'
 import { AiPromptDialog } from './AiPromptDialog'
+import { draftDocument, type SiteDraft } from './site/api'
+import { SiteDraftNotes } from './site/SiteDraftNotes'
+import { SiteProfileDialog } from './site/SiteProfileDialog'
 import { fixPrompt } from './aiPrompt'
 import { copyText } from './copyText'
 import { profilePath } from './paths'
@@ -39,6 +42,8 @@ export interface ProfileTransferControls {
   /** Opens the file choice: browsers allow it only within the click itself, so this clicks the input. */
   pickFile: () => void
   openPrompt: () => void
+  /** F-C7: the dialog that drafts the profile from the sponsor's website. */
+  openSite: () => void
 }
 
 /**
@@ -60,6 +65,9 @@ export function ProfileTransfer({ controls, onExporting }: {
   const [state, setState] = useState<ImportState | null>(null)
   const [password, setPassword] = useState('')
   const [prompting, setPrompting] = useState(false)
+  // F-C7: the website draft dialog, and the draft whose review the confirmation shows (with the link name in force).
+  const [siteOpen, setSiteOpen] = useState(false)
+  const [site, setSite] = useState<{ draft: SiteDraft; handle: string } | null>(null)
   // D-Q100-13: the sponsor confirms that deleted products leave the quizzes they are shown on.
   const [leaving, setLeaving] = useState(false)
   const leavingId = useId()
@@ -93,6 +101,7 @@ export function ProfileTransfer({ controls, onExporting }: {
     exportNow: () => void exportNow(),
     pickFile: () => input.current?.click(),
     openPrompt: () => setPrompting(true),
+    openSite: () => setSiteOpen(true),
   }))
 
   // F-C5: the problems as they are, for the AI tool that wrote the file (alone, or in the fixing prompt).
@@ -102,12 +111,25 @@ export function ProfileTransfer({ controls, onExporting }: {
     else notify.error(t('profile.transfer.prompt.copyFailed'))
   }
 
-  const chosen = async (file: File) => {
+  const checkDocument = async (document: Record<string, unknown>) => {
+    try {
+      setState({ kind: 'checked', document, plan: await checkProfileImport(document) })
+    } catch (e) {
+      setState({ kind: 'refused', problems: reasonsOf(e, t) })
+    }
+  }
+
+  const begin = () => {
     setPassword('')
     setLeaving(false)
     setLinkStates({})
     setKeepImages(false)
     setState({ kind: 'checking' })
+  }
+
+  const chosen = async (file: File) => {
+    begin()
+    setSite(null)
     let document: Record<string, unknown>
     try {
       document = await readJsonFile(file)
@@ -115,8 +137,18 @@ export function ProfileTransfer({ controls, onExporting }: {
       setState({ kind: 'refused', problems: [t('profile.transfer.notJson')] })
       return
     }
+    await checkDocument(document)
+  }
+
+  // F-C7: a draft from the sponsor's website goes through the same check and confirmation as a file does; the account's
+  // contact name goes in (the server never takes one from the website).
+  const reviewDraft = async (draft: SiteDraft, handle: string = draft.handle?.handle ?? '') => {
+    begin()
+    setSiteOpen(false)
+    setSite({ draft, handle })
     try {
-      setState({ kind: 'checked', document, plan: await checkProfileImport(document) })
+      const sponsor = await readMySponsor()
+      await checkDocument(draftDocument(draft, sponsor?.contactName ?? '', handle || undefined))
     } catch (e) {
       setState({ kind: 'refused', problems: reasonsOf(e, t) })
     }
@@ -177,6 +209,8 @@ export function ProfileTransfer({ controls, onExporting }: {
   const busy = state?.kind === 'checking' || state?.kind === 'importing'
   const plan = state?.kind === 'checked' ? state.plan : null
   const needsPassword = plan?.mailServer === 'PASSWORD'
+  // F-C7: a drafted link name that is another Sponsor's is not imported; the sponsor picks a free one first.
+  const handleTaken = site?.draft.handle?.taken === true && site.handle === site.draft.handle.handle
   const linked = plan?.linked ?? []
   const refused = (plan?.links ?? []).filter((link) => linkStates[link.path]?.kind === 'failed')
   const downloading = (plan?.links ?? []).some((link) => linkStates[link.path]?.kind === 'loading')
@@ -189,6 +223,11 @@ export function ProfileTransfer({ controls, onExporting }: {
           if (file) void chosen(file)
         }} />
       <AiPromptDialog open={prompting} onClose={() => setPrompting(false)} />
+      <SiteProfileDialog open={siteOpen} onClose={() => setSiteOpen(false)} onReview={(draft) => void reviewDraft(draft)}
+        onPrompt={() => {
+          setSiteOpen(false)
+          setPrompting(true)
+        }} />
       <Dialog open={state !== null} onOpenChange={(open) => {
         if (!open && !busy) setState(null)
       }}>
@@ -198,6 +237,10 @@ export function ProfileTransfer({ controls, onExporting }: {
             <DialogDescription>{t('profile.transfer.importHint')}</DialogDescription>
           </DialogHeader>
           {state?.kind === 'checking' && <p role="status" className="text-sm">{t('profile.transfer.checking')}</p>}
+          {site && state && state.kind !== 'checking' && (
+            <SiteDraftNotes draft={site.draft} handle={site.handle}
+              onHandle={(handle) => void reviewDraft(site.draft, handle)} />
+          )}
           {plan && (
             <div className="flex flex-col gap-3 text-sm" data-testid="profile-import-plan">
               <ul className="flex flex-col gap-1">
@@ -333,7 +376,7 @@ export function ProfileTransfer({ controls, onExporting }: {
             {state?.kind === 'checked' && (
               <Button data-testid="profile-import-confirm"
                 disabled={(needsPassword && !password) || (linked.length > 0 && !leaving) || downloading
-                  || (refused.length > 0 && !keepImages)}
+                  || (refused.length > 0 && !keepImages) || handleTaken}
                 onClick={() => void start(state.document, state.plan)}>
                 {t('profile.transfer.confirm')}
               </Button>

@@ -159,6 +159,8 @@ export interface AiUsage {
   dayEnds: string | null
   /** The most questions one request may ask for at the effort in force (fewer at effort high). */
   maxCount: number
+  /** F-C7: whether drafting a profile from the sponsor's website is on in this deployment. */
+  siteProfileEnabled: boolean
 }
 
 export function toAiUsage(row: Row | undefined): AiUsage {
@@ -179,6 +181,7 @@ export function toAiUsage(row: Row | undefined): AiUsage {
     monthEnds: str(r.monthEnds),
     dayEnds: str(r.dayEnds),
     maxCount: orNull(r.maxCount) ?? AI_LIMITS.maxCount,
+    siteProfileEnabled: r.siteProfileEnabled === true || r.siteProfileEnabled === 'true',
   }
 }
 
