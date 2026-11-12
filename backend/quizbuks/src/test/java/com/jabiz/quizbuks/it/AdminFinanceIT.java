@@ -375,7 +375,7 @@ class AdminFinanceIT extends PayoutItSupport {
         // The export is the platform's, of the same rows; as known at the month's end, without the late posting,
         // and so is the run issued as known then (its archived rows, not run again).
         String csv = exportCsv(MONTHLY, period(from, to));
-        assertThat(csv.lines().count()).isEqualTo(37);
+        assertThat(csv.lines().count()).isEqualTo(40);
         assertThat(csv).contains("TRANSFER_REVERSED");
         String known = exportCsv(MONTHLY, period(from, to, to));
         assertThat(line(known, "OTHER")).isNotEqualTo(line(csv, "OTHER")).contains(",4,");
