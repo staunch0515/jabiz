@@ -47,8 +47,8 @@ import java.util.function.Predicate;
  * submission is refused); otherwise the operator is frozen on the publication and its fees are set aside
  * ({@code QB_PREPAYMENT_FREEZE}, one a purpose).
  *
- * <p>After the publication's state changes ({@link #after}): going on charges the audience fee from what was set
- * aside ({@code QB_PREPAYMENT_CHARGE}); back to the draft (withdrawn, rejected, its review expired) gives everything
+ * <p>After the publication's state changes ({@link #after}): starting (going live) charges the audience fee from what
+ * was set aside ({@code QB_PREPAYMENT_CHARGE}); back to the draft (withdrawn, rejected, its review expired) gives everything
  * back ({@code QB_PREPAYMENT_RELEASE}). An ended publication's is given back by the daily job.
  */
 public final class PublicationPrepayments {
@@ -261,8 +261,8 @@ public final class PublicationPrepayments {
 
     /**
      * Notes what a state change of the publication asks for afterwards ({@link PublicationEditing#write} calls it):
-     * back to the draft with something set aside gives it back; going on with something set aside charges the
-     * audience fee from it.
+     * back to the draft with something set aside gives it back; starting (going live, not approved) with something set
+     * aside charges the audience fee from it.
      */
     static void note(ProcessContext ctx, EntityInstance publication, Map<String, Object> values, String to) {
         if (!concerned(publication)) {
@@ -277,11 +277,11 @@ public final class PublicationPrepayments {
         String publicationId = String.valueOf(publication.id());
         if (PublicationStatus.DRAFT.equals(to)) {
             ctx.put(RELEASE, new Prepayments.ReleaseInput(sponsorId, publicationId, releaseReason(values)));
-        } else if (PublicationStatus.SCHEDULED.equals(to) || PublicationStatus.LIVE.equals(to)) {
-            String from = publication.get("status");
-            if (PublicationStatus.DRAFT.equals(from) || PublicationStatus.PENDING_REVIEW.equals(from)) {
-                ctx.put(CHARGE, new Prepayments.ChargeInput(sponsorId, publicationId, QbPrepayments.AUDIENCE));
-            }
+        } else if (PublicationStatus.LIVE.equals(to) && !PublicationStatus.FUNDS_SHORT.equals(publication.get("status"))) {
+            // §8.8 (M7 of the F-M5 review): charged when it starts, not when it is approved; ended before it starts,
+            // nothing is charged and the daily job gives it all back. Resumed after a pause it may have started
+            // already: the charge is once (QB_PREPAYMENT_CHARGE does nothing for a prepayment charged).
+            ctx.put(CHARGE, new Prepayments.ChargeInput(sponsorId, publicationId, QbPrepayments.AUDIENCE));
         }
     }
 

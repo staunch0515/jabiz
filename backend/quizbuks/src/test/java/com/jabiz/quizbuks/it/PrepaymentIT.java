@@ -236,6 +236,9 @@ class PrepaymentIT extends PlayItSupport {
             sponsor).getFirst().get("operator_id"));
         submit(sponsorToken(sponsor), publicationId);
         assertThat(status(publicationId)).isEqualTo("SCHEDULED");
+        // M7 of the F-M5 review (§8.8): approved is not on: nothing is charged before it starts.
+        assertThat(query("SELECT 1 FROM qb_fee_charge_version WHERE sponsor_id = ?", sponsor)).isEmpty();
+        goLive(publicationId);
         Map<String, Object> charge = query("SELECT * FROM qb_fee_charge_version WHERE sponsor_id = ? AND kind = "
             + "'AUDIENCE'", sponsor).getFirst();
         assertThat(charge).containsEntry("operator_id", operator);
@@ -250,7 +253,7 @@ class PrepaymentIT extends PlayItSupport {
         assertThat(differences(sponsor)).isEmpty();
 
         // A day after its end, the daily job closes what is left.
-        clock.set(clock.instant().plus(Duration.ofDays(9)));
+        clock.set(clock.instant().plus(Duration.ofDays(8)));
         runTick();
         assertThat(status(publicationId)).isEqualTo("ENDED");
         systemRun(Prepayments.RELEASE_ITEM, body("publicationId", publicationId, "sponsorId", sponsor));
@@ -296,6 +299,31 @@ class PrepaymentIT extends PlayItSupport {
         long noSource = ((Number) query("SELECT count(*) AS n FROM ledger_transaction_version WHERE source_entity "
             + "IS NULL").getFirst().get("n")).longValue();
         assertThat(((Number) other.get("transactionCount")).longValue()).isEqualTo(noSource);
+    }
+
+    @Test
+    void endedBeforeItStartsChargesNothingAndGivesEverythingBack() {
+        // M7 of the F-M5 review: the fee is charged when the publication starts; ended before that, nothing is
+        // charged and the daily job gives the whole prepayment back.
+        autoApprove(true);
+        String sponsor = pricedSponsor("fm5-early-end");
+        String grantId = grant(sponsor, 1_000, clock.instant().plus(Duration.ofDays(90)));
+        String publicationId = audienceDraft(sponsor, "FM5 ended early");
+        submit(sponsorToken(sponsor), publicationId);
+        assertThat(status(publicationId)).isEqualTo("SCHEDULED");
+        run("QB_PUBLICATION_ADMIN_END", TestTokens.bearer(tokens, "fm5-content-admin",
+            QbPermissions.ADMIN_CONTENT_WRITE), body("publicationId", publicationId, "reason", "F-M5 test"));
+        assertThat(status(publicationId)).isEqualTo("ENDED");
+        assertThat(query("SELECT 1 FROM qb_fee_charge_version WHERE sponsor_id = ?", sponsor)).isEmpty();
+        systemRun(Prepayments.RELEASE_ITEM, body("publicationId", publicationId, "sponsorId", sponsor));
+        assertThat(prepayments(publicationId)).singleElement().satisfies(row -> {
+            assertThat(row).containsEntry("status", "RELEASED").containsEntry("release_reason", "ENDED");
+            assertThat(row.get("charged_at")).isNull();
+        });
+        assertThat(remainingOf(grantId)).isEqualByComparingTo("1000");
+        assertThat(ledger("2180", sponsor)).isEqualByComparingTo("0");
+        assertThat(query("SELECT 1 FROM qb_fee_charge_version WHERE sponsor_id = ?", sponsor)).isEmpty();
+        assertThat(differences(sponsor)).isEmpty();
     }
 
     @Test
@@ -349,6 +377,7 @@ class PrepaymentIT extends PlayItSupport {
             "reason", "F-M11"));
         decide(requestId, "APPROVE", null);
         assertThat(status(publicationId)).isEqualTo("SCHEDULED");
+        goLive(publicationId);
         assertThat(query("SELECT operator_id FROM qb_fee_charge_version WHERE sponsor_id = ? AND kind = 'AUDIENCE'",
             sponsor)).singleElement().satisfies(row -> assertThat(row).containsEntry("operator_id", frozen));
         assertThat(prepayments(publicationId)).singleElement()
