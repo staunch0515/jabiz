@@ -259,6 +259,11 @@ class PackageImportIT extends TreeItSupport {
         assertThat(latest("qb_quiz_version", "quiz_id", "quiz_id = '" + quizId + "'").getFirst())
             .containsEntry("title", "Replaced").containsEntry("shuffle_questions", true);
 
+        // F-C7b-2: the AI mark goes on a new draft only.
+        assertThat(codes(refused("QB_QUIZ_IMPORT", token, body("document", quizFile("Marked", "One?"), "files", body(),
+            "intoQuizId", quizId, "aiGenerated", true), 422))).contains("QB_QUIZ_IMPORT_AI_INTO_QUIZ");
+        assertThat(stemsOf(quizId)).containsExactly("New one?", "New two?");
+
         // F-S7: a file whose questions keep their order replaces the content with that setting, and back.
         Map<String, Object> fixed = quizFile("Fixed", "First?", "Second?");
         fixed.put("formatVersion", 3);

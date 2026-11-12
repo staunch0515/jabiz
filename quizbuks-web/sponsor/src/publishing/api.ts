@@ -585,8 +585,11 @@ export interface RewardSettings {
  * default parameter (Q28), and the highest reward per attempt. The server checks again when a draft is saved and
  * submitted.
  */
-export async function readRewardSettings(): Promise<RewardSettings> {
-  const row = (await runQuery<Row>(PUBLISHING_TEMPLATE.rewardMethods, { limit: 1 })).items[0] ?? {}
+export async function readRewardSettings(firstLaunch = false): Promise<RewardSettings> {
+  // F-F10a: on production and staging the Kudos reward switch not published counts as off; the server says it to the
+  // template only through this parameter (what the console offers; the processes decide from their own environment).
+  const row = (await runQuery<Row>(PUBLISHING_TEMPLATE.rewardMethods, { limit: 1, params: { firstLaunch } }))
+    .items[0] ?? {}
   // Names that are no method are dropped, as the server drops them (a typo allows less, never more).
   const named = String(row.methods ?? '').split(',').map((name) => name.trim())
   const max = row.maxRewardPerAttempt == null || row.maxRewardPerAttempt === '' ? null : Number(row.maxRewardPerAttempt)

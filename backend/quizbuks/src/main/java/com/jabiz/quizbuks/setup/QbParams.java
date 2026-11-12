@@ -512,8 +512,20 @@ public final class QbParams {
     public static final String SITE_PROFILE_OPTIONS = "qb.ai.site-profile.options";
     public static final String SITE_PROFILE_MATERIALS_MAX = "qb.ai.site-profile.materials-max";
     public static final String SITE_PROFILE_HANDLE_ALTERNATIVES = "qb.ai.site-profile.handle-alternatives";
-    /** The controlled ones, in the order of {@link #CONTROLLED} (last). */
+    /** The controlled ones, in the order of {@link #CONTROLLED} (before {@link #REWARD_KUDOS}). */
     public static final List<String> SITE_PROFILE_CONTROLLED = List.of(SITE_PROFILE_ENABLED, SITE_PROFILE_MONTHLY);
+
+    /**
+     * F-F10a: whether a publication may be published with the reward method {@code PLATFORM} (Kudos paid by QuizBuks).
+     * The declared value is today's behaviour (true); the first launch's value ({@code FirstLaunchSwitches}) is false,
+     * so no publication can offer a Kudos reward however a sponsor is set up. Not there at all (before setup):
+     * not blocked on a system that does not say it is production or staging (as {@code qb.reward.default-methods} not
+     * there gives the platform's Kudos, F-S4b); on production and staging it counts as off (default-deny, so a system
+     * whose proposals were never published pays no Kudos reward).
+     */
+    public static final String REWARD_KUDOS_ENABLED = "qb.reward.kudos.enabled";
+    /** F-F10a: the Kudos reward switch (controlled, the last of {@link #CONTROLLED}). */
+    public static final List<String> REWARD_KUDOS = List.of(REWARD_KUDOS_ENABLED);
 
     /**
      * The parameters that change only through controlled changes (proposed by one administrator, published by
@@ -525,7 +537,8 @@ public final class QbParams {
         REWARD, JOURNAL_ACCOUNTS, ISSUER, List.of(LEGAL_MAX_ANNOUNCE_DAYS), AI_CONTROLLED, PROSPECT_CONTROLLED,
         OPERATOR_PLANS, OPERATOR_WITHDRAWAL, List.of(TOPUP_BANK_MIN, TOPUP_BANK_MAX), BANK_RECEIVING, WITHDRAWAL_BANK, AUDIENCE_BILLING_PARAMS,
         CASH_ACCOUNT_PARAMS, FEE_PARAMS,
-        List.of(ENTRY_FEE_ENABLED), List.of(USAGE_FREE_BYTES), List.of(VIDEO_MAINLAND_SITES), HELP_CONTROLLED, FEE_CREDIT_PARAMS, SITE_PROFILE_CONTROLLED)
+        List.of(ENTRY_FEE_ENABLED), List.of(USAGE_FREE_BYTES), List.of(VIDEO_MAINLAND_SITES), HELP_CONTROLLED, FEE_CREDIT_PARAMS,
+        SITE_PROFILE_CONTROLLED, REWARD_KUDOS)
         .flatMap(List::stream).toList();
 
     /** A parameter: its key, kind (as the platform writes kinds) and first value. */
@@ -872,7 +885,7 @@ public final class QbParams {
                 + "prizes, messages, benefits, money, assets, hub; at most four, \"More\" follows; empty: this "
                 + "default)"),
         // F-C7: drafting from a website (the ordinary ones, then the controlled ones in the order of
-        // SITE_PROFILE_CONTROLLED; last).
+        // SITE_PROFILE_CONTROLLED; before F-F10a's Kudos switch).
         new Param(SITE_PROFILE_DAILY, Map.of("type", "numeric", "precision", 3, "scale", 0), "3",
             "How many times a sponsor may ask the AI to draft from their website a day"),
         new Param(SITE_PROFILE_MAX_PAGES, Map.of("type", "numeric", "precision", 3, "scale", 0), "10",
@@ -889,6 +902,10 @@ public final class QbParams {
             "Whether sponsors may ask the AI to draft a profile package and a quiz from their website"),
         new Param(SITE_PROFILE_MONTHLY, Map.of("type", "numeric", "precision", 3, "scale", 0), "10",
             "How many times a sponsor may ask the AI to draft from their website a month"),
+        // F-F10a: the Kudos reward switch (controlled, after the F-C7 ones: the last of CONTROLLED, and so the last proposal of QB_SETUP, which follows this list).
+        new Param(REWARD_KUDOS_ENABLED, BOOL, true,
+            "Whether a publication may offer the reward method PLATFORM (Kudos paid by QuizBuks); off at the first "
+                + "launch (F-F10a)"),
         // F-M3: company verification (ordinary; last).
         new Param(VERIFICATION_LINK_HOURS, Map.of("type", "numeric", "precision", 3, "scale", 0), "48",
             "How many hours the link mailed to a company address to verify a sponsor's company stays good (1 to 168)"),

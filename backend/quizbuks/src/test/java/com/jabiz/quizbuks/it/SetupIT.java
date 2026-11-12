@@ -502,6 +502,8 @@ class SetupIT extends QbItSupport {
         // F-S4b: empty, none (a new Sponsor gets what a lit node opens).
         expected.put(QbParams.REWARD_DEFAULT_METHODS, "");
         expected.put(QbParams.REWARD_MAX_PER_ATTEMPT, "0");
+        // F-F10a: declared on; the first launch (production, staging) proposes false, which SetupIT does not run as.
+        expected.put(QbParams.REWARD_KUDOS_ENABLED, "true");
         // Q48: AI prospecting off, its model and effort, the operators' cost cap and rate.
         expected.putAll(Map.of(QbParams.PROSPECT_ENABLED, "false", QbParams.PROSPECT_MODEL, "claude-opus-5-5",
             QbParams.PROSPECT_EFFORT, "medium", QbParams.PROSPECT_OPERATOR_MONTHLY_CAP, "100.0000",

@@ -14,7 +14,9 @@ import com.jabiz.process.ProcessDefinition;
 import com.jabiz.quizbuks.QbPermissions;
 import com.jabiz.quizbuks.wallet.QbWallets;
 import com.jabiz.quizbuks.operator.OperatorScopes;
+import com.jabiz.quizbuks.setup.FirstLaunchSwitches;
 import com.jabiz.runtime.approval.ApprovalProcesses;
+import com.jabiz.runtime.web.JabizWebProperties;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -358,8 +360,8 @@ public class PublishingConfig {
 
     @Bean
     ProcessDefinition<PublicationProcesses.SaveInput, SaveOutput, ProcessContext> qbPublicationSave(
-        MessageCatalog messages) {
-        return PublicationProcesses.save(messages);
+        MessageCatalog messages, JabizWebProperties web) {
+        return PublicationProcesses.save(messages, FirstLaunchSwitches.appliesTo(web.environment()));
     }
 
     @Bean
@@ -382,8 +384,8 @@ public class PublishingConfig {
 
     @Bean
     ProcessDefinition<PublicationProcesses.CopyInput, SaveOutput, ProcessContext> qbPublicationCopy(
-        MessageCatalog messages) {
-        return PublicationProcesses.copy(messages);
+        MessageCatalog messages, JabizWebProperties web) {
+        return PublicationProcesses.copy(messages, FirstLaunchSwitches.appliesTo(web.environment()));
     }
 
     @Bean
@@ -393,8 +395,9 @@ public class PublishingConfig {
     }
 
     @Bean
-    ProcessDefinition<PublicationProcesses.PublicationRef, PublicationOutput, ProcessContext> qbPublicationSubmit() {
-        return PublicationLifecycle.submit();
+    ProcessDefinition<PublicationProcesses.PublicationRef, PublicationOutput, ProcessContext> qbPublicationSubmit(
+        JabizWebProperties web) {
+        return PublicationLifecycle.submit(FirstLaunchSwitches.appliesTo(web.environment()));
     }
 
     @Bean

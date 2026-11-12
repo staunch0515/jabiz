@@ -1,10 +1,14 @@
-import { Alert, AlertDescription, Label } from '@jabiz/ui'
-import { useId } from 'react'
+import { Alert, AlertDescription, Button, Label } from '@jabiz/ui'
+import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { useId, useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import { reasonsOf } from '../../content/QuizTransfer'
+import { quizPath } from '../../content/paths'
 import { SPONSOR } from '../../messages'
 import type { ContentLanguage } from '../../qb/api'
 import { QB } from '../../qb/messages'
-import type { SiteDraft } from './api'
+import { navigate } from '../../qb/router'
+import { makeSiteQuiz, SITE_QUERY, type SiteDraft } from './api'
 import './messages'
 
 
@@ -38,6 +42,18 @@ export function SiteDraftNotes({ draft, handle, onHandle }: {
   const { t } = useTranslation(SPONSOR)
   const { t: tQb } = useTranslation(QB)
   const id = useId()
+  const queryClient = useQueryClient()
+  const [quizProblems, setQuizProblems] = useState<string[]>([])
+  // F-C7b-2: the "get to know us" quiz, from the draft's articles; its questions wait in the quiz for review.
+  const quiz = useMutation({
+    mutationFn: () => makeSiteQuiz(draft.aiJobId),
+    onSuccess: async (made) => {
+      await queryClient.invalidateQueries({ queryKey: SITE_QUERY })
+      await queryClient.invalidateQueries({ queryKey: ['qb'] })
+      navigate(quizPath(made.quizId))
+    },
+    onError: (error) => setQuizProblems(reasonsOf(error, t)),
+  })
   const base = draft.languages[0] ?? draft.language
   const basics = record(draft.profile?.basics)
   const page = record(draft.profile?.page)
@@ -53,6 +69,24 @@ export function SiteDraftNotes({ draft, handle, onHandle }: {
         lines: product.price == null ? [] : [{ language: base, text: `${String(product.price)} ${String(product.currency ?? '')}` }] },
     ]),
   ].filter((field) => field.lines.length > 0)
+  // A path of the draft as the sponsor knows the field, never the path itself.
+  const pathLabel = (raw: string): string => {
+    // A text of one language (`basics.intro.ja`) is the field itself.
+    const path = raw.replace(/\.(ja|en|zh)$/, '')
+    const product = /^products\[(\d+)]\.?(name|price|image|description|shopUrl)?$/.exec(path)
+    if (product) {
+      const n = Number(product[1]) + 1
+      const part = product[2]
+      return part === 'name' ? t('site.review.productName', { n })
+        : part === 'price' ? t('site.review.productPrice', { n })
+        : part ? t(`site.review.product.${part}`, { n }) : t('site.review.productWhole', { n })
+    }
+    const article = /^materials\[(\d+)]/.exec(path)
+    if (article) return t('site.review.article', { n: Number(article[1]) + 1 })
+    const known: Record<string, string> = { 'basics.company': 'company', 'basics.intro': 'intro',
+      'page.headline': 'headline', 'page.website': 'website', 'page.cover': 'cover', 'basics.avatar': 'avatar' }
+    return known[path] ? t(`site.review.${known[path]}`) : t('site.review.pathOther')
+  }
   const taken = draft.handle?.taken ?? false
   return (
     <section className="flex flex-col gap-3 rounded-md border p-3 text-sm" aria-labelledby={`${id}-title`}
@@ -107,7 +141,7 @@ export function SiteDraftNotes({ draft, handle, onHandle }: {
       {draft.notFound.length > 0 && (
         <div data-testid="site-not-found">
           <p className="font-medium">{t('site.review.notFound')}</p>
-          <ul className="list-disc pl-5">{draft.notFound.map((path) => <li key={path}>{path}</li>)}</ul>
+          <ul className="list-disc pl-5">{draft.notFound.map((path) => <li key={path}>{pathLabel(path)}</li>)}</ul>
         </div>
       )}
       {draft.dropped.length > 0 && (
@@ -116,13 +150,64 @@ export function SiteDraftNotes({ draft, handle, onHandle }: {
           <ul className="list-disc pl-5">
             {draft.dropped.map((field) => (
               <li key={`${field.path}-${field.reason}`}>
-                {field.path}: {t(`site.review.reason.${reasonKey(field.reason)}`, { defaultValue: field.reason })}
+                {pathLabel(field.path)}: {t(`site.review.reason.${reasonKey(field.reason)}`, { defaultValue: field.reason })}
               </li>
             ))}
           </ul>
         </div>
       )}
-      {draft.materials > 0 && <p className="text-muted-foreground">{t('site.review.quiz', { n: draft.materials })}</p>}
+      {draft.materials > 0 && (
+        <div className="flex flex-col gap-2" data-testid="site-quiz">
+          <p className="text-muted-foreground">{t('site.review.quiz', { n: draft.materials, q: draft.questions })}</p>
+          {draft.quizId
+            ? (
+              <p role="status" data-testid="site-quiz-made">
+                {t('site.review.quizMade')}{' '}
+                <a href={quizPath(draft.quizId)} className="underline" data-testid="site-quiz-open"
+                  onClick={(event) => {
+                    event.preventDefault()
+                    navigate(quizPath(draft.quizId!))
+                  }}>{t('site.review.quizOpen')}</a>
+              </p>
+            )
+            : (
+              <>
+                <p>{t('site.review.quizHint')}</p>
+                <div data-testid="site-articles">
+                  <p className="font-medium">{t('site.review.articlesTitle')}</p>
+                  <ul className="list-disc pl-5">
+                    {draft.articles.map((article, i) => {
+                      const link = safeLink(article.url)
+                      return (
+                        <li key={i} className="break-words">
+                          {article.title}
+                          {link && <>{' '}<a href={link} target="_blank" rel="noopener noreferrer" className="break-all underline"
+                            data-testid="site-article-source">{t('site.review.articleFrom', { url: link })}</a></>}
+                        </li>
+                      )
+                    })}
+                  </ul>
+                </div>
+                <span>
+                  <Button type="button" variant="outline" size="sm" disabled={quiz.isPending} data-testid="site-quiz-make"
+                    onClick={() => {
+                      setQuizProblems([])
+                      quiz.mutate()
+                    }}>
+                    {t('site.review.quizMake')}
+                  </Button>
+                </span>
+              </>
+            )}
+          {quizProblems.length > 0 && (
+            <Alert variant="destructive" data-testid="site-quiz-problems">
+              <AlertDescription>
+                <ul className="list-disc pl-5">{quizProblems.map((problem, i) => <li key={i}>{problem}</li>)}</ul>
+              </AlertDescription>
+            </Alert>
+          )}
+        </div>
+      )}
     </section>
   )
 }
@@ -131,5 +216,6 @@ export function SiteDraftNotes({ draft, handle, onHandle }: {
 function reasonKey(reason: string): string {
   if (reason === 'Contact details were removed') return 'contact'
   if (reason === "Not on the website's own domain") return 'offSite'
+  if (reason === 'Not one of the languages asked for') return 'otherLanguage'
   return 'other'
 }

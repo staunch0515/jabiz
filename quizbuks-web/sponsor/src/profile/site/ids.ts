@@ -3,6 +3,8 @@ export const SITE_PROFILE = {
   request: 'QB_SITE_PROFILE_REQUEST',
   /** The sponsor's own site drafts, newest first (`queries/qb/sponsor/site-profile.sql`). */
   template: 'qb.sponsor.site-profile',
+  /** Makes the "get to know us" quiz draft from a ready draft's articles; its questions wait for review. */
+  quiz: 'QB_SITE_PROFILE_QUIZ',
 } as const
 
 /** The reasons a job's stored `failureCode` can name; others get the general text. */
