@@ -232,7 +232,7 @@ export function ProfileTransfer({ controls, onExporting }: {
         if (!open && !busy) setState(null)
       }}>
         {/* The review of a draft from a website is long (fields, notes, articles, the quiz): the dialog scrolls, so that its buttons are always reachable. */}
-        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl" data-testid="profile-import-dialog">
+        <DialogContent className="sm:max-w-2xl" data-testid="profile-import-dialog">
           <DialogHeader>
             <DialogTitle>{t('profile.transfer.importTitle')}</DialogTitle>
             <DialogDescription>{t('profile.transfer.importHint')}</DialogDescription>

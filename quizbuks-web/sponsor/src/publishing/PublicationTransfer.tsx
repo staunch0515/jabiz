@@ -328,7 +328,7 @@ export function ImportSettingsButton({ opener }: {
       <Dialog open={value !== null} onOpenChange={(open) => {
         if (!open && !run.isPending) close()
       }}>
-        <DialogContent className="max-h-[90vh] overflow-y-auto" data-testid="publication-import-dialog">
+        <DialogContent data-testid="publication-import-dialog">
           <form noValidate className="flex flex-col gap-4" onSubmit={(event) => {
             event.preventDefault()
             if (ready) run.mutate()
