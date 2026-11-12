@@ -606,16 +606,16 @@ test.describe.serial('the first launch\'s loop', () => {
     try {
       await setControlledParam(request, 'qb.audience.billing.enabled', 'true')
       await setControlledParam(request, 'qb.audience.fee.refund-unused-days', 'true')
-      // Her operator prices the gender rule at 100 a day (step 2'); one winner's place, for women, seven days.
+      // Her operator prices the gender rule at 100 a day (step 2'); one winner's place (a reward of 10), for
+      // women, seven days.
       await run(request, operator.operatorToken, 'QB_OPERATOR_AUDIENCE_PRICES_SET', { minimumFee: 0,
         prices: [{ ruleKey: 'gender', dailyPrice: 100 }], reason: 'Closed loop' })
       await fund(request, sora.token, 2000)
       const made = await boundPublicationOf(request, sora.token, map!.treeId, map!.basics, unique('Coffee for one '),
-        { maxWinners: 1, audience: [{ key: 'gender', options: ['FEMALE'] }] })
+        { reward: 10, maxWinners: 1, audience: [{ key: 'gender', options: ['FEMALE'] }] })
       const [charged] = (await query(request, sora.token, 'qb.sponsor.publication-prepayments',
         { publicationId: made.publicationId })).filter((row) => row.purpose === 'AUDIENCE')
       expect(charged).toBeTruthy()
-      const [before] = await query(request, sora.token, 'qb.sponsor.wallet', {})
 
       // Rin (a woman, she says) takes the one place on its first day: it ends early.
       await run(request, rin.token, 'QB_PROFILE_ATTRIBUTES_SAVE', { profileAnswers: [{ key: 'gender',
@@ -634,13 +634,12 @@ test.describe.serial('the first launch\'s loop', () => {
         return false
       }, { message: 'the credit note', timeout: 150_000, intervals: [10_000] }).toBe(true)
       expect(note).toEqual(expect.objectContaining({ reason: 'AUDIENCE_UNUSED', usedDays: 1 }))
+      // Prepaid: all of it went back where it was paid from (the balances themselves: CreditNoteIT).
       expect(Number(note!.refundedCash) + Number(note!.refundedCredit)).toBe(Number(note!.total))
-      const [after] = await query(request, sora.token, 'qb.sponsor.wallet', {})
-      expect(Number(after.cashBalance) + Number(after.feeCreditBalance))
-        .toBe(Number(before.cashBalance) + Number(before.feeCreditBalance) + Number(note!.total))
 
       // Her publication's page lists it.
       await signIn(page, '/sponsor/', sora.email)
+      await expect(page.getByTestId('dashboard-status')).toBeVisible()
       await page.goto(`/sponsor/publications/${made.publicationId}/fees`)
       await expect(page.getByTestId('publication-credit-note-number')).toHaveText(String(note!.creditNoteNo))
     } finally {
