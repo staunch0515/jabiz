@@ -1,5 +1,8 @@
 package com.jabiz.quizbuks.it;
 
+import com.jabiz.runtime.test.TestTokens;
+import com.jabiz.quizbuks.QbPermissions;
+import com.jabiz.quizbuks.setup.QbRoles;
 import com.jabiz.quizbuks.content.ai.AiCodes;
 import com.jabiz.quizbuks.content.ai.AiProcesses;
 import com.jabiz.quizbuks.content.ai.QbAi;
@@ -78,12 +81,27 @@ class SiteQuizIT extends AiItSupport {
         String sponsor = newSponsor("site-quiz-" + UUID.randomUUID());
         String token = sponsorFull(sponsor);
         Object aiJobId = readyDraft(token);
+        // The website request is the one request of the day; the questions kept next to the quiz are none.
+        Map<String, Object> cardBefore = items("qb.sponsor.ai-usage", token, body("params",
+            Map.of("at", clock.instant().toString()))).getFirst();
+        assertThat(((Number) cardBefore.get("jobsToday")).intValue()).isEqualTo(1);
+        Object usageJobsBefore = usage(sponsor).get("jobs");
 
         Map<String, Object> made = run(SiteQuizProcesses.QUIZ, token, body("aiJobId", aiJobId));
         String quizId = String.valueOf(made.get("quizId"));
         assertThat(((Number) made.get("materials")).intValue()).isEqualTo(2);
         // The third question names an article that is not there: the content rules clean that reference, not the question.
         assertThat(((Number) made.get("questions")).intValue()).isEqualTo(3);
+
+        // Nothing is counted twice: the card's requests of the day and the month's jobs are as before.
+        Map<String, Object> cardAfter = items("qb.sponsor.ai-usage", token, body("params",
+            Map.of("at", clock.instant().toString()))).getFirst();
+        assertThat(cardAfter.get("jobsToday")).isEqualTo(cardBefore.get("jobsToday"));
+        assertThat(cardAfter.get("jobs")).isEqualTo(cardBefore.get("jobs"));
+        assertThat(usage(sponsor).get("jobs")).isEqualTo(usageJobsBefore);
+        assertThat(latest("qb_quiz_version", "quiz_id", "quiz_id = '" + quizId + "'").getFirst())
+            .containsEntry("ai_generated", true);
+        assertThat(job(made.get("questionsJob")).get("from_site_draft_id")).isEqualTo(String.valueOf(aiJobId));
 
         // The quiz: a draft of the sponsor's, with the articles in order and no question yet.
         Map<String, Object> quiz = latest("qb_quiz_version", "quiz_id", "quiz_id = '" + quizId + "'").getFirst();
@@ -103,7 +121,8 @@ class SiteQuizIT extends AiItSupport {
             .doesNotContain("\"materials\":[9]").contains("\"materials\":[2]");
         // The website draft stays for the profile's review, and is marked used.
         assertThat(job(aiJobId)).containsEntry("status", QbAi.READY);
-        assertThat(((Number) job(aiJobId).get("accepted_count")).intValue()).isEqualTo(1);
+        assertThat(job(aiJobId).get("site_quiz_id")).isEqualTo(UUID.fromString(quizId));
+        assertThat(job(aiJobId).get("accepted_count")).isNull();
         assertThat(String.valueOf(job(aiJobId).get("candidates"))).contains("Aini Inc.");
 
         // One quiz a draft.
@@ -155,5 +174,85 @@ class SiteQuizIT extends AiItSupport {
             .contains(AiCodes.JOB_EXPIRED);
         assertThat(query("SELECT count(DISTINCT quiz_id) AS n FROM qb_quiz_version").getFirst().get("n"))
             .isEqualTo(quizzesBefore);
+    }
+
+    @Test
+    void theDraftOfAnotherKindIsRefusedAndSoAreABannedSponsorAnUnverifiedAddressAndACallerWithoutContentWrite() {
+        String sponsor = newSponsor("site-quiz-k-" + UUID.randomUUID());
+        String token = sponsorFull(sponsor);
+        // Not a website draft: an ordinary request for questions.
+        List<String> quiz = quizWithArticle(token, "Kinds " + UUID.randomUUID(), "Material.");
+        Object other = request(token, quiz.get(0), List.of(quiz.get(1)), 1).get("aiJobId");
+        assertThat(codes(refused(SiteQuizProcesses.QUIZ, token, body("aiJobId", other), 422)))
+            .contains(AiCodes.WRONG_KIND);
+
+        Object aiJobId = readyDraft(token);
+        // Without the right to write content.
+        String readOnly = TestTokens.bearer(tokens, sponsor, QbPermissions.AI_USE);
+        assertThat(refused(SiteQuizProcesses.QUIZ, readOnly, body("aiJobId", aiJobId), 403).toString())
+            .contains(QbPermissions.CONTENT_WRITE);
+        // An address that is not verified.
+        assertThat(refused(SiteQuizProcesses.QUIZ, TestTokens.unverified(tokens, sponsor,
+            QbRoles.of(QbRoles.SPONSOR).permissions().toArray(String[]::new)), body("aiJobId", aiJobId), 403).toString())
+            .contains("EMAIL_NOT_VERIFIED");
+        // A banned sponsor.
+        String boss = userWithRole("site-quiz-boss-" + UUID.randomUUID(), QbRoles.ADMIN_SUPER);
+        run("QB_USER_BAN", tokenOf(boss, QbRoles.ADMIN_SUPER), body("userId", sponsor, "reason", "Fraud"));
+        assertThat(codes(refused(SiteQuizProcesses.QUIZ, token, body("aiJobId", aiJobId), 422)))
+            .contains("QB_USER_BANNED");
+        assertThat(job(aiJobId).get("site_quiz_id")).isNull();
+    }
+
+    @Test
+    void questionsThatAllFailTheRulesLeaveNoJobAndTheQuizIsStillMade() {
+        draft = DRAFT.replaceAll("(?s)\"questions\": \\[.*\\]\\}\\s*$", "\"questions\": []}");
+        String token = sponsorFull(newSponsor("site-quiz-n-" + UUID.randomUUID()));
+        Object aiJobId = readyDraft(token);
+        Map<String, Object> made = run(SiteQuizProcesses.QUIZ, token, body("aiJobId", aiJobId));
+        assertThat(made.get("questionsJob")).isNull();
+        assertThat(((Number) made.get("questions")).intValue()).isZero();
+        assertThat(job(aiJobId).get("site_quiz_id")).isEqualTo(UUID.fromString(String.valueOf(made.get("quizId"))));
+    }
+
+    @Test
+    void theKeptQuestionsExpireAndCanBeDiscardedLikeAnyOther() {
+        String sponsor = newSponsor("site-quiz-e-" + UUID.randomUUID());
+        String token = sponsorFull(sponsor);
+        Object first = readyDraft(token);
+        Object discarded = run(SiteQuizProcesses.QUIZ, token, body("aiJobId", first)).get("questionsJob");
+        assertThat(run(AiProcesses.DISCARD, token, body("aiJobId", discarded))).containsEntry("status", QbAi.DISCARDED);
+        assertThat(job(discarded)).containsEntry("status", QbAi.DISCARDED).containsEntry("candidates", null);
+
+        String other = sponsorFull(newSponsor("site-quiz-f-" + UUID.randomUUID()));
+        Object second = readyDraft(other);
+        Object expires = run(SiteQuizProcesses.QUIZ, other, body("aiJobId", second)).get("questionsJob");
+        advance(Duration.ofDays(30));
+        runExpiry();
+        assertThat(job(expires)).containsEntry("status", QbAi.EXPIRED).containsEntry("candidates", null);
+        assertThat(job(second)).containsEntry("status", QbAi.EXPIRED);
+    }
+
+    @Test
+    void aQuizTheImportRefusesLeavesTheDraftUnmarkedAndNothingKept() {
+        // More articles than a quiz may hold (a deployment that raised the draft's limit above the quiz's): the usual
+        // import refuses the file, and then nothing is made, marked or kept.
+        setParam(QbParams.SITE_PROFILE_MATERIALS_MAX, "12");
+        try {
+            StringBuilder many = new StringBuilder();
+            for (int i = 1; i <= 11; i++) {
+                many.append(i > 1 ? "," : "").append("{\"title\": \"Page ").append(i).append("\", \"body\": \"Text ")
+                    .append(i).append("\", \"url\": \"https://www.aini.example/p").append(i).append("\"}");
+            }
+            draft = DRAFT.replaceAll("(?s)\"materials\": \\[.*?\\],\\s*\"questions\"",
+                java.util.regex.Matcher.quoteReplacement("\"materials\": [" + many + "], \"questions\""));
+            String token = sponsorFull(newSponsor("site-quiz-r-" + UUID.randomUUID()));
+            Object aiJobId = readyDraft(token);
+            assertThat(codes(refused(SiteQuizProcesses.QUIZ, token, body("aiJobId", aiJobId), 422))).isNotEmpty();
+            assertThat(job(aiJobId).get("site_quiz_id")).isNull();
+            assertThat(query("SELECT count(*) AS n FROM qb_ai_job WHERE from_site_draft_id = ?",
+                String.valueOf(aiJobId)).getFirst().get("n")).isEqualTo(0L);
+        } finally {
+            setParam(QbParams.SITE_PROFILE_MATERIALS_MAX, "5");
+        }
     }
 }

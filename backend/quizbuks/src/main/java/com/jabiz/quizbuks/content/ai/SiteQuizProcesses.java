@@ -35,7 +35,7 @@ import java.util.UUID;
  *       question, each marked reviewed by the sponsor;</li>
  *   <li>no usage is counted: the website job counted what the AI used.</li>
  * </ul>
- * One quiz a draft ({@code acceptedCount} of the website job); the draft stays for the profile's review.
+ * One quiz a draft (the website job's {@code siteQuizId}); the draft stays for the profile's review.
  */
 public final class SiteQuizProcesses {
 
@@ -48,6 +48,8 @@ public final class SiteQuizProcesses {
 
     /** The titles of the quiz in the draft's base language, with the company's name. */
     private static final Map<String, String> TITLES = Map.of("en", "Get to know %s", "zh", "认识 %s", "ja", "%sを知ろう");
+    /** What stands for the company's name when the draft has none: "us" in the quiz's language. */
+    private static final Map<String, String> US = Map.of("en", "us", "zh", "我们", "ja", "私たち");
     private static final Map<String, String> INTROS = Map.of(
         "en", "Read these articles from the website of %s, then answer the questions.",
         "zh", "读一读 %s 官网上的这几篇文章，再回答问题。",
@@ -77,7 +79,7 @@ public final class SiteQuizProcesses {
             .compute("Write the quiz file", (metadata, ctx) -> write(ctx))
             .step("Make the quiz", CallProcess.<ProcessContext>when(ctx -> !ctx.hasViolations()
                     && ctx.contains(DOCUMENT), QuizTransferProcesses.IMPORT, 1,
-                ctx -> new QuizTransferProcesses.ImportInput(document(ctx), Map.of()), IMPORTED))
+                ctx -> new QuizTransferProcesses.ImportInput(document(ctx), Map.of(), null, true), IMPORTED))
             .compute("Keep the questions for review", (metadata, ctx) -> keep(ctx)));
     }
 
@@ -110,7 +112,7 @@ public final class SiteQuizProcesses {
         if (!com.jabiz.quizbuks.content.QuizEditing.instant(job.get("expiresAt")).isAfter(ctx.opTime())) {
             refuse(AiCodes.JOB_EXPIRED, "The AI candidates expired");
         }
-        if (job.get("acceptedCount") instanceof Number made && made.intValue() > 0) {
+        if (job.get("siteQuizId") != null) {
             refuse(AiCodes.SITE_QUIZ_MADE, "A quiz was made from this draft already");
         }
         JsonNode stored = JSON.readTree(String.valueOf((Object) job.get("candidates")));
@@ -127,7 +129,9 @@ public final class SiteQuizProcesses {
             article.put("kind", "ARTICLE");
             article.put("title", material.path("title").asString());
             article.put("body", material.path("body").asString());
-            if (material.path("url").isString()) {
+            // The page it was taken from; a longer address would not fit a material's description.
+            if (material.path("url").isString()
+                && material.path("url").asString().length() <= com.jabiz.quizbuks.content.ContentLimits.MATERIAL_DESCRIPTION_LENGTH) {
                 article.put("description", material.path("url").asString());
             }
             articles.add(article);
@@ -151,7 +155,7 @@ public final class SiteQuizProcesses {
     private static String company(JsonNode profile, String language) {
         JsonNode name = profile.path("basics").path("company");
         String text = name.isString() ? name.asString().strip() : "";
-        return text.isEmpty() ? "us" : text;
+        return text.isEmpty() ? US.get(language) : text;
     }
 
     private static String clip(String text, int max) {
@@ -184,10 +188,12 @@ public final class SiteQuizProcesses {
             kept.put("fromSiteDraft", String.valueOf(job.id()));
             Map<String, Object> values = new LinkedHashMap<>();
             // The platform's job id is unique and names nothing here: this job is the draft's, already finished.
-            // Derived from the draft's id (one quiz a draft), not random: a random id blocks on the system's entropy.
+            // Derived from the draft's id (one quiz a draft), not random: under BlockHound a random UUID reads
+            // SecureRandom's seed (a blocking read of the system's entropy) and fails the test.
             values.put("externalJobId", UUID.nameUUIDFromBytes(("site-quiz:" + job.id())
                 .getBytes(java.nio.charset.StandardCharsets.UTF_8)).toString());
             values.put("sponsorId", ctx.request().actorId());
+            values.put("fromSiteDraftId", String.valueOf(job.id()));
             values.put("quizId", imported.quizId().toString());
             values.put("kind", QbAi.KIND_QUESTIONS);
             values.put("params", JSON.writeValueAsString(kept));
@@ -208,7 +214,7 @@ public final class SiteQuizProcesses {
         }
         // The draft is used once for a quiz (the profile's review of it goes on).
         Map<String, Object> used = new LinkedHashMap<>();
-        used.put("acceptedCount", BigDecimal.ONE);
+        used.put("siteQuizId", imported.quizId().toString());
         ctx.changes().update(QbAi.JOB, job.id(), job.version(), used);
         ctx.put(AiProcesses.OUTPUT, new QuizOutput(imported.quizId(), questionsJob, materials, checked.valid().size()));
     }

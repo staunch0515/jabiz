@@ -99,6 +99,10 @@ public final class QbAi {
         // Absent for a site's draft (F-C7), which names no quiz; present for every other kind.
         eb.field("quizId", f -> f.physicalColumn("quiz_id").immutable(true).processOnly()
             .asReference(QbContent.QUIZ));
+        // F-C7b-2: the quiz made from a site draft (kind SITE_PROFILE), once; empty for every other job.
+        eb.field("siteQuizId", f -> f.physicalColumn("site_quiz_id").processOnly().asReference(QbContent.QUIZ));
+        // F-C7b-2: the website draft a QUESTIONS job was made from (it is not a request of the day: see AiProcesses.limited).
+        eb.field("fromSiteDraftId", f -> f.physicalColumn("from_site_draft_id").processOnly().asText(36));
         eb.field("kind", f -> f.physicalColumn("kind").immutable(true).required(true).processOnly()
             .asCode(KIND_DICTIONARY, KIND_QUESTIONS, KIND_COVER, KIND_TRANSLATION,
                 KIND_PUBLICATION_TEXTS, KIND_TRANSLATION_CHECK, KIND_SITE_PROFILE));

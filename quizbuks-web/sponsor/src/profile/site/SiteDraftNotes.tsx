@@ -69,6 +69,22 @@ export function SiteDraftNotes({ draft, handle, onHandle }: {
         lines: product.price == null ? [] : [{ language: base, text: `${String(product.price)} ${String(product.currency ?? '')}` }] },
     ]),
   ].filter((field) => field.lines.length > 0)
+  // A path of the draft as the sponsor knows the field, never the path itself.
+  const pathLabel = (raw: string): string => {
+    // A text of one language (`basics.intro.ja`) is the field itself.
+    const path = raw.replace(/\.(ja|en|zh)$/, '')
+    const product = /^products\[(\d+)]\.?(name|price)?$/.exec(path)
+    if (product) {
+      const n = Number(product[1]) + 1
+      return product[2] === 'name' ? t('site.review.productName', { n })
+        : product[2] === 'price' ? t('site.review.productPrice', { n }) : t('site.review.productWhole', { n })
+    }
+    const article = /^materials\[(\d+)]/.exec(path)
+    if (article) return t('site.review.article', { n: Number(article[1]) + 1 })
+    const known: Record<string, string> = { 'basics.company': 'company', 'basics.intro': 'intro',
+      'page.headline': 'headline', 'page.website': 'website' }
+    return known[path] ? t(`site.review.${known[path]}`) : t('site.review.pathOther')
+  }
   const taken = draft.handle?.taken ?? false
   return (
     <section className="flex flex-col gap-3 rounded-md border p-3 text-sm" aria-labelledby={`${id}-title`}
@@ -123,7 +139,7 @@ export function SiteDraftNotes({ draft, handle, onHandle }: {
       {draft.notFound.length > 0 && (
         <div data-testid="site-not-found">
           <p className="font-medium">{t('site.review.notFound')}</p>
-          <ul className="list-disc pl-5">{draft.notFound.map((path) => <li key={path}>{path}</li>)}</ul>
+          <ul className="list-disc pl-5">{draft.notFound.map((path) => <li key={path}>{pathLabel(path)}</li>)}</ul>
         </div>
       )}
       {draft.dropped.length > 0 && (
@@ -132,7 +148,7 @@ export function SiteDraftNotes({ draft, handle, onHandle }: {
           <ul className="list-disc pl-5">
             {draft.dropped.map((field) => (
               <li key={`${field.path}-${field.reason}`}>
-                {field.path}: {t(`site.review.reason.${reasonKey(field.reason)}`, { defaultValue: field.reason })}
+                {pathLabel(field.path)}: {t(`site.review.reason.${reasonKey(field.reason)}`, { defaultValue: field.reason })}
               </li>
             ))}
           </ul>
@@ -141,11 +157,35 @@ export function SiteDraftNotes({ draft, handle, onHandle }: {
       {draft.materials > 0 && (
         <div className="flex flex-col gap-2" data-testid="site-quiz">
           <p className="text-muted-foreground">{t('site.review.quiz', { n: draft.materials, q: draft.questions })}</p>
-          {draft.quizMade
-            ? <p role="status" data-testid="site-quiz-made">{t('site.review.quizMade')}</p>
+          {draft.quizId
+            ? (
+              <p role="status" data-testid="site-quiz-made">
+                {t('site.review.quizMade')}{' '}
+                <a href={quizPath(draft.quizId)} className="underline" data-testid="site-quiz-open"
+                  onClick={(event) => {
+                    event.preventDefault()
+                    navigate(quizPath(draft.quizId!))
+                  }}>{t('site.review.quizOpen')}</a>
+              </p>
+            )
             : (
               <>
                 <p>{t('site.review.quizHint')}</p>
+                <div data-testid="site-articles">
+                  <p className="font-medium">{t('site.review.articlesTitle')}</p>
+                  <ul className="list-disc pl-5">
+                    {draft.articles.map((article, i) => {
+                      const link = safeLink(article.url)
+                      return (
+                        <li key={i} className="break-words">
+                          {article.title}
+                          {link && <>{' '}<a href={link} target="_blank" rel="noopener noreferrer" className="break-all underline"
+                            data-testid="site-article-source">{t('site.review.articleFrom', { url: link })}</a></>}
+                        </li>
+                      )
+                    })}
+                  </ul>
+                </div>
                 <span>
                   <Button type="button" variant="outline" size="sm" disabled={quiz.isPending} data-testid="site-quiz-make"
                     onClick={() => {

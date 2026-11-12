@@ -348,7 +348,9 @@ public final class AiProcesses {
                                     new QueryPredicate.IsNull("finishedAt")))))).limit(100).build(), OPEN),
                     QueryEntities.query(QbAi.defaultDataset(QbAi.JOB), ctx -> EntityQuery.builder()
                     .where(and(new QueryPredicate.Eq("sponsorId", ctx.request().actorId()),
-                            new QueryPredicate.Gte("requestedAt", AiLimits.dayStart(ctx.opTime(), zone))))
+                            new QueryPredicate.Gte("requestedAt", AiLimits.dayStart(ctx.opTime(), zone)),
+                            // questions kept next to a quiz made from a website draft are not requests of the day
+                            new QueryPredicate.IsNull("fromSiteDraftId")))
                     .limit(ctx.get(SETTINGS, AiSettings.class).dailyJobs() + 1).build(), TODAY),
                     QueryEntities.query(QbAi.defaultDataset(QbAi.USAGE), ctx -> usageOf(ctx.request().actorId(),
                         AiLimits.month(ctx.opTime(), zone)), USAGE)))

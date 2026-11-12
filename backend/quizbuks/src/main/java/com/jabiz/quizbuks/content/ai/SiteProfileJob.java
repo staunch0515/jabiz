@@ -83,7 +83,21 @@ public final class SiteProfileJob {
     }
 
     /** A field of the answer that was left out, and why. */
-    public record Dropped(String path, String reason) {}
+    public record Dropped(String path, String reason) {
+        /** The longest path or reason kept: what the AI wrote as a path is not trusted to be short. */
+        public static final int MAX_LENGTH = 120;
+        /** The most fields listed: a draft that left out more than this is not worth a longer list. */
+        public static final int MAX_LISTED = 50;
+
+        public Dropped {
+            path = clip(path);
+            reason = clip(reason);
+        }
+
+        private static String clip(String text) {
+            return text == null || text.length() <= MAX_LENGTH ? text : text.substring(0, MAX_LENGTH);
+        }
+    }
 
     /** One article for the quiz: a title, the page's text tidied, and the page it was taken from. */
     public record Material(String title, String body, String url) {}

@@ -27,11 +27,13 @@ const DRAFT = {
     { path: 'products[1]', reason: 'Price is not a number' }],
   translated: ['en'],
   handle: { handle: 'aini', taken: true, alternatives: ['aini-2', 'aini-3'] },
-  materials: [{ title: 'About us', body: 'x', url: 'https://www.aini.example/about' }],
+  materials: [{ title: 'About us', body: 'x', url: 'https://www.aini.example/about' },
+    { title: 'Odd', body: 'y', url: 'javascript:alert(1)' }],
   questions: [],
 }
 
 const row = (status: string, extra: Record<string, unknown> = {}) => ({
+  siteQuizId: null,
   aiJobId: 'j1', externalJobId: 'x1', status,
   params: JSON.stringify({ url: 'https://www.aini.example/', language: 'ja', languages: ['ja', 'en'] }),
   candidates: status === 'READY' ? JSON.stringify(DRAFT) : null, candidateCount: 0, invalidCount: 0, acceptedCount: null,
@@ -139,7 +141,7 @@ describe('a draft from the website, as the page reads it', () => {
     expect(draft.dropped).toHaveLength(2)
     expect(draft.translated).toEqual(['en'])
     expect(draft.handle).toEqual({ handle: 'aini', taken: true, alternatives: ['aini-2', 'aini-3'] })
-    expect(draft.materials).toBe(1)
+    expect(draft.materials).toBe(2)
     expect(toSiteDraft(row('QUEUED')).profile).toBeNull()
   })
 
@@ -246,6 +248,19 @@ describe('the menu item and the dialog', () => {
   })
 })
 
+describe('a request that stays queued', () => {
+  it('can be cancelled after the page has given up waiting, and the form that would be refused is not shown', async () => {
+    const stale = new Date(Date.now() - 6 * 60_000).toISOString()
+    const calls = server({ rows: [[row('QUEUED', { requestedAt: stale })]] })
+    renderMenu()
+    const dialog = await openDialog()
+    expect(await within(dialog).findByTestId('site-slow')).toBeInTheDocument()
+    expect(within(dialog).queryByTestId('site-address')).toBeNull()
+    await userEvent.click(within(dialog).getByTestId('site-cancel'))
+    await waitFor(() => expect(calls.of('/api/processes/QB_AI_CANCEL/latest')).toEqual([{ aiJobId: 'j1' }]))
+  })
+})
+
 describe('reviewing the draft', () => {
   async function review() {
     const calls = server({ rows: [[row('READY')]] })
@@ -276,10 +291,12 @@ describe('reviewing the draft', () => {
     const headline = within(confirmation).getAllByTestId('site-field').find((f) => f.dataset.path === 'page.headline')!
     expect(within(headline).queryByTestId('site-source')).toBeNull()
     expect(headline).toHaveTextContent('did not say which page')
-    expect(within(confirmation).getByTestId('site-not-found')).toHaveTextContent('page.cover')
+    // Fields are named as the sponsor knows them, never by their path.
+    expect(within(confirmation).getByTestId('site-not-found')).toHaveTextContent('another detail')
+    expect(within(confirmation).getByTestId('site-not-found')).not.toHaveTextContent('page.cover')
     const dropped = within(confirmation).getByTestId('site-dropped')
-    expect(dropped).toHaveTextContent('basics.intro.ja: a person\'s e-mail address, phone number or social account was removed')
-    expect(dropped).toHaveTextContent('products[1]: Price is not a number')
+    expect(dropped).toHaveTextContent('About you: a person\'s e-mail address, phone number or social account was removed')
+    expect(dropped).toHaveTextContent('Product 2: Price is not a number')
     await expectAccessible()
   })
 
@@ -298,7 +315,7 @@ describe('reviewing the draft', () => {
 
 describe('the "get to know us" quiz', () => {
   async function review(options: Options) {
-    const calls = server({ rows: [[row('READY', options.quizFails ? { acceptedCount: 1 } : {})]], ...options })
+    const calls = server({ rows: [[row('READY', options.quizFails ? { siteQuizId: 'quiz-9' } : {})]], ...options })
     renderMenu()
     const dialog = await openDialog()
     await userEvent.click(await within(dialog).findByTestId('site-review'))
@@ -309,14 +326,25 @@ describe('the "get to know us" quiz', () => {
 
   it('makes the quiz draft from the articles on request; the questions wait for review in the quiz', async () => {
     const { calls, confirmation } = await review({})
-    expect(within(confirmation).getByTestId('site-quiz')).toHaveTextContent('1 articles and 0 questions')
+    expect(within(confirmation).getByTestId('site-quiz')).toHaveTextContent('2 articles and 0 questions')
     await userEvent.click(within(confirmation).getByTestId('site-quiz-make'))
     await waitFor(() => expect(calls.of('/api/processes/QB_SITE_PROFILE_QUIZ/latest')).toEqual([{ aiJobId: 'j1' }]))
+  })
+
+  it('lists the articles the quiz will have, each with its page as a link only when it is an https address', async () => {
+    const { confirmation } = await review({})
+    const articles = within(confirmation).getByTestId('site-articles')
+    expect(articles).toHaveTextContent('About us')
+    expect(articles).toHaveTextContent('Odd')
+    const links = within(articles).getAllByTestId('site-article-source')
+    expect(links).toHaveLength(1)
+    expect(links[0]).toHaveAttribute('href', 'https://www.aini.example/about')
   })
 
   it('does not offer a second quiz from the same draft', async () => {
     const { confirmation } = await review({ quizFails: true })
     expect(within(confirmation).getByTestId('site-quiz-made')).toHaveTextContent('A quiz was made from this draft')
+    expect(within(confirmation).getByTestId('site-quiz-open')).toHaveAttribute('href', expect.stringContaining('quiz-9'))
     expect(within(confirmation).queryByTestId('site-quiz-make')).toBeNull()
   })
 
