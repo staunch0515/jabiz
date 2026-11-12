@@ -1189,6 +1189,21 @@ Quiz 与发布有主题词（平台词表中的词与自定义词），学者可
 - **看寄出的是哪一版**：投递记录写明所用的文字版本（`sys_mail_attempt`、`sys_notification`、`sys_document_delivery` 的 `text_version_no`，空 = 缺省）。
 - **新增模版的开发规则**：每个模版必须有三语的 `mail.<名>.name` 与每个参数的 `.sample(…)`（`MailTemplatesCoverageTest`）；让收件人付款、转账或讲到收款账户、付款方式的、又没有令牌的通知，一律加 `protectedText()`（见上面的判定原则）。
 
+### 7.46 从官网生成资料与“认识我们”的 Quiz（F-C7）
+
+发起方给自己官网的地址，AI 读该网站，起草资料包与一份“认识我们”的 Quiz（`docs/quizbuks/plans/impl/F-C7.md`，帮助 `help/site-profile.md`）。作业类型 `qb.ai.site-profile`（外部作业，平台 D38），请求流程 `QB_SITE_PROFILE_REQUEST`，Quiz 由 `QB_SITE_PROFILE_QUIZ` 建立。它只起草：结果存在作业里（`READY`），发起方在确认页确认后才经现有的 `QB_PROFILE_IMPORT` 写入；题目只经 `QB_AI_ACCEPT` 逐题由人确认入库。
+
+- **开关与参数**：`qb.ai.site-profile.enabled`（受控参数，**缺省关**，四眼：一人提出、另一人发布）与 `qb.ai.enabled` 都开才可用；`qb.ai.site-profile.monthly`（每月次数，受控，缺省 10）；普通参数 `.daily`（每天次数 3）、`.max-pages`（最多读几页 10）、`.questions`（题数 5）、`.options`（选项数 4）、`.materials-max`（文章数 5）、`.handle-alternatives`（链接名被占用时给几个备选 3）。失败的也计入每日与每月次数。发起方页面只在 `siteProfileEnabled`（模版 `qb.sponsor.ai-usage`）为真时显示入口。
+- **上线前必须做**：开关保持关闭，直到（1）在 staging 用一个真实网站测一次耗时。平台对一次外部调用封顶 2 分钟、没有流式，读多页再写三语资料包可能超过；若超过，需要平台支持流式（须总控决定）或降低页数、输出上限；配置 `quizbuks.ai.site-profile.request-timeout`（缺省用 `quizbuks.ai.request-timeout`，至多 PT2M）。（2）核对输入 token 是否按轮累计：服务端工具多轮读取时每轮的输入可能累计，预留（页数 × 每页上限 + 固定部分，`SiteProfileJob.reservedInput`）是否够，不够就提高预留。结果记在 `plans/impl/F-C7.md`「待核实」。F-M9（预付 AI 额度）做好之前费用由平台承担，用量照 `QbAiUsage` 计入并受 AI 额度限制。
+- **只读该网站**：请求带 `allowed_domains`（主机与其 `www.` 的另一种写法）、不用网页搜索；地址须是 `https://` 的公网主机，不收账号、端口、IP、内网名，也不收**公共后缀**本身（`co.jp`、`github.io` 等）；写了路径就从那个路径读，查询与片段丢掉；Unicode 域名转 punycode。**补公共后缀**：在资源文件 `backend/quizbuks/src/main/resources/quizbuks/ai/public-suffixes.txt` 加一行（小写、punycode，一行一个）并发版，没有别处读它；清单是下限，不是公共后缀表的全部。社交服务的主机清单在同目录的 `social-hosts.txt`，补法相同。
+- **个人信息**：联系人姓名不取；电话、邮箱、社交账号在 `PersonalDetails` 中去掉（NFKC 归一后匹配，没有可去掉的文字原样保留），被改动的字段列在草稿的 `dropped` 里，确认页逐项给发起方看。已知限制（也写在帮助里）：不以 0 或 + 开头的境外号码、“LINE ID xxx”这类写法不去掉；订单号、品番等长数字可能被误去掉；站外店铺链接会被去掉。
+- **图片**：处理器不下载图片，只给链接，确认页导入时才按 D75 逐张下载。
+- **超时不重试**：一次调用超时，作业直接失败（`QB_AI_SITE_TIMEOUT`），只计一次尝试的预留用量，免得损失翻倍。
+- **费用事故**：同 §7.8（先撤提供方的密钥，再把 `qb.ai.enabled` 关闭）；只停这一项就把 `qb.ai.site-profile.enabled` 关闭（四眼），已请求的作业照常结束并计费，新请求被拒。取消作业只经 `QB_AI_CANCEL`。
+- **待办**：草稿就绪时给发起方一条待办（`task.qb.ai.site-profile`，来源键 `site-profile:<作业号>`），丢弃或过期时经子流程 `QB_SITE_PROFILE_REVIEW_CLOSE` 关闭。
+- **出了问题**：发起方说读不了：看作业的 `failure_code`（`QB_AI_SITE_UNREACHABLE` 打不开、`QB_AI_SITE_ROBOTS` robots.txt 不允许、`QB_AI_SITE_NO_TEXT` 几乎没有文字、`QB_AI_SITE_TIMEOUT` 用时过长、`QB_AI_NO_CANDIDATES` 没有可用的内容）；这几种都请发起方改用“给 AI 工具的提示词”或手填。作业输入里的官网地址在操作记录中被遮蔽（`siteAddress` 标 `@Sensitive`），要查就看作业本身的 `params`。
+- **部署**：迁移 V114；部署后执行一次 `QB_SETUP`（新的参数与审核规则），再由另一位管理员发布。
+
 ## 8. 升级到线 1.3（S0 的迁移 V29、V30）
 
 S0（`shopify/S0-publisher.md`）给发布、档位、卡片、会话、分析、现金 / 兑换 / 电子奖品与码池、邀请加上 `publisher_kind`（已有的行全部为 `SPONSOR`），并把普通表的 `sponsor_id` 列改名为 `publisher_id`。

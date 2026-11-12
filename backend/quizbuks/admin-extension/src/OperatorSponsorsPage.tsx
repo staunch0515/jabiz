@@ -29,6 +29,8 @@ import { EmptyState, LoadFailed } from './components'
 import { BillingDialog } from './BillingDialog'
 import { useLabels, usePaged, usePoints } from './hooks'
 import { DICTIONARY, PATH, PERMISSION } from './ids'
+import { confirmOnboarding } from './fee-api'
+import { RegionExceptionAction } from './RegionExceptionAction'
 import { banSponsor, readOperatorSponsors, unbanSponsor, type OperatorSponsor } from './operator-api'
 
 /** The columns sorted on the server, by the template's `list.sorts` field (Q53a). */
@@ -37,6 +39,9 @@ const SORTS = { company: 'company' } as const
 const linkClass = 'text-primary font-medium underline-offset-4 hover:underline'
 const right = { className: 'text-right tabular-nums' }
 const KEY = ['qb-ext', 'operator-sponsors'] as const
+
+/** F-F11b: a Sponsor of the operator, approved and not banned, may be confirmed for the onboarding Kudos. */
+const isGrantable = (s: OperatorSponsor) => s.mine && s.reviewStatus === 'APPROVED' && !s.banned
 
 /**
  * Bans a sponsor (`QB_OPERATOR_SPONSOR_BAN`, with a reason headquarters reads; the sponsor reads only that the account
@@ -108,6 +113,12 @@ export default function OperatorSponsorsPage() {
   const points = usePoints()
   const { can } = useAuth()
   const biller = can(PERMISSION.feeBilling)
+  const granter = can(PERMISSION.feeCreditOnboarding)
+  // F-F11b: the onboarding Kudos for several Sponsors at once. Each is its own call (one wallet lock, one transaction);
+  // one batch runs at a time, and a Sponsor that failed stays ticked to try again.
+  const [selected, setSelected] = useState<ReadonlySet<string>>(new Set())
+  const [results, setResults] = useState<Readonly<Record<string, { ok: boolean; text: string }>>>({})
+  const [progress, setProgress] = useState<{ done: number; total: number } | null>(null)
   const [billing, setBilling_] = useState<OperatorSponsor | null>(null)
   const [search, setSearch] = useSearchParams()
   const q = search.get('q') ?? ''
@@ -122,8 +133,53 @@ export default function OperatorSponsorsPage() {
     }
     setSearch(next, { replace: true })
   }
+  const toggle = (userId: string, on: boolean) => setSelected((now) => {
+    const next = new Set(now)
+    if (on) next.add(userId)
+    else next.delete(userId)
+    return next
+  })
+  const grantSelected = async () => {
+    if (progress || selected.size === 0) return
+    const ids = [...selected]
+    setProgress({ done: 0, total: ids.length })
+    for (const [index, userId] of ids.entries()) {
+      try {
+        const given = await confirmOnboarding(userId)
+        setResults((now) => ({ ...now, [userId]: given.granted ? { ok: true, text: t('fee.onboarding.bulk.ok') }
+          : { ok: false, text: t('fee.onboarding.bulk.nothing') } }))
+        if (given.granted) toggle(userId, false)
+      } catch (e) {
+        setResults((now) => ({ ...now, [userId]: { ok: false, text: e instanceof ApiError ? e.display : String(e) } }))
+      }
+      setProgress({ done: index + 1, total: ids.length })
+    }
+    setProgress(null)
+    void queryClient.invalidateQueries({ queryKey: ['qb-ext'] })
+  }
   const { query, table, sortable } = usePaged([...KEY, q, mine], (offset, limit, sorts) => readOperatorSponsors(q, mine, offset, limit, sorts), true, SORTS)
   const columns = useMemo<ColumnDef<OperatorSponsor, unknown>[]>(() => [
+    ...(granter ? [{
+      id: 'grant',
+      header: t('fee.onboarding.bulk.title'),
+      cell: ({ row }: { row: { original: OperatorSponsor } }) => {
+        const s = row.original
+        const result = results[s.userId]
+        return (
+          <span className="flex flex-wrap items-center gap-2">
+            {isGrantable(s) && !result?.ok && (
+              <Checkbox checked={selected.has(s.userId)} disabled={progress !== null} data-testid="sponsor-grant-select"
+                aria-label={t('fee.onboarding.bulk.select', { name: s.company })}
+                onCheckedChange={(value) => toggle(s.userId, value === true)} />
+            )}
+            {result && (
+              <span className={result.ok ? 'text-sm' : 'text-destructive text-sm'} role={result.ok ? undefined : 'alert'}
+                data-testid="sponsor-grant-result" data-state={result.ok ? 'ok' : 'error'}>{result.text}</span>
+            )}
+          </span>
+        )
+      },
+    } satisfies ColumnDef<OperatorSponsor, unknown>] : []),
     {
       id: 'company',
       header: t('operator.sponsors.company'),
@@ -166,6 +222,13 @@ export default function OperatorSponsorsPage() {
         )
       },
     },
+    // F-F11b: a mainland China exception for the operator's own Sponsor, or the note that one is in force.
+    ...(can(PERMISSION.regionWrite) ? [{
+      id: 'region',
+      header: t('region.title'),
+      cell: ({ row }: { row: { original: OperatorSponsor } }) => (row.original.mine
+        ? <RegionExceptionAction kind="SPONSOR" id={row.original.userId} name={row.original.company} /> : null),
+    } satisfies ColumnDef<OperatorSponsor, unknown>] : []),
     {
       id: 'ban',
       header: t('operator.sponsors.ban'),
@@ -193,7 +256,7 @@ export default function OperatorSponsorsPage() {
         )
       },
     },
-  ], [t, review, billingMode, points, biller])
+  ], [t, review, billingMode, points, biller, granter, can, selected, results, progress])
   return (
     <div className="flex flex-col gap-4" data-testid="operator-sponsors-page">
       <PageHeader title={t('operator.sponsors.pageTitle')} description={t('operator.sponsors.description')}
@@ -214,6 +277,23 @@ export default function OperatorSponsorsPage() {
           <Label htmlFor={`${id}-mine`} className="font-normal">{t('operator.sponsors.onlyMine')}</Label>
         </div>
       </form>
+      {granter && (
+        <div className="flex flex-col gap-2" data-testid="sponsors-grant-bar">
+          <p className="text-muted-foreground text-sm">{t('fee.onboarding.bulk.hint')}</p>
+          <span className="flex flex-wrap items-center gap-3">
+            <Button type="button" disabled={selected.size === 0 || progress !== null}
+              aria-busy={progress !== null || undefined} data-testid="operator-sponsors-confirm-selected"
+              onClick={() => void grantSelected()}>
+              {t('fee.onboarding.bulk.confirm', { n: selected.size })}
+            </Button>
+            {progress && (
+              <span role="status" className="text-sm" data-testid="sponsors-grant-progress">
+                {t('fee.onboarding.bulk.running', progress)}
+              </span>
+            )}
+          </span>
+        </div>
+      )}
       {query.isError
         ? <LoadFailed error={query.error} onRetry={() => void query.refetch()} />
         : (

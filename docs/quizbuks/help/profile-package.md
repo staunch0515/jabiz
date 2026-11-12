@@ -27,7 +27,7 @@
 
 **邮件服务器**：资料包带着邮件服务器的设置，但不带密码；导入后到"邮件服务器"页补上密码，说明见那一页。它不由 AI 起草。
 
-**用 AI 根据官网起草**：点"给 AI 工具的提示词"，填好官网地址和联系人姓名，点"复制提示词"，交给能读网页的 AI 工具（ChatGPT、Gemini、Claude 等）。AI 会回答一个 JSON，保存成 `.quizbuks-profile.json` 文件，再按上面的"导入"选择它。不要让 AI 在文件里放图片数据，只要链接。
+**用 AI 根据官网起草**：点"给 AI 工具的提示词"，填好官网地址和联系人姓名，点"复制提示词"，交给能读网页的 AI 工具（ChatGPT、Gemini、Claude 等）。AI 会回答一个 JSON，保存成 `.quizbuks-profile.json` 文件，再按上面的"导入"选择它。不要让 AI 在文件里放图片数据，只要链接。如果你想让 AI 直接替你读官网，也可以用菜单里的“从官网生成”，见“从官网生成资料与‘认识我们’的 Quiz”一页（`site-profile.md`）。
 
 **一定要校对**：导入前的确认页会列出将新增、修改与删除的内容。AI 可能读错或漏掉信息，请把公司名、简介、商品的价格与链接与官网逐项对照，确认无误再导入。
 
@@ -47,7 +47,7 @@
 
 **メールサーバー**：資料パッケージにはメールサーバーの設定が入りますが、パスワードは入りません。取り込み後に「メールサーバー」ページでパスワードを入れてください。説明はそのページにあります。AI による下書きの対象ではありません。
 
-**AI で公式サイトから下書きを作る**：「AI ツール用のプロンプト」を開き、公式サイトの URL と担当者名を入れて「プロンプトをコピー」し、ウェブページを読める AI ツール（ChatGPT、Gemini、Claude など）に渡します。AI が返した JSON を `.quizbuks-profile.json` として保存し、上の「取り込む」で選びます。AI に画像データを入れさせず、リンクだけにしてください。
+**AI で公式サイトから下書きを作る**：「AI ツール用のプロンプト」を開き、公式サイトの URL と担当者名を入れて「プロンプトをコピー」し、ウェブページを読める AI ツール（ChatGPT、Gemini、Claude など）に渡します。AI が返した JSON を `.quizbuks-profile.json` として保存し、上の「取り込む」で選びます。AI に画像データを入れさせず、リンクだけにしてください。AI に公式サイトを直接読ませたいときは、メニューの「公式サイトから下書き」も使えます（「公式サイトからの下書きと「私たちを知る」クイズ」のページ、`site-profile.md`）。
 
 **必ず確認してください**：取り込み前の確認画面に、追加・変更・削除される内容が表示されます。AI は読み違いや抜けをすることがあるため、会社名・紹介文・商品の価格とリンクを公式サイトと一つずつ照らし合わせ、間違いがなければ取り込んでください。
 
@@ -67,7 +67,7 @@
 
 **Mail server**: a package carries the mail server's settings but never its password; after an import, add the password on the "Mail server" page, where it is explained. An AI tool does not draft it.
 
-**Drafting with an AI tool from your website**: press "Prompt for an AI tool", enter your website address and the contact name, press "Copy the prompt" and give it to an AI tool that can read web pages (ChatGPT, Gemini, Claude and others). The AI answers with one JSON; save it as a `.quizbuks-profile.json` file and choose it with "Import" as above. Do not let the AI put image data in the file, only links.
+**Drafting with an AI tool from your website**: press "Prompt for an AI tool", enter your website address and the contact name, press "Copy the prompt" and give it to an AI tool that can read web pages (ChatGPT, Gemini, Claude and others). The AI answers with one JSON; save it as a `.quizbuks-profile.json` file and choose it with "Import" as above. Do not let the AI put image data in the file, only links. If you would rather have an AI read your website for you, use "Draft from your website" in the same menu (the page "Drafting from your website, and the \"get to know us\" quiz", `site-profile.md`).
 
 **Always check it**: the confirmation screen before the import lists what will be added, changed and removed. An AI can misread or miss things, so compare the company name, the introduction and each product's price and link with your website, and import only when they are right.
 
