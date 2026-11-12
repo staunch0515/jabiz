@@ -72,7 +72,9 @@ CREATE INDEX qb_distribution_settlement_version_sponsor_idx
     ON qb_distribution_settlement_version (sponsor_id, period);
 CREATE INDEX qb_distribution_settlement_version_period_only_idx ON qb_distribution_settlement_version (period);
 
--- The distribution fee is a kind of charge.
+-- The distribution fee is a kind of charge (its code is longer than the column was: widened, the values read the same
+-- in the integrity seal's digest, decision D58).
+ALTER TABLE qb_fee_charge_version ALTER COLUMN kind TYPE varchar(20);
 ALTER TABLE qb_fee_charge_version DROP CONSTRAINT qb_fee_charge_version_kind_check;
 ALTER TABLE qb_fee_charge_version ADD CONSTRAINT qb_fee_charge_version_kind_check
     CHECK (kind IN ('MONTHLY', 'MANUAL', 'AUDIENCE', 'DISTRIBUTION'));
