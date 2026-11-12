@@ -91,7 +91,7 @@
 - **平台管理系统**（`/qb/ai`）：`qb.admin.ai-jobs` 加费用列（美元成本、日元费用、平台承担、运营商）；新模板 `qb.admin.ai-fees`（按月、发起方、运营商：成本美元、收费日元、承担、未记费、额度余额；可导出）；倍数 / 汇率 / 最低购买额 / 开关的受控变更入口沿用参数页。
 - **任务与自动收尾**：`qb.ai-fee-monthly`、`qb.ai-credit-expire`（均可补跑）；预留随作业结束释放；到期提醒复用 F-M2 的赠送到期提醒（赠送还在 AI 额度中时也提醒，实现时确认 `qb.fee-credit-remind` 的取项含这部分）。
 - **告警**：平台承担的合计超过阈值、核对差异均给总部财务待办；每月把 Anthropic 控制台的账单与总部页的"成本美元合计"对照（`operations.md`）。
-- **`operations.md`** 新小节（当时的最大号 + 1；F-M7 分支用 7.50）：开关与参数、价格 / 汇率的受控变更、两个任务的时刻与补跑、锁序、核对项的处理、与提供方账单对照、"不要用关收费开关止损"、关开关后的行为、官网生成的前提。
+- **`operations.md`** 新小节（编号取当时最大的小节号 + 1；F-M7 也会加一节，排在它后面）：开关与参数、价格 / 汇率的受控变更、两个任务的时刻与补跑、锁序、核对项的处理、与提供方账单对照、"不要用关收费开关止损"、关开关后的行为、官网生成的前提。
 
 ## 8 对账、月报与依赖
 
@@ -107,7 +107,7 @@
   3. `wallet.sql`（它加 `creditNoteCredit`，改"未付"的算法）、`recon-fee-account.sql`、`monthly.sql`、`recon-fee-receivable.sql`：本项在其上追加。
   4. 贷项凭证可以对任意费用开手工凭证：对种类 `AI` 的费用，按 F-M7 的规则退到账户（不是 AI 额度）。**本项不依赖它，但加一个测试确认不出错**（待它合入后补，列为 b 的测试）。
   5. 前端 `sponsor/src/wallet/*`（`FeeAccount.tsx`、`api.ts`、`messages.ts`）与 `admin-extension`（`fee-api.ts`、`fee-messages.ts`）同样被它改动。
-  6. `operations.md` 7.50、`F-M.md` §10、`first-launch-progress.md`、`backend/quizbuks/CLAUDE.md`：文档合并。
+  6. `operations.md`（F-M7 新加的小节）、`F-M.md` §10、`first-launch-progress.md`、`backend/quizbuks/CLAUDE.md`：文档合并。
 - 其他已合并的依赖：F-M1（`FeeAllocation`、`QbFeePayment`）、F-M5（`Prepayments`、2180）、F-M11（`QbFeeCharge.operatorId` 由调用方给）、F-C7（官网生成作业）、F-C10（帮助独立）；**官网生成的收费依赖本项**（`qb.ai.site-profile.enabled` 由此改 `ACTIVE`）。F-M12（分成基数）、F-M13（账单分列）、F-M15（封禁 / 注销）在本项之后。
 
 ## 9 测试清单
