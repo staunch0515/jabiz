@@ -128,7 +128,8 @@ public final class Reconciliation {
         return "urn:jabiz:dataset:default:" + entity;
     }
 
-    public static ProcessDefinition<ReconcileInput, ReconcileOutput, ProcessContext> process() {
+    /** @param zone the fiscal year's zone: F-M6's months of the distribution fee (the unsettled publications) */
+    public static ProcessDefinition<ReconcileInput, ReconcileOutput, ProcessContext> process(java.time.ZoneId zone) {
         return ProcessDefinition.define(RUN, 1, ReconcileInput.class, ReconcileOutput.class, ProcessContext.class,
             pb -> pb
                 .description("Reconciles the wallets, the pending rewards and the top-ups with the ledger.")
@@ -163,7 +164,8 @@ public final class Reconciliation {
                 .step("Check the entry fees unsettled", RunTemplate.<ProcessContext>of(ENTRY_FEES_TEMPLATE,
                     ctx -> Map.of(), ENTRY_FEES))
                 .step("Compare the fee account", RunTemplate.<ProcessContext>of(FEE_ACCOUNT_TEMPLATE,
-                    ctx -> Map.of("at", ctx.get(INPUT, ReconcileInput.class).scheduledTime()), FEE_ACCOUNT))
+                    ctx -> Map.of("at", ctx.get(INPUT, ReconcileInput.class).scheduledTime(), "zone", zone.getId()),
+                    FEE_ACCOUNT))
                 // The takers' cache follows by events: one found behind counts only when the previous run found them.
                 .step("Find the previous run", QueryEntities.<ProcessContext>of(defaultDataset(RUN_ENTITY_NAME),
                     ctx -> EntityQuery.builder().where(new QueryPredicate.Lt("scheduledTime",

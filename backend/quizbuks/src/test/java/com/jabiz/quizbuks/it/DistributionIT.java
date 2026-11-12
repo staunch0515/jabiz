@@ -316,6 +316,32 @@ class DistributionIT extends PrepaymentItSupport {
     }
 
     @Test
+    void theDailyCheckReportsAMonthNotSettledAndAnEndWithoutItsFinalRow() {
+        autoApprove(true);
+        distribution(true);
+        String sponsor = distributionSponsor("fm6-recon");
+        cash(sponsor, 1_000);
+        String publicationId = publication(sponsor, "FM6 recon", Map.of());
+        starts(publicationId, 1, "fm6-recon");
+        String month = period(clock.instant());
+        YearMonth next = YearMonth.parse(month).plusMonths(1);
+        // The 2nd at 07:00: 31 hours into the month, past qb.distribution.unsettled-after-hours (30); not settled.
+        clock.set(next.atDay(2).atTime(7, 0).atZone(ZONE).toInstant());
+        assertThat(differences(sponsor)).extracting(row -> row.get("checkCode"))
+            .containsExactly("DISTRIBUTION_UNSETTLED");
+        systemRun(DistributionSettlements.SETTLE, body("publicationId", publicationId, "sponsorId", sponsor,
+            "period", month, "last", false));
+        assertThat(differences(sponsor)).isEmpty();
+        // Ended and never settled final: reported 48 hours after the end.
+        end(publicationId);
+        clock.set(clock.instant().plus(Duration.ofHours(49)));
+        assertThat(differences(sponsor)).extracting(row -> row.get("checkCode"))
+            .containsExactlyInAnyOrder("DISTRIBUTION_FINAL_MISSING", "PREPAYMENT_STALE");
+        finalRun(clock.instant());
+        assertThat(differences(sponsor)).isEmpty();
+    }
+
+    @Test
     void anOperatorsLeadSetsItsPriceWithinTheRange() {
         String hq = TestTokens.bearer(tokens, "fm6-ops", QbPermissions.OPERATORS_WRITE, QbPermissions.OPERATORS_READ);
         String operator = newOperator(hq, unique("fm6 operator"));

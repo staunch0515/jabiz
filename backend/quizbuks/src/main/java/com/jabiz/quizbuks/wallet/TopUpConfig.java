@@ -259,7 +259,17 @@ class TopUpConfig {
             .item(ReconChecks.PREPAYMENT_PARTS, "en", "Prepayments against their parts",
                 "zh", "预付款与其分摊", "ja", "前払金と内訳")
             .item(ReconChecks.PREPAYMENT_UNCHARGED, "en", "Audience fees not charged though the publication started",
-                "zh", "发布已开始但未记的受众规则费", "ja", "開始済みの掲載で未請求のオーディエンス料金"));
+                "zh", "发布已开始但未记的受众规则费", "ja", "開始済みの掲載で未請求のオーディエンス料金")
+            .item(ReconChecks.DISTRIBUTION_DEPOSITS, "en", "Distribution fee deposits (2180)",
+                "zh", "配送费预付（2180）", "ja", "配信料の前払い（2180）")
+            .item(ReconChecks.DISTRIBUTION_UNSETTLED, "en", "Distribution fees not settled for the month before",
+                "zh", "上月未结算的配送费", "ja", "前月分が未精算の配信料")
+            .item(ReconChecks.DISTRIBUTION_FINAL_MISSING, "en", "Ended publications without their final distribution "
+                + "settlement", "zh", "已结束但无最终结算的配送费", "ja", "終了後に最終精算がない配信料")
+            .item(ReconChecks.DISTRIBUTION_PRICE_OUT_OF_RANGE, "en", "Distribution prices outside the headquarters' "
+                + "range", "zh", "超出总部范围的配送费价目", "ja", "本部の範囲外の配信料の価格")
+            .item(ReconChecks.DISTRIBUTION_AT_FLOOR, "en", "Publications charged the least distribution price (a note)",
+                "zh", "按下限计费的配送费（仅提示）", "ja", "下限で計算した配信料（お知らせのみ）"));
     }
 
     /** Accounting evidence is kept ten years from the end of its fiscal year (Q10b, item 13; L-4). */
@@ -492,8 +502,14 @@ class TopUpConfig {
 
     @Bean
     ProcessDefinition<Reconciliation.ReconcileInput, Reconciliation.ReconcileOutput, ProcessContext>
-        qbReconcileRun() {
-        return Reconciliation.process();
+        qbReconcileRun(@org.springframework.beans.factory.annotation.Value("${jabiz.fiscal-year-zone:UTC}") String zone) {
+        java.time.ZoneId zoneId;
+        try {
+            zoneId = java.time.ZoneId.of(zone);
+        } catch (RuntimeException e) {
+            zoneId = java.time.ZoneOffset.UTC;
+        }
+        return Reconciliation.process(zoneId);
     }
 
     // ---- Stripe's events -------------------------------------------------------------------------------------------

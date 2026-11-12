@@ -1,7 +1,7 @@
 /*---
 id: qb.system.recon-fee-account
-description: Whether the account that pays the platform's fees agrees with its lots and payments, by sponsor (F-M1) - the fee credit (2190) with its wallet and grants, the cash (2160) with its lots, and the fee payments posted with their parts; by operator (F-M2) the promotion expenses of the grants (5140) with what was granted less what was voided; and (F-S4b) by sponsor the lighting grants with the lit records that earned them; and (F-M3) the top-ups of verified companies with their verifications and certified amounts; and (F-M4) by operator its account (2140) with its settlements, withdrawals and transfers; and (F-M5) by sponsor the prepayments (2180) with what their open prepayments hold, and no prepayment held for a publication back in its draft (the daily reconciliation; differences only)
-entities: [QbWallet, QbFeeCreditGrant, QbCashLot, QbFeePayment, LedgerEntry, LedgerAccount, LedgerTransaction, QbTreeLit, QbTreeLitRevocation, QbTree, QbSponsorVerification, QbSponsor, QbOperatorSettlement, QbOperatorWithdrawal, QbOperatorTransfer, QbPrepayment, QbPublication, QbPublicationStartCounter, SysParam]
+description: Whether the account that pays the platform's fees agrees with its lots and payments, by sponsor (F-M1) - the fee credit (2190) with its wallet and grants, the cash (2160) with its lots, and the fee payments posted with their parts; by operator (F-M2) the promotion expenses of the grants (5140) with what was granted less what was voided; and (F-S4b) by sponsor the lighting grants with the lit records that earned them; and (F-M3) the top-ups of verified companies with their verifications and certified amounts; and (F-M4) by operator its account (2140) with its settlements, withdrawals and transfers; and (F-M5) by sponsor the prepayments (2180) with what their open prepayments hold, and no prepayment held for a publication back in its draft; and (F-M6) the distribution fee's deposits, settlements and prices (the daily reconciliation; differences only, and one note)
+entities: [QbWallet, QbFeeCreditGrant, QbCashLot, QbFeePayment, LedgerEntry, LedgerAccount, LedgerTransaction, QbTreeLit, QbTreeLitRevocation, QbTree, QbSponsorVerification, QbSponsor, QbOperatorSettlement, QbOperatorWithdrawal, QbOperatorTransfer, QbPrepayment, QbPublication, QbPublicationStartCounter, SysParam, QbPublicationCard, QbDistributionSettlement, QbDistributionPrice]
 datasets:
   QbWallet: urn:jabiz:dataset:default:QbWallet
   QbFeeCreditGrant: urn:jabiz:dataset:default:QbFeeCreditGrant
@@ -19,8 +19,12 @@ datasets:
   QbPublication: urn:jabiz:dataset:default:QbPublication
   QbPublicationStartCounter: urn:jabiz:dataset:default:QbPublicationStartCounter
   SysParam: urn:jabiz:dataset:now:SysParam
+  QbPublicationCard: urn:jabiz:dataset:default:QbPublicationCard
+  QbDistributionSettlement: urn:jabiz:dataset:default:QbDistributionSettlement
+  QbDistributionPrice: urn:jabiz:dataset:default:QbDistributionPrice
 params:
   at: { like: QbPublication.endedAt, description: "The run's time: an ended publication's prepayment still open a while after it is a difference (none: not checked)" }
+  zone: { kind: { type: text, maxLength: 64 }, description: "F-M6: the fiscal year's zone, whose months the distribution fee is settled by (none: the unsettled months are not checked)" }
 results:
   checkCode: { kind: { type: text, maxLength: 30 } }
   sponsorId: { kind: { type: text, maxLength: 128 } }
@@ -65,6 +69,17 @@ permissions: [qb.wallet.system]
 --   is not there: expected 0, actual what they hold (a postpaid one: what it still counts).
 -- PREPAYMENT_UNCHARGED (F-M5 recheck N1): by sponsor, the audience fees not charged though the publication started
 --   (live or underfunded, or with a start already): expected 0, actual the fees before tax.
+-- DISTRIBUTION_DEPOSITS (F-M6): 2180 for a sponsor on the lines of the purpose DISTRIBUTION (dimension 3) against
+--   what their open prepaid DISTRIBUTION prepayments hold.
+-- DISTRIBUTION_UNSETTLED (F-M6): by sponsor, the publications due for the month before :at (the condition of
+--   qb.system.distribution-due) without the month's row or a final one, qb.distribution.unsettled-after-hours (0 to
+--   720, else 30) into the month: expected 0, actual how many. Not checked without :zone.
+-- DISTRIBUTION_FINAL_MISSING (F-M6): by sponsor, the ended publications with a price per start and no final row
+--   qb.distribution.final-missing-after-hours (0 to 720, else 48) after their end: expected 0, actual how many.
+-- DISTRIBUTION_PRICE_OUT_OF_RANGE (F-M6): by operator (sponsorId holds it), a price outside the headquarters' range as
+--   the parameters give it now (a bound not set does not bound): expected 0, actual 1.
+-- DISTRIBUTION_AT_FLOOR (F-M6, a note, not a difference): by sponsor, the publications not ended whose price per start
+--   is the operator's floor (their top tier set it no higher): expected 0, actual how many.
 -- PREPAYMENT_PARTS (F-M5 review M3): by sponsor, the prepaid prepayments whose parts (set aside, given back, less
 --   what fees took of them) do not add up to what they hold: expected what they hold, actual what the parts say.
 WITH credit_ledger AS (
@@ -113,6 +128,52 @@ prepayment_ledger AS (
     JOIN {{LedgerAccount}} a ON a.{{LedgerAccount.accountId}} = e.{{LedgerEntry.accountId}}
     WHERE a.{{LedgerAccount.accountCode}} = '2180'
     GROUP BY e.{{LedgerEntry.dimension1}}
+),
+distribution_ledger AS (
+    SELECT e.{{LedgerEntry.dimension1}} AS r_party,
+           sum(CASE WHEN e.{{LedgerEntry.direction}} = 'CREDIT' THEN e.{{LedgerEntry.amount}}
+               ELSE -e.{{LedgerEntry.amount}} END) AS r_balance
+    FROM {{LedgerEntry}} e
+    JOIN {{LedgerAccount}} a ON a.{{LedgerAccount.accountId}} = e.{{LedgerEntry.accountId}}
+    WHERE a.{{LedgerAccount.accountCode}} = '2180' AND e.{{LedgerEntry.dimension3}} = 'DISTRIBUTION'
+    GROUP BY e.{{LedgerEntry.dimension1}}
+),
+distribution_held AS (
+    SELECT p.{{QbPrepayment.sponsorId}} AS r_party, sum(p.{{QbPrepayment.remaining}}) AS r_remaining
+    FROM {{QbPrepayment}} p
+    WHERE p.{{QbPrepayment.status}} = 'OPEN' AND p.{{QbPrepayment.mode}} = 'PREPAID'
+      AND p.{{QbPrepayment.purpose}} = 'DISTRIBUTION'
+    GROUP BY p.{{QbPrepayment.sponsorId}}
+),
+distribution_params AS (
+    SELECT coalesce(max(CASE WHEN p.{{SysParam.paramKey}} = 'qb.distribution.unsettled-after-hours'
+                                  AND p.{{SysParam.value}} ~ '^[0-9]{1,3}$' AND CAST(p.{{SysParam.value}} AS int) <= 720
+                             THEN CAST(p.{{SysParam.value}} AS int) END), 30) AS unsettled_hours,
+           coalesce(max(CASE WHEN p.{{SysParam.paramKey}} = 'qb.distribution.final-missing-after-hours'
+                                  AND p.{{SysParam.value}} ~ '^[0-9]{1,3}$' AND CAST(p.{{SysParam.value}} AS int) <= 720
+                             THEN CAST(p.{{SysParam.value}} AS int) END), 48) AS missing_hours,
+           max(CASE WHEN p.{{SysParam.paramKey}} = 'qb.distribution.rate.min' THEN p.{{SysParam.value}} END) AS rate_min,
+           max(CASE WHEN p.{{SysParam.paramKey}} = 'qb.distribution.rate.max' THEN p.{{SysParam.value}} END) AS rate_max,
+           max(CASE WHEN p.{{SysParam.paramKey}} = 'qb.distribution.unit-floor.min' THEN p.{{SysParam.value}} END)
+               AS floor_min,
+           max(CASE WHEN p.{{SysParam.paramKey}} = 'qb.distribution.unit-floor.max' THEN p.{{SysParam.value}} END)
+               AS floor_max,
+           max(CASE WHEN p.{{SysParam.paramKey}} = 'qb.distribution.unit-ceiling.max' THEN p.{{SysParam.value}} END)
+               AS ceiling_max,
+           max(CASE WHEN p.{{SysParam.paramKey}} = 'qb.distribution.minimum-deposit.max' THEN p.{{SysParam.value}} END)
+               AS deposit_max
+    FROM {{SysParam}} p
+    WHERE p.{{SysParam.paramKey}} LIKE 'qb.distribution.%'
+),
+distribution_month AS (
+    -- The month before :at in :zone: its first instant, the next month's, and its name.
+    SELECT (date_trunc('month', CAST(:at AS timestamptz) AT TIME ZONE CAST(:zone AS text)) - interval '1 month')
+               AT TIME ZONE CAST(:zone AS text) AS m_start,
+           date_trunc('month', CAST(:at AS timestamptz) AT TIME ZONE CAST(:zone AS text))
+               AT TIME ZONE CAST(:zone AS text) AS m_end,
+           to_char(date_trunc('month', CAST(:at AS timestamptz) AT TIME ZONE CAST(:zone AS text)) - interval '1 month',
+               'YYYY-MM') AS m_name
+    WHERE CAST(:at AS timestamptz) IS NOT NULL AND CAST(:zone AS text) IS NOT NULL
 ),
 prepayments_held AS (
     SELECT p.{{QbPrepayment.sponsorId}} AS r_party, sum(p.{{QbPrepayment.remaining}}) AS r_remaining
@@ -337,3 +398,64 @@ WHERE pp.{{QbPrepayment.purpose}} = 'AUDIENCE'
   AND pp.{{QbPrepayment.chargeAmount}} > 0
   AND (pub.{{QbPublication.status}} IN ('LIVE', 'FUNDS_SHORT') OR coalesce(sc.{{QbPublicationStartCounter.starts}}, 0) > 0)
 GROUP BY pp.{{QbPrepayment.sponsorId}}
+UNION ALL
+SELECT CAST('DISTRIBUTION_DEPOSITS' AS varchar(30)), CAST(coalesce(dh.r_party, dl.r_party) AS varchar(128)),
+       coalesce(dh.r_remaining, 0), coalesce(dl.r_balance, 0)
+FROM distribution_held dh
+FULL OUTER JOIN distribution_ledger dl ON dl.r_party = dh.r_party
+WHERE coalesce(dh.r_remaining, 0) <> coalesce(dl.r_balance, 0)
+UNION ALL
+SELECT CAST('DISTRIBUTION_UNSETTLED' AS varchar(30)), CAST(dp.{{QbPublication.publisherId}} AS varchar(128)),
+       CAST(0 AS numeric), CAST(count(*) AS numeric)
+FROM {{QbPublication}} dp
+JOIN {{QbPublicationCard}} dc ON dc.{{QbPublicationCard.publicationId}} = dp.{{QbPublication.publicationId}}
+CROSS JOIN distribution_month dm
+CROSS JOIN distribution_params dpar
+WHERE dp.{{QbPublication.distributionUnit}} IS NOT NULL
+  AND dp.{{QbPublication.publisherKind}} = 'SPONSOR'
+  AND CAST(:at AS timestamptz) >= dm.m_end + make_interval(hours => dpar.unsettled_hours)
+  AND dc.{{QbPublicationCard.startAt}} < dm.m_end
+  AND (dc.{{QbPublicationCard.endedAt}} IS NULL OR dc.{{QbPublicationCard.endedAt}} >= dm.m_start)
+  AND NOT EXISTS (SELECT 1 FROM {{QbDistributionSettlement}} ds
+                  WHERE ds.{{QbDistributionSettlement.publicationId}} = CAST(dp.{{QbPublication.publicationId}} AS text)
+                    AND (ds.{{QbDistributionSettlement.final}} OR ds.{{QbDistributionSettlement.period}} = dm.m_name))
+GROUP BY dp.{{QbPublication.publisherId}}
+UNION ALL
+SELECT CAST('DISTRIBUTION_FINAL_MISSING' AS varchar(30)), CAST(dp.{{QbPublication.publisherId}} AS varchar(128)),
+       CAST(0 AS numeric), CAST(count(*) AS numeric)
+FROM {{QbPublication}} dp
+JOIN {{QbPublicationCard}} dc ON dc.{{QbPublicationCard.publicationId}} = dp.{{QbPublication.publicationId}}
+CROSS JOIN distribution_params dpar
+WHERE dp.{{QbPublication.distributionUnit}} IS NOT NULL
+  AND dp.{{QbPublication.publisherKind}} = 'SPONSOR'
+  AND dc.{{QbPublicationCard.status}} = 'ENDED'
+  AND CAST(:at AS timestamptz) IS NOT NULL
+  AND dc.{{QbPublicationCard.endedAt}} < CAST(:at AS timestamptz) - make_interval(hours => dpar.missing_hours)
+  AND NOT EXISTS (SELECT 1 FROM {{QbDistributionSettlement}} ds
+                  WHERE ds.{{QbDistributionSettlement.publicationId}} = CAST(dp.{{QbPublication.publicationId}} AS text)
+                    AND ds.{{QbDistributionSettlement.final}})
+GROUP BY dp.{{QbPublication.publisherId}}
+UNION ALL
+SELECT CAST('DISTRIBUTION_PRICE_OUT_OF_RANGE' AS varchar(30)), CAST(pr.{{QbDistributionPrice.operatorId}} AS varchar(128)),
+       CAST(0 AS numeric), CAST(1 AS numeric)
+FROM {{QbDistributionPrice}} pr
+CROSS JOIN distribution_params dpar
+WHERE (dpar.rate_min ~ '^[0-9]+(\.[0-9]+)?$' AND pr.{{QbDistributionPrice.rate}} < CAST(dpar.rate_min AS numeric))
+   OR (dpar.rate_max ~ '^[0-9]+(\.[0-9]+)?$' AND pr.{{QbDistributionPrice.rate}} > CAST(dpar.rate_max AS numeric))
+   OR (dpar.floor_min ~ '^[0-9]+(\.[0-9]+)?$'
+       AND pr.{{QbDistributionPrice.unitFloor}} < CAST(dpar.floor_min AS numeric))
+   OR (dpar.floor_max ~ '^[0-9]+(\.[0-9]+)?$'
+       AND pr.{{QbDistributionPrice.unitFloor}} > CAST(dpar.floor_max AS numeric))
+   OR (dpar.ceiling_max ~ '^[0-9]+(\.[0-9]+)?$'
+       AND pr.{{QbDistributionPrice.unitCeiling}} > CAST(dpar.ceiling_max AS numeric))
+   OR (dpar.deposit_max ~ '^[0-9]+(\.[0-9]+)?$'
+       AND pr.{{QbDistributionPrice.minimumDeposit}} > CAST(dpar.deposit_max AS numeric))
+UNION ALL
+SELECT CAST('DISTRIBUTION_AT_FLOOR' AS varchar(30)), CAST(dp.{{QbPublication.publisherId}} AS varchar(128)),
+       CAST(0 AS numeric), CAST(count(*) AS numeric)
+FROM {{QbPublication}} dp
+JOIN {{QbPublicationCard}} dc ON dc.{{QbPublicationCard.publicationId}} = dp.{{QbPublication.publicationId}}
+WHERE dp.{{QbPublication.distributionAtFloor}}
+  AND dp.{{QbPublication.publisherKind}} = 'SPONSOR'
+  AND dc.{{QbPublicationCard.status}} <> 'ENDED'
+GROUP BY dp.{{QbPublication.publisherId}}

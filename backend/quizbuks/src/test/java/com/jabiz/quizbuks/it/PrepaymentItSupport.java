@@ -141,8 +141,10 @@ abstract class PrepaymentItSupport extends PlayItSupport {
     /** What the daily check finds about the Sponsor in the account that pays the platform's fees (none: agrees). */
     List<Map<String, Object>> differences(String sponsor) {
         return items("qb.system.recon-fee-account", TestTokens.bearer(tokens, "fm5-recon", QbPermissions.WALLET_SYSTEM),
-            Map.of("params", Map.of("at", clock.instant().toString()))).stream().filter(row -> sponsor.equals(String.valueOf(row.get("sponsorId")))
-                && !"FEE_CREDIT_PROMOTION".equals(row.get("checkCode"))).toList();
+            Map.of("params", Map.of("at", clock.instant().toString(), "zone", "Asia/Tokyo"))).stream()
+            .filter(row -> sponsor.equals(String.valueOf(row.get("sponsorId")))
+                && !"FEE_CREDIT_PROMOTION".equals(row.get("checkCode"))
+                && !"DISTRIBUTION_AT_FLOOR".equals(row.get("checkCode"))).toList();
     }
 
     @SuppressWarnings("unchecked")
