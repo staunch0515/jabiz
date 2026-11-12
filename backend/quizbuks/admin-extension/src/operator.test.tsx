@@ -294,6 +294,66 @@ describe('the operator', () => {
       { userId: SPONSOR, reason: 'Fake prizes' }))
   })
 
+  it('shows no batch confirmation to a member who may not confirm the onboarding Kudos', async () => {
+    renderAt('/qb/operator/sponsors', '/qb/operator/sponsors', <OperatorSponsorsPage />)
+    await screen.findAllByTestId('sponsor-row')
+    expect(screen.queryByTestId('operator-sponsors-confirm-selected')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('sponsor-grant-select')).not.toBeInTheDocument()
+  })
+
+  it('confirms the ticked Sponsors one by one, one batch at a time, and leaves a failed one ticked (F-F11b)', async () => {
+    server.permissions.add(PERMISSION.feeCreditOnboarding)
+    const FIRST = '0192f0a0-0000-7000-8000-00000000c101'
+    const SECOND = '0192f0a0-0000-7000-8000-00000000c102'
+    server.sponsors = [
+      sponsor({ onboardingId: 'a1', userId: FIRST, company: 'Alpha' }),
+      sponsor({ onboardingId: 'a2', userId: SECOND, company: 'Beta' }),
+      // Not offered: another operator's, one not approved yet, and a banned one.
+      sponsor({ onboardingId: 'a3', userId: 'x3', company: 'Gamma', mine: false }),
+      sponsor({ onboardingId: 'a4', userId: 'x4', company: 'Delta', reviewStatus: 'IN_REVIEW' }),
+      sponsor({ onboardingId: 'a5', userId: 'x5', company: 'Epsilon', banned: true }),
+    ]
+    let release: () => void = () => undefined
+    const gate = new Promise<void>((resolve) => { release = resolve })
+    server.runProcess.mockImplementation(async (name: string, input: { sponsorId?: string }) => {
+      if (name !== FEE_PROCESS.onboarding) return { operatorId: OPERATOR, changed: true }
+      await gate
+      if (input.sponsorId === SECOND) throw new ApiError(422, { detail: 'The grant is switched off.' })
+      return { grantId: 'g1', granted: true, amount: 100, expiresAt: null }
+    })
+    const { container } = renderAt('/qb/operator/sponsors', '/qb/operator/sponsors', <OperatorSponsorsPage />)
+    const rows = await screen.findAllByTestId('sponsor-row')
+    expect(screen.getAllByTestId('sponsor-grant-select')).toHaveLength(2)
+    expect(within(rows[2]).queryByTestId('sponsor-grant-select')).not.toBeInTheDocument()
+    expect(screen.getByTestId('operator-sponsors-confirm-selected')).toBeDisabled()
+    await expectAccessible(container)
+
+    const user = userEvent.setup()
+    await user.click(within(rows[0]).getByTestId('sponsor-grant-select'))
+    await user.click(within(rows[1]).getByTestId('sponsor-grant-select'))
+    const button = screen.getByTestId('operator-sponsors-confirm-selected')
+    expect(button).toHaveTextContent('2 selected')
+    await user.click(button)
+    // One batch at a time: while it runs nothing can be started or changed again.
+    await waitFor(() => expect(screen.getByTestId('sponsors-grant-progress')).toBeInTheDocument())
+    expect(button).toBeDisabled()
+    screen.getAllByTestId('sponsor-grant-select').forEach((box) => expect(box).toBeDisabled())
+    release()
+    await waitFor(() => expect(screen.queryByTestId('sponsors-grant-progress')).not.toBeInTheDocument())
+    expect(server.runProcess.mock.calls.filter(([name]) => name === FEE_PROCESS.onboarding)
+      .map(([, input]) => (input as { sponsorId: string }).sponsorId)).toEqual([FIRST, SECOND])
+
+    const [first, second] = screen.getAllByTestId('sponsor-row')
+    expect(within(first).getByTestId('sponsor-grant-result')).toHaveAttribute('data-state', 'ok')
+    // The granted one is done (no box); the failed one says why and stays ticked.
+    expect(within(first).queryByTestId('sponsor-grant-select')).not.toBeInTheDocument()
+    expect(within(second).getByTestId('sponsor-grant-result')).toHaveAttribute('data-state', 'error')
+    expect(within(second).getByTestId('sponsor-grant-result')).toHaveTextContent('switched off')
+    expect(within(second).getByTestId('sponsor-grant-select')).toBeChecked()
+    expect(screen.getByTestId('operator-sponsors-confirm-selected')).toHaveTextContent('1 selected')
+    await expectAccessible(container)
+  })
+
   it('sets how its own Sponsor is billed, with a reason (Q87)', async () => {
     server.get.mockImplementation(async (path: string) => {
       if (path === '/api/dictionaries/{urn}') return [{ code: 'PREPAID', label: 'Prepaid' },
