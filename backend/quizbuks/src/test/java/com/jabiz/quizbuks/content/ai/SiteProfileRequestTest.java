@@ -16,7 +16,7 @@ class SiteProfileRequestTest {
     @Test
     void anAddressBecomesTheHostsHomeOrIsRefused() {
         assertThat(SiteProfileProcesses.siteUrl("https://www.Aini-Helmet.com/ja/about?x=1#y"))
-            .isEqualTo("https://www.aini-helmet.com/");
+            .isEqualTo("https://www.aini-helmet.com/ja/about");
         assertThat(SiteProfileProcesses.siteUrl("aini-helmet.com")).isEqualTo("https://aini-helmet.com/");
         assertThat(SiteProfileProcesses.siteUrl("  https://shop.example.co.jp  ")).isEqualTo("https://shop.example.co.jp/");
         for (String refused : new String[] {"http://aini.com/", "https://user:pw@aini.com/", "https://aini.com:8443/",
@@ -26,6 +26,44 @@ class SiteProfileRequestTest {
             assertThat(SiteProfileProcesses.siteUrl(refused)).as(refused).isNull();
         }
         assertThat(SiteProfileProcesses.siteUrl(null)).isNull();
+    }
+
+    @Test
+    void aPathIsKeptAndTheQueryIsNot() {
+        assertThat(SiteProfileProcesses.siteUrl("https://example.com/shops/tokyo/?a=1#b"))
+            .isEqualTo("https://example.com/shops/tokyo/");
+        assertThat(SiteProfileProcesses.siteUrl("https://name.github.io/blog/")).isEqualTo("https://name.github.io/blog/");
+        assertThat(SiteProfileProcesses.siteUrl("https://example.com/日本語/ページ"))
+            .isEqualTo("https://example.com/%E6%97%A5%E6%9C%AC%E8%AA%9E/%E3%83%9A%E3%83%BC%E3%82%B8");
+    }
+
+    @Test
+    void aNameAnybodyMayRegisterUnderIsRefusedAsItStandsButNotWhatIsBelowIt() {
+        for (String refused : new String[] {"https://co.jp/", "co.jp", "https://github.io/x", "https://netlify.app/",
+            "https://com.cn/", "https://co.uk/", "https://myshopify.com/"}) {
+            assertThat(SiteProfileProcesses.siteUrl(refused)).as(refused).isNull();
+        }
+        assertThat(SiteProfileProcesses.siteUrl("https://shop.co.jp/")).isEqualTo("https://shop.co.jp/");
+        assertThat(SiteProfileProcesses.siteUrl("https://name.myshopify.com/")).isEqualTo("https://name.myshopify.com/");
+    }
+
+    @Test
+    void aUnicodeHostGoesToTheJobInPunycode() {
+        assertThat(SiteProfileProcesses.siteUrl("https://例え.jp/")).isEqualTo("https://xn--r8jz45g.jp/");
+        assertThat(SiteProfileProcesses.siteUrl("例え.jp/店")).isEqualTo("https://xn--r8jz45g.jp/%E5%BA%97");
+        assertThat(SiteProfileProcesses.siteUrl("https://ＥＸＡＭＰＬＥ.com/")).isEqualTo("https://example.com/");
+        assertThat(SiteProfileProcesses.siteUrl("https://-bad-.com/")).isNull();
+        assertThat(SiteProfileProcesses.domainsOf("https://xn--r8jz45g.jp/")).containsExactly("xn--r8jz45g.jp",
+            "www.xn--r8jz45g.jp");
+    }
+
+    @Test
+    void theRecordedSummaryHoldsTheHostOnly() {
+        String summary = new SiteProfileProcesses.RequestInput("https://www.Aini.com/secret/path?token=abc", "ja", null,
+            null, null, null, true, null).toString();
+        assertThat(summary).contains("host=www.aini.com").doesNotContain("secret").doesNotContain("token");
+        assertThat(new SiteProfileProcesses.RequestInput("user:pw@evil token=1", "ja", null, null, null, null, true, null)
+            .toString()).contains("host=***").doesNotContain("pw");
     }
 
     @Test

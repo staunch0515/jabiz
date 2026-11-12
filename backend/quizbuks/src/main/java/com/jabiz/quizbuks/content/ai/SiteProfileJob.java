@@ -32,6 +32,18 @@ public final class SiteProfileJob {
     public static final int MAX_JOB_INPUT_BYTES = 8 * 1024;
     /** The output asked for, thinking included: a package in three languages, five articles and their questions. */
     public static final int MAX_OUTPUT_TOKENS = 32_000;
+    /** The pages' tokens a read may bring in, besides the instructions and the answer. */
+    private static final long FRAMING_TOKENS = 5_000;
+
+    /**
+     * The input one attempt may come to: every page it is allowed to read (the provider counts the pages' tokens as
+     * input), and no less than a web reader's usual. An unanswered call is charged this too.
+     */
+    public static long reservedInput(int maxPages) {
+        return Math.max(ClaudeWebResearch.RESERVED_INPUT_TOKENS,
+            (long) maxPages * ClaudeWebResearch.MAX_CONTENT_TOKENS + FRAMING_TOKENS);
+    }
+
     /** The most failures the answer may name: why a site could not be read. */
     public static final List<String> FAILURES = List.of("UNREACHABLE", "ROBOTS", "NO_TEXT");
 

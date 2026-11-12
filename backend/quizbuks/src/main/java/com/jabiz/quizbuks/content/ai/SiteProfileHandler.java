@@ -21,7 +21,15 @@ class SiteProfileHandler implements ExternalJobHandler<SiteProfileJob.Input, Sit
     private final JsonMapper json;
     private final Duration timeout;
 
-    SiteProfileHandler(JsonMapper json, @Value("${quizbuks.ai.request-timeout:PT2M}") Duration timeout) {
+    /**
+     * @param timeout how long one call to the provider waits ({@code quizbuks.ai.site-profile.request-timeout}, the
+     *                service's longest, two minutes, unless set shorter): a read of several pages and a long answer
+     *                may need more than a call without streaming can have; see docs/quizbuks/plans/impl/F-C7.md
+     */
+    SiteProfileHandler(JsonMapper json,
+        @Value("${quizbuks.ai.site-profile.request-timeout:${quizbuks.ai.request-timeout:PT2M}}") Duration timeout) {
+        // refused at start when it is zero or more than the service allows
+        new ClaudeCalls.Settings(timeout);
         this.json = json;
         this.timeout = timeout;
     }
@@ -30,7 +38,8 @@ class SiteProfileHandler implements ExternalJobHandler<SiteProfileJob.Input, Sit
     public ExternalJobResult<SiteProfileJob.Result> run(SiteProfileJob.Input input, ExternalJobContext ctx) {
         ClaudeWebResearch.Answer answer = ClaudeWebResearch.of(ctx, json).ask(ctx, new ClaudeWebResearch.Request(
             input.model(), input.effort(), SiteProfilePrompt.SYSTEM, SiteProfilePrompt.user(input, json),
-            input.userKey(), 0, input.maxPages(), null, input.domains(), SiteProfileJob.MAX_OUTPUT_TOKENS), timeout);
+            input.userKey(), 0, input.maxPages(), null, input.domains(), SiteProfileJob.MAX_OUTPUT_TOKENS,
+            SiteProfileJob.reservedInput(input.maxPages())), timeout);
         SiteProfileJob.Result result = SiteProfileAnswer.parse(answer.servedModel(), answer.fellBack(), answer.text(),
             input, json);
         if (result == null) {

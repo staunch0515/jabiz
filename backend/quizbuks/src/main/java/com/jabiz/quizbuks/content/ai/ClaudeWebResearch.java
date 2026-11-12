@@ -61,18 +61,31 @@ public final class ClaudeWebResearch {
      * @param allowedDomains the only domains the provider may fetch from (F-C7: a site's own pages), or empty for any
      *                       the conversation names; given to the fetch tool as {@code allowed_domains}
      * @param maxTokens      the output asked for (thinking included), or null for {@value #MAX_TOKENS}
+     * @param reservedInput  the input a call that got no answer is charged (the pages it may read), or null for
+     *                       {@value #RESERVED_INPUT_TOKENS}
      */
     public record Request(String model, String effort, String system, String user, String userKey, int searches,
-        int fetches, String country, List<String> allowedDomains, Integer maxTokens) {
+        int fetches, String country, List<String> allowedDomains, Integer maxTokens, Long reservedInput) {
 
         public Request {
             allowedDomains = allowedDomains == null ? List.of() : List.copyOf(allowedDomains);
         }
 
+        /** The same without the reserved input. */
+        public Request(String model, String effort, String system, String user, String userKey, int searches,
+            int fetches, String country, List<String> allowedDomains, Integer maxTokens) {
+            this(model, effort, system, user, userKey, searches, fetches, country, allowedDomains, maxTokens, null);
+        }
+
         /** A request that may fetch from any address the conversation names, with the usual output (prospecting). */
         public Request(String model, String effort, String system, String user, String userKey, int searches,
             int fetches, String country) {
-            this(model, effort, system, user, userKey, searches, fetches, country, List.of(), null);
+            this(model, effort, system, user, userKey, searches, fetches, country, List.of(), null, null);
+        }
+
+        /** The input a call that got no answer is charged. */
+        public long inputTokens() {
+            return reservedInput == null ? RESERVED_INPUT_TOKENS : reservedInput;
         }
 
         /** The output asked for. */
@@ -109,7 +122,7 @@ public final class ClaudeWebResearch {
     public static ClaudeApi.Usage unanswered(Request request) {
         long text = (request.system().getBytes(StandardCharsets.UTF_8).length
             + request.user().getBytes(StandardCharsets.UTF_8).length) / 3 + 1_000;
-        return new ClaudeApi.Usage(Math.max(text, RESERVED_INPUT_TOKENS), request.outputTokens());
+        return new ClaudeApi.Usage(Math.max(text, request.inputTokens()), request.outputTokens());
     }
 
     /** What the search tools cost, in dollars. */

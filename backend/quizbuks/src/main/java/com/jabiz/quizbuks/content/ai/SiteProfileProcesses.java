@@ -14,7 +14,10 @@ import com.jabiz.quizbuks.messaging.QbLegal;
 import com.jabiz.quizbuks.publishing.SponsorChecks;
 import com.jabiz.quizbuks.setup.QbParams;
 import com.jabiz.runtime.BusinessRuleViolationException;
+import com.jabiz.security.Sensitive;
+import com.jabiz.quizbuks.page.QbSponsorPages;
 import com.jabiz.runtime.EntityInstance;
+import com.jabiz.runtime.task.TaskSpec;
 import com.jabiz.runtime.process.steps.LoadParams;
 import com.jabiz.runtime.process.steps.QueryEntities;
 import com.jabiz.runtime.process.steps.StartExternalJob;
@@ -52,14 +55,19 @@ public final class SiteProfileProcesses {
 
     public static final String REQUEST = "QB_SITE_PROFILE_REQUEST";
 
+    public static final String TASK_TYPE = "qb.ai.site-profile";
+    public static final String TASK_TITLE = "task.qb.ai.site-profile";
+    /** The step key under which the completion process holds who has the drafted link name (and its alternatives). */
+    static final String HANDLES = "siteHandles";
+    /** How many numbered link names are tried for each alternative wanted. */
+    private static final int TRIES_PER_ALTERNATIVE = 3;
+
     private static final String PARAMS = "siteProfileParams";
     private static final String SITE_JOBS = "siteJobs";
     private static final JsonMapper JSON = JsonMapper.builder().build();
-    /** The pages' tokens a read may bring in, besides the instructions and the answer. */
-    private static final long FRAMING_TOKENS = 5_000;
 
     /**
-     * @param url               the sponsor's website
+     * @param siteAddress       the sponsor's website (what was typed may hold anything, so the operation's record masks it)
      * @param language          the base language of the package ({@code en}, {@code zh} or {@code ja})
      * @param otherLanguages    up to two more, translated by the AI and marked as machine-translated
      * @param profile           whether to draft the basics and the page (yes unless false)
@@ -68,15 +76,17 @@ public final class SiteProfileProcesses {
      * @param rightsDeclared    must be true: the website is the sponsor's, or one they may use
      * @param aiNoticeVersionNo the version of the AI notice the page showed, when the sponsor accepts it now
      */
-    public record RequestInput(@NotBlank @Size(max = 300) String url,
+    public record RequestInput(@Sensitive @NotBlank @Size(max = 300) String siteAddress,
         @NotNull @Pattern(regexp = "en|zh|ja") String language,
         @Size(max = 2) List<@NotNull @Pattern(regexp = "en|zh|ja") String> otherLanguages, Boolean profile,
         Boolean products, Boolean quiz, @NotNull Boolean rightsDeclared, @Positive Integer aiNoticeVersionNo) {
 
         @Override
         public String toString() {
-            // Recorded in the operation's summary: the website is public, nothing of the sponsor is in it.
-            return "RequestInput[url=" + url + ", language=" + language + ", others=" + otherLanguages + "]";
+            // Recorded in the operation's summary: the host only (what was typed may hold anything), nothing of the sponsor.
+            String address = siteUrl(siteAddress);
+            String host = address == null ? "***" : URI.create(address).getHost();
+            return "RequestInput[host=" + host + ", language=" + language + ", others=" + otherLanguages + "]";
         }
     }
 
@@ -102,7 +112,8 @@ public final class SiteProfileProcesses {
                     .step("Load the parameters", LoadParams.<ProcessContext>of(ProcessContext::opTime, PARAMS,
                         QbParams.SITE_PROFILE_ENABLED, QbParams.SITE_PROFILE_MONTHLY, QbParams.SITE_PROFILE_DAILY,
                         QbParams.SITE_PROFILE_MAX_PAGES, QbParams.SITE_PROFILE_QUESTIONS,
-                        QbParams.SITE_PROFILE_OPTIONS, QbParams.SITE_PROFILE_MATERIALS_MAX, QbParams.PRODUCTS_MAX))
+                        QbParams.SITE_PROFILE_OPTIONS, QbParams.SITE_PROFILE_MATERIALS_MAX, QbParams.SITE_PROFILE_HANDLE_ALTERNATIVES,
+                        QbParams.PRODUCTS_MAX))
                     .compute("Prepare the request", (metadata, ctx) -> prepare(ctx, userKeys));
                 AiProcesses.limited(pb, zone);
                 pb.step("Load the sponsor's site requests", QueryEntities.<ProcessContext>of(
@@ -127,30 +138,73 @@ public final class SiteProfileProcesses {
 
     // ---- the request -----------------------------------------------------------------------------------------------
 
-    /** The website's address as the job takes it: {@code https://host/}, or null when it is not a website's. */
+    /** Names under which anybody may register a site (resource {@code quizbuks/ai/public-suffixes.txt}). */
+    private static final java.util.Set<String> PUBLIC_SUFFIXES = readSuffixes();
+    private static final int PATH_MAX = 200;
+
+    private static java.util.Set<String> readSuffixes() {
+        try (java.io.InputStream in = SiteProfileProcesses.class.getResourceAsStream("/quizbuks/ai/public-suffixes.txt")) {
+            if (in == null) {
+                throw new IllegalStateException("quizbuks/ai/public-suffixes.txt is missing");
+            }
+            return new java.io.BufferedReader(new java.io.InputStreamReader(in, java.nio.charset.StandardCharsets.UTF_8))
+                .lines().map(String::strip).filter(line -> !line.isEmpty() && !line.startsWith("#"))
+                .collect(java.util.stream.Collectors.toUnmodifiableSet());
+        } catch (java.io.IOException e) {
+            throw new IllegalStateException(e);
+        }
+    }
+
+    /**
+     * The website's address as the job takes it: {@code https://host/path}, or null when it is not a website's. The host
+     * may be written in Unicode (it goes to the job in punycode); the path is kept (a site under a path is read from
+     * there), the query and fragment are not; a name anybody may register under ({@code co.jp}, {@code github.io}) is
+     * refused.
+     */
     static String siteUrl(String given) {
         if (given == null) {
             return null;
         }
-        String text = given.strip();
-        if (!text.contains("://")) {
-            text = "https://" + text;
+        String text = java.text.Normalizer.normalize(given.strip(), java.text.Normalizer.Form.NFKC);
+        if (text.regionMatches(true, 0, "https://", 0, 8)) {
+            text = text.substring(8);
+        } else if (text.contains("://")) {
+            return null;
         }
-        URI uri;
+        int cut = 0;
+        while (cut < text.length() && "/?#".indexOf(text.charAt(cut)) < 0) {
+            cut++;
+        }
+        String host = text.substring(0, cut).toLowerCase(Locale.ROOT);
+        String path = "";
+        if (cut < text.length() && text.charAt(cut) == '/') {
+            int end = cut;
+            while (end < text.length() && "?#".indexOf(text.charAt(end)) < 0) {
+                end++;
+            }
+            path = text.substring(cut, end);
+        }
+        if (host.isEmpty() || host.chars().anyMatch(c -> c == '@' || c == ':' || Character.isWhitespace(c))
+            || path.length() > PATH_MAX || path.chars().anyMatch(c -> Character.isISOControl(c) || c == '\\')) {
+            return null;
+        }
         try {
-            uri = URI.create(text);
+            host = java.net.IDN.toASCII(host);
         } catch (IllegalArgumentException e) {
             return null;
         }
-        String host = uri.getHost() == null ? null : uri.getHost().toLowerCase(Locale.ROOT);
-        if (!"https".equalsIgnoreCase(uri.getScheme()) || host == null || uri.getUserInfo() != null
-            || uri.getPort() != -1 || !host.matches("[a-z0-9-]+(\\.[a-z0-9-]+)+") || host.length() > 253
-            || !host.substring(host.lastIndexOf('.') + 1).matches("[a-z]{2,}")
-            || List.of("local", "internal", "localhost", "lan", "home", "corp")
-                .contains(host.substring(host.lastIndexOf('.') + 1))) {
+        String tld = host.substring(host.lastIndexOf('.') + 1);
+        if (!host.matches("[a-z0-9-]+(\\.[a-z0-9-]+)+") || host.length() > 253 || host.contains("..")
+            || !tld.matches("[a-z]{2,}|xn--[a-z0-9-]+")
+            || List.of("local", "internal", "localhost", "lan", "home", "corp").contains(tld)
+            || PUBLIC_SUFFIXES.contains(host)) {
             return null;
         }
-        return "https://" + host + "/";
+        try {
+            return new URI("https", host, path.isEmpty() ? "/" : path, null).toASCIIString();
+        } catch (java.net.URISyntaxException e) {
+            return null;
+        }
     }
 
     /** The domains the provider may fetch from: the host and its {@code www.} twin. */
@@ -176,9 +230,9 @@ public final class SiteProfileProcesses {
             problems.add(new Violation("rightsDeclared", AiCodes.SITE_RIGHTS_REQUIRED, "Declare that the website is "
                 + "yours, or one you may use", Map.of()));
         }
-        String url = siteUrl(input.url());
+        String url = siteUrl(input.siteAddress());
         if (url == null) {
-            problems.add(new Violation("url", AiCodes.SITE_URL_INVALID, "Give the website's address: a host name, "
+            problems.add(new Violation("siteAddress", AiCodes.SITE_URL_INVALID, "Give the website's address: a host name, "
                 + "like https://www.example.com/, with no user name, port or address of a machine", Map.of()));
         }
         List<String> languages = new ArrayList<>(List.of(input.language()));
@@ -214,8 +268,7 @@ public final class SiteProfileProcesses {
         }
         // An attempt may read every page it is allowed (the provider counts the pages' tokens as input) and writes
         // all the output it asks for; a job has its attempts.
-        long reservedInput = Math.max(ClaudeWebResearch.RESERVED_INPUT_TOKENS,
-            (long) maxPages * ClaudeWebResearch.MAX_CONTENT_TOKENS + FRAMING_TOKENS);
+        long reservedInput = SiteProfileJob.reservedInput(maxPages);
         long estimate = (long) SiteProfileJob.ATTEMPTS * (reservedInput + SiteProfileJob.MAX_OUTPUT_TOKENS);
         Map<String, Object> stored = new LinkedHashMap<>();
         stored.put("url", url);
@@ -225,6 +278,7 @@ public final class SiteProfileProcesses {
         stored.put("products", products);
         stored.put("quiz", quiz);
         stored.put("maxPages", maxPages);
+        stored.put("handleAlternatives", QbParams.limit(params, QbParams.SITE_PROFILE_HANDLE_ALTERNATIVES));
         stored.put("reservedInputTokens", reservedInput);
         stored.put("maxOutputTokens", SiteProfileJob.MAX_OUTPUT_TOKENS);
         // The declaration, as it is recorded with the request (the sponsor's own website, or one they may use).
@@ -258,6 +312,100 @@ public final class SiteProfileProcesses {
         }
     }
 
+    // ---- the link name ---------------------------------------------------------------------------------------------
+
+    /** The drafted link name and the numbered ones that may stand in for it: {@code name}, {@code name-2}, … */
+    static List<String> handleCandidates(String handle, int alternatives) {
+        List<String> candidates = new ArrayList<>();
+        if (handle == null || !handle.matches(QbSponsorPages.HANDLE_PATTERN)) {
+            return candidates;
+        }
+        candidates.add(handle);
+        for (int n = 2; n < 2 + alternatives * TRIES_PER_ALTERNATIVE; n++) {
+            String suffix = "-" + n;
+            String base = handle.substring(0, Math.min(handle.length(), QbSponsorPages.HANDLE_LENGTH - suffix.length()));
+            candidates.add(base.replaceAll("-+$", "") + suffix);
+        }
+        return candidates;
+    }
+
+    @SuppressWarnings("unchecked")
+    private static String draftedHandle(ExternalJobCompletion completion) {
+        if (!SiteProfileJob.TYPE.equals(completion.jobType())) {
+            return null;
+        }
+        Object page = completion.result(SiteProfileJob.Result.class).profile().get("page");
+        return page instanceof Map<?, ?> map && ((Map<String, Object>) map).get("handle") instanceof String handle
+            ? handle : null;
+    }
+
+    private static int alternativesOf(EntityInstance job) {
+        return AiProcesses.params(job).get("handleAlternatives") instanceof Number n ? n.intValue() : 0;
+    }
+
+    /** The pages that hold the drafted link name or one of its numbered stand-ins (none for any other job). */
+    static EntityQuery handlesQuery(ProcessContext ctx) {
+        ExternalJobCompletion completion = ctx.get(AiProcesses.INPUT, ExternalJobCompletion.class);
+        EntityInstance job = AiProcesses.first(ctx, AiProcesses.JOB);
+        List<Object> handles = new ArrayList<>();
+        if (job != null && QbAi.KIND_SITE_PROFILE.equals(job.get("kind"))) {
+            handles.addAll(handleCandidates(draftedHandle(completion), alternativesOf(job)));
+        }
+        return EntityQuery.builder().where(new QueryPredicate.In("handle", handles))
+            .limit(Math.max(1, handles.size())).build();
+    }
+
+    /** What the sponsor is told about the drafted link name: free, or another sponsor's and some that are free. */
+    private static Map<String, Object> handleInfo(ProcessContext ctx, ExternalJobCompletion completion,
+        EntityInstance job) {
+        String handle = draftedHandle(completion);
+        if (handle == null) {
+            return null;
+        }
+        List<EntityInstance> pages = AiProcesses.rows(ctx, HANDLES);
+        java.util.Set<String> others = new java.util.HashSet<>();
+        for (EntityInstance page : pages) {
+            if (!completion.requestedBy().equals(page.get("userId"))) {
+                others.add((String) page.get("handle"));
+            }
+        }
+        Map<String, Object> info = new LinkedHashMap<>();
+        info.put("handle", handle);
+        info.put("taken", others.contains(handle));
+        List<String> free = new ArrayList<>();
+        if (others.contains(handle)) {
+            for (String candidate : handleCandidates(handle, alternativesOf(job))) {
+                if (free.size() < alternativesOf(job) && !others.contains(candidate)) {
+                    free.add(candidate);
+                }
+            }
+        }
+        info.put("alternatives", free);
+        return info;
+    }
+
+    // ---- the request to review ---------------------------------------------------------------------------------------
+
+    static String reviewSource(String aiJobId) {
+        return "site-profile:" + aiJobId;
+    }
+
+    /** Whether the outcome just kept is a site draft waiting for the sponsor. */
+    static boolean draftReady(ProcessContext ctx) {
+        ExternalJobCompletion completion = ctx.get(AiProcesses.INPUT, ExternalJobCompletion.class);
+        AiProcesses.JobOutput output = (AiProcesses.JobOutput) ctx.get(AiProcesses.OUTPUT);
+        return SiteProfileJob.TYPE.equals(completion.jobType()) && output != null && output.aiJobId() != null
+            && QbAi.READY.equals(output.status());
+    }
+
+    /** The sponsor's request to review the draft; closed when the draft is used, dropped or expires. */
+    static TaskSpec reviewTask(ProcessContext ctx) {
+        ExternalJobCompletion completion = ctx.get(AiProcesses.INPUT, ExternalJobCompletion.class);
+        AiProcesses.JobOutput output = (AiProcesses.JobOutput) ctx.get(AiProcesses.OUTPUT);
+        return TaskSpec.forUser(TASK_TYPE, TASK_TITLE, Map.of(), completion.requestedBy())
+            .about(QbAi.JOB, output.aiJobId()).source(reviewSource(output.aiJobId()));
+    }
+
     // ---- the outcome -----------------------------------------------------------------------------------------------
 
     /**
@@ -283,7 +431,7 @@ public final class SiteProfileProcesses {
                     + "not be read (" + result.failure() + ")");
             } else {
                 values.put("status", QbAi.READY);
-                values.put("candidates", JSON.writeValueAsString(stored(result)));
+                values.put("candidates", JSON.writeValueAsString(stored(result, handleInfo(ctx, completion, job))));
                 values.put("candidateCount", BigDecimal.valueOf(result.questions().size()));
                 values.put("invalidCount", BigDecimal.valueOf(result.invalidQuestions()));
                 values.put("expiresAt", completion.finishedTime().plus(Duration.ofDays(
@@ -306,9 +454,12 @@ public final class SiteProfileProcesses {
     }
 
     /** What the sponsor's confirmation reads: the draft, without the model's name. */
-    private static Map<String, Object> stored(SiteProfileJob.Result result) {
+    private static Map<String, Object> stored(SiteProfileJob.Result result, Map<String, Object> handle) {
         Map<String, Object> kept = new LinkedHashMap<>();
         kept.put("profile", result.profile());
+        if (handle != null) {
+            kept.put("handle", handle);
+        }
         kept.put("sources", result.sources());
         kept.put("notFound", result.notFound());
         kept.put("dropped", result.dropped());

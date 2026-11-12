@@ -31,6 +31,9 @@ import com.jabiz.runtime.EntityNotFoundException;
 import com.jabiz.runtime.file.FileEntities;
 import com.jabiz.runtime.param.ParamEntities;
 import com.jabiz.runtime.process.steps.CancelExternalJob;
+import com.jabiz.runtime.task.CloseTasks;
+import com.jabiz.runtime.task.CreateTask;
+import com.jabiz.runtime.task.TaskSpec;
 import com.jabiz.runtime.process.steps.HoldLock;
 import com.jabiz.runtime.process.steps.LoadEntity;
 import com.jabiz.runtime.process.steps.LoadParams;
@@ -851,7 +854,12 @@ public final class AiProcesses {
                     ctx -> ctx.get(INPUT, ExternalJobCompletion.class).jobId(),
                     ctx -> ctx.get(INPUT, ExternalJobCompletion.class).requestedBy(),
                     ctx -> ctx.get(INPUT, ExternalJobCompletion.class).finishedTime()))
-                .compute("Keep the candidates", (metadata, ctx) -> complete(ctx, zone)));
+                .step("Load who holds the drafted link names", QueryEntities.<ProcessContext>of(
+                    com.jabiz.quizbuks.page.QbSponsorPages.DEFAULT_DATASET, SiteProfileProcesses::handlesQuery,
+                    SiteProfileProcesses.HANDLES))
+                .compute("Keep the candidates", (metadata, ctx) -> complete(ctx, zone))
+                .step("Ask the sponsor to review the draft", CreateTask.<ProcessContext>when(
+                    SiteProfileProcesses::draftReady, SiteProfileProcesses::reviewTask)));
     }
 
     public static ProcessDefinition<ExternalJobFailure, JobOutput, ProcessContext> failed(ZoneId zone) {
@@ -1398,7 +1406,15 @@ public final class AiProcesses {
                 values.put("closedAt", ctx.opTime());
                 clearCovers(values, job);
                 return values;
-            });
+            }, pb -> pb.step("Close the request to review", closeReview()));
+    }
+
+    /** The request to review a site draft (F-C7), closed when the draft is dropped, expires or is used. */
+    static com.jabiz.process.StepSpec<CloseTasks.Metadata<ProcessContext>, ProcessContext> closeReview() {
+        return CloseTasks.<ProcessContext>cancel(ctx -> {
+            EntityInstance job = first(ctx, JOB);
+            return SiteProfileProcesses.reviewSource(job == null ? "" : String.valueOf(job.id()));
+        });
     }
 
     /**
@@ -1494,7 +1510,8 @@ public final class AiProcesses {
                 clearCovers(values, job);
                 ctx.changes().update(QbAi.JOB, job.id(), job.version(), values);
                 ctx.put(OUTPUT, new JobOutput(String.valueOf(job.id()), QbAi.EXPIRED));
-            }));
+            })
+            .step("Close the request to review", closeReview()));
     }
 
     // ---- translations (Q73d-1) ---------------------------------------------------------------------------------

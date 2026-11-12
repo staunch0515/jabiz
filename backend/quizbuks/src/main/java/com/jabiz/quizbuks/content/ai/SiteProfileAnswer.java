@@ -27,19 +27,15 @@ import java.util.regex.Pattern;
 public final class SiteProfileAnswer {
 
     static final int MAX_NOT_FOUND = 40;
-    static final int NOT_FOUND_LENGTH = 120;
     /** Passes of removing what the package's checks refuse: a removed required field refuses once more. */
     private static final int PASSES = 8;
     private static final String PLACEHOLDER = "-";
 
-    private static final Pattern EMAIL = Pattern.compile("[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(\\.[A-Za-z0-9-]+)*\\.[A-Za-z]{2,}");
-    // A telephone number: an optional country code, then groups of digits split by spaces, dots or hyphens
-    // (03-1234-5678, +81 90 1234 5678, (03) 1234 5678). A date (2026-01-31) has no group of three digits or more after
-    // its first two, so it is not taken.
-    private static final Pattern PHONE = Pattern.compile(
-        "(?<![\\w/.])(?:\\+\\d{1,3}[\\s.-]?)?\\(?0?\\d{1,4}\\)?[\\s.-]\\d{2,4}[\\s.-]\\d{3,4}(?![\\w.-]*\\d)");
-    private static final Pattern LINK_TARGET = Pattern.compile("\\]\\((?:mailto|tel):[^)]*\\)", Pattern.CASE_INSENSITIVE);
     private static final Pattern PATH = Pattern.compile("([A-Za-z]+)(?:\\[(\\d+)])?");
+    /** A path of the package, as the prompt names them: {@code basics.company}, {@code products[0].price}. */
+    private static final Pattern FIELD_PATH = Pattern.compile("[A-Za-z]{1,30}(?:\\[\\d{1,3}])?(?:\\.[A-Za-z]{1,30}(?:\\[\\d{1,3}])?){0,3}");
+    static final String CONTACT_REMOVED = "Contact details were removed";
+    static final String OFF_SITE = "Not on the website's own domain";
 
     /**
      * The reply as a result, or null when it holds no JSON object (the attempt is tried again).
@@ -61,9 +57,9 @@ public final class SiteProfileAnswer {
         Map<String, String> sources = sources(node.get("sources"), profile, input);
         List<String> notFound = notFound(node.get("notFound"));
         List<String> translated = translated(node.get("translated"), input);
-        List<SiteProfileJob.Material> materials = input.quiz() ? materials(node.get("materials"), input) : List.of();
+        List<SiteProfileJob.Material> materials = input.quiz() ? materials(node.get("materials"), input, dropped) : List.of();
         AiCandidates.Checked questions = input.quiz() && !materials.isEmpty()
-            ? questions(node.get("questions"), materials.size(), input, json) : new AiCandidates.Checked(List.of(), 0);
+            ? questions(node.get("questions"), materials.size(), input, dropped) : new AiCandidates.Checked(List.of(), 0);
         return new SiteProfileJob.Result(servedModel, fellBack, null, profile, sources, notFound, dropped, translated,
             materials, questions.valid(), questions.invalid());
     }
@@ -96,7 +92,8 @@ public final class SiteProfileAnswer {
         check.put("basics", basics);
         check.put("page", page);
         check.put("products", products);
-        removePersonalDetails(check);
+        removePersonalDetails(check, dropped);
+        offSite(check, input, dropped);
         for (int pass = 0; pass < PASSES; pass++) {
             ProfilePackage.Read read = ProfilePackage.read(check, input.maxProducts());
             if (read.problems().isEmpty()) {
@@ -190,21 +187,22 @@ public final class SiteProfileAnswer {
         return false;
     }
 
-    /** Removes a person's e-mail addresses and telephone numbers from every text of the package. */
+    /** Removes a person's contact details from every text of the package, listing each text that held some. */
     @SuppressWarnings("unchecked")
-    private static void removePersonalDetails(Map<String, Object> check) {
+    private static void removePersonalDetails(Map<String, Object> check, List<SiteProfileJob.Dropped> dropped) {
         for (String key : List.of("basics", "page")) {
-            scrub((Map<String, Object>) check.get(key));
+            scrub((Map<String, Object>) check.get(key), key + ".", dropped);
         }
-        for (Object product : (List<Object>) check.get("products")) {
-            if (product instanceof Map<?, ?> map) {
-                scrub((Map<String, Object>) map);
+        List<Object> products = (List<Object>) check.get("products");
+        for (int i = 0; i < products.size(); i++) {
+            if (products.get(i) instanceof Map<?, ?> map) {
+                scrub((Map<String, Object>) map, "products[" + i + "].", dropped);
             }
         }
     }
 
     @SuppressWarnings("unchecked")
-    private static void scrub(Map<String, Object> map) {
+    private static void scrub(Map<String, Object> map, String path, List<SiteProfileJob.Dropped> dropped) {
         for (Map.Entry<String, Object> entry : map.entrySet()) {
             String key = entry.getKey();
             if (key.equals("url") || key.equals("shopUrl") || key.equals("website") || key.equals("handle")
@@ -212,22 +210,56 @@ public final class SiteProfileAnswer {
                 continue;
             }
             if (entry.getValue() instanceof String value) {
-                entry.setValue(withoutPersonalDetails(value));
+                PersonalDetails.Cleaned cleaned = PersonalDetails.clean(value);
+                if (cleaned.changed()) {
+                    entry.setValue(cleaned.text());
+                    dropped.add(new SiteProfileJob.Dropped(path + key, CONTACT_REMOVED));
+                }
             } else if (entry.getValue() instanceof Map<?, ?> nested) {
-                scrub((Map<String, Object>) nested);
+                scrub((Map<String, Object>) nested, path + key + ".", dropped);
             }
         }
     }
 
-    /** A text without e-mail addresses, telephone numbers, and {@code mailto:} and {@code tel:} links. */
-    public static String withoutPersonalDetails(String text) {
-        if (text == null) {
-            return null;
+    /**
+     * The page's website is the address asked for; a shop link or an image that is not on the site's own domain is
+     * left out (an image on another host cannot be shown to come from the company), and listed.
+     */
+    @SuppressWarnings("unchecked")
+    private static void offSite(Map<String, Object> check, SiteProfileJob.Input input,
+        List<SiteProfileJob.Dropped> dropped) {
+        Map<String, Object> page = (Map<String, Object>) check.get("page");
+        if (input.profile()) {
+            page.put("website", input.url());
+            offSiteImage((Map<String, Object>) check.get("basics"), "avatar", "basics.avatar", input, dropped);
+            offSiteImage(page, "cover", "page.cover", input, dropped);
         }
-        String value = LINK_TARGET.matcher(text).replaceAll("](#)");
-        value = EMAIL.matcher(value).replaceAll("");
-        value = PHONE.matcher(value).replaceAll("");
-        return value.replaceAll("[ \\t]{2,}", " ").replaceAll("[ \\t]+([.,;:、。])", "$1").strip();
+        List<Object> products = (List<Object>) check.get("products");
+        for (int i = 0; i < products.size(); i++) {
+            if (products.get(i) instanceof Map<?, ?> map) {
+                Map<String, Object> product = (Map<String, Object>) map;
+                String path = "products[" + i + "].";
+                if (product.get("shopUrl") instanceof String shop && !onSite(shop, input.domains())) {
+                    product.remove("shopUrl");
+                    dropped.add(new SiteProfileJob.Dropped(path + "shopUrl", OFF_SITE));
+                }
+                offSiteImage(product, "image", path + "image", input, dropped);
+            }
+        }
+    }
+
+    private static void offSiteImage(Map<String, Object> owner, String field, String path,
+        SiteProfileJob.Input input, List<SiteProfileJob.Dropped> dropped) {
+        if (owner.get(field) instanceof Map<?, ?> image && !(image.get("url") instanceof String url
+            && onSite(url.strip(), input.domains()))) {
+            owner.remove(field);
+            dropped.add(new SiteProfileJob.Dropped(path, OFF_SITE));
+        }
+    }
+
+    /** A text without e-mail addresses, telephone numbers, social accounts, and {@code mailto:} and {@code tel:} links. */
+    public static String withoutPersonalDetails(String text) {
+        return PersonalDetails.without(text);
     }
 
     // ---- sources, articles and questions ---------------------------------------------------------------------------
@@ -287,8 +319,9 @@ public final class SiteProfileAnswer {
             for (JsonNode item : node) {
                 if (item.isString() && found.size() < MAX_NOT_FOUND) {
                     String text = item.asString().strip();
-                    if (!text.isEmpty()) {
-                        found.add(text.substring(0, Math.min(text.length(), NOT_FOUND_LENGTH)));
+                    // only a path of the package: what the model writes freely here would be shown as it is
+                    if (FIELD_PATH.matcher(text).matches() && !found.contains(text)) {
+                        found.add(text);
                     }
                 }
             }
@@ -310,7 +343,8 @@ public final class SiteProfileAnswer {
         return found;
     }
 
-    private static List<SiteProfileJob.Material> materials(JsonNode node, SiteProfileJob.Input input) {
+    private static List<SiteProfileJob.Material> materials(JsonNode node, SiteProfileJob.Input input,
+        List<SiteProfileJob.Dropped> dropped) {
         List<SiteProfileJob.Material> found = new ArrayList<>();
         if (node == null || !node.isArray()) {
             return found;
@@ -319,11 +353,18 @@ public final class SiteProfileAnswer {
             if (found.size() >= input.materialsMax()) {
                 break;
             }
-            String title = item.path("title").isString() ? withoutPersonalDetails(item.path("title").asString()) : null;
-            String body = item.path("body").isString() ? withoutPersonalDetails(item.path("body").asString()) : null;
+            PersonalDetails.Cleaned cleanTitle = PersonalDetails.clean(
+                item.path("title").isString() ? item.path("title").asString() : null);
+            PersonalDetails.Cleaned cleanBody = PersonalDetails.clean(
+                item.path("body").isString() ? item.path("body").asString() : null);
+            String title = cleanTitle.text();
+            String body = cleanBody.text();
             String url = item.path("url").isString() ? item.path("url").asString() : null;
             if (title == null || title.isBlank() || body == null || body.isBlank() || !onSite(url, input.domains())) {
                 continue;
+            }
+            if (cleanTitle.changed() || cleanBody.changed()) {
+                dropped.add(new SiteProfileJob.Dropped("materials[" + found.size() + "]", CONTACT_REMOVED));
             }
             found.add(new SiteProfileJob.Material(clip(title, ContentLimits.MATERIAL_TITLE_LENGTH),
                 clip(body, ContentLimits.MATERIAL_BODY_LENGTH), url));
@@ -332,12 +373,12 @@ public final class SiteProfileAnswer {
     }
 
     private static AiCandidates.Checked questions(JsonNode node, int materialCount, SiteProfileJob.Input input,
-        JsonMapper json) {
+        List<SiteProfileJob.Dropped> dropped) {
         List<AiQuestionsJob.Candidate> raw = new ArrayList<>();
         int unreadable = 0;
         if (node != null && node.isArray()) {
             for (JsonNode item : node) {
-                AiQuestionsJob.Candidate candidate = candidate(item, input);
+                AiQuestionsJob.Candidate candidate = candidate(item, input, dropped, raw.size());
                 if (candidate == null) {
                     unreadable++;
                 } else {
@@ -354,20 +395,24 @@ public final class SiteProfileAnswer {
     }
 
     /** One question as the job asks for it: the number of options asked, exactly one correct; null if it is not. */
-    private static AiQuestionsJob.Candidate candidate(JsonNode item, SiteProfileJob.Input input) {
+    private static AiQuestionsJob.Candidate candidate(JsonNode item, SiteProfileJob.Input input,
+        List<SiteProfileJob.Dropped> dropped, int index) {
         if (item == null || !item.isObject() || !item.path("stem").isString() || !item.path("options").isArray()
             || item.path("options").size() != input.options()) {
             return null;
         }
         List<AiQuestionsJob.Option> options = new ArrayList<>();
         int correct = 0;
+        boolean changed = false;
         for (JsonNode option : item.path("options")) {
             if (!option.path("text").isString() || !option.path("correct").isBoolean()) {
                 return null;
             }
             boolean right = option.path("correct").asBoolean();
             correct += right ? 1 : 0;
-            options.add(new AiQuestionsJob.Option(withoutPersonalDetails(option.path("text").asString()), right));
+            PersonalDetails.Cleaned text = PersonalDetails.clean(option.path("text").asString());
+            changed |= text.changed();
+            options.add(new AiQuestionsJob.Option(text.text(), right));
         }
         if (correct != 1) {
             return null;
@@ -378,8 +423,11 @@ public final class SiteProfileAnswer {
                 materials.add(no.asInt());
             }
         }
-        return new AiQuestionsJob.Candidate(withoutPersonalDetails(item.path("stem").asString()), options, null,
-            materials);
+        PersonalDetails.Cleaned stem = PersonalDetails.clean(item.path("stem").asString());
+        if (changed || stem.changed()) {
+            dropped.add(new SiteProfileJob.Dropped("questions[" + index + "]", CONTACT_REMOVED));
+        }
+        return new AiQuestionsJob.Candidate(stem.text(), options, null, materials);
     }
 
     private static String clip(String text, int max) {

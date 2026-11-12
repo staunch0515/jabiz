@@ -73,3 +73,18 @@
 4. **权利声明的记录**：规格写"记入同意记录"。`ConsentChecks` 现在只管法律文本的版本（`AI_NOTICE` 等）。建议：作业的 `params` 里记 `rightsDeclared`（时刻），不新增法律文本；若要用同意记录，须新增一份"网站权利声明"的法律文本（内容管理员发布）。是否按建议？
 5. **月 token 限额**：这种作业按 10 页 × 2 万 token 估计，一次约 20 万输入 token，可能一次用掉大部分 `qb.ai.monthly-tokens`；是否把它另列一项限额（建议：计入同一限额，调大缺省值，不另设）？
 6. 迁移号：开 C7a 时核。
+
+## C7a 审查后的决定与待核实（Fable 对 #630 的意见）
+
+- **联系方式剔除**（`PersonalDetails`）：先 NFKC 归一并统一各种连字符，再匹配；电话是 0 或 `+` 开头（或括号加 0）、总位数 10–13、组间只有单个分隔符的数字串，邮箱含 `＠`、`[at]`、`(at)`、国际化域名，社交账号含社交服务的链接（清单在资源 `quizbuks/ai/social-hosts.txt`）与 `LINE: @…` 等写法。没有可剔除的文字原样返回，所以尺寸、年份、价格、型号不受影响；被改动的字段列进 `dropped`（原因 `Contact details were removed`），发起方在确认页看得到。
+- **站外内容**：`page.website` 一律用作业输入的地址；不在该站域名下的 `shopUrl` 和图片列进 `dropped` 并去掉；`notFound` 只收符合字段路径格式的条目。
+- **链接名被占用**：完成流程按链接名查主页，被他人占用时给至多 `qb.ai.site-profile.handle-alternatives`（缺省 3）个带数字的备选，存在草稿的 `handle` 里（本人已持有的不算占用）。
+- **地址**：保留路径、去掉查询与片段；Unicode 主机名由服务器转成 punycode；公共后缀（`co.jp`、`github.io` 等，资源 `quizbuks/ai/public-suffixes.txt`）本身不收，其下的子域名可以。运维记录里的 `siteAddress` 被遮蔽（`@Sensitive`），`toString` 只含规范化后的主机。
+- **完成通知**：草稿就绪时给发起方一条待办（`task.qb.ai.site-profile`，来源键 `site-profile:<作业号>`），草稿被丢弃或过期时关闭；确认后的关闭在 C7b 加入。
+- **没有回答的调用**按这种作业的预留输入计费：`Request` 带 `reservedInput`（`SiteProfileJob.reservedInput(maxPages)`，与请求时预留一致）。
+
+### 待核实（上线前，开关 `qb.ai.site-profile.enabled` 保持关闭）
+
+1. **耗时**：平台限定单次外部调用至多 2 分钟，不支持流式。读 10 页再写三语资料包、文章和题目，输出可能超过一次不流式调用能给的时间。本环境没有真实的服务密钥，**尚未用真实网站测过**。上线前必须在 staging 用一个真实网站测一次，把耗时写在这里；若超过 2 分钟，需要平台增加流式调用的支持（须总控决定），或降低 `SiteProfileJob.MAX_OUTPUT_TOKENS` 与页数。每次调用的等待时限是配置 `quizbuks.ai.site-profile.request-timeout`（缺省 PT2M，最多 PT2M）。
+2. **输入 token 是否按轮累计**：服务端工具多轮读取（`pause_turn` 续接）时，每一轮的输入 token 可能累计计费，预留（页数 × 每页上限 + 固定部分）是否足够，用真实运行的用量核对，不够就提高预留。
+3. **PR 里写明的后移项**：总部（平台管理系统）AI 页列出这种作业、`@MaskedLink`、`QuizFileChecks` 放在 C7b / C7c。

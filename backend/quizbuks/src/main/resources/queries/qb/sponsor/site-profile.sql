@@ -32,7 +32,8 @@ SELECT
     j.{{QbAiJob.externalJobId}}  AS externalJobId,
     j.{{QbAiJob.status}}         AS status,
     j.{{QbAiJob.params}}         AS params,
-    j.{{QbAiJob.candidates}}     AS candidates,
+    -- The draft's text only for a draft that waits (a list of past requests does not carry every draft).
+    CASE WHEN j.{{QbAiJob.status}} = 'READY' THEN j.{{QbAiJob.candidates}} END AS candidates,
     j.{{QbAiJob.candidateCount}} AS candidateCount,
     j.{{QbAiJob.invalidCount}}   AS invalidCount,
     j.{{QbAiJob.acceptedCount}}  AS acceptedCount,

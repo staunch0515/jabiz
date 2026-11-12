@@ -508,6 +508,7 @@ public final class QbParams {
     public static final String SITE_PROFILE_QUESTIONS = "qb.ai.site-profile.questions";
     public static final String SITE_PROFILE_OPTIONS = "qb.ai.site-profile.options";
     public static final String SITE_PROFILE_MATERIALS_MAX = "qb.ai.site-profile.materials-max";
+    public static final String SITE_PROFILE_HANDLE_ALTERNATIVES = "qb.ai.site-profile.handle-alternatives";
     /** The controlled ones, in the order of {@link #CONTROLLED} (last). */
     public static final List<String> SITE_PROFILE_CONTROLLED = List.of(SITE_PROFILE_ENABLED, SITE_PROFILE_MONTHLY);
 
@@ -881,6 +882,8 @@ public final class QbParams {
             "How many options each question of the \"get to know us\" quiz has"),
         new Param(SITE_PROFILE_MATERIALS_MAX, Map.of("type", "numeric", "precision", 2, "scale", 0), "5",
             "The most articles the \"get to know us\" quiz drafted from a website has"),
+        new Param(SITE_PROFILE_HANDLE_ALTERNATIVES, Map.of("type", "numeric", "precision", 2, "scale", 0), "3",
+            "How many other link names are offered when the one drafted from a website is another sponsor's"),
         new Param(SITE_PROFILE_ENABLED, BOOL, false,
             "Whether sponsors may ask the AI to draft a profile package and a quiz from their website"),
         new Param(SITE_PROFILE_MONTHLY, Map.of("type", "numeric", "precision", 3, "scale", 0), "10",

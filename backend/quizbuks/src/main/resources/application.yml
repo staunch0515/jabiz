@@ -517,6 +517,10 @@ quizbuks:
   # requests and, through the job types' enabledBy (platform D52 item 4), holds queued and retrying jobs everywhere.
   ai:
     request-timeout: ${QB_AI_REQUEST_TIMEOUT:PT2M}
+    # F-C7: the longest one call of the website reader waits (at most two minutes, the platform's longest: a call
+    # without streaming cannot have more; docs/quizbuks/plans/impl/F-C7.md, "Timing").
+    site-profile:
+      request-timeout: ${QB_AI_SITE_PROFILE_REQUEST_TIMEOUT:PT2M}
     max-concurrency: ${QB_AI_MAX_CONCURRENCY:4}
     # Q8b: PDF materials go to Claude as the files themselves: each at most max-bytes (at most 20 MiB). A request
     # reserves max-pages pages (at most 600) of its sponsor's monthly tokens until its job ends; no PDF is parsed here:
