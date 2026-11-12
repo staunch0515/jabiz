@@ -305,6 +305,11 @@ public final class FeeProcesses {
         ParamValues params = ctx.get(PARAMS, ParamValues.class);
         List<Violation> problems = new ArrayList<>();
         EntityInstance sponsor = first(ctx, SPONSOR);
+        // N1 of Fable's second F-M6 review: a defence; the callers read the prepayment of the sponsor they charge.
+        EntityInstance held = first(ctx, PREPAYMENT);
+        if (held != null && !input.sponsorId().equals(String.valueOf((Object) held.get("sponsorId")))) {
+            throw new IllegalStateException("Prepayment " + held.id() + " is not " + input.sponsorId() + "'s");
+        }
         // M3 of the F-M6 review: a fee charged from a prepayment is for what was bought with money already set aside
         // (an audience fee at the start, a distribution fee at its settlement), and is billed as the prepayment was
         // (below): it is charged whatever the onboarding is now. A sponsor who erased their account has none, and

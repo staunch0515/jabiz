@@ -422,7 +422,8 @@ CROSS JOIN distribution_params dpar
 -- passed since that month's end. The months a postpaid sponsor's invoice waits for (qb.system.fee-invoices-due:
 -- owed less ready) are among them, and so are a prepaid sponsor's.
 CROSS JOIN LATERAL generate_series(
-    date_trunc('month', dc.{{QbPublicationCard.startAt}} AT TIME ZONE CAST(:zone AS text)),
+    -- When it went on (N1): greatest(its start, its approval); the same expression in qb.system.distribution-due, qb.system.fee-invoices-due and qb.system.recon-fee-account (DistributionDueConditionTest).
+    date_trunc('month', greatest(dc.{{QbPublicationCard.startAt}}, dp.{{QbPublication.approvedAt}}) AT TIME ZONE CAST(:zone AS text)),
     date_trunc('month', least(coalesce(dc.{{QbPublicationCard.endedAt}}, dm.m_end - interval '1 second'),
                               dm.m_end - interval '1 second') AT TIME ZONE CAST(:zone AS text)),
     interval '1 month') AS mo(r_month)

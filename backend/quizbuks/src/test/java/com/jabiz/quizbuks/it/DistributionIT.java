@@ -738,6 +738,62 @@ class DistributionIT extends PrepaymentItSupport {
         assertThat(distributionPrepayment(second)).containsEntry("mode", "POSTPAID");
     }
 
+    @Test
+    void approvedInTheNextMonthItIsDueFromItsApprovalNotFromItsStart() {
+        // N1 (Fable's second review): submitted on the last day of a month to start at once, approved on the 2nd of the
+        // next (after that month's run): the month it was not on is never due, so neither the check nor the postpaid
+        // invoice waits for a row that cannot come.
+        autoApprove(false);
+        distribution(true);
+        String sponsor = reviewedSponsor("fm6-late-approval");
+        distributionPrice(operatorOf(sponsor));
+        credit(sponsor, 5_000);
+        billing(sponsor, "POSTPAID", 100_000);
+        YearMonth month = YearMonth.parse(period(clock.instant()));
+        Instant evening = month.atEndOfMonth().atTime(20, 0).atZone(ZONE).toInstant();
+        if (!clock.instant().isBefore(evening)) {
+            month = month.plusMonths(1);
+            evening = month.atEndOfMonth().atTime(20, 0).atZone(ZONE).toInstant();
+        }
+        clock.set(evening);
+        String token = sponsorToken(sponsor);
+        // One approved at once, live in the month, with a fee of the month (the month's invoice waits for its due).
+        Map<String, Object> on = complete(version(token, "FM6 on time quiz"), "FM6 on time", clock.instant(),
+            clock.instant().plus(Duration.ofDays(7)));
+        on.put("maxWinners", 30);
+        on.put("regions", List.of("GLOBAL"));
+        String onTime = (String) run("QB_PUBLICATION_SAVE", token, on).get("publicationId");
+        decide(String.valueOf(submit(token, onTime).get("approvalRequestId")), "APPROVE", null);
+        starts(onTime, 1, "fm6-late-approval");
+        // The other submitted now, starting now, approved only on the 2nd.
+        Map<String, Object> save = complete(version(token, "FM6 late quiz"), "FM6 late", clock.instant(),
+            clock.instant().plus(Duration.ofDays(7)));
+        save.put("maxWinners", 30);
+        save.put("regions", List.of("GLOBAL"));
+        String late = (String) run("QB_PUBLICATION_SAVE", token, save).get("publicationId");
+        String requestId = String.valueOf(submit(token, late).get("approvalRequestId"));
+        String settled = month.toString();
+        monthlyIn(month.plusMonths(1));
+        assertThat(settlements(onTime)).singleElement()
+            .satisfies(row -> assertThat(row).containsEntry("period", settled));
+        clock.set(month.plusMonths(1).atDay(2).atTime(10, 0).atZone(ZONE).toInstant());
+        decide(requestId, "APPROVE", null);
+        assertThat(status(late)).isEqualTo("LIVE");
+
+        // A day on: not due for the month before its approval, nothing reported, the month's invoice issued.
+        clock.set(month.plusMonths(1).atDay(3).atTime(10, 0).atZone(ZONE).toInstant());
+        String last = month.plusMonths(1).toString();
+        assertThat(items(DistributionSettlements.DUE_TEMPLATE, TestTokens.bearer(tokens, "fm6-system",
+            QbPermissions.FEE_SYSTEM), Map.of("params", Map.of("period", settled, "periodStart",
+            month.atDay(1).atStartOfDay(ZONE).toInstant().toString(), "periodEnd",
+            month.plusMonths(1).atDay(1).atStartOfDay(ZONE).toInstant().toString()))))
+            .noneMatch(row -> late.equals(row.get("publicationId")));
+        assertThat(differences(sponsor)).isEmpty();
+        assertThat(invoicesDue(last)).filteredOn(row -> sponsor.equals(row.get("sponsorId"))).singleElement()
+            .satisfies(row -> assertThat(row).containsEntry("period", settled));
+        assertThat(settlements(late)).isEmpty();
+    }
+
     // ---- helpers -----------------------------------------------------------------------------------------------------
 
     List<Map<String, Object>> invoicesDue(String current) {

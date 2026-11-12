@@ -612,3 +612,10 @@
     - 店面：店面的发布由店铺的流程建立，计费的 IT 中建不出；`PublicationPrepaymentsTest` 断言只有发起方的、非挑战的发布才冻结，两个结算任务的取项只取单价不为空且 `publisherKind = 'SPONSOR'` 的发布。
     - `AdminFinanceIT.theDistributionFeesKindsAreTheirPostingsRowByRow`：一个月中冻结 165、结算 16（`DISTRIBUTION_CHARGED` 与从预付款付的 `PREPAYMENT_USED`）、退回 149，逐行逐科目非零。
 
+
+19. **N1（Fable 第二次审查）该结算的起点是上架的时刻**：三处判断"某月该不该结算"的地方原来都从卡片的 `startAt` 起算。三处是月度任务的取项 `qb.system.distribution-due`、后付账单的等待 `qb.system.fee-invoices-due` 与核对 `DISTRIBUTION_UNSETTLED`。批准可以晚于 `startAt` 并跨月，例如月末提交、次月 2 日才批准：那个月的月度结算早已跑过、永远不会有行，核对每天报差异、分录导出被挡、后付账单开不出来。
+    - 改为 `greatest(startAt, approvedAt)`（发布在批准时上架，`goingOn` 写 `approvedAt`；有卡片即已批准）。
+    - 三处写同一个表达式，`DistributionDueConditionTest` 检查三个模板各有且只有这一处读 `startAt`。
+    - 先写复现的测试 `DistributionIT.approvedInTheNextMonthItIsDueFromItsApprovalNotFromItsStart`：修前该月仍在取项中。
+    - 另加一行防线：`QB_FEE_CHARGE` 核对 `prepaymentId` 所指的预付款属于被记费的发起方。
+20. **已注销的发起方**：结束结算从预付款记费（第 12 条）；预付款不够付的余额从账户扣，账户已清空时成为收不回的未付。这部分随 F-M15（注销收尾：注销前结清）处理，本项不另做。
