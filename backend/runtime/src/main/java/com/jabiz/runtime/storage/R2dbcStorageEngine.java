@@ -408,18 +408,51 @@ public final class R2dbcStorageEngine implements StorageEngine {
 
     @Override
     public Mono<Long> count(PhysicalQueryPlan plan) {
+        return aggregate(plan, "count(*)", 0L, total -> ((Number) total).longValue());
+    }
+
+    @Override
+    public Mono<BigDecimal> sum(PhysicalQueryPlan plan, String column) {
+        return aggregate(plan, "coalesce(sum(" + SqlIdentifiers.require(column) + "), 0)", BigDecimal.ZERO,
+            R2dbcStorageEngine::decimal);
+    }
+
+    /**
+     * One aggregate over the rows matching the plan's condition, sorting and paging ignored; {@code none} without a
+     * round trip when the plan matches nothing. {@code expression} is built from validated identifiers only.
+     */
+    private <T> Mono<T> aggregate(PhysicalQueryPlan plan, String expression, T none,
+        java.util.function.Function<Object, T> value) {
         return Mono.deferContextual(view -> {
             if (plan.matchesNothing()) {
-                return Mono.just(0L);
+                return Mono.just(none);
             }
-            StringBuilder sql = new StringBuilder("SELECT count(*) AS total FROM ").append(plan.source());
+            StringBuilder sql = new StringBuilder("SELECT ").append(expression).append(" AS total FROM ")
+                .append(plan.source());
             if (plan.whereClause() != null && !plan.whereClause().isBlank()) {
                 sql.append(" WHERE ").append(plan.whereClause());
             }
             return query(view, sql.toString(), plan.bindParams(), plan.timeout(), texts(List.of(sql.toString())))
                 .next()
-                .map(row -> ((Number) row.get("total")).longValue());
+                .map(row -> value.apply(row.get("total")));
         });
+    }
+
+    /**
+     * A total as the driver gives it: numeric as BigDecimal, an integer sum (bigint) as Long, a floating-point column's
+     * as Double (a total of NaN or an infinity has no decimal value and is refused).
+     */
+    private static BigDecimal decimal(Object total) {
+        return switch (total) {
+            case BigDecimal decimal -> decimal;
+            case Long l -> BigDecimal.valueOf(l);
+            case Integer i -> BigDecimal.valueOf(i);
+            case Short sh -> BigDecimal.valueOf(sh);
+            case java.math.BigInteger big -> new BigDecimal(big);
+            case Double d when Double.isFinite(d) -> BigDecimal.valueOf(d);
+            case Float f when Float.isFinite(f) -> new BigDecimal(Float.toString(f));
+            default -> throw new IllegalStateException("Unexpected total of type " + total.getClass().getName());
+        };
     }
 
     @Override
