@@ -82,7 +82,8 @@ public final class QbPrepayments {
             .asMonetary("JPY", 0));
         // F-M11: the operator its fees belong to, frozen at the submission.
         eb.field("operatorId", f -> f.physicalColumn("operator_id").immutable(true).processOnly().asText(36));
-        // What the amount was worked out from (the audience fee's quote), as JSON, for the pages and the checks.
+        // What the amount was worked out from (the audience fee's quote), as JSON, for the pages and the checks. As it was
+        // at the submission: an exposure top-up (F-M8) raises the amount but does not rewrite this.
         eb.field("detail", f -> f.physicalColumn("detail").immutable(true).processOnly().asText(DETAIL_LENGTH, true));
         eb.field("status", f -> f.physicalColumn("status").required(true).processOnly()
             .asCode(STATUS_DICTIONARY, STATUSES.toArray(String[]::new)));

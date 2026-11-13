@@ -145,4 +145,137 @@ class ExposureFeeIT extends ExposureFeeItSupport {
         refused(PublicationExposureTopUp.TOP_UP, sponsorToken(reviewedSponsor("fm8-other")), body("publicationId",
             publicationId, "expectedPurchased", 110, "additional", 5), 404);
     }
+
+    // ---- the top-up as the prepayment was set aside, not as the sponsor's billing is now (Fable M1) --------------------
+
+    private Map<String, Object> topUp(String sponsor, String publicationId, long expected, long additional) {
+        return body("publicationId", publicationId, "expectedPurchased", expected, "additional", additional);
+    }
+
+    private String bought(String name, long requested, long grant) {
+        String sharedVideoId = approvedVideo(reviewedSponsor(name + "-provider"));
+        String sponsor = reviewedSponsor(name);
+        if (grant > 0) {
+            grant(sponsor, grant, clock.instant().plus(Duration.ofDays(90)));
+        }
+        return sponsor + "|" + draft(sponsor, name, sharedVideoId, requested);
+    }
+
+    @Test
+    void aPostpaidSponsorsPurchaseAndTopUpCountAgainstTheCreditLimitAndMoveNoMoney() {
+        String sponsor = reviewedSponsor("fm8-post");
+        String sharedVideoId = approvedVideo(reviewedSponsor("fm8-post-provider"));
+        billing(sponsor, "POSTPAID", 130);
+        String publicationId = draft(sponsor, "Post", sharedVideoId, 105L);
+        submit(sponsorToken(sponsor), publicationId);
+        assertThat(exposurePrepayment(publicationId)).containsEntry("mode", "POSTPAID");
+        assertThat(dec(exposurePrepayment(publicationId).get("amount"))).isEqualByComparingTo("115");
+        assertThat(ledger("2180", sponsor)).isEqualByComparingTo("0");
+        // 6 more fit the limit of 130 (121 set aside); 11 more (132 in all) do not, and nothing is written.
+        run(PublicationExposureTopUp.TOP_UP, sponsorToken(sponsor), topUp(sponsor, publicationId, 105, 5));
+        assertThat(dec(exposurePrepayment(publicationId).get("amount"))).isEqualByComparingTo("121");
+        assertThat(ledger("2180", sponsor)).isEqualByComparingTo("0");
+        assertThat(codes(refused(PublicationExposureTopUp.TOP_UP, sponsorToken(sponsor), topUp(sponsor, publicationId,
+            110, 10), 422))).contains(FeeCodes.PUBLICATION_FUNDS);
+        assertThat(dec(exposurePrepayment(publicationId).get("amount"))).isEqualByComparingTo("121");
+        assertThat(dec(row(publicationId).get("exposure_purchased"))).isEqualByComparingTo("110");
+    }
+
+    @Test
+    void aTopUpFollowsTheBillingTheExposuresWereSetAsideWithWhateverTheBillingIsNow() {
+        // Prepaid when bought, postpaid now: the top-up still takes the money from the account, so with just the 115 of
+        // the purchase in it the 6 more are short (the old check passed as postpaid and the freeze then failed: a 500).
+        String[] a = bought("fm8-mode-a", 105, 115).split("\\|");
+        submit(sponsorToken(a[0]), a[1]);
+        billing(a[0], "POSTPAID", 100_000);
+        assertThat(codes(refused(PublicationExposureTopUp.TOP_UP, sponsorToken(a[0]), topUp(a[0], a[1], 105, 5), 422)))
+            .contains(FeeCodes.PUBLICATION_FUNDS);
+        assertThat(dec(exposurePrepayment(a[1]).get("amount"))).isEqualByComparingTo("115");
+        assertThat(ledger("2180", a[0])).isEqualByComparingTo("115");
+        // With the money in the account it takes it as the purchase did.
+        grant(a[0], 1_000, clock.instant().plus(Duration.ofDays(90)));
+        run(PublicationExposureTopUp.TOP_UP, sponsorToken(a[0]), topUp(a[0], a[1], 105, 5));
+        assertThat(ledger("2180", a[0])).isEqualByComparingTo("121");
+        assertThat(differences(a[0])).isEmpty();
+
+        // Postpaid when bought, prepaid now: the credit limit is gone, so the top-up of what was set aside against it is
+        // refused as the postpaid funds check says (it neither adds without setting aside nor takes money it never
+        // took), and nothing is written.
+        String sponsor = reviewedSponsor("fm8-mode-b");
+        String sharedVideoId = approvedVideo(reviewedSponsor("fm8-mode-b-provider"));
+        // Money in the account, so that the old check (as prepaid) would have passed and added without the credit.
+        grant(sponsor, 5_000, clock.instant().plus(Duration.ofDays(90)));
+        billing(sponsor, "POSTPAID", 100_000);
+        String publicationId = draft(sponsor, "Mode b", sharedVideoId, 105L);
+        submit(sponsorToken(sponsor), publicationId);
+        billing(sponsor, "PREPAID", 0);
+        assertThat(codes(refused(PublicationExposureTopUp.TOP_UP, sponsorToken(sponsor), topUp(sponsor, publicationId,
+            105, 5), 422))).contains(FeeCodes.PUBLICATION_FUNDS);
+        assertThat(dec(exposurePrepayment(publicationId).get("amount"))).isEqualByComparingTo("115");
+        assertThat(exposurePrepayment(publicationId)).containsEntry("mode", "POSTPAID");
+        assertThat(ledger("2180", sponsor)).isEqualByComparingTo("0");
+        // The credit limit given back, it goes through and still moves no money.
+        billing(sponsor, "POSTPAID", 100_000);
+        run(PublicationExposureTopUp.TOP_UP, sponsorToken(sponsor), topUp(sponsor, publicationId, 105, 5));
+        assertThat(dec(exposurePrepayment(publicationId).get("amount"))).isEqualByComparingTo("121");
+        assertThat(ledger("2180", sponsor)).isEqualByComparingTo("0");
+    }
+
+    @Test
+    void aShortfallRefusesATopUpAndWritesNothing() {
+        // Exactly the 115 of the purchase in the account: the 6 more are short.
+        String[] a = bought("fm8-short-top", 105, 115).split("\\|");
+        submit(sponsorToken(a[0]), a[1]);
+        long versions = query("SELECT 1 FROM qb_publication_version WHERE publication_id = CAST(? AS uuid)", a[1]).size();
+        assertThat(codes(refused(PublicationExposureTopUp.TOP_UP, sponsorToken(a[0]), topUp(a[0], a[1], 105, 5), 422)))
+            .contains(FeeCodes.PUBLICATION_FUNDS);
+        assertThat(query("SELECT 1 FROM qb_publication_version WHERE publication_id = CAST(? AS uuid)", a[1]))
+            .hasSize((int) versions);
+        assertThat(dec(exposurePrepayment(a[1]).get("amount"))).isEqualByComparingTo("115");
+        assertThat(ledger("2180", a[0])).isEqualByComparingTo("115");
+    }
+
+    @Test
+    void aTopUpIsRefusedForAClosedPrepaymentAnEndedOrWaitingPublicationAndTooManyAtOnce() {
+        String[] a = bought("fm8-states", 105, 5_000).split("\\|");
+        String token = sponsorToken(a[0]);
+        submit(token, a[1]);
+        // Too many at once (the single limit) and in all.
+        assertThat(codes(refused(PublicationExposureTopUp.TOP_UP, token, topUp(a[0], a[1], 105, 1_000_001), 422)))
+            .contains(FeeCodes.EXPOSURE_TOP_UP_RANGE);
+        // A prepayment already closed.
+        execute("UPDATE qb_prepayment SET status = 'RELEASED', released_at = ?, release_reason = 'ENDED', "
+            + "version = version + 1 WHERE publication_id = ? AND purpose = 'EXPOSURE'",
+            java.sql.Timestamp.from(clock.instant()), a[1]);
+        assertThat(codes(refused(PublicationExposureTopUp.TOP_UP, token, topUp(a[0], a[1], 105, 5), 422)))
+            .contains(FeeCodes.EXPOSURE_PREPAYMENT_CLOSED);
+        // Ended: not running any more.
+        run("QB_PUBLICATION_ADMIN_END", com.jabiz.runtime.test.TestTokens.bearer(tokens, "fm8-content-end",
+            com.jabiz.quizbuks.QbPermissions.ADMIN_CONTENT_WRITE), body("publicationId", a[1], "reason", "F-M8 test"));
+        assertThat(codes(refused(PublicationExposureTopUp.TOP_UP, token, topUp(a[0], a[1], 105, 5), 422)))
+            .contains(FeeCodes.EXPOSURE_NOT_BOUGHT);
+    }
+
+    @Test
+    void aTopUpOfAPublicationInReviewIsRefusedAndAnUnverifiedOrBannedSponsorCannotTopUp() {
+        autoApprove(false);
+        String[] a = bought("fm8-review", 105, 5_000).split("\\|");
+        submit(sponsorToken(a[0]), a[1]);
+        assertThat(status(a[1])).isEqualTo("PENDING_REVIEW");
+        assertThat(codes(refused(PublicationExposureTopUp.TOP_UP, sponsorToken(a[0]), topUp(a[0], a[1], 105, 5), 422)))
+            .contains(FeeCodes.EXPOSURE_NOT_BOUGHT);
+        autoApprove(true);
+        // An address not verified: refused before anything.
+        refused(PublicationExposureTopUp.TOP_UP, com.jabiz.runtime.test.TestTokens.unverified(tokens, a[0],
+            com.jabiz.quizbuks.setup.QbRoles.of(com.jabiz.quizbuks.setup.QbRoles.SPONSOR).permissions()
+                .toArray(String[]::new)), topUp(a[0], a[1], 105, 5), 403);
+        // Banned: refused with the ban, nothing written; works again when unbanned.
+        String boss = com.jabiz.runtime.test.TestTokens.bearer(tokens, "fm8-boss", com.jabiz.quizbuks.setup.QbRoles
+            .of(com.jabiz.quizbuks.setup.QbRoles.ADMIN_SUPER).permissions().toArray(String[]::new));
+        run("QB_USER_BAN", boss, body("userId", a[0], "reason", "Fraud"));
+        assertThat(codes(refused(PublicationExposureTopUp.TOP_UP, sponsorToken(a[0]), topUp(a[0], a[1], 105, 5), 422)))
+            .contains("QB_USER_BANNED");
+        assertThat(dec(exposurePrepayment(a[1]).get("amount"))).isEqualByComparingTo("115");
+        run(com.jabiz.quizbuks.identity.BanProcesses.UNBAN, boss, body("userId", a[0], "note", "Cleared"));
+    }
 }

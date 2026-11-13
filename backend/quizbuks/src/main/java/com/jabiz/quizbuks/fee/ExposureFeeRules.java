@@ -66,7 +66,8 @@ public final class ExposureFeeRules {
 
     /** The exposures billed: the successful ones, but no more than were bought ({@code ExposureRules.billable}). */
     public static long billable(long successful, long purchased) {
-        return Math.min(Math.max(0, successful), Math.max(0, purchased));
+        // The one definition (the sum of the settlements may not exceed what was bought): the counting side's.
+        return com.jabiz.quizbuks.exposure.ExposureRules.billable(Math.max(0, successful), Math.max(0, purchased));
     }
 
     /** What {@code count} exposures at {@code unit} come to, rounded up to the yen (before tax). */

@@ -35,6 +35,7 @@ export const WAITING_ROWS: readonly WaitingRow[] = [
  * against the registry by `FirstLaunchSwitchesTemplateTest`.
  */
 export const KEY_BEFORE_MEANING_ROWS: readonly WaitingRow[] = [
+  { key: 'qb.exposure.billing.enabled', group: 'exposure', waitingFor: 'F-M8' },
   { key: 'qb.ai.site-profile.enabled', group: 'aifee', waitingFor: 'F-M9' },
 ]
 

@@ -207,7 +207,7 @@ public final class Prepayments {
             .step("Save the prepayment", SaveChanges.now())
             .step("Post it", CallProcess.<ProcessContext>when(ctx -> ctx.contains(POST_INPUT), LedgerProcesses.POST, 1,
                 ctx -> ctx.get(POST_INPUT), POSTING))
-            .compute("Record its parts", (metadata, ctx) -> recordFrozen(ctx)));
+            .compute("Record its parts", (metadata, ctx) -> recordFrozen(ctx, freezeInput(ctx).sponsorId())));
     }
 
     static void setAside(ProcessContext ctx) {
@@ -294,7 +294,7 @@ public final class Prepayments {
             .compute("Raise it", (metadata, ctx) -> raise(ctx))
             .step("Post it", CallProcess.<ProcessContext>when(ctx -> ctx.contains(POST_INPUT), LedgerProcesses.POST, 1,
                 ctx -> ctx.get(POST_INPUT), POSTING))
-            .compute("Record its parts", (metadata, ctx) -> recordFrozen(ctx)));
+            .compute("Record its parts", (metadata, ctx) -> recordFrozen(ctx, topUpInput(ctx).sponsorId())));
     }
 
     static void raise(ProcessContext ctx) {
@@ -310,24 +310,19 @@ public final class Prepayments {
         values.put("amount", FeeGate.money(prepayment.get("amount")).add(input.amount()));
         values.put("remaining", FeeGate.money(prepayment.get("remaining")).add(input.amount()));
         ctx.changes().update(QbPrepayments.PREPAYMENT, prepayment.id(), prepayment.version(), values);
-        // recordFrozen reads the input as a freeze's: the same figures, the prepayment's own mode.
-        ctx.put(INPUT, new FreezeInput(input.sponsorId(), input.publicationId(), input.purpose(),
-            String.valueOf((Object) prepayment.get("mode")), input.amount(), BigDecimal.ZERO, null, null));
-        post(ctx, freezeInput(ctx), id, TOPPED_UP);
+        // The posting is the freeze's, with the prepayment's own mode (not the sponsor's billing now).
+        post(ctx, new FreezeInput(input.sponsorId(), input.publicationId(), input.purpose(),
+            String.valueOf((Object) prepayment.get("mode")), input.amount(), BigDecimal.ZERO, null, null), id, TOPPED_UP);
     }
 
     static TopUpInput topUpInput(ProcessContext ctx) {
-        Object input = ctx.get(INPUT);
-        return input instanceof TopUpInput topUp ? topUp
-            : new TopUpInput(((FreezeInput) input).sponsorId(), ((FreezeInput) input).publicationId(),
-                ((FreezeInput) input).purpose(), ((FreezeInput) input).amount());
+        return ctx.get(INPUT, TopUpInput.class);
     }
 
-    static void recordFrozen(ProcessContext ctx) {
+    static void recordFrozen(ProcessContext ctx, String sponsorId) {
         if (!ctx.contains(ALLOCATION)) {
             return;
         }
-        FreezeInput input = freezeInput(ctx);
         FeeAllocation.Result result = ctx.get(ALLOCATION, FeeAllocation.Result.class);
         String transactionId = ctx.get(POSTING, LedgerProcesses.PostOutput.class).transactionId();
         String id = (String) ctx.get(PREPAYMENT_ID);
@@ -335,18 +330,18 @@ public final class Prepayments {
         Map<String, EntityInstance> lots = FeeSettlement.byId(FeeGate.list(ctx, LOTS));
         for (FeeAllocation.Part part : result.parts()) {
             boolean credit = QbFeeAccount.FEE_CREDIT.equals(part.subAccount());
-            insertPart(ctx, input.sponsorId(), QbPrepayments.PREPAYMENT, id, part.subAccount(),
+            insertPart(ctx, sponsorId, QbPrepayments.PREPAYMENT, id, part.subAccount(),
                 credit ? part.lotId() : null, credit ? null : part.lotId(), part.amount(), transactionId, null);
             EntityInstance lot = credit ? grants.get(part.lotId()) : lots.get(part.lotId());
             ctx.changes().update(credit ? QbFeeAccount.GRANT : QbFeeAccount.CASH_LOT, lot.id(), lot.version(),
                 Map.of("remaining", FeeGate.money(lot.get("remaining")).subtract(part.amount())));
         }
         if (result.credit().signum() > 0) {
-            QbWallets.change(ctx, FeeGate.first(ctx, CREDIT_WALLET), QbWallets.FEE_CREDIT, input.sponsorId(),
+            QbWallets.change(ctx, FeeGate.first(ctx, CREDIT_WALLET), QbWallets.FEE_CREDIT, sponsorId,
                 result.credit().negate(), 0, BigDecimal.ZERO);
         }
         if (result.cash().signum() > 0) {
-            QbWallets.change(ctx, FeeGate.first(ctx, CASH_WALLET), QbWallets.CASH, input.sponsorId(),
+            QbWallets.change(ctx, FeeGate.first(ctx, CASH_WALLET), QbWallets.CASH, sponsorId,
                 result.cash().negate(), 0, BigDecimal.ZERO);
         }
     }

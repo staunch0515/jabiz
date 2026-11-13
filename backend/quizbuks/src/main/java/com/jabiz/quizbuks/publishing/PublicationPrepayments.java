@@ -418,8 +418,12 @@ public final class PublicationPrepayments {
             return List.of(new com.jabiz.entity.Violation(null, com.jabiz.quizbuks.fee.FeeCodes.FEE_PARAMS,
                 "The tax rate cannot be used", Map.of("rate", "null")));
         }
-        long least = params(ctx).find(QbParams.EXPOSURE_MIN_PURCHASE, BigDecimal.class)
-            .map(BigDecimal::longValue).orElse(1L);
+        // Like the other parameters: one that is not published refuses (no least read as 1).
+        if (params(ctx).find(QbParams.EXPOSURE_MIN_PURCHASE, BigDecimal.class).isEmpty()) {
+            return List.of(new com.jabiz.entity.Violation(null, com.jabiz.quizbuks.fee.FeeCodes.FEE_PARAMS,
+                "The fewest exposures a submission buys cannot be used", Map.of("param", QbParams.EXPOSURE_MIN_PURCHASE)));
+        }
+        long least = params(ctx).find(QbParams.EXPOSURE_MIN_PURCHASE, BigDecimal.class).get().longValue();
         Object requested = publication.get("exposureRequested");
         if (requested == null || ((Number) requested).longValue() < least) {
             return List.of(new com.jabiz.entity.Violation("exposureRequested",
@@ -438,6 +442,11 @@ public final class PublicationPrepayments {
 
     /** The funds of the publication from the reads (the check, and the wizard's look). */
     static PrepaymentRules.Funds funds(ProcessContext ctx) {
+        return funds(ctx, billingMode(ctx));
+    }
+
+    /** As {@link #funds(ProcessContext)}, for a billing mode given (an exposure top-up: the prepayment's own). */
+    static PrepaymentRules.Funds funds(ProcessContext ctx, String billingMode) {
         List<PrepaymentRules.Item> items = itemsOf(ctx);
         if (FeeGate.list(ctx, POSTPAID).size() > MAX_POSTPAID) {
             throw new IllegalStateException("More than " + MAX_POSTPAID + " open postpaid prepayments");
@@ -446,7 +455,7 @@ public final class PublicationPrepayments {
             .reduce(BigDecimal.ZERO, BigDecimal::add);
         BigDecimal owed = ctx.contains(OWED) ? owedOf(ctx) : BigDecimal.ZERO;
         EntityInstance sponsor = FeeGate.first(ctx, SPONSOR);
-        return PrepaymentRules.check(items, new PrepaymentRules.Standing(billingMode(ctx), spendable(ctx), owed,
+        return PrepaymentRules.check(items, new PrepaymentRules.Standing(billingMode, spendable(ctx), owed,
             setAside, sponsor == null ? null : FeeGate.money(sponsor.get("creditLimit"))));
     }
 

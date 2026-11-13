@@ -88,6 +88,10 @@ abstract class ExposureFeeItSupport extends PrepaymentItSupport {
                 .assertThat(((Number) row.get("changed")).longValue()).as(table).isZero());
     }
 
+    static java.math.BigDecimal dec(Object value) {
+        return new java.math.BigDecimal(String.valueOf(value));
+    }
+
     static long outboxEvents(String type, String key, String value) {
         return ((Number) query("SELECT count(*) AS n FROM sys_outbox_event WHERE event_type = ? "
             + "AND payload::jsonb ->> ? = ?", type, key, value).getFirst().get("n")).longValue();
