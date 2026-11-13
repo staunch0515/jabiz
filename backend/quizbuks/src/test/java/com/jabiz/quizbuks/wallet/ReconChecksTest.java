@@ -139,7 +139,10 @@ class ReconChecksTest {
             + "\"CREDIT_NOTE_LIMITS\":0,\"CREDIT_NOTE_USES\":0,\"CREDIT_NOTE_USE_VOID\":0,\"CREDIT_UNUSED_WITH_DUE\":0,"
             + "\"DISTRIBUTION_AT_FLOOR\":0,\"DISTRIBUTION_DEPOSITS\":0,\"DISTRIBUTION_FINAL_MISSING\":0,"
             + "\"DISTRIBUTION_PRICE_RANGE\":0,\"DISTRIBUTION_UNSETTLED\":0,\"ENTRY_FEES_UNSETTLED\":0,"
-            + "\"FEES_RECEIVABLE\":0,\"FEE_CREDIT\":0,\"FEE_CREDIT_PROMOTION\":0,\"FEE_PAYMENTS\":0,")
+            + "\"EXPOSURE_AMOUNT_MISMATCH\":0,\"EXPOSURE_DEPOSITS\":0,\"EXPOSURE_FINAL_MISSING\":0,"
+            + "\"EXPOSURE_PRICE_RANGE\":0,\"EXPOSURE_SETTLED_OVER\":0,\"EXPOSURE_SETTLED_SHORT\":0,"
+            + "\"EXPOSURE_UNIT_MISMATCH\":0,\"EXPOSURE_UNPURCHASED\":0,"
+            + "\"EXPOSURE_UNSETTLED\":0,\"FEES_RECEIVABLE\":0,\"FEE_CREDIT\":0,\"FEE_CREDIT_PROMOTION\":0,\"FEE_PAYMENTS\":0,")
             .contains("\"LEDGER_ZERO\":0").contains("\"TOPUP_FEE\":0");
     }
 
@@ -220,15 +223,18 @@ class ReconChecksTest {
             .doesNotContainAnyElementsOf(ReconChecks.NOTES);
         assertThat(ReconChecks.OWNERS.keySet()).allSatisfy(code -> assertThat(ReconChecks.ALL).contains(code));
         assertThat(ReconChecks.ALL).allSatisfy(code -> assertThat(ReconChecks.owner(code)).as(code).isNotBlank());
-        // Four need attention (F-M10: the AI help's usage total, owned by the content administrators and leading to the
-        // AI page they can open), two are notes, the rest are differences.
+        // Five need attention (the two price ranges, the audience fee without its period, a credit with a due fee, and
+        // F-M10's AI help usage total, owned by the content administrators and leading to the AI page they can open),
+        // three are notes (the taker wallet's lag, the distribution fee at its floor, F-M8's unpurchased exposures),
+        // the rest are differences.
         assertThat(ReconChecks.ATTENTION).containsExactlyInAnyOrder(ReconChecks.DISTRIBUTION_PRICE_RANGE,
-            ReconChecks.AUDIENCE_REFUND_NO_PERIOD, ReconChecks.CREDIT_UNUSED_WITH_DUE, ReconChecks.HELP_USAGE_TOTAL);
+            ReconChecks.AUDIENCE_REFUND_NO_PERIOD, ReconChecks.CREDIT_UNUSED_WITH_DUE, ReconChecks.HELP_USAGE_TOTAL,
+            ReconChecks.EXPOSURE_PRICE_RANGE);
         assertThat(ReconChecks.owner(ReconChecks.HELP_USAGE_TOTAL)).isEqualTo(QbPermissions.ADMIN_HELP_GAPS);
         assertThat(ReconChecks.link(ReconChecks.HELP_USAGE_TOTAL)).isEqualTo("/qb/ai");
         assertThat(ReconChecks.link(ReconChecks.DISTRIBUTION_PRICE_RANGE)).isEqualTo(ReconTasks.RECONCILIATION_PAGE);
         assertThat(ReconChecks.ALL.stream().filter(c -> ReconChecks.level(c) == ReconChecks.Level.DIFFERENCE))
-            .hasSize(ReconChecks.ALL.size() - 6);
+            .hasSize(ReconChecks.ALL.size() - 8);
     }
 
     @Test

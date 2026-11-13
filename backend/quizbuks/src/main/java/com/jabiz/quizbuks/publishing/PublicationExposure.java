@@ -7,6 +7,8 @@ import com.jabiz.quizbuks.QbPermissions;
 import com.jabiz.quizbuks.exposure.ExposureCodes;
 import com.jabiz.runtime.EntityInstance;
 import com.jabiz.runtime.process.steps.RunTemplate;
+import jakarta.validation.constraints.DecimalMin;
+import jakarta.validation.constraints.Digits;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotNull;
@@ -49,8 +51,17 @@ public final class PublicationExposure {
     /**
      * @param publicationId the publication
      * @param purchased     the exposures bought in all; none: unlimited
+     * @param unit          the price per exposure to freeze with it; none: the price is not touched (the purchase at
+     *                      the submission froze it already). Only the end-to-end tests' root gives it, so that a
+     *                      publication they buy for has the price the reconciliation expects beside a purchase
      */
-    public record PurchasedInput(@NotNull UUID publicationId, @Min(1) @Max(MAX_PURCHASED) Long purchased) {}
+    public record PurchasedInput(@NotNull UUID publicationId, @Min(1) @Max(MAX_PURCHASED) Long purchased,
+        @DecimalMin("0") @Digits(integer = 15, fraction = 4) BigDecimal unit) {
+
+        public PurchasedInput(UUID publicationId, Long purchased) {
+            this(publicationId, purchased, null);
+        }
+    }
 
     public record EndInput(@NotNull UUID publicationId) {}
 
@@ -80,12 +91,16 @@ public final class PublicationExposure {
             return;
         }
         BigDecimal wanted = input.purchased() == null ? null : BigDecimal.valueOf(input.purchased());
-        if (PublicationEditing.same(publication.get("exposurePurchased"), wanted)) {
+        boolean unitSame = input.unit() == null || PublicationEditing.same(publication.get("exposureUnit"), input.unit());
+        if (unitSame && PublicationEditing.same(publication.get("exposurePurchased"), wanted)) {
             PublicationEditing.unchanged(ctx, publication);
             return;
         }
         Map<String, Object> values = new LinkedHashMap<>();
         values.put("exposurePurchased", wanted);
+        if (input.unit() != null) {
+            values.put("exposureUnit", input.unit());
+        }
         PublicationEditing.write(ctx, publication, values);
         EntityInstance card = PublicationEditing.first(ctx, PublicationEditing.CARD);
         if (card != null && !PublicationEditing.same(card.get("exposurePurchased"), wanted)) {

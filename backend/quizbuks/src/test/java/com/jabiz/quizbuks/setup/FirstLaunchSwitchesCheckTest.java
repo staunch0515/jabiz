@@ -70,8 +70,8 @@ class FirstLaunchSwitchesCheckTest {
     void theSwitchesThatMustBeOffAreTheRegistrysFalseRowsAndTheWaitingOnesWhoseKeyExists() {
         assertThat(FirstLaunchSwitchesCheck.MUST_BE_OFF).containsExactlyInAnyOrder(QbParams.KUDOS_BUY_ENABLED,
             QbParams.KUDOS_SELL_ENABLED, QbParams.TRANSFER_ENABLED, QbParams.WITHDRAWAL_BANK_ENABLED,
-            QbParams.REWARD_KUDOS_ENABLED, QbParams.ENTRY_FEE_ENABLED, QbParams.EXPOSURE_BILLING_ENABLED,
-            QbParams.AI_FEE_ENABLED, QbParams.SITE_PROFILE_ENABLED);
+            QbParams.REWARD_KUDOS_ENABLED, QbParams.ENTRY_FEE_ENABLED, QbParams.AI_FEE_ENABLED,
+            QbParams.SITE_PROFILE_ENABLED);
         // A waiting row whose key does not exist yet never counts: there is nothing to turn on.
         FirstLaunchSwitches.ALL.stream().filter(row -> row.status() == FirstLaunchSwitches.Status.WAITING)
             .filter(row -> !FirstLaunchSwitches.KEY_BEFORE_MEANING.contains(row.key()))
@@ -88,11 +88,13 @@ class FirstLaunchSwitchesCheckTest {
     }
 
     @Test
-    void theExposureSwitchWaitsForItsSettlementsAndWarnsWhenItIsOnBeforeThey() {
-        // F-M8: the key exists (declared off) and the switch is on only once the settlements are there (F-M8c).
+    void theExposureSwitchIsAnOrdinaryActiveOneNow() {
+        // F-M8c: the settlements are there, so the switch is on at the launch and does not warn when it is on.
         assertThat(FirstLaunchSwitchesCheck.problems(Map.of(QbParams.EXPOSURE_BILLING_ENABLED, "true",
-            QbParams.REWARD_KUDOS_ENABLED, "false"))).singleElement()
-            .satisfies(problem -> assertThat(problem.location())
-                .isEqualTo("parameter " + QbParams.EXPOSURE_BILLING_ENABLED));
+            QbParams.REWARD_KUDOS_ENABLED, "false"))).isEmpty();
+        assertThat(FirstLaunchSwitches.ALL).anySatisfy(row -> {
+            assertThat(row.key()).isEqualTo(QbParams.EXPOSURE_BILLING_ENABLED);
+            assertThat(row.status()).isEqualTo(FirstLaunchSwitches.Status.ACTIVE);
+        });
     }
 }

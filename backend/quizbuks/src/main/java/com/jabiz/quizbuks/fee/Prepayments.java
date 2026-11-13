@@ -176,6 +176,7 @@ public final class Prepayments {
     static final String PUBLICATION = "publication";
     static final String RELEASE_CALL = "releaseCall";
     static final String FINAL_SETTLEMENT = "finalSettlement";
+    static final String EXPOSURE_FINAL = "exposureFinalSettlement";
     static final String OPEN_PREPAYMENT = "openPrepayment";
 
     private Prepayments() {}
@@ -563,6 +564,12 @@ public final class Prepayments {
                             new QueryPredicate.In("publicationId", QbPrepayments.DISTRIBUTION.equals(
                                 releaseInput(ctx).purpose()) ? List.of(releaseInput(ctx).publicationId()) : List.of()),
                             new QueryPredicate.Eq("final", true)))).limit(1).build(), FINAL_SETTLEMENT),
+                    // F-M8: and the exposure fee's, the same way.
+                    QueryEntities.query(QbExposureFees.defaultDataset(QbExposureFees.SETTLEMENT), ctx -> EntityQuery
+                        .builder().where(new QueryPredicate.And(List.of(
+                            new QueryPredicate.In("publicationId", QbPrepayments.EXPOSURE.equals(
+                                releaseInput(ctx).purpose()) ? List.of(releaseInput(ctx).publicationId()) : List.of()),
+                            new QueryPredicate.Eq("final", true)))).limit(1).build(), EXPOSURE_FINAL),
                     QueryEntities.query(QbWallets.defaultDataset(QbWallets.WALLET),
                         ctx -> QbWallets.query(QbWallets.CASH, releaseInput(ctx).sponsorId()), CASH_WALLET),
                     QueryEntities.query(QbWallets.defaultDataset(QbWallets.WALLET),
@@ -625,8 +632,10 @@ public final class Prepayments {
         }
         List<Release> plan = new ArrayList<>();
         List<LedgerProcesses.PostInput> posts = new ArrayList<>();
-        if (QbPrepayments.DISTRIBUTION.equals(releaseInput(ctx).purpose())
-            && FeeGate.first(ctx, FINAL_SETTLEMENT) == null) {
+        if ((QbPrepayments.DISTRIBUTION.equals(releaseInput(ctx).purpose())
+            && FeeGate.first(ctx, FINAL_SETTLEMENT) == null)
+            || (QbPrepayments.EXPOSURE.equals(releaseInput(ctx).purpose())
+            && FeeGate.first(ctx, EXPOSURE_FINAL) == null)) {
             // Not settled to its end yet: a settlement may still need it (§9.7).
             ctx.put(PLAN, List.of());
             ctx.put(POSTS, List.of());

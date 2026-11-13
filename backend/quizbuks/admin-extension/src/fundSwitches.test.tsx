@@ -156,20 +156,19 @@ describe('FundSwitches', () => {
   it('shows a waiting row whose key exists with its value in force and says what it waits for', async () => {
     // F-M7: the audience fee's switch is an active row now (on at the launch), with no waiting note.
     server.switches = [...(server.switches as Row[]), row('qb.audience.billing.enabled', 'audience', 'true', 'true', true),
-      row('qb.exposure.billing.enabled', 'exposure', 'false', 'true', true),
+      row('qb.exposure.billing.enabled', 'exposure', 'true', 'true', true),
       row('qb.ai.fee.enabled', 'aifee', 'false', 'true', true),
       row('qb.ai.site-profile.enabled', 'aifee', 'false', 'true', true)]
     renderCard()
     await screen.findByTestId('fund-switches')
     await screen.findAllByTestId('fund-switch-proposal')
-    expect(KEY_BEFORE_MEANING_ROWS.map((r) => r.key)).toEqual(['qb.exposure.billing.enabled',
-      'qb.ai.fee.enabled', 'qb.ai.site-profile.enabled'])
+    expect(KEY_BEFORE_MEANING_ROWS.map((r) => r.key)).toEqual(['qb.ai.fee.enabled', 'qb.ai.site-profile.enabled'])
     // F-M9a-1: the AI fee's key exists before a-2 can charge the months.
     expect(within(stateOfRow('qb.ai.fee.enabled') as HTMLElement).getByTestId('fund-switch-note'))
       .toHaveTextContent('Waits for F-M9')
-    // F-M8: the exposure fee's switch waits for its settlements (F-M8c) the same way.
-    expect(within(stateOfRow('qb.exposure.billing.enabled') as HTMLElement).getByTestId('fund-switch-note'))
-      .toHaveTextContent('Waits for F-M8')
+    // F-M8c: the exposure fee's switch is an ordinary active row now (on at the launch), with no waiting note.
+    expect(stateOfRow('qb.exposure.billing.enabled')).toHaveAttribute('data-state', 'match')
+    expect(within(stateOfRow('qb.exposure.billing.enabled') as HTMLElement).queryByText(/Waits for/)).toBeNull()
     const site = within(stateOfRow('qb.ai.site-profile.enabled') as HTMLElement)
     expect(stateOfRow('qb.ai.site-profile.enabled')).toHaveAttribute('data-state', 'differs')
     expect(site.getByTestId('fund-switch-value')).toHaveTextContent('true')
