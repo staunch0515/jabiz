@@ -304,9 +304,8 @@ public class OperatorConfig {
             .targetEntityType(QbSettlementLines.LINE)
             .asDefault()
             .permissions(QbPermissions.ADMIN_FINANCE_READ, QbPermissions.SPONSOR_VIEW_WRITE)
-            // One settlement writes its lines in one commit: the cap's, with room for the credit used on a payment's other fees
-            // (the platform's default is 100).
-            .policy(p -> p.processOnlyWrites().maxWriteBatchSize(Math.max(2 * maxLines, 100)))
+            // One settlement writes its lines in one commit: the cap's, which they never exceed (the platform's default is 100).
+            .policy(p -> p.processOnlyWrites().maxWriteBatchSize(Math.max(maxLines, 100)))
             .storage(s -> s.driver("r2dbc-postgresql").connectionPoolRef(poolRef)));
     }
 

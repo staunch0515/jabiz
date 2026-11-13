@@ -536,10 +536,11 @@ public final class OperatorSettlements {
      * is the cost part or, for a kind outside the list, the whole fee. The line's rates are this month's, or, for a fee
      * a capped settlement left, those of that settlement (it is counted later at the rates of the month it was left in).
      *
-     * <p>The cap (§3.9, option B): the settlement's lines are the voids, the credit used on fees counted before and,
-     * for each fee counted now, one for the fee and one for each part of the credit used on it. The fees are taken
-     * oldest first (chargedAt, charge id) while the next fee with its credit-used lines still fits; the credit used on
-     * a fee counted is never cut. Voids go first (they are never cut).
+     * <p>The cap (§3.9, option B): the settlement's lines are the voids, the new credit-used lines on fees counted
+     * before, and, for each fee counted now, one for the fee and one for each part of the credit used on it. They fit
+     * the cap together, in this order: the voids first (oldest fee first), then the credit-used lines of fees counted
+     * before (oldest payment first, a line at a time), then the fees, oldest first (chargedAt, charge id), each with
+     * its own credit-used lines, which are never cut from it. What does not fit waits for the next settlement.
      */
     @SuppressWarnings("unchecked")
     static void countCharges(ProcessContext ctx, int maxLines) {
@@ -579,33 +580,32 @@ public final class OperatorSettlements {
         // also touches a waiting fee (written with it), and the new ones on fees counted before, which wait by payment,
         // the oldest first, in what the voids leave.
         Map<String, Integer> giftLines = new LinkedHashMap<>();
-        int fixedLines = 0;
-        Map<String, List<Map<String, Object>>> priorByPayment = new LinkedHashMap<>();
+        List<Map<String, Object>> prior = new ArrayList<>();
         for (Map<String, Object> row : rows(ctx, GIFTS)) {
             if (input.operatorId().equals(String.valueOf(row.get("chargeOperatorId")))
                 && Boolean.TRUE.equals(row.get("counted")) && !Boolean.TRUE.equals(row.get("done"))) {
                 String chargeId = String.valueOf(row.get("chargeId"));
                 if (waitingIds.contains(chargeId)) {
                     giftLines.merge(chargeId, 1, Integer::sum);
-                } else if (Boolean.TRUE.equals(row.get("forNewFee"))) {
-                    fixedLines++;
                 } else {
-                    priorByPayment.computeIfAbsent(String.valueOf(row.get("paymentId")), k -> new ArrayList<>()).add(row);
+                    // Also a part of a payment that pays a waiting fee too: each (payment, fee) is a line of its own, and
+                    // the rounding is cumulative per fee, so a payment's lines may be written in different settlements.
+                    prior.add(row);
                 }
             }
         }
-        List<Map.Entry<String, List<Map<String, Object>>>> priorOrder = new ArrayList<>(priorByPayment.entrySet());
-        priorOrder.sort(Comparator.comparing((Map.Entry<String, List<Map<String, Object>>> e) ->
-            time(e.getValue().getFirst().get("paidAt"))).thenComparing(Map.Entry::getKey));
-        long room = (long) maxLines - voidsTaken - fixedLines;
+        prior.sort(Comparator.comparing((Map<String, Object> row) -> time(row.get("paidAt")))
+            .thenComparing(row -> String.valueOf(row.get("paymentId")))
+            .thenComparing(row -> String.valueOf(row.get("chargeId"))));
+        long room = Math.max(0, (long) maxLines - voidsTaken);
         Set<String> deferredPayments = new java.util.HashSet<>();
         int deferredPriorLines = 0;
-        for (Map.Entry<String, List<Map<String, Object>>> entry : priorOrder) {
-            if (!deferredPayments.isEmpty() || entry.getValue().size() > room) {
-                deferredPayments.add(entry.getKey());
-                deferredPriorLines += entry.getValue().size();
+        for (Map<String, Object> row : prior) {
+            if (room > 0 && deferredPayments.isEmpty()) {
+                room--;
             } else {
-                room -= entry.getValue().size();
+                deferredPayments.add(giftKey(row));
+                deferredPriorLines++;
             }
         }
         // 3. The fees, oldest first, with their credit-used lines, in what is left.
@@ -975,7 +975,7 @@ public final class OperatorSettlements {
                 if (input.operatorId().equals(String.valueOf(row.get("chargeOperatorId")))
                     && Boolean.TRUE.equals(row.get("counted")) && !Boolean.TRUE.equals(row.get("done"))
                     && !deferred.contains(String.valueOf(row.get("chargeId")))
-                    && !((Set<?>) ctx.get(DEFERRED_PAYMENTS)).contains(String.valueOf(row.get("paymentId")))) {
+                    && !((Set<?>) ctx.get(DEFERRED_PAYMENTS)).contains(giftKey(row))) {
                     contributions.add(contribution(row, parts.get(i)));
                 }
             }
@@ -1074,6 +1074,11 @@ public final class OperatorSettlements {
                 : String.valueOf(row.get("grantSource")), row.get("grantId") == null ? null
                 : String.valueOf(row.get("grantId")), row.get("priorNoShare") == null ? null
                 : Boolean.valueOf(String.valueOf(row.get("priorNoShare"))));
+    }
+
+    /** A part of a payment on a fee: one line. */
+    private static String giftKey(Map<String, Object> row) {
+        return row.get("paymentId") + "|" + row.get("chargeId");
     }
 
     @SuppressWarnings("unchecked")

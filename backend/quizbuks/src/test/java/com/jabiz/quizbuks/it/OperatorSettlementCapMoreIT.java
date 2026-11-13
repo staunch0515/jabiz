@@ -183,4 +183,76 @@ class OperatorSettlementCapMoreIT extends CapItSupport {
             + "line_kind = 'CHARGE'", who[0])).hasSize(6);
         assertThat(query("SELECT 1 FROM qb_operator_settlement WHERE operator_id = ?", who[0])).hasSize(2);
     }
+
+    /** Review M-2: six voids with a cap of four: written over two settlements, one VOID line each, the same total. */
+    @Test
+    @Order(5)
+    void voidsAboveTheCapAreWrittenOverTwoSettlementsOneLineEachAndTheDeductionTotalsTheSame() {
+        String[] who = start(2047);
+        setControlledParam(QbParams.OPERATOR_SHARE_KINDS, QbParams.defaultOf(QbParams.OPERATOR_SHARE_KINDS));
+        List<String> ids = fees(who[1], 6, 100, "2047-02-10T01:00:00Z");
+        settle(who[0], "2047-02", "2047-03-02T00:00:00Z");
+        settle(who[0], "2047-03", "2047-04-02T00:00:00Z");
+        clock.set(Instant.parse("2047-04-05T01:00:00Z"));
+        for (String id : ids) {
+            voidInvoice(invoiceOf(id).get("invoice_id"));
+        }
+        Map<String, Object> april = settle(who[0], "2047-04", "2047-05-02T00:00:00Z");
+        Map<String, Object> may = settle(who[0], "2047-05", "2047-06-02T00:00:00Z");
+        assertThat(lineCharges(april.get("settlement_id"), "VOID")).containsExactlyElementsOf(ids.subList(0, 4));
+        assertThat(lineCharges(may.get("settlement_id"), "VOID")).containsExactlyElementsOf(ids.subList(4, 6));
+        // The voids are read one more than the cap: "at least" this many are left (the count says so).
+        assertThat(april).containsEntry("capped", true).containsEntry("uncounted", 1);
+        assertThat(may).containsEntry("capped", false);
+        // Each fee's share (100 at 50%: 50) is deducted once: 200 and 100, 300 as if all at once.
+        assertThat(n(april, "void_deduction")).isEqualByComparingTo("200");
+        assertThat(n(may, "void_deduction")).isEqualByComparingTo("100");
+        assertThat(query("SELECT charge_id FROM qb_operator_settlement_line_version WHERE operator_id = ? AND "
+            + "line_kind = 'VOID' GROUP BY charge_id HAVING count(*) > 1", who[0])).isEmpty();
+    }
+
+    /**
+     * Review M-2: voids, then the credit used on fees counted before, then new fees compete for the cap in that order.
+     * Cap 4: two voids and three parts of credit and three waiting fees: the first settlement writes the two voids and two
+     * parts and no fee; the next the last part and the three fees.
+     */
+    @Test
+    @Order(6)
+    void voidsTakeTheCapFirstThenCreditUsedOnFeesCountedBeforeThenNewFees() {
+        String[] who = start(2048);
+        setControlledParam(QbParams.OPERATOR_SHARE_KINDS, QbParams.defaultOf(QbParams.OPERATOR_SHARE_KINDS));
+        // Two fees to be voided (cash), then the fee that credit is used on later (10,000; the grant pays 10,500 of it).
+        List<String> voided = fees(who[1], 2, 100, "2048-02-10T01:00:00Z");
+        grant(who[1], 10_500, Instant.parse("2052-01-01T00:00:00Z"));
+        String paid = fees(who[1], 1, 10_000, "2048-02-11T01:00:00Z").getFirst();
+        settle(who[0], "2048-02", "2048-03-02T00:00:00Z");
+        String template = String.valueOf(query("SELECT payment_id FROM qb_fee_payment_version WHERE target_id = ? AND "
+            + "sub_account = 'FEE_CREDIT'", paid).getFirst().get("payment_id"));
+        clock.set(Instant.parse("2048-03-05T01:00:00Z"));
+        for (String id : voided) {
+            voidInvoice(invoiceOf(id).get("invoice_id"));
+        }
+        execute("CREATE TABLE it_parts3 AS SELECT n, gen_random_uuid() AS pid FROM generate_series(1, 3) n");
+        execute("INSERT INTO entity_registry (entity_id, entity_type, created_seq_id) SELECT p.pid, r.entity_type, "
+            + "r.created_seq_id FROM it_parts3 p, entity_registry r WHERE r.entity_id = ?::uuid", template);
+        execute("INSERT INTO qb_fee_payment_version (payment_id, version_no, effect_start_time, created_time, "
+            + "process_seq_id, sponsor_id, target_entity, target_id, sub_account, grant_id, cash_lot_id, amount, "
+            + "paid_at, transaction_id, prepayment_id) SELECT p.pid, 1, t.effect_start_time, t.created_time, "
+            + "t.process_seq_id, t.sponsor_id, t.target_entity, t.target_id, t.sub_account, t.grant_id, t.cash_lot_id, "
+            + "1, TIMESTAMPTZ '2048-03-10T01:00:00Z' + p.n * interval '1 second', t.transaction_id, t.prepayment_id "
+            + "FROM it_parts3 p JOIN qb_fee_payment_version t ON t.payment_id = ?::uuid", template);
+        List<String> waiting = fees(who[1], 3, 100, "2048-03-12T01:00:00Z");
+        assertThat(paid).isNotNull();
+
+        Map<String, Object> march = settle(who[0], "2048-03", "2048-04-02T00:00:00Z");
+        assertThat(lineCharges(march.get("settlement_id"), "VOID")).hasSize(2);
+        assertThat(lineCharges(march.get("settlement_id"), "GIFT")).hasSize(2);
+        assertThat(lineCharges(march.get("settlement_id"), "CHARGE")).isEmpty();
+        assertThat(march).containsEntry("capped", true).containsEntry("uncounted", 4);
+        Map<String, Object> april = settle(who[0], "2048-04", "2048-05-02T00:00:00Z");
+        assertThat(lineCharges(april.get("settlement_id"), "VOID")).isEmpty();
+        assertThat(lineCharges(april.get("settlement_id"), "GIFT")).hasSize(1);
+        assertThat(lineCharges(april.get("settlement_id"), "CHARGE")).containsExactlyElementsOf(waiting);
+        assertThat(april).containsEntry("capped", false);
+    }
 }

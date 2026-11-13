@@ -25,7 +25,7 @@ class DistributionDueConditionTest {
      */
     static final java.util.Map<String, Integer> TEMPLATES = java.util.Map.of("distribution-due.sql", 1,
         "exposure-due.sql", 1, "fee-invoices-due.sql", 2, "recon-prepayments.sql", 1,
-        "recon-exposure.sql", 1, "operator-settlement-readiness.sql", 1);
+        "recon-exposure.sql", 1, "operator-settlement-readiness.sql", 2);
     static final Pattern WENT_ON = Pattern.compile(
         "greatest\\((\\w+)\\.\\{\\{QbPublicationCard\\.startAt}}, (\\w+)\\.\\{\\{QbPublication\\.approvedAt}}\\)");
 

@@ -1,11 +1,12 @@
 /*---
 id: qb.system.operator-settlement-readiness
 description: "The steps before an operator's settlement of a month that are not done yet: a distribution fee due for one of its publications, an invoice of its sponsors' postpaid fees (F-M12 b)"
-entities: [QbPublication, QbPublicationCard, QbDistributionSettlement, QbFeeCharge, QbFeeInvoice]
+entities: [QbPublication, QbPublicationCard, QbDistributionSettlement, QbExposureSettlement, QbFeeCharge, QbFeeInvoice]
 datasets:
   QbPublication: urn:jabiz:dataset:default:QbPublication
   QbPublicationCard: urn:jabiz:dataset:default:QbPublicationCard
   QbDistributionSettlement: urn:jabiz:dataset:default:QbDistributionSettlement
+  QbExposureSettlement: urn:jabiz:dataset:default:QbExposureSettlement
   QbFeeCharge: urn:jabiz:dataset:default:QbFeeCharge
   QbFeeInvoice: urn:jabiz:dataset:default:QbFeeInvoice
 params:
@@ -59,8 +60,28 @@ WHERE EXISTS (
                       WHERE i.{{QbFeeInvoice.sponsorId}} = c.{{QbFeeCharge.sponsorId}}
                         AND ((i.{{QbFeeInvoice.period}} = c.{{QbFeeCharge.period}} AND i.{{QbFeeInvoice.chargeId}} IS NULL)
                              OR i.{{QbFeeInvoice.chargeId}} = CAST(c.{{QbFeeCharge.chargeId}} AS text))))
--- READINESS EXTENSION POINT (F-M12 b): the exposure fee's monthly settlement (F-M8's QB_EXPOSURE_SETTLE; its table
--- qb_exposure_settlement_version exists, the process does not yet) and F-M9 (the AI monthly charge) are not merged. When
--- they merge, each adds its step as one more branch here, "UNION ALL SELECT 'EXPOSURE' AS blockedBy WHERE EXISTS (...)"
--- and "'AI'" (F-M9: a finished CREDIT AI job of the operator's sponsors, in the month, with no fee yet), with its
--- entity and dataset in the header, and OperatorSettlementReadinessTest names the branch.
+UNION ALL
+-- EXPOSURE (F-M8c, plan F-M8 §7.1): the same for the exposure fee: a publication of the operator (frozen on it) that bought
+-- exposures, due an exposure fee for the month, without the month's row or its final one (an ended publication is settled
+-- by its final row, which the ending job writes). The condition is the one of qb.system.exposure-due,
+-- qb.system.fee-invoices-due and qb.system.recon-exposure (DistributionDueConditionTest): change them together.
+SELECT 'EXPOSURE' AS blockedBy
+WHERE EXISTS (
+    SELECT 1
+    FROM {{QbPublicationCard}} pc
+    JOIN {{QbPublication}} p ON p.{{QbPublication.publicationId}} = pc.{{QbPublicationCard.publicationId}}
+    WHERE pc.{{QbPublicationCard.operatorId}} = :operatorId
+      AND p.{{QbPublication.billingOperatorId}} = :operatorId
+      AND p.{{QbPublication.exposureUnit}} IS NOT NULL
+      AND p.{{QbPublication.exposurePurchased}} IS NOT NULL
+      AND p.{{QbPublication.publisherKind}} = 'SPONSOR'
+      -- When it went on: greatest(its start, its approval); the same expression everywhere the condition is.
+      AND greatest(pc.{{QbPublicationCard.startAt}}, p.{{QbPublication.approvedAt}}) < :periodEnd
+      AND (pc.{{QbPublicationCard.endedAt}} IS NULL OR pc.{{QbPublicationCard.endedAt}} >= :periodStart)
+      AND NOT EXISTS (SELECT 1 FROM {{QbExposureSettlement}} s
+                      WHERE s.{{QbExposureSettlement.publicationId}} = CAST(p.{{QbPublication.publicationId}} AS text)
+                        AND (s.{{QbExposureSettlement.final}} OR s.{{QbExposureSettlement.period}} = :month)))
+-- READINESS EXTENSION POINT (F-M12 b): F-M9 (the AI monthly charge) is not merged yet. When it merges it adds its step as
+-- one more branch here, "UNION ALL SELECT 'AI' AS blockedBy WHERE EXISTS (...)" (a finished CREDIT AI job of the operator's
+-- sponsors, in the month, with no fee yet), with its entity and dataset in the header, and OperatorReadinessTemplateTest
+-- names the branch.
