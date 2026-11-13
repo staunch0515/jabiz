@@ -82,6 +82,7 @@ services:
       JABIZ_ALERT_QB_AI_HELD_MAX: ${JABIZ_ALERT_QB_AI_HELD_MAX:-1}
       # QuizBuks (F-C10): the share of the AI help's monthly tokens, in percent, from which it alerts.
       JABIZ_ALERT_QB_HELP_USAGE_PERCENT: ${JABIZ_ALERT_QB_HELP_USAGE_PERCENT:-80}
+      JABIZ_ALERT_QB_HELP_COST_PERCENT: ${JABIZ_ALERT_QB_HELP_COST_PERCENT:-100}
       GF_SMTP_ENABLED: ${GF_SMTP_ENABLED:-false}
       GF_SMTP_HOST: ${GF_SMTP_HOST:-}
       GF_SMTP_USER: ${GF_SMTP_USER:-}

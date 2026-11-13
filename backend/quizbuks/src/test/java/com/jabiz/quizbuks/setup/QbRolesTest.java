@@ -336,4 +336,14 @@ class QbRolesTest {
             QbPermissions.PLAY_SYSTEM, QbPermissions.MESSAGING_SYSTEM, "ledger.post",
             "ledger.reverse", "inbound.write", "external-job.complete", "external-job.write"));
     }
+
+    /** F-M10: the task that says a month's AI dollars reached the alert is finance's and links to the AI page. */
+    @Test
+    void financeAndTheSuperAdministratorReadTheAiPageButAnOperatorDoesNot() {
+        assertThat(QbRoles.of(QbRoles.ADMIN_FINANCE).permissions()).contains(QbPermissions.ADMIN_AI_READ,
+            QbPermissions.RECONCILE);
+        assertThat(QbRoles.of(QbRoles.ADMIN_SUPER).permissions()).contains(QbPermissions.ADMIN_AI_READ);
+        assertThat(QbRoles.of(QbRoles.ADMIN_CONTENT).permissions()).contains(QbPermissions.ADMIN_AI_READ);
+        assertThat(QbRoles.of(QbRoles.OPERATOR).permissions()).doesNotContain(QbPermissions.ADMIN_AI_READ);
+    }
 }

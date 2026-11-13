@@ -271,6 +271,13 @@ public final class QbParams {
     public static final List<String> EXPOSURE_CONTROLLED = List.of(EXPOSURE_BILLING_ENABLED, EXPOSURE_UNIT_MIN,
         EXPOSURE_UNIT_MAX, EXPOSURE_MIN_PURCHASE, EXPOSURE_FINAL_END_GRACE_SEC, EXPOSURE_UNSETTLED_AFTER_HOURS,
         EXPOSURE_FINAL_MISSING_AFTER_HOURS, EXPOSURE_TOP_UP_MAX);
+     * F-M14 (docs/quizbuks/plans/impl/F-M14.md §5, G7): how long the daily reconciliation waits before it reports a
+     * prepayment not given back and an audience fee not decided. They decide whether the check reports at all, so they
+     * are controlled (four eyes), as the distribution checks' hours are; a value that only says when to remind is not.
+     * An installation that has them keeps its values: the setup creates or proposes a parameter only once.
+     */
+    public static final List<String> RECON_THRESHOLDS = List.of(PREPAYMENT_RELEASE_OVERDUE_DAYS,
+        AUDIENCE_REFUND_MISSING_AFTER_HOURS);
     /** The cap's kind, which the controlled change that first sets it gives (yen, whole). */
     public static final Map<String, Object> FEE_CREDIT_MANUAL_MAX_KIND = Map.of("type", "monetary", "currency", "JPY",
         "scale", 0);
@@ -530,13 +537,26 @@ public final class QbParams {
      * changes what the help may spend.
      */
     public static final String HELP_CACHE_READ_WEIGHT = "qb.help.cache-read-weight";
+    /**
+     * F-M10: the estimated dollars a month (the AI help and the reviewers' translation checks together) from which the
+     * alert and the task say the AI costs have reached a level (0: no alert). Ordinary: it decides when to be reminded,
+     * not what may be spent. Rule of thumb: the monthly tokens times the model's output price times 0.8 per million.
+     */
+    public static final String HELP_GLOBAL_MONTHLY_USD_ALERT = "qb.help.global-monthly-usd-alert";
     /** The help's controlled parameters (last, in this order). */
     public static final List<String> HELP_CONTROLLED = List.of(HELP_ENABLED, HELP_GLOBAL_MONTHLY_TOKENS,
         HELP_CACHE_READ_WEIGHT);
+    /**
+     * F-M10: {@code qb.help.user-daily} is controlled too, as the specification asks (the limit parameters are
+     * controlled): changing how many questions a person asks a day takes a second administrator. The last of
+     * {@link #CONTROLLED}, after {@link #REWARD_KUDOS}: a controlled parameter added later goes at the end, so that the
+     * proposals before it keep their places.
+     */
+    public static final List<String> HELP_USER_LIMITS = List.of(HELP_USER_DAILY);
     public static final List<String> HELP = List.of(HELP_ENABLED, HELP_MODEL, HELP_USER_DAILY,
         HELP_GLOBAL_MONTHLY_TOKENS, HELP_HISTORY_TURNS, HELP_RETENTION_DAYS, HELP_MANUAL_MAX_BYTES, HELP_POLL_SECONDS,
         HELP_POLL_MAX_MINUTES, HELP_ESCALATION_REMIND_DAYS, HELP_AUTO_CLOSE_DAYS, HELP_QUESTION_MAX_LENGTH,
-        HELP_ANSWER_MAX_LENGTH, HELP_MAX_LINKS, HELP_CACHE_READ_WEIGHT);
+        HELP_ANSWER_MAX_LENGTH, HELP_MAX_LINKS, HELP_CACHE_READ_WEIGHT, HELP_GLOBAL_MONTHLY_USD_ALERT);
     /**
      * F-F3: the areas of the Sponsor app's bottom menu on a phone, comma-separated area keys (home, quizzes,
      * publications, prizes, messages, benefits, money, assets, hub; "More" follows them); not controlled. The Sponsor app
@@ -595,7 +615,8 @@ public final class QbParams {
         OPERATOR_PLANS, OPERATOR_WITHDRAWAL, List.of(TOPUP_BANK_MIN, TOPUP_BANK_MAX), BANK_RECEIVING, WITHDRAWAL_BANK, AUDIENCE_BILLING_PARAMS,
         CASH_ACCOUNT_PARAMS, FEE_PARAMS,
         List.of(ENTRY_FEE_ENABLED), List.of(USAGE_FREE_BYTES), List.of(VIDEO_MAINLAND_SITES), HELP_CONTROLLED, FEE_CREDIT_PARAMS,
-        SITE_PROFILE_CONTROLLED, DISTRIBUTION_CONTROLLED, EXPOSURE_CONTROLLED, REWARD_KUDOS)
+        SITE_PROFILE_CONTROLLED, DISTRIBUTION_CONTROLLED, EXPOSURE_CONTROLLED, REWARD_KUDOS, RECON_THRESHOLDS,
+        HELP_USER_LIMITS)
         .flatMap(List::stream).toList();
 
     /** A parameter: its key, kind (as the platform writes kinds) and first value. */
@@ -899,8 +920,6 @@ public final class QbParams {
         new Param(HELP_MODEL, Map.of("type", "code", "dictUrn", "urn:jabiz:dict:quizbuks:ai-model", "allowedValues",
             List.of("claude-opus-5-5", "claude-sonnet-5-5", "claude-haiku-5-5")), "claude-haiku-5-5",
             "The model the AI help asks (a smaller, faster one)"),
-        new Param(HELP_USER_DAILY, Map.of("type", "numeric", "precision", 4, "scale", 0), "20",
-            "The questions to the AI help one person asks a day (0: none)"),
         new Param(HELP_HISTORY_TURNS, Map.of("type", "numeric", "precision", 2, "scale", 0), "6",
             "The latest turns of a conversation sent to the AI with a question (0 to 20)"),
         new Param(HELP_RETENTION_DAYS, DAYS, "180", "Days after its last activity an AI help conversation is deleted"),
@@ -921,6 +940,9 @@ public final class QbParams {
             "The longest AI help answer kept, in characters (500 to 8000); a longer one is cut"),
         new Param(HELP_MAX_LINKS, Map.of("type", "numeric", "precision", 2, "scale", 0), "5",
             "The most links of the site one AI help answer keeps (0 to 10)"),
+        new Param(HELP_GLOBAL_MONTHLY_USD_ALERT, Map.of("type", "numeric", "precision", 9, "scale", 2), "8",
+            "The estimated dollars a month, the AI help and the reviewers' translation checks together, from which the "
+                + "alert and the task say so (0 to 1,000,000; 0: no alert)"),
         new Param(HELP_ENABLED, BOOL, false, "Whether Takers and Sponsors may ask the AI help (Claude)"),
         new Param(HELP_GLOBAL_MONTHLY_TOKENS, TOKENS, "20000000",
             "The tokens the AI help may use a month, everybody together"),
@@ -1017,7 +1039,8 @@ public final class QbParams {
         new Param(EXPOSURE_TOP_UP_MAX, Map.of("type", "numeric", "precision", 9, "scale", 0), "1000000",
             "The most exposures one top-up buys (1 to 999,999,999; a placeholder; keeps the parts of a deposit within "
                 + "what it can be shared into)"),
-        // F-F10a: the Kudos reward switch (controlled, after the F-C7 ones: the last of CONTROLLED, and so the last proposal of QB_SETUP, which follows this list).
+        // F-F10a: the Kudos reward switch (controlled, after the F-C7, F-M6 and F-M8 ones; the F-M14 thresholds and the help's
+        // daily limit come after it, in the order of CONTROLLED, which QB_SETUP's proposals follow).
         new Param(REWARD_KUDOS_ENABLED, BOOL, true,
             "Whether a publication may offer the reward method PLATFORM (Kudos paid by QuizBuks); off at the first "
                 + "launch (F-F10a)"),
@@ -1035,7 +1058,10 @@ public final class QbParams {
         // F-M7 (N9): the daily check (ordinary; last).
         new Param(AUDIENCE_REFUND_MISSING_AFTER_HOURS, Map.of("type", "numeric", "precision", 3, "scale", 0), "30",
             "After how many hours of a publication's end an audience fee whose unused days are not decided yet is "
-                + "reported by the daily check (the daily job decides at 03:37)"));
+                + "reported by the daily check (the daily job decides at 03:37)"),
+        // F-M10: the AI help's daily questions (controlled; the last of CONTROLLED).
+        new Param(HELP_USER_DAILY, Map.of("type", "numeric", "precision", 4, "scale", 0), "20",
+            "The questions to the AI help one person asks a day (0: none)"));
 
     /** The declared value of a parameter: what {@code QB_SETUP} writes. */
     public static String defaultOf(String key) {

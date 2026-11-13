@@ -1,5 +1,6 @@
 package com.jabiz.quizbuks.prospect;
 
+import com.jabiz.quizbuks.identity.CallerChecks;
 import com.jabiz.entity.Violation;
 import com.jabiz.external.ExternalJobCancellation;
 import com.jabiz.external.ExternalJobCompletion;
@@ -196,6 +197,8 @@ public final class ProspectProcesses {
      * membership is held shared for the process (a removal takes effect at the next act).
      */
     public static <I, O> void owner(ProcessDefinitionBuilder<I, O, ProcessContext> pb) {
+        // F-ban-coverage: a banned member's still valid token is refused before the membership is read.
+        CallerChecks.refuseBanned(pb);
         pb.step("Hold the caller's membership", HoldLock.<ProcessContext>shared(
                 ctx -> QbOperators.memberLockName(ctx.request().actorId())))
             .step("Load the caller's membership", QueryEntities.<ProcessContext>of(
@@ -385,10 +388,11 @@ public final class ProspectProcesses {
                     .permissions(QbPermissions.PROSPECT_USE)
                     .requiresVerifiedEmail()
                     .contextFactory(ProspectProcesses::start)
-                    .outputMapper(ctx -> ctx.get(OUTPUT, ProspectOutput.class))
-                    .step("Draw the trial's token", RandomBytesStep.class,
-                        new RandomBytesStep.Metadata(RANDOM, TOKEN_BYTES));
+                    .outputMapper(ctx -> ctx.get(OUTPUT, ProspectOutput.class));
+                // After the caller's ban (owner): the draw reads and writes nothing, but nothing comes before the ban.
                 owner(pb);
+                pb.step("Draw the trial's token", RandomBytesStep.class,
+                    new RandomBytesStep.Metadata(RANDOM, TOKEN_BYTES));
                 lockAndLoad(pb, ctx -> ctx.get(INPUT, ApproveInput.class).prospectId());
                 pb.compute("Approve", (metadata, ctx) -> approve(ctx, ctx.get(INPUT, ApproveInput.class), json));
             });

@@ -56,8 +56,16 @@ public final class Reconciliation {
     static final String RECEIVABLE_TEMPLATE = "qb.system.recon-fee-receivable";
     /** Q88b: 2170 by sponsor is never negative. */
     static final String ENTRY_FEES_TEMPLATE = "qb.system.recon-entry-fees";
-    /** F-M1: the account that pays the platform's fees against its lots and payments. */
-    static final String FEE_ACCOUNT_TEMPLATE = "qb.system.recon-fee-account";
+    /** F-M1: the fee credit and the cash that pay the platform's fees against their lots, grants and payments. */
+    static final String FEE_CREDIT_TEMPLATE = "qb.system.recon-fee-credit";
+    /** F-M4: an operator's account (2140) against its settlements, withdrawals and transfers. */
+    static final String OPERATOR_ACCOUNT_TEMPLATE = "qb.system.recon-operator-account";
+    /** F-M5, F-M6: the prepayments and the distribution fee's deposits, settlements and prices. */
+    static final String PREPAYMENTS_TEMPLATE = "qb.system.recon-prepayments";
+    /** F-M7: the audience fees' refunds and the credit notes. */
+    static final String CREDIT_NOTES_TEMPLATE = "qb.system.recon-credit-notes";
+    /** F-M10: everybody's row of the AI help's usage against the people's rows. */
+    static final String HELP_USAGE_TEMPLATE = "qb.system.recon-help-usage";
 
     public record ReconcileInput(@NotNull Instant scheduledTime) {}
 
@@ -119,7 +127,11 @@ public final class Reconciliation {
     static final String TRANSFERS = "transfers";
     static final String RECEIVABLE = "receivable";
     static final String ENTRY_FEES = "entryFees";
-    static final String FEE_ACCOUNT = "feeAccount";
+    static final String FEE_CREDIT = "feeCredit";
+    static final String OPERATOR_ACCOUNT = "operatorAccount";
+    static final String PREPAYMENTS = "prepayments";
+    static final String CREDIT_NOTES = "creditNotes";
+    static final String HELP_USAGE = "helpUsage";
     static final String DISTRIBUTION_PARAMS = "distributionParams";
     static final String PREVIOUS = "previous";
     static final String PREVIOUS_TAKERS = "previousTakers";
@@ -170,8 +182,17 @@ public final class Reconciliation {
                 .step("Load the distribution checks' hours", LoadParams.<ProcessContext>optional(ProcessContext::opTime,
                     DISTRIBUTION_PARAMS, QbParams.DISTRIBUTION_UNSETTLED_AFTER_HOURS,
                     QbParams.DISTRIBUTION_FINAL_MISSING_AFTER_HOURS, QbParams.AUDIENCE_REFUND_MISSING_AFTER_HOURS))
-                .step("Compare the fee account", RunTemplate.<ProcessContext>of(FEE_ACCOUNT_TEMPLATE,
-                    ctx -> feeAccountParams(ctx, zone), FEE_ACCOUNT))
+                // The fee account's checks are four statements by domain (F-M14 G10), each with the parameters it declares.
+                .step("Compare the fee credit", RunTemplate.<ProcessContext>of(FEE_CREDIT_TEMPLATE,
+                    ctx -> Map.of(), FEE_CREDIT))
+                .step("Compare the operator accounts", RunTemplate.<ProcessContext>of(OPERATOR_ACCOUNT_TEMPLATE,
+                    ctx -> Map.of(), OPERATOR_ACCOUNT))
+                .step("Compare the prepayments", RunTemplate.<ProcessContext>of(PREPAYMENTS_TEMPLATE,
+                    ctx -> feeAccountParams(ctx, zone, "at", "zone", "unsettledHours", "missingHours"), PREPAYMENTS))
+                .step("Compare the credit notes", RunTemplate.<ProcessContext>of(CREDIT_NOTES_TEMPLATE,
+                    ctx -> feeAccountParams(ctx, zone, "at", "refundHours"), CREDIT_NOTES))
+                .step("Compare the AI help's usage", RunTemplate.<ProcessContext>of(HELP_USAGE_TEMPLATE,
+                    ctx -> Map.of(), HELP_USAGE))
                 // The takers' cache follows by events: one found behind counts only when the previous run found them.
                 .step("Find the previous run", QueryEntities.<ProcessContext>of(defaultDataset(RUN_ENTITY_NAME),
                     ctx -> EntityQuery.builder().where(new QueryPredicate.Lt("scheduledTime",
@@ -219,7 +240,11 @@ public final class Reconciliation {
         found.addAll(ReconChecks.coded(rows(ctx, TRANSFERS)));
         found.addAll(ReconChecks.coded(rows(ctx, RECEIVABLE)));
         found.addAll(ReconChecks.coded(rows(ctx, ENTRY_FEES)));
-        found.addAll(ReconChecks.coded(rows(ctx, FEE_ACCOUNT)));
+        found.addAll(ReconChecks.coded(rows(ctx, FEE_CREDIT)));
+        found.addAll(ReconChecks.coded(rows(ctx, OPERATOR_ACCOUNT)));
+        found.addAll(ReconChecks.coded(rows(ctx, PREPAYMENTS)));
+        found.addAll(ReconChecks.coded(rows(ctx, CREDIT_NOTES)));
+        found.addAll(ReconChecks.coded(rows(ctx, HELP_USAGE)));
         java.util.Set<String> foundBefore = new java.util.HashSet<>();
         TopUpCrediting.list(ctx, PREVIOUS_TAKERS).forEach(item -> foundBefore.add(item.get("partyId")));
         ReconChecks.TakerItems takers = ReconChecks.takers(rows(ctx, TAKERS), foundBefore);
@@ -258,8 +283,11 @@ public final class Reconciliation {
     private static TaskSpec task(ProcessContext ctx) {
         String day = ctx.get(INPUT, ReconcileInput.class).scheduledTime().atOffset(ZoneOffset.UTC).toLocalDate()
             .toString();
+        // F-M14: with how many checks differ; one a day to qb.reconcile, whose every check today's differences are
+        // (ReconChecks.owner: a check owned by another permission is asked about in its own task, F-M10).
         return TaskSpec.forPermission("qb.recon-diff", "task.qb.recon-diff", Map.of("date", day,
-                "differences", String.valueOf(result(ctx).differences())), QbPermissions.RECONCILE)
+                "differences", String.valueOf(result(ctx).differences()),
+                "checks", String.valueOf(result(ctx).checksDiffering())), QbPermissions.RECONCILE)
             .about(RUN_ENTITY_NAME, ctx.get(RUN_ID)).source("recon:" + day);
     }
 
@@ -289,8 +317,11 @@ public final class Reconciliation {
 
     private Reconciliation() {}
 
-    /** The fee account's template parameters: the run's time and zone, and the distribution checks' hours (or none). */
-    static Map<String, Object> feeAccountParams(ProcessContext ctx, java.time.ZoneId zone) {
+    /**
+     * The fee account templates' parameters: the run's time and zone, and the checks' hours (or none); a template is
+     * given only the {@code names} it declares.
+     */
+    static Map<String, Object> feeAccountParams(ProcessContext ctx, java.time.ZoneId zone, String... names) {
         com.jabiz.param.ParamValues params = ctx.get(DISTRIBUTION_PARAMS, com.jabiz.param.ParamValues.class);
         Map<String, Object> values = new java.util.HashMap<>();
         values.put("at", ctx.get(INPUT, ReconcileInput.class).scheduledTime());
@@ -302,6 +333,7 @@ public final class Reconciliation {
         // F-M7 (N9): the audience fees not decided yet.
         values.put("refundHours", params.find(QbParams.AUDIENCE_REFUND_MISSING_AFTER_HOURS,
             java.math.BigDecimal.class).orElse(null));
+        values.keySet().retainAll(java.util.Set.of(names));
         return values;
     }
 }

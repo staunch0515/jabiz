@@ -286,6 +286,8 @@ public final class TreeProcesses {
                 .requiresVerifiedEmail()
                 .contextFactory(TreeProcesses::start)
                 .outputMapper(ctx -> ctx.get(OUTPUT, TreeOutput.class));
+            // F-ban-coverage: a banned member's still valid token is refused before anything else.
+            CallerChecks.refuseBanned(pb);
             OperatorChecks.member(pb);
             pb.step("Lock the operator's graphs", HoldLock.<ProcessContext>exclusive(
                     ctx -> QbTrees.ownerLockName(QbTrees.OPERATOR, OperatorChecks.operatorId(ctx))))
@@ -842,6 +844,8 @@ public final class TreeProcesses {
                 .requiresVerifiedEmail()
                 .contextFactory(TreeProcesses::start)
                 .outputMapper(ctx -> ctx.get(OUTPUT, TreeOutput.class));
+            // F-ban-coverage: a banned member's or Sponsor's still valid token is refused before anything else.
+            CallerChecks.refuseBanned(pb);
             pb.step("Draw", RandomBytesStep.class, new RandomBytesStep.Metadata(RANDOM, 32));
             loadGraph(pb);
             pb.step("Load the template", QueryEntities.<ProcessContext>of(QbTrees.defaultDataset(QbTrees.TREE),
@@ -1164,6 +1168,8 @@ public final class TreeProcesses {
                 .requiresVerifiedEmail()
                 .contextFactory(TreeProcesses::start)
                 .outputMapper(ctx -> ctx.get(OUTPUT, TreeOutput.class));
+            // F-ban-coverage: it ends the publications bound to the graph, so a banned caller's token is refused first.
+            CallerChecks.refuseBanned(pb);
             loadGraph(pb);
             loadBound(pb);
             pb.compute("Retire the graph", (metadata, ctx) -> {
