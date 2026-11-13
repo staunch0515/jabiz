@@ -315,4 +315,17 @@ class OperatorShareRulesTest {
         assertThat(OperatorShareRules.validKinds(null)).isFalse();
         assertThat(OperatorShareRules.validKinds("MONTHLY,")).isFalse();
     }
+
+    @Test
+    void termsKeptWithACappedSettlementReadBackTheSame() {
+        OperatorShareRules.Terms terms = new OperatorShareRules.Terms(java.util.Set.of("MONTHLY", "MANUAL", "AI"), true,
+            false, new BigDecimal("0.5000"), java.util.Map.of("ONBOARDING", "OPERATOR", "MANUAL", "PLATFORM"));
+        OperatorShareRules.Terms back = OperatorShareRules.Terms.fromText(terms.toText());
+        assertThat(back).isEqualTo(terms);
+        assertThat(back.treatmentOf("ONBOARDING")).isEqualTo(OperatorShareRules.OPERATOR);
+        // No treatments, one kind.
+        OperatorShareRules.Terms bare = new OperatorShareRules.Terms(java.util.Set.of("MONTHLY"), false, true,
+            BigDecimal.ONE, java.util.Map.of());
+        assertThat(OperatorShareRules.Terms.fromText(bare.toText())).isEqualTo(bare);
+    }
 }

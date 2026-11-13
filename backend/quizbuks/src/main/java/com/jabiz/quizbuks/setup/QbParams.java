@@ -176,6 +176,15 @@ public final class QbParams {
         OPERATOR_CREDIT_RECOVERY_RATE,
         operatorGiftTreatment("ONBOARDING"), operatorGiftTreatment("CERTIFIED_TOP_UP"),
         operatorGiftTreatment("MANUAL"), operatorGiftTreatment("LIGHT"), OPERATOR_GIFT_RECOVER_OUTSIDE_BASE);
+
+    /**
+     * F-M12 b (plan §3.1, §5): how many days after a month's end the settlement waits for the step before it (the
+     * distribution fees and the monthly invoices of the operator's sponsors) before it settles anyway; 0 to 31. Controlled
+     * (it decides when money is counted), proposed after {@link #OPERATOR_SHARE} so earlier proposals keep their places.
+     * {@code qb.operator.settlement.waiting-after-hours} belongs to the reconciliation check (part c).
+     */
+    public static final String OPERATOR_SETTLEMENT_READINESS_MAX_DAYS = "qb.operator.settlement.readiness-max-days";
+    public static final List<String> OPERATOR_SETTLEMENT = List.of(OPERATOR_SETTLEMENT_READINESS_MAX_DAYS);
     /** The controlled AI parameters, in the order the administrators' page shows them. */
     public static final List<String> AI_CONTROLLED = List.of(AI_ENABLED, AI_MODEL, AI_EFFORT, AI_SPONSOR_DAILY_JOBS,
         AI_SPONSOR_MONTHLY_TOKENS, AI_GLOBAL_MONTHLY_TOKENS);
@@ -614,7 +623,7 @@ public final class QbParams {
         CASH_ACCOUNT_PARAMS, FEE_PARAMS,
         List.of(ENTRY_FEE_ENABLED), List.of(USAGE_FREE_BYTES), List.of(VIDEO_MAINLAND_SITES), HELP_CONTROLLED, FEE_CREDIT_PARAMS,
         SITE_PROFILE_CONTROLLED, DISTRIBUTION_CONTROLLED, REWARD_KUDOS, RECON_THRESHOLDS, HELP_USER_LIMITS,
-        OPERATOR_SHARE)
+        OPERATOR_SHARE, OPERATOR_SETTLEMENT)
         .flatMap(List::stream).toList();
 
     /** A parameter: its key, kind (as the platform writes kinds) and first value. */
@@ -1053,7 +1062,12 @@ public final class QbParams {
             "Who bears granted credit (a lit node) used on fees: OPERATOR or PLATFORM"),
         new Param(OPERATOR_GIFT_RECOVER_OUTSIDE_BASE, BOOL, false,
             "Whether granted credit used on a fee outside the share base (an AI fee) is taken back too, for the part "
-                + "that is not cost"));
+                + "that is not cost"),
+        // F-M12 b: how long a month's settlement waits for the distribution fees and invoices (controlled, after the
+        // share settings so the proposals before it keep their places).
+        new Param(OPERATOR_SETTLEMENT_READINESS_MAX_DAYS, Map.of("type", "numeric", "precision", 2, "scale", 0), "5",
+            "How many days after a month's end an operator's settlement waits for its sponsors' distribution fees and "
+                + "monthly invoices before it settles anyway (0 to 31; 0: it does not wait)"));
 
     /** The declared value of a parameter: what {@code QB_SETUP} writes. */
     public static String defaultOf(String key) {

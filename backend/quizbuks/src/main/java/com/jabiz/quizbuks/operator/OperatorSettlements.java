@@ -27,6 +27,7 @@ import com.jabiz.runtime.approval.RequireApproval;
 import com.jabiz.runtime.document.DocumentProcesses;
 import com.jabiz.runtime.ledger.LedgerProcesses;
 import com.jabiz.runtime.param.ParamEntities;
+import com.jabiz.runtime.task.CreateTask;
 import com.jabiz.runtime.process.steps.CallProcess;
 import com.jabiz.runtime.process.steps.HoldLock;
 import com.jabiz.runtime.process.steps.QueryEntities;
@@ -82,6 +83,12 @@ public final class OperatorSettlements {
     public static final String STATEMENT = "QB_OPERATOR_SETTLEMENT_STATEMENT";
     public static final String JOB = "qb.operator-settlement";
     public static final String DUE_TEMPLATE = "qb.system.operator-settlements-due";
+    /** F-M12 b (§3.1): the steps before the settlement not done yet (distribution fees, invoices). */
+    public static final String READINESS_TEMPLATE = "qb.system.operator-settlement-readiness";
+    /** F-M12 b: the source key of a finance task not made yet. */
+    public static final String ALERT_TEMPLATE = "qb.system.operator-settlement-alert";
+    public static final String CAPPED_TASK = "qb.operator-settlement.capped";
+    public static final String CAPPED_TASK_TITLE = "task.qb.operator-settlement.capped";
     /** F-M12 §3.2: the fees to count (every kind, from the switch point on, not already counted, not voided). */
     public static final String CHARGES_TEMPLATE = "qb.system.operator-settlement-charges";
     /** F-M12 §3.5: counted fees whose invoice was voided since. */
@@ -90,7 +97,10 @@ public final class OperatorSettlements {
     public static final String GIFTS_TEMPLATE = "qb.system.operator-settlement-gifts";
     /** F-M7 (C3): the credit notes issued in the month on the operator's fees (before tax). */
     public static final String CREDIT_NOTES_TEMPLATE = "qb.system.operator-credit-notes";
-    /** F-M12 §3.9: a defence, far above a month's lines of a middling operator (thousands); not reached here. */
+    /**
+     * F-M12 §3.9 (option B): the cap on one settlement's lines (fees, voids and credit used together), far above a
+     * month's lines of a middling operator (thousands). The fees that do not fit wait for the next settlement.
+     */
     public static final int MAX_LINES = 20_000;
     public static final String DOCUMENT_TEMPLATE = "qb.admin.operator-settlement-doc";
     public static final String ISSUER_TEMPLATE = "qb.admin.settlement-issuer";
@@ -172,6 +182,17 @@ public final class OperatorSettlements {
             .asMonetary("JPY", 0));
         eb.field("giftCarriedOut", f -> f.physicalColumn("gift_carried_out").immutable(true).required(true)
             .asMonetary("JPY", 0));
+        // F-M12 b: the part of a gift refund that offset the cost carried (posted to 4110); the cap on the lines (plan
+        // §3.9, option B): whether the fees waiting did not all fit, how many were left, the last fee counted, and the
+        // settings kept for the fees left (they are counted later at these and at platformShare).
+        eb.field("costOffset", f -> f.physicalColumn("cost_offset").immutable(true).required(true)
+            .asMonetary("JPY", 0));
+        eb.field("capped", f -> f.physicalColumn("capped").immutable(true).required(true).asBool());
+        eb.field("uncounted", f -> f.physicalColumn("uncounted").immutable(true).required(true).asNumeric(9, 0));
+        eb.field("watermarkChargedAt", f -> f.physicalColumn("watermark_charged_at").immutable(true)
+            .asTemporal(TemporalRole.EVENT_TIME));
+        eb.field("watermarkChargeId", f -> f.physicalColumn("watermark_charge_id").immutable(true).asText(36));
+        eb.field("cappedTerms", f -> f.physicalColumn("capped_terms").immutable(true).asText(1000));
         eb.field("platformShare", f -> f.physicalColumn("platform_share").immutable(true).required(true)
             .asNumeric(5, 4));
         eb.field("operatorShare", f -> f.physicalColumn("operator_share").immutable(true).required(true)
@@ -251,6 +272,16 @@ public final class OperatorSettlements {
     static final String COVERED_FROM = "coveredFrom";
     static final String COUNTED_NOW = "countedNow";
     static final String SKIP = "skip";
+    static final String READINESS = "readiness";
+    static final String ALERT_SOURCE = "alertSource";
+    static final String ALERT_ROWS = "alertRows";
+    static final String DEFERRED = "deferred";
+    static final String CHARGE_TERMS = "chargeTerms";
+    static final String CAPPED = "capped";
+    static final String UNCOUNTED = "uncounted";
+    static final String WATERMARK = "watermark";
+    static final String OLDEST_UNCOUNTED = "oldestUncounted";
+    static final String WAIT_UNTIL = "waitUntil";
     static final String NEW_ID = "newId";
     static final String NEW_ROW = "newRow";
     static final String POST_INPUT = "postInput";
@@ -269,6 +300,11 @@ public final class OperatorSettlements {
     private OperatorSettlements() {}
 
     // ---- the month -----------------------------------------------------------------------------------------------------
+
+    /** The month {@code time} falls in, in {@code zone}. */
+    public static String currentMonth(Instant time, ZoneId zone) {
+        return MONTH.format(YearMonth.from(time.atZone(zone)));
+    }
 
     /** The month before the one {@code time} falls in, in {@code zone}. */
     public static String previousMonth(Instant time, ZoneId zone) {
@@ -315,6 +351,14 @@ public final class OperatorSettlements {
     // ---- the monthly run -----------------------------------------------------------------------------------------------
 
     public static ProcessDefinition<RunInput, SettlementOutput, ProcessContext> run(ZoneId zone) {
+        return run(zone, MAX_LINES);
+    }
+
+    /** @param maxLines the cap on a settlement's lines (plan §3.9, option B): {@link #MAX_LINES}, lower only in tests */
+    public static ProcessDefinition<RunInput, SettlementOutput, ProcessContext> run(ZoneId zone, int maxLines) {
+        if (maxLines < 1) {
+            throw new IllegalArgumentException("The cap on a settlement's lines must be at least 1");
+        }
         return ProcessDefinition.define(RUN, 1, RunInput.class, SettlementOutput.class, ProcessContext.class, pb -> pb
             .description("Settles one operator's month: its share of the commission, posted as owed, and the "
                 + "statement issued.")
@@ -346,18 +390,26 @@ public final class OperatorSettlements {
                         runInput(ctx).operatorId()), new QueryPredicate.IsNull("coveredFrom"))))
                     .orderBy("periodEnd", false).limit(1).build(), LAST_OLD)))
             .compute("Find the switch point", (metadata, ctx) -> prepare(ctx, zone))
+            // F-M12 b (§3.1): only until the deadline; later the steps not done are counted next time as late.
+            .step("Check the steps before it", RunTemplate.<ProcessContext>when(ctx -> !skip(ctx) && waiting(ctx),
+                READINESS_TEMPLATE, ctx -> Map.of("operatorId", runInput(ctx).operatorId(), "month",
+                    runInput(ctx).month(), "periodStart", monthStart(runInput(ctx).month(), zone), "periodEnd",
+                    monthEnd(runInput(ctx).month(), zone)), READINESS))
+            .compute("Wait for them or go on", (metadata, ctx) -> decideReadiness(ctx))
             .step("Add up the credit notes", RunTemplate.<ProcessContext>when(ctx -> !skip(ctx), CREDIT_NOTES_TEMPLATE,
                 ctx -> Map.of("operatorId", runInput(ctx).operatorId(), "from", monthStart(runInput(ctx).month(), zone),
                     "to", monthEnd(runInput(ctx).month(), zone)), CREDIT_NOTES))
             .step("Read the fees to count", RunTemplate.<ProcessContext>when(ctx -> !skip(ctx), CHARGES_TEMPLATE,
+                // One more than the cap: a cap that cuts is seen without trusting a read limit.
                 ctx -> Map.of("operatorId", runInput(ctx).operatorId(), "coveredFrom", ctx.get(COVERED_FROM),
-                    "month", runInput(ctx).month()), CHARGES))
-            .compute("Count the fees", (metadata, ctx) -> countCharges(ctx))
+                    "month", runInput(ctx).month(), "maxFees", (long) maxLines + 1), CHARGES))
             .step("Read the voided fees", RunTemplate.<ProcessContext>when(ctx -> !skip(ctx), VOIDS_TEMPLATE,
                 ctx -> Map.of("operatorId", runInput(ctx).operatorId()), VOIDS))
             .step("Read the credit used", RunTemplate.<ProcessContext>when(ctx -> !skip(ctx), GIFTS_TEMPLATE,
+                // The gifts of every fee that waits (the cap decides below which are counted now).
                 ctx -> Map.of("operatorId", runInput(ctx).operatorId(), "coveredFrom", ctx.get(COVERED_FROM),
-                    "countedNow", countedNow(ctx)), GIFTS))
+                    "countedNow", candidateIds(ctx)), GIFTS))
+            .compute("Count the fees", (metadata, ctx) -> countCharges(ctx, maxLines))
             .compute("Settle", (metadata, ctx) -> settle(ctx, zone))
             .step("Save the settlement", SaveChanges.now())
             .step("Post the share owed", CallProcess.<ProcessContext>when(ctx -> ctx.contains(POST_INPUT),
@@ -366,7 +418,46 @@ public final class OperatorSettlements {
                 LedgerProcesses.POST, 1, ctx -> ctx.get(POST_INPUT_GIFT), POSTING_GIFT))
             .step("Read the settlement", QueryEntities.<ProcessContext>of(QbOperators.defaultDataset(SETTLEMENT),
                 ctx -> byId(ctx.contains(NEW_ID) ? (String) ctx.get(NEW_ID) : null), NEW_ROW))
-            .compute("Record the posting", (metadata, ctx) -> recordPosting(ctx)));
+            .compute("Record the posting", (metadata, ctx) -> recordPosting(ctx))
+            // F-M12 b: capped two months running, or a fee left for more than a month: finance is asked, once.
+            .step("Check for the task", RunTemplate.<ProcessContext>when(ctx -> ctx.contains(ALERT_SOURCE),
+                ALERT_TEMPLATE, ctx -> Map.of("sourceKey", ctx.get(ALERT_SOURCE, String.class)), ALERT_ROWS))
+            .step("Ask finance", CreateTask.<ProcessContext>when(ctx -> !rows(ctx, ALERT_ROWS).isEmpty(),
+                OperatorSettlements::cappedTask)));
+    }
+
+    /** Whether the deadline for the steps before the settlement has not passed (so they are checked). */
+    static boolean waiting(ProcessContext ctx) {
+        return ctx.contains(WAIT_UNTIL) && ctx.opTime().isBefore(ctx.get(WAIT_UNTIL, Instant.class));
+    }
+
+    /**
+     * Something the settlement waits for that is not done: nothing is settled today (the daily job takes the operator
+     * again tomorrow, as the same month: an earlier one is never skipped). Past the deadline nothing is checked.
+     */
+    static void decideReadiness(ProcessContext ctx) {
+        if (!skip(ctx) && !rows(ctx, READINESS).isEmpty()) {
+            ctx.put(SKIP, true);
+        }
+    }
+
+    /**
+     * F-M12 b: how many days after the month's end the settlement waits for the steps before it, 0 to 31; not
+     * published or not a whole number in range: refused (nothing is assumed).
+     */
+    static int readinessMaxDays(ProcessContext ctx) {
+        String key = QbParams.OPERATOR_SETTLEMENT_READINESS_MAX_DAYS;
+        String value = setting(ctx, key);
+        BigDecimal days;
+        try {
+            days = new BigDecimal(value);
+        } catch (NumberFormatException e) {
+            throw invalid(key, value);
+        }
+        if (days.signum() < 0 || days.compareTo(BigDecimal.valueOf(31)) > 0 || days.stripTrailingZeros().scale() > 0) {
+            throw invalid(key, value);
+        }
+        return days.intValueExact();
     }
 
     static boolean skip(ProcessContext ctx) {
@@ -397,14 +488,36 @@ public final class OperatorSettlements {
         EntityInstance lastOld = first(ctx, LAST_OLD);
         Instant coveredFrom = lastOld == null ? Instant.EPOCH : time(lastOld.get("periodEnd"));
         ctx.put(COVERED_FROM, coveredFrom);
+        // The settings are all read (and refused if bad) before anything is decided, whatever the deadline.
+        ctx.put(TERMS, terms(ctx));
+        ctx.put(WAIT_UNTIL, monthEnd(input.month(), zone).atZone(zone).plusDays(readinessMaxDays(ctx)).toInstant());
+    }
+
+    /** The ids of the fees that wait (the charges template's rows), for the credit-used read. */
+    static List<Object> candidateIds(ProcessContext ctx) {
+        List<Object> ids = new ArrayList<>();
+        for (Map<String, Object> row : rows(ctx, CHARGES)) {
+            ids.add(String.valueOf(row.get("chargeId")));
+        }
+        return ids;
     }
 
     /**
      * Builds a CHARGE line for each fee to count (every kind, F-M12 §3.2): the part out of the base ({@code excluded})
-     * is the cost part or, for a kind outside the list, the whole fee. The line's rates are this month's. The ids
-     * counted feed the gift query, which may reach a fee counted only now.
+     * is the cost part or, for a kind outside the list, the whole fee. The line's rates are this month's, or, for a fee
+     * a capped settlement left, those of that settlement (it is counted later at the rates of the month it was left in).
+     *
+     * <p>The cap (§3.9, option B): the settlement's lines are the voids, the credit used on fees counted before and,
+     * for each fee counted now, one for the fee and one for each part of the credit used on it. The fees are taken
+     * oldest first (chargedAt, charge id) while the next fee with its credit-used lines still fits; the credit used on
+     * a fee counted is never cut. Voids go first (they are never cut).
      */
-    static void countCharges(ProcessContext ctx) {
+    @SuppressWarnings("unchecked")
+    static void countCharges(ProcessContext ctx, int maxLines) {
+        ctx.put(DEFERRED, Set.<String>of());
+        ctx.put(CHARGE_TERMS, Map.<String, OperatorShareRules.Terms>of());
+        ctx.put(CAPPED, false);
+        ctx.put(UNCOUNTED, 0);
         if (skip(ctx)) {
             ctx.put(COUNTED_NOW, List.of());
             ctx.put(CHARGE_LINES, List.of());
@@ -412,18 +525,75 @@ public final class OperatorSettlements {
             return;
         }
         RunInput input = runInput(ctx);
-        OperatorShareRules.Terms terms = terms(ctx);
-        ctx.put(TERMS, terms);
+        OperatorShareRules.Terms terms = ctx.get(TERMS, OperatorShareRules.Terms.class);
         BigDecimal share = planShare(ctx);
-        BigDecimal recoveryRate = recoveryRate(ctx);
+
+        List<Map<String, Object>> waiting = new ArrayList<>(rows(ctx, CHARGES));
+        waiting.sort(Comparator.comparing((Map<String, Object> row) -> time(row.get("chargedAt")))
+            .thenComparing(row -> String.valueOf(row.get("chargeId"))));
+        Set<String> waitingIds = new java.util.HashSet<>();
+        for (Map<String, Object> row : waiting) {
+            waitingIds.add(String.valueOf(row.get("chargeId")));
+        }
+        // The credit-used lines each fee brings (one a part of a payment this operator's fee was paid with, not written
+        // yet), and those of fees counted before, which no cap decides.
+        Map<String, Integer> giftLines = new LinkedHashMap<>();
+        int priorGiftLines = 0;
+        for (Map<String, Object> row : rows(ctx, GIFTS)) {
+            if (input.operatorId().equals(String.valueOf(row.get("chargeOperatorId")))
+                && Boolean.TRUE.equals(row.get("counted")) && !Boolean.TRUE.equals(row.get("done"))) {
+                String chargeId = String.valueOf(row.get("chargeId"));
+                if (waitingIds.contains(chargeId)) {
+                    giftLines.merge(chargeId, 1, Integer::sum);
+                } else {
+                    priorGiftLines++;
+                }
+            }
+        }
+        long budget = (long) maxLines - rows(ctx, VOIDS).size() - priorGiftLines;
+        List<Map<String, Object>> taken = new ArrayList<>();
+        for (Map<String, Object> row : waiting) {
+            long cost = 1 + giftLines.getOrDefault(String.valueOf(row.get("chargeId")), 0);
+            if (cost > budget) {
+                break;
+            }
+            budget -= cost;
+            taken.add(row);
+        }
+        long all = waiting.isEmpty() ? 0 : ((Number) waiting.getFirst().get("waitingTotal")).longValue();
+        int uncounted = (int) (all - taken.size());
+        Set<String> deferred = new java.util.HashSet<>();
+        for (int i = taken.size(); i < waiting.size(); i++) {
+            deferred.add(String.valueOf(waiting.get(i).get("chargeId")));
+        }
+        if (uncounted > 0) {
+            ctx.put(CAPPED, true);
+            ctx.put(UNCOUNTED, uncounted);
+            ctx.put(DEFERRED, deferred);
+            if (!taken.isEmpty()) {
+                Map<String, Object> last = taken.getLast();
+                ctx.put(WATERMARK, Map.of("at", time(last.get("chargedAt")), "id", String.valueOf(last.get("chargeId"))));
+            }
+            if (taken.size() < waiting.size()) {
+                ctx.put(OLDEST_UNCOUNTED, time(waiting.get(taken.size()).get("chargedAt")));
+            }
+        }
+
         List<Object> countedNow = new ArrayList<>();
         List<Map<String, Object>> lines = new ArrayList<>();
         Map<String, Map<String, Object>> byId = new LinkedHashMap<>();
-        for (Map<String, Object> row : rows(ctx, CHARGES)) {
+        Map<String, OperatorShareRules.Terms> termsOf = new LinkedHashMap<>();
+        for (Map<String, Object> row : taken) {
             String chargeId = String.valueOf(row.get("chargeId"));
             String kind = String.valueOf(row.get("kind"));
             BigDecimal amount = money(row.get("amount"));
-            BigDecimal excluded = OperatorShareRules.excluded(kind, amount, money(row.get("shareExcluded")), terms);
+            // A fee a capped settlement left is counted at that settlement's share and settings.
+            boolean left = row.get("originTerms") != null && row.get("originShare") != null;
+            OperatorShareRules.Terms feeTerms = left ? OperatorShareRules.Terms.fromText(
+                String.valueOf(row.get("originTerms"))) : terms;
+            BigDecimal feeShare = left ? money(row.get("originShare")) : share;
+            termsOf.put(chargeId, feeTerms);
+            BigDecimal excluded = OperatorShareRules.excluded(kind, amount, money(row.get("shareExcluded")), feeTerms);
             Map<String, Object> line = new LinkedHashMap<>();
             line.put("operatorId", input.operatorId());
             line.put("sponsorId", row.get("sponsorId"));
@@ -441,10 +611,10 @@ public final class OperatorSettlements {
             line.put("inBase", BigDecimal.ZERO);
             line.put("recoverGross", BigDecimal.ZERO);
             line.put("noShare", false);
-            line.put("shareRate", share);
-            line.put("recoveryRate", recoveryRate);
+            line.put("shareRate", feeShare);
+            line.put("recoveryRate", feeTerms.recoveryRate());
             line.put("recoverBase", OperatorShareRules.recoverBase(kind, amount, money(row.get("shareExcluded")),
-                terms));
+                feeTerms));
             lines.add(line);
             byId.put(chargeId, line);
             countedNow.add(chargeId);
@@ -452,6 +622,7 @@ public final class OperatorSettlements {
         ctx.put(COUNTED_NOW, countedNow);
         ctx.put(CHARGE_LINES, lines);
         ctx.put(CHARGE_BY_ID, byId);
+        ctx.put(CHARGE_TERMS, termsOf);
     }
 
     @SuppressWarnings("unchecked")
@@ -480,11 +651,13 @@ public final class OperatorSettlements {
         // platform) stands for.
         BigDecimal platformFees = BigDecimal.ZERO;
         BigDecimal costExcluded = BigDecimal.ZERO;
-        BigDecimal inBaseSum = BigDecimal.ZERO;
+        // By the share the platform keeps: the fees a capped settlement left keep the share of that month.
+        Map<BigDecimal, BigDecimal> baseByShare = new java.util.TreeMap<>();
         for (Map<String, Object> line : chargeLines) {
             platformFees = platformFees.add(money(line.get("amount")));
             costExcluded = costExcluded.add(money(line.get("excluded")));
-            inBaseSum = inBaseSum.add(money(line.get("amount")).subtract(money(line.get("excluded"))));
+            baseByShare.merge(money(line.get("shareRate")), money(line.get("amount")).subtract(
+                money(line.get("excluded"))), BigDecimal::add);
         }
 
         // The voids of fees counted before: a signed cost, not in the base (M1).
@@ -521,14 +694,26 @@ public final class OperatorSettlements {
         BigDecimal voidDeduction = OperatorShareRules.floor(voidExact);
 
         // The credit used, cut into the fees it paid, row by row (F-M12 §3.3).
-        GiftResult gift = gifts(ctx, terms, chargeById, countedNowSet(ctx), input);
+        GiftResult gift = gifts(ctx, terms, chargeById, countedNowSet(ctx), deferredSet(ctx), chargeTerms(ctx), input);
 
         // The base: ⌊net base × (1 − platform share)⌋, net of the same-batch credit the platform bears.
-        BigDecimal netBase = inBaseSum.subtract(gift.sameBatchNoShareInBase);
-        BigDecimal operatorShare = operatorShare(netBase, share);
-        // A net base below 0 (more of the credit the platform bears than fees, same batch): the operator's share of
-        // the negative part is a cost (F-M12 review M1: positive).
-        BigDecimal negativeBase = OperatorShareRules.negativeBaseCost(netBase, share);
+        // Each share's fees on their own (one share unless a capped settlement's fees are counted now), the sums of
+        // what is rounded down being added.
+        BigDecimal operatorShare = BigDecimal.ZERO;
+        BigDecimal negativeBase = BigDecimal.ZERO;
+        Set<BigDecimal> shares = new java.util.TreeSet<>(baseByShare.keySet());
+        shares.addAll(gift.sameBatchNoShareInBase.keySet());
+        for (BigDecimal groupShare : shares) {
+            BigDecimal netBase = baseByShare.getOrDefault(groupShare, BigDecimal.ZERO)
+                .subtract(gift.sameBatchNoShareInBase.getOrDefault(groupShare, BigDecimal.ZERO));
+            operatorShare = operatorShare.add(operatorShare(netBase, groupShare));
+            // A net base below 0 (more of the credit the platform bears than fees, same batch): the operator's share
+            // of the negative part is a cost (F-M12 review M1: positive).
+            negativeBase = negativeBase.add(OperatorShareRules.negativeBaseCost(netBase, groupShare));
+        }
+        if (shares.isEmpty()) {
+            operatorShare = operatorShare(BigDecimal.ZERO, share);
+        }
 
         // F-M7 (C3) as F-M12 §3.5 has it: a note takes back only the part of its fee that entered the base, at the
         // rate of that fee's CHARGE line (a fee without one: as the fee is counted now).
@@ -545,10 +730,14 @@ public final class OperatorSettlements {
                 excluded = money(row.get("lineExcluded"));
                 rate = money(row.get("lineShareRate"));
             } else {
+                // A fee not counted yet: at the rates it will be counted at, so that the note and the fee agree. A fee
+                // a capped settlement left is counted at that month's (F-M12 b, option b of the review L5).
+                boolean left = row.get("originTerms") != null && row.get("originShare") != null;
                 feeAmount = money(row.get("chargeAmount"));
                 excluded = OperatorShareRules.excluded(String.valueOf(row.get("feeKind")), feeAmount,
-                    money(row.get("chargeShareExcluded")), terms);
-                rate = share;
+                    money(row.get("chargeShareExcluded")), left ? OperatorShareRules.Terms.fromText(
+                        String.valueOf(row.get("originTerms"))) : terms);
+                rate = left ? money(row.get("originShare")) : share;
             }
             noteExact = noteExact.add(OperatorShareRules.exactShare(OperatorShareRules.noteInBase(amount, feeAmount,
                 excluded), rate));
@@ -592,11 +781,26 @@ public final class OperatorSettlements {
         values.put("giftCarriedIn", giftCarriedIn);
         values.put("giftRecovered", recovery.recovered());
         values.put("giftCarriedOut", recovery.carriedOut());
+        values.put("costOffset", recovery.costOffset());
+        values.put("capped", Boolean.TRUE.equals(ctx.get(CAPPED)));
+        values.put("uncounted", BigDecimal.valueOf(((Number) ctx.get(UNCOUNTED)).longValue()));
+        if (ctx.contains(WATERMARK)) {
+            Map<String, Object> mark = (Map<String, Object>) ctx.get(WATERMARK);
+            values.put("watermarkChargedAt", mark.get("at"));
+            values.put("watermarkChargeId", mark.get("id"));
+        }
+        if (Boolean.TRUE.equals(ctx.get(CAPPED))) {
+            // The fees left are counted later at these settings (and at platformShare).
+            values.put("cappedTerms", terms.toText());
+        }
         values.put("status", CREDITED);
         values.put("issuedAt", ctx.opTime());
         values.put("revision", BigDecimal.ONE);
         String id = String.valueOf(ctx.changes().insert(SETTLEMENT, values));
         ctx.put(NEW_ID, id);
+        if (Boolean.TRUE.equals(ctx.get(CAPPED))) {
+            alertIfCapped(ctx, zone, previous, input);
+        }
 
         for (Map<String, Object> line : chargeLines) {
             insertLine(ctx, id, line);
@@ -669,7 +873,8 @@ public final class OperatorSettlements {
     }
 
     /** The outcome of cutting the credit used into the fees it paid: the lines and the month's totals. */
-    private record GiftResult(List<Map<String, Object>> lines, BigDecimal giftPaid, BigDecimal sameBatchNoShareInBase,
+    private record GiftResult(List<Map<String, Object>> lines, BigDecimal giftPaid,
+        Map<BigDecimal, BigDecimal> sameBatchNoShareInBase,
         BigDecimal giftShareDeduction, BigDecimal giftUsed, BigDecimal giftDue) {}
 
     /** One contribution of the credit used to a fee, before the cumulative rounding. */
@@ -678,7 +883,8 @@ public final class OperatorSettlements {
 
     @SuppressWarnings("unchecked")
     private static GiftResult gifts(ProcessContext ctx, OperatorShareRules.Terms terms,
-        Map<String, Map<String, Object>> chargeById, Set<String> countedNow, RunInput input) {
+        Map<String, Map<String, Object>> chargeById, Set<String> countedNow, Set<String> deferred,
+        Map<String, OperatorShareRules.Terms> chargeTerms, RunInput input) {
         List<Map<String, Object>> rows = rows(ctx, GIFTS);
         // A payment's part is cut over ALL the fees it paid (an invoice's fees, of every operator and counted or not, by
         // their totals, the yen left by the largest remainder), and only then are this operator's counted fees that
@@ -697,7 +903,8 @@ public final class OperatorSettlements {
             for (int i = 0; i < group.size(); i++) {
                 Map<String, Object> row = group.get(i);
                 if (input.operatorId().equals(String.valueOf(row.get("chargeOperatorId")))
-                    && Boolean.TRUE.equals(row.get("counted")) && !Boolean.TRUE.equals(row.get("done"))) {
+                    && Boolean.TRUE.equals(row.get("counted")) && !Boolean.TRUE.equals(row.get("done"))
+                    && !deferred.contains(String.valueOf(row.get("chargeId")))) {
                     contributions.add(contribution(row, parts.get(i)));
                 }
             }
@@ -715,7 +922,7 @@ public final class OperatorSettlements {
         Map<String, Boolean> treatedAs = new LinkedHashMap<>();
         List<Map<String, Object>> lines = new ArrayList<>();
         BigDecimal giftPaid = BigDecimal.ZERO;
-        BigDecimal sameBatchNoShareInBase = BigDecimal.ZERO;
+        Map<BigDecimal, BigDecimal> sameBatchNoShareInBase = new java.util.TreeMap<>();
         BigDecimal crossNoShareExact = BigDecimal.ZERO;
         BigDecimal giftUsed = BigDecimal.ZERO;
         BigDecimal dueExact = BigDecimal.ZERO;
@@ -744,7 +951,8 @@ public final class OperatorSettlements {
                 String key = chargeId + "|" + c.grantId();
                 if (!treatedAs.containsKey(key)) {
                     treatedAs.put(key, c.priorNoShare() != null ? c.priorNoShare()
-                        : !OperatorShareRules.OPERATOR.equals(terms.treatmentOf(c.grantSource())));
+                        : !OperatorShareRules.OPERATOR.equals(chargeTerms.getOrDefault(chargeId, terms)
+                            .treatmentOf(c.grantSource())));
                 }
                 boolean noShare = treatedAs.get(key);
                 boolean operatorBears = !noShare;
@@ -776,7 +984,7 @@ public final class OperatorSettlements {
                 dueExact = dueExact.add(value.recoverGross().multiply(recoveryRate));
                 if (noShare) {
                     if (sameBatch) {
-                        sameBatchNoShareInBase = sameBatchNoShareInBase.add(value.inBase());
+                        sameBatchNoShareInBase.merge(shareRate, value.inBase(), BigDecimal::add);
                         giftPaid = giftPaid.add(value.amount());
                     } else {
                         crossNoShareExact = crossNoShareExact.add(OperatorShareRules.exactShare(value.inBase(),
@@ -795,6 +1003,41 @@ public final class OperatorSettlements {
                 : String.valueOf(row.get("grantSource")), row.get("grantId") == null ? null
                 : String.valueOf(row.get("grantId")), row.get("priorNoShare") == null ? null
                 : Boolean.valueOf(String.valueOf(row.get("priorNoShare"))));
+    }
+
+    @SuppressWarnings("unchecked")
+    private static Set<String> deferredSet(ProcessContext ctx) {
+        return (Set<String>) ctx.get(DEFERRED);
+    }
+
+    @SuppressWarnings("unchecked")
+    private static Map<String, OperatorShareRules.Terms> chargeTerms(ProcessContext ctx) {
+        return (Map<String, OperatorShareRules.Terms>) ctx.get(CHARGE_TERMS);
+    }
+
+    /**
+     * Capped two months running, or a fee left for more than a month: finance is asked (the task is made after the
+     * settlement is written; its source key names the operator and the month, and is looked up first).
+     */
+    private static void alertIfCapped(ProcessContext ctx, ZoneId zone, EntityInstance previous, RunInput input) {
+        boolean again = previous != null && Boolean.TRUE.equals(previous.get("capped"));
+        Instant oldest = ctx.contains(OLDEST_UNCOUNTED) ? ctx.get(OLDEST_UNCOUNTED, Instant.class) : null;
+        boolean old = oldest != null && oldest.isBefore(ctx.opTime().atZone(zone).minusMonths(1).toInstant());
+        if (again || old) {
+            ctx.put(ALERT_SOURCE, CAPPED_TASK + ":" + input.operatorId() + ":" + input.month());
+        }
+    }
+
+    /** F-M12 b: finance's task: the settlement left fees for the next one, and how many. */
+    static com.jabiz.runtime.task.TaskSpec cappedTask(ProcessContext ctx) {
+        RunInput input = runInput(ctx);
+        Map<String, String> params = new LinkedHashMap<>();
+        params.put("operator", input.operatorId());
+        params.put("month", input.month());
+        params.put("uncounted", String.valueOf(ctx.get(UNCOUNTED)));
+        return com.jabiz.runtime.task.TaskSpec.forPermission(CAPPED_TASK, CAPPED_TASK_TITLE, params,
+                QbPermissions.RECONCILE)
+            .about(SETTLEMENT, String.valueOf(ctx.get(NEW_ID))).source(ctx.get(ALERT_SOURCE, String.class));
     }
 
     @SuppressWarnings("unchecked")
@@ -998,6 +1241,7 @@ public final class OperatorSettlements {
         List<Object> keys = new ArrayList<>(OperatorPlans.paramKeys());
         keys.add(QbParams.PROSPECT_USD_JPY);
         keys.addAll(QbParams.OPERATOR_SHARE);
+        keys.addAll(QbParams.OPERATOR_SETTLEMENT);
         return keys;
     }
 
