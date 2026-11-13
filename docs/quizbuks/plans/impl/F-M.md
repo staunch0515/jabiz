@@ -414,7 +414,7 @@
 
 ### 9.1 现状与范围
 - 开始答题已写开始一侧的计数 `QbPublicationStartCounter.starts`（开始锁内，Q10a4），**累计、只增**；本项只读它，不改答题路径（`AttemptStatementBudgetIT` 不变，不在 `qb_attempt` 上加索引）。
-- 本项做：运营商价目表与总部范围、提交时冻结单价与预付（`PublicationPrepayments.items` 加一项 `DISTRIBUTION`）、按月结算任务与结算记录、结束后的结清与释放、页面、核对与月报。曝光费（F-M8）以后加进同一结算任务（种类 `EXPOSURE`），本项留好按种类的结构，不做曝光。
+- 本项做：运营商价目表与总部范围、提交时冻结单价与预付（`PublicationPrepayments.items` 加一项 `DISTRIBUTION`）、按月结算任务与结算记录、结束后的结清与释放、页面、核对与月报。曝光费（F-M8）与本项用同一套规则与步骤、各自的流程与表（总控 2026-11-12 决定，见 `F-M8.md`），本项不做曝光。
 
 - 不做：封禁、注销时的最后一次结算与释放（随 F-M15）；曝光费（F-M8）。
 
