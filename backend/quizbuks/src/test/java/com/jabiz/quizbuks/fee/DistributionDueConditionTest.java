@@ -24,7 +24,8 @@ class DistributionDueConditionTest {
      * prepayments statement holds the distribution fee's, F-M8c adds the exposure fee's to it).
      */
     static final java.util.Map<String, Integer> TEMPLATES = java.util.Map.of("distribution-due.sql", 1,
-        "exposure-due.sql", 1, "fee-invoices-due.sql", 2, "recon-prepayments.sql", 1);
+        "exposure-due.sql", 1, "fee-invoices-due.sql", 2, "recon-prepayments.sql", 1,
+        "recon-exposure.sql", 1);
     static final Pattern WENT_ON = Pattern.compile(
         "greatest\\((\\w+)\\.\\{\\{QbPublicationCard\\.startAt}}, (\\w+)\\.\\{\\{QbPublication\\.approvedAt}}\\)");
 

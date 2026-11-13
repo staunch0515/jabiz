@@ -21,8 +21,8 @@ permissions: [qb.fee.system]
 ---*/
 -- Due (F-M8, as the distribution fee's): a sponsor's publication with a price per exposure frozen and exposures bought,
 -- on (started and approved) before the month's end, not ended before the month's start, without a final settlement;
--- and without a row of the month. The same condition is in qb.system.fee-invoices-due and qb.system.recon-prepayments
--- (EXPOSURE_UNSETTLED): change them together. The item reads everything again under the sponsor's wallet lock.
+-- and without a row of the month. The same condition is in qb.system.fee-invoices-due and qb.system.recon-exposure
+-- (EXPOSURE_UNSETTLED): change them together (DistributionDueConditionTest keeps their start the same). The item reads everything again under the sponsor's wallet lock.
 SELECT CAST(p.{{QbPublication.publicationId}} AS text) AS publicationId, p.{{QbPublication.publisherId}} AS sponsorId
 FROM {{QbPublication}} p
 JOIN {{QbPublicationCard}} c ON c.{{QbPublicationCard.publicationId}} = p.{{QbPublication.publicationId}}

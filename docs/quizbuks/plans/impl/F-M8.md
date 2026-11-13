@@ -143,7 +143,7 @@
 - **运营商管理系统**（`admin-extension`，仿 `DistributionPages.tsx`）：曝光费价目页（负责人可改、成员只读，理由必填）、本运营商发起方的结算列表（`qb.operator.exposure-settlements`，运营商范围，登记 `OperatorScopes`）。
 - **平台管理系统**：各运营商价目与总部范围（范围链到受控变更）、全部结算列表（`qb.admin.exposure-settlements`，`qb.admin.finance.read`，可导出）、上线开关页（`fund-switch-messages.ts`）的曝光行。
 - **"待我处理"加"曝光即将用完"**（审查 L）：剩余 ≤ 比例的进行中发布出现在发起方的"待我处理"。
-- **提醒**：新任务 `qb.exposure-low`（`JobDefinition.forEach`，逐项流程 `QB_EXPOSURE_LOW_NOTICE_ITEM`，`internal()`，取项模板 `qb.system.exposure-low-due`）：进行中、有已购、剩余 ≤ 已购 × `qb.exposure.low-ratio`、`QbExposureNotice.notifiedFor` ≠ 当前已购的发布，给发起方发站内信与邮件（沿用 `PublicationNotices` 的发送方式；新三语文字：三语 `mail.<名>.name`、每个参数的 `.sample(…)`、`.entries("sponsor")`、`t.protectedText()`，并加进 `MailTemplatesCoverageTest.PROTECTED`（审查 L3）；邮件文字可在线修改的规则照 `MailText` 的做法登记），并写 `QbExposureNotice`。追加购买后已购变了，再次可提醒。
+- **提醒**：新任务 `qb.exposure-low`（`JobDefinition.forEach`，逐项流程 `QB_EXPOSURE_LOW_NOTICE_ITEM`，`internal()`，取项模板 `qb.system.exposure-low-due`）：进行中、有已购、剩余 ≤ 已购 × `qb.exposure.low-ratio`、`QbExposureNotice.notifiedFor` ≠ 当前已购的发布，给发起方发站内信与邮件（沿用 `PublicationNotices` 的发送方式；新三语文字：三语 `mail.<名>.name`、每个参数的 `.sample(…)`、`.entries("sponsor")`；邮件不含令牌与登录链接，所以**不用** `t.protectedText()`、也不进 `MailTemplatesCoverageTest.PROTECTED`（审查 L8：一位管理员即可改字，与其他通知一致）；邮件文字可在线修改的规则照 `MailText` 的做法登记），并写 `QbExposureNotice`。追加购买后已购变了，再次可提醒。
 - **每日核对**（随 `quizbuks.reconcile.run-cron` 的日常对账，`ReconChecks` 加项，时长都是受控参数）：
   - `EXPOSURE_DEPOSITS`：2180 用途 `EXPOSURE` 按发布 = `OPEN` 预付款剩余；
   - `EXPOSURE_SETTLED_OVER`：某发布各结算行的次数之和 > 已购次数（结算次数 ≤ 已购，规格）；
@@ -206,7 +206,7 @@
 
 1. **另立流程与表**（总控 2026-11-12 同意，审查 M7）：配送费已上线的逻辑（含 N1–N5 的交叠与顺序）不动，回归风险最小；代价是两处相似的代码，所以抽出 `UnitFeeRules` 并让两边共用步骤的辅助方法。规格 F-M8 与 `F-M.md` §9.1 的写法已在本 PR 改为"同一套规则与步骤、各自的流程与表"。
 2. **提交时调用 `QB_EXPOSURE_PURCHASED_SET`**（审查 M1、M2 已定）：先写提交的版本，再调子流程，输出取子流程的 `revision`；子流程重入发布锁的行为实施前确认。已购只经 `PublicationExposure` 的一个写入辅助方法。
-3. **月界按 `counted_at`**：与配送费的"读计数器的时刻"不同。对 F-M12（运营商按费用的 `period` 分成）更准；但要加部分索引，并在 `operations.md` 写清两种费用月界的差别，免得对账时混淆。
+3. **月界按 `counted_at`**（`final` 行把更早月份漏结的次数也算进它的期间，F-M12 的分成因此在 `final` 的月份，见 `operations.md` §7.54；审查 L7）：与配送费的"读计数器的时刻"不同。对 F-M12（运营商按费用的 `period` 分成）更准；但要加部分索引，并在 `operations.md` 写清两种费用月界的差别，免得对账时混淆。
 4. **成功次数的计数**：一个发布最多 999,999,999 次，月度按索引数行；`final` 数全部。先看 V97 的索引，必要时才加；单发布的行数大时关注结算耗时（任务逐项、每项一个事务，不影响他人）。
 5. **并发超出与追加购买**：超出已购的照记不收，追加后按 min 补收，可能让发起方意外；页面与帮助写明（问题 9）。
 6. **已购不能减少**：没有退购，只有结束退回；若需求方以后要退购，累计取整的单调性要重新论证。

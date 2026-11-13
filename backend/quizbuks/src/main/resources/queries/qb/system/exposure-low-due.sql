@@ -21,6 +21,11 @@ permissions: [qb.publication.system]
 -- 0.5 is the largest value qb.exposure.low-ratio may have (ExposureFeeRules.MAX_LOW_RATIO): a publication more than
 -- half left is never a candidate, one under half is looked at again only when a new exposure was counted (checked_used)
 -- and never again once told about this number bought (notified_for).
+-- Scale: a count through that index for every running publication with a purchase, every ten minutes; the rows of
+-- running publications are few and the item is one short transaction. A half-used publication is a candidate again only
+-- after a new exposure was counted, because the item writes what it looked at (checked_used) even when it tells nobody.
+-- With qb.exposure.low-ratio 0 (the reminder off) the item still writes that look and tells nobody: the cost is one
+-- transaction for each half-used publication and each new exposure, which is less than being a candidate every run.
 SELECT CAST(c.{{QbPublicationCard.publicationId}} AS text) AS publicationId
 FROM {{QbPublicationCard}} c
 CROSS JOIN LATERAL (
