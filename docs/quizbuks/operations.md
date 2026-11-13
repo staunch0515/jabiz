@@ -307,6 +307,7 @@ FROM pg_stat_statements ORDER BY total_exec_time DESC LIMIT 20;
 - [ ] 法务意见已取得（资金決済法：Q6b 的转账），收据措辞、隐私政策与条款已确认（`launch-checklist.md`）
 - [ ] Stripe 正式账户（日本）已通过审核，Connect 平台资料与 Express 设置完成，打款银行账户与打款计划已设
 - [ ] **新的数据库**（不沿用测试库；确需沿用时先核清测试数据，见 README"正式上线"）
+- [ ] **价目都在范围内**：部署含核对项 `DISTRIBUTION_PRICE_RANGE` 的版本之前（此前这项因码超长从未报出，见 §7.48），在要部署的库（staging 与正式各一次）上执行 `psql "$DATABASE_URL" -f tools/quizbuks/sql/distribution-price-range.sql`（只读）。结果为空才部署；有行时先把这些运营商的价目改回范围内（或按总部决定调整范围），否则部署后的第一次核对即为 `DIFF`，分录导出被挡（§7.2）
 - [ ] 正式的受限密钥（§1.3 的权限）放进 `STRIPE_API_KEY`；正式模式的两个 Webhook 端点（事件同测试，API 版本 `2025-03-31.basil`），两个签名密钥放进环境
 - [ ] `QB_STRIPE_LIVEMODE=true`；§1.4 的测试开关一个都没有；`JABIZ_SECURITY_MFA_ADMINISTRATION` 未设；`SPRING_PROFILES_ACTIVE` 不含 `dev`
 - [ ] `QB_SPONSOR_LINK`、`QB_APP_LINK`、`JABIZ_MAIL_BASE_URL` 都是正式的 `https` 地址；正式域名写进 `tools/quizbuks/stripe-test-mode/production-hosts`
@@ -420,7 +421,8 @@ FROM pg_stat_statements ORDER BY total_exec_time DESC LIMIT 20;
 | F-M4 运营商的账、F-M11 运营商归属 | §7.43 |
 | F-M5 提交时的资金检查与预付款 | §7.47 |
 | F-M6 配送费 | §7.48 |
-| F-M7 受众规则费、F-M8 曝光费、F-M9 AI 额度、F-M10 平台承担的 AI、F-M12 运营商结算、F-M13 账单与收据、F-M14 月报与核对、F-M15 封禁与抹除 | 随功能交付 |
+| F-M7 受众规则费（退回与贷项凭证） | §7.50 |
+| F-M8 曝光费、F-M9 AI 额度、F-M10 平台承担的 AI、F-M12 运营商结算、F-M13 账单与收据、F-M14 月报与核对、F-M15 封禁与抹除 | 随功能交付 |
 | F-F3 发起方页面的区域 | §7.40 |
 | F-F6 刷新令牌的重用宽限 | §5（安全） |
 | F-F8 AI 获客的开关 | §7.14 |
@@ -441,6 +443,7 @@ FROM pg_stat_statements ORDER BY total_exec_time DESC LIMIT 20;
 - **现象**：每日核对 `DIFF`，平台管理系统待办（`qb.reconcile`），`qb.admin.recon-items` 列出差异项（钱包与账本、待支付、2110 合计、账本平衡、充值与分录）。
 - **处理**：按差异项的种类在平台管理系统读对应的记录与分录；**不直接改表**（只追加表有触发器，普通表的修改会让核对与审计更难对上）。账本只经冲正修正（`LEDGER_REVERSE`，由对应的业务流程）；
   确属缺陷时开问题、写复现测试再修。差异消除后的下一次核对为 `OK`，分录导出才能继续（它要求月末之后最近一次核对为 `OK`）。
+- **核对没有运行，而是失败**（`qb-reconcile-missing`，任务的运行记录中 `QB_RECONCILE_RUN` 失败、错误为 "A reconciliation template returned the check code …"）：某个核对模板给出了 `ReconChecks.ALL` 之外的码（拼错，或超过列宽 30 被截短）。整次核对失败，而不是悄悄少核一项。这是缺陷：开问题、写复现测试再修（`ReconChecksTest` 检查模板中的码都已知、都不超过 30 个字符）；修好部署后补跑错过的时刻。
 - 1110（Stripe 余额）与 Stripe 实际余额的出入（争议手续费、不退还的手续费、测试资金）不在核对中，由财务按 Stripe 报表调整。
 
 ### 7.3 分录导出被拒
@@ -1277,7 +1280,7 @@ Quiz 与发布有主题词（平台词表中的词与自定义词），学者可
 
 发起方按开始答题的人数向平台付配送费，由运营商定价、每月结算（`docs/quizbuks/plans/impl/F-M.md` §9）。学者读到的内容不变。
 
-- **价目与范围**：每个运营商一行价目（`QbDistributionPrice`）：比例（**日元 / Kudos**：发布最高档位每 1 Kudos、每人收多少日元，不是百分比）、单价下限、单价上限、最低预付（没有中奖名额上限的发布冻结它）。由运营商负责人在运营商管理系统的"配送费价目"页（`QB_OPERATOR_DISTRIBUTION_PRICE_SET`）或总部在平台管理系统的"配送费价目"页（`QB_DISTRIBUTION_PRICE_SET`，`qb.fee.manage`：只有总部的财务管理员，运营商没有）保存，理由必填；没有价目的运营商不收配送费。总部的范围是受控参数 `qb.distribution.rate.min|max`、`unit-floor.min|max`、`unit-ceiling.max`、`minimum-deposit.max`（一位管理员提出、另一位发布）；保存价目时按当时的范围检查，范围改窄后已有的价目不变，每日核对报 `DISTRIBUTION_PRICE_OUT_OF_RANGE`（`sponsorId` 一列是运营商），请运营商或总部改价。`qb.distribution.unit-floor.min` 的缺省值 1 日元是占位，**打开开关之前由需求方确认**。
+- **价目与范围**：每个运营商一行价目（`QbDistributionPrice`）：比例（**日元 / Kudos**：发布最高档位每 1 Kudos、每人收多少日元，不是百分比）、单价下限、单价上限、最低预付（没有中奖名额上限的发布冻结它）。由运营商负责人在运营商管理系统的"配送费价目"页（`QB_OPERATOR_DISTRIBUTION_PRICE_SET`）或总部在平台管理系统的"配送费价目"页（`QB_DISTRIBUTION_PRICE_SET`，`qb.fee.manage`：只有总部的财务管理员，运营商没有）保存，理由必填；没有价目的运营商不收配送费。总部的范围是受控参数 `qb.distribution.rate.min|max`、`unit-floor.min|max`、`unit-ceiling.max`、`minimum-deposit.max`（一位管理员提出、另一位发布）；保存价目时按当时的范围检查，范围改窄后已有的价目不变，每日核对报 `DISTRIBUTION_PRICE_RANGE`（`sponsorId` 一列是运营商），请运营商或总部改价。`qb.distribution.unit-floor.min` 的缺省值 1 日元是占位，**打开开关之前由需求方确认**。
 - **开关**：`qb.distribution.billing.enabled`（受控，缺省关）只在提交时读。打开后提交的发布冻结单价（clamp（比例 × 最高档位，下限，上限），四位小数）与预付（`⌈名额 × 单价⌉ + 税`，或最低预付），预付是 F-M5 的预付款，用途 `DISTRIBUTION`。**关掉不追溯**：已冻结单价的发布照常结算到结束。挑战与店面的发布不收；直营发起方照付。名额乘单价超过一笔费用的上限即 422 `QB_DISTRIBUTION_DEPOSIT_RANGE`。
 - **结算**（`QB_DISTRIBUTION_SETTLE`，逐项任务，每项一个事务，只取发起方的钱包锁）：
   - 月度 `qb.distribution-fee`：每月 2 日 00:37（`jabiz.fiscal-year-zone`，部署设置 `QB_DISTRIBUTION_MONTHLY_CRON`），结算上个月该结算的发布（上架时间早于月末、月初之前没有结束、还没有 `final` 行）；已结束超过宽限的直接写成 `final` 并退回剩余。
@@ -1286,7 +1289,7 @@ Quiz 与发布有主题词（平台词表中的词与自定义词），学者可
   - 每行记累计的开始人数与金额，本次 = ⌈累计人数 × 单价⌉ − 此前已收，另加税（向下取整）；为 0 不记费。记费是 `QB_FEE_CHARGE` 种类 `DISTRIBUTION`，归属提交时冻结的运营商：预付的先从该发布的预付款扣（赠送先、现金后），不够从平台费账户扣，再不够成未付；后付的记应收，预付款按本次金额减少。
   - 一次运行至多 10000 项；余下的由每日核对报出，用平台的补跑（`JOB_RUN_REQUEST`，带原因）再运行该时刻。
 - **账单的先后**：后付的月账单任务 `qb.fee-invoice` 改为每天 01:17（每月 1 日不运行），一个发起方某月的账单要等该月应结算的发布都有该月或 `final` 的结算行才开；结算晚了，补上后的下一次运行即开出。那个月的账单开出之后才记的费用（补跑的结算）进入记费当月的账单；`final` 行可能把结束所在月最后一段的人数晚一个月收（运营商结算按费用的月份分成，这部分在下一个月）。对账时区分结算行的 `period`（人数的月份）与费用的 `period`（账单的月份）。
-- **核对**（每日对账）：`DISTRIBUTION_DEPOSITS`（2180 用途 `DISTRIBUTION` 按发起方 = 未关闭的配送费预付款）；`DISTRIBUTION_UNSETTLED`（按（发起方，月份）列出：本月之前的每个月，月末之后过了 `qb.distribution.unsettled-after-hours` 小时（受控，缺省 30，即 2 日 06:00）仍没有该月或 `final` 结算行的发布个数，参照列是月份 `YYYY-MM`；包含后付发起方的账单在等的月份（`qb.system.fee-invoices-due` 的应开减已可开），也包含预付发起方的）；`DISTRIBUTION_FINAL_MISSING`（结束超过 `qb.distribution.final-missing-after-hours` 小时（受控，缺省 48）仍没有 `final` 行）；`DISTRIBUTION_PRICE_OUT_OF_RANGE`；`DISTRIBUTION_AT_FLOOR` 只提示（不算差异）：按下限计费的进行中的发布，非平台付奖的档位金额是发起方自报的，过低即落到下限，供运营商与总部查看。月报新类 `DISTRIBUTION_CHARGED`、`DISTRIBUTION_DEPOSIT`、`DISTRIBUTION_RELEASED`；全部结算在平台管理系统的"配送费结算"页（`qb.admin.distribution-settlements`，可按月份与"只看按下限"筛选，以平台的导出导出）。
+- **核对**（每日对账）：`DISTRIBUTION_DEPOSITS`（2180 用途 `DISTRIBUTION` 按发起方 = 未关闭的配送费预付款）；`DISTRIBUTION_UNSETTLED`（按（发起方，月份）列出：本月之前的每个月，月末之后过了 `qb.distribution.unsettled-after-hours` 小时（受控，缺省 30，即 2 日 06:00）仍没有该月或 `final` 结算行的发布个数，参照列是月份 `YYYY-MM`；包含后付发起方的账单在等的月份（`qb.system.fee-invoices-due` 的应开减已可开），也包含预付发起方的）；`DISTRIBUTION_FINAL_MISSING`（结束超过 `qb.distribution.final-missing-after-hours` 小时（受控，缺省 48）仍没有 `final` 行）；`DISTRIBUTION_PRICE_RANGE`（按运营商：价目超出总部现在的范围。原名 `DISTRIBUTION_PRICE_OUT_OF_RANGE` 有 31 个字符，超过核对项的列宽 30，被截短后不被认出，所以 2026-11-13 之前从未报过；早先运行的汇总里仍是旧名，值都是 0，字典中保留为停用的项，核对页照常读。现在模板给出不认识的码时整次核对失败（§7.2），核对码一律不超过 30 个字符，`ReconChecksTest` 检查。部署前先查价目，见 §4 检查清单）；`DISTRIBUTION_AT_FLOOR` 只提示（不算差异）：按下限计费的进行中的发布，非平台付奖的档位金额是发起方自报的，过低即落到下限，供运营商与总部查看。月报新类 `DISTRIBUTION_CHARGED`、`DISTRIBUTION_DEPOSIT`、`DISTRIBUTION_RELEASED`；全部结算在平台管理系统的"配送费结算"页（`qb.admin.distribution-settlements`，可按月份与"只看按下限"筛选，以平台的导出导出）。
 - **差异的处理**：`DISTRIBUTION_UNSETTLED` / `DISTRIBUTION_FINAL_MISSING` 多半是任务没有运行或该项失败：看任务的运行与失败的项，修好原因后补跑该时刻。补跑哪一个时刻：`DISTRIBUTION_UNSETTLED` 的月份 M 补跑 `qb.distribution-fee` 在 M 的次月 2 日 00:37 的计划时刻（`POST /api/jobs/qb.distribution-fee/runs`，带该时刻与原因；同一时刻幂等，已结的项不再写）；几个月都缺时从最早的月份起逐月补跑，一次只补一个月（期间由时刻决定）。`DISTRIBUTION_FINAL_MISSING` 补跑 `qb.distribution-final` 最近一次的计划时刻（任何一天的都结所有已过宽限的结束发布）。后付发起方的账单在补上之后的下一次 01:17 开出。`DISTRIBUTION_DEPOSITS` 有差异同 §7.47 的 `PREPAYMENTS`，报开发。不手工写结算行（只追加、只写一次）、分录或改表。
 - **常见询问**：发起方问配送费怎么算——发布页的"配送费"写明单价、上次结算以来开始的人数与目前约多少；"学者得到的奖励就是您设定的全部，配送费另由平台按开始答题的人数收取"。
 
@@ -1333,6 +1336,31 @@ Quiz 与发布有主题词（平台词表中的词与自定义词），学者可
 - **自动收尾**：样板中已经结束的发布照常结算，没有人付费的部分为 0（`SampleRestoreIT`：奖励在实物、电子奖品与绑定节点的发布，到期结束后账本与费用表都没有新行）。样板人员的问题记录即验收材料，由需求方保管，本系统不另建。
 - **千题库的 AI 生成**：站内 AI 每个作业至多 20 题、同时至多 2 个未完成、每人每天 20 个作业（`qb.ai.sponsor.daily-jobs`，受控），缺省每天至多 400 题，所以 1000 题的题库用外部 AI 按 `quiz-file-prompts.md` 生成 Quiz 文件再导入；必要时由总部在测试系统临时调高 `qb.ai.sponsor.daily-jobs`（四眼），用完调回。样板做成后靠发起方包恢复，不需要反复生成。
 - **部署**：迁移 V118（`qb_package_import.batch_bytes`）；部署后运行一次 `QB_SETUP`（新的普通参数 `qb.content.import.batch-bytes`，§7.37）。没有新的环境变量、角色权限、任务。
+
+### 7.50 受众规则费的退回与贷项凭证（F-M7）
+
+受众规则费上架时一次记全期（F-M5）；发布提前结束时按未用天数开**贷项凭证**；财务也可以对任何一笔费用手工开凭证（四眼）。原费用与它的账单从不修改（`docs/quizbuks/plans/impl/F-M.md` §10）。
+
+- **开关**：`qb.audience.billing.enabled`（受控，首次上线为开）；`qb.audience.fee.refund-unused-days`（受控，缺省关，由需求方另定）。退不退按**发布结束那一刻**的开关：结束时关、之后打开不补退；结束时开、之后关掉照退。结束那一刻开关还没有发布过值的，按"关"处理（`NONE_SWITCH_OFF`）。下架（`ADMIN`）与到期结束（`EXPIRED`）不退。
+- **退回任务** `qb.audience-refund`：每天 03:37（`jabiz.fiscal-year-zone`，部署设置 `QB_AUDIENCE_REFUND_CRON`；一次至多 `quizbuks.audience-refund.max-items`，缺省 10000），在 03:07 的配送费结束结算与 03:23 的预付款退回之后。每项一笔已记费的受众规则费，只判定一次，结果写在预付款上（`refund_decided_at` / `refund_outcome`：`REFUNDED` 退回、`CREDITED` 成为贷项、`NONE_SWITCH_OFF`、`NONE_REASON`、`NONE_ZERO`、`NONE_NO_PERIOD`）。已用天数 = 从计费的开始到结束，按 24 小时向上取整、至少 1 天（暂停的天也算）；应收 = max（最低使用费，日价合计 × 已用天数），按冻结时的报价；退回额 = 原费用 − 应收。F-M7 之前冻结的预付款没有计费期间，取冻结时刻的发布期间；读不到即 `NONE_NO_PERIOD`。
+- **凭证的去向（一条规则）**：先抵这笔费用所在账单还欠的部分（`OPEN` / `PARTIAL` / `OVERDUE`）；**预付**的费用再把超出部分退回付款的地方（最后付的先退：同一时刻先退账户付的、再退预付款付的，各自先现金后赠送），从预付款付的部分经预付款退回（与作废时同一条路径），退到已作废的赠送当即再作废；**后付**的从不退现金。再剩下的是**贷项**：立即按开具时刻抵该发起方其他未付的账单，抵不完的留给下一张账单（预付记费、后付月账单、提前付清都先用贷项）。所以"有未用贷项"与"有未付账单"不会同时出现（核对 `CREDIT_UNUSED_WITH_DUE`）。
+- **开具日期**：凭证带开具日期（`issued_on`，按 `jabiz.fiscal-year-zone` 即日本时间的那一天，与账单的开具日期一致），印在 PDF 上。
+- **欠多少**：账单的欠额 = 合计 − 已抵（`creditApplied`）− 已付。被凭证抵完的账单为 `PAID`（`paid_at` 有值，没有付款分录，不开收据）。
+- **过账**：凭证 借 4120（金额）、2150（税）/ 贷 1130（合计），来源 `QbFeeCreditNote`；退回 借 1130 / 贷 2160、2190（账户付的）与 2180（预付款付的），再 借 2180 / 贷 2160、2190（来源预付款）。月报：凭证为 `FEE_CREDIT_NOTE`；退回为 `FEE_PAID` 的负数；出 2180 为 `PREPAYMENT_RELEASED`；再作废为 `FEE_CREDIT_VOIDED`。抵用不过账。
+- **手工开凭证**（平台管理系统"平台费"页，费用行的"开贷项凭证"）：财务（`qb.fee.manage`）提出原费用、金额（不含税）与原因（印在凭证上），另一位管理员批准（`qb.fee-request.review`）。**上限**：一笔费用的全部凭证（自动与手工）的金额 ≤ 原费用的金额，税 ≤ 原费用的税；每张凭证的税 = min（⌊金额 × 原费用税率⌋，税的余额），开满的那张取税的余额。超出即 422 `QB_FEE_CREDIT_NOTE_EXCEEDS`。**批准时余额已不够**（期间开了别的凭证）：不少开，申请为 `FAILED`，财务收到待办"已批准的平台费申请未能执行"，按新的余额重新提出。账单已作废的费用不能开凭证（422 `QB_FEE_CREDIT_NOTE_VOIDED`）。
+- **何时作废、何时开凭证**：账单整张开错、还没有凭证也没被凭证抵过时作废；有凭证或被抵过的账单不能作废（422 `QB_FEE_INVOICE_HAS_CREDIT_NOTE`，批准时才出现的也同样以 `FAILED` 结束并给财务待办），更正只能开凭证。
+- **运营商分成**：运营商月结算多两列：当月开具的凭证金额（不含税，按费用记费时的运营商）与扣减 = ⌊凭证 × （1 − 当月方案的平台比例）⌋。扣减是成本（与固定费、获客费用并列），不够扣的结转下月；结算单上有"贷项凭证扣减"一行。
+- **核对**（每日对账）：`AUDIENCE_REFUND_MISSING`（结束超过 `qb.audience.refund.missing-after-hours` 小时（普通参数，缺省 30）仍未判定：看任务的运行与失败的项，修好后用 `JOB_RUN_REQUEST` 补跑 `qb.audience-refund` 最近的计划时刻）；`AUDIENCE_REFUND_NO_PERIOD`（按预付款列出判定为没有期间、财务还没处理的：财务决定退就手工开凭证，不退就对该预付款（核对行的参照）运行流程 `QB_AUDIENCE_REFUND_CLOSE` 并写明原因（`qb.fee.manage`；核对页上的按钮随 F-M14），结果为 `NONE_FINANCE`；两者都会让这一行消失）；`AUDIENCE_FEE_NOT_LIVE`（有受众规则费而发布从未上架：报开发）；`CREDIT_NOTE_USES`、`CREDIT_NOTE_LIMITS`、`CREDIT_NOTE_USE_VOID`、`CREDIT_UNUSED_WITH_DUE`（报开发，不手工改表）；`FEES_RECEIVABLE` 已含未用贷项。
+- **发起方看到的**：发布页"预付款"下列出该发布的凭证（号、天数、金额）；"资金 → 账单"有"贷项凭证"一栏（可下载 PDF，首次下载时签发，之后给同一份），账单上写明已用凭证抵减的金额，平台费账户显示未用的贷项。凭证的 PDF 与收据一同保留（十年）。
+
+### 7.51 封禁与钱（F-M15 a0）
+
+封禁后，已签发的访问令牌在到期前仍能调用接口，所以每个由人发起的动钱流程自己再读封禁（422 `QB_USER_BANNED`，什么也不写）。`docs/quizbuks/plans/impl/F-M15.md` §5.4。
+
+- **运营商一侧**：负责人或成员被封禁后，确认入驻赠送、设付费方式、保存提现银行账户、申请与取消提现、移除成员、撤销认证、设配送价、转入直营发起方都被拒绝；解封后照常。总部的动作（建运营商、加减成员、指派发起方、抽查、方案、结算与付款、提现的付款与驳回、平台费申请、关闭无期间的退回）不检查：总部角色的持有人只能停用、不能封禁。新增由人发起的流程忘了检查，测试 `BanCoverageTest` 会失败（豁免表写明理由）。
+- **赠送**：被封禁的发起方不再得到新的赠送（入驻、点亮、认证补发、追加）。追加赠送在提出时即拒绝（422 `QB_FEE_CREDIT_BANNED`；手工记费照常可以提出）；审核期间被封禁的，批准时申请以"驳回"（`REJECTED`）结束，什么也不发，解封后由财务重新提出。同一来源键已经发过的仍返回原笔（重放不报错）。
+- **到期提醒**：封禁期间不寄"赠送即将到期"的邮件，也不记已提醒；解封后仍在提醒期内的照常提醒。赠送照常到期。
+- **注销时钱表的文字**：账单、费用、申请、充值、转入直营的记录都保留；只抹去其中的自由文字（手工费用与申请的理由、账单的作废理由、手工入账的理由与汇款人名、负责人在转入时写的备注；可空的列写空，必填的写 `***`）。转入的备注随写的负责人或收款的直营发起方任一方的注销而抹去。手工入账的理由因此可以为空（迁移 V120 放宽了检查），流程仍要求填写。
 
 ## 8. 升级到线 1.3（S0 的迁移 V29、V30）
 

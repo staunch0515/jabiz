@@ -22,7 +22,7 @@
 4. **平台先行**：平台缺的能力只由 S1 在 `1.3/platform` 上做；S2、S3 发现平台缺东西，告诉需求方，由 S1 排进去，不在应用里绕过。
 5. **迁移编号**：应用的迁移（`db/migration/V<n>__quizbuks_*.sql`）在**合并前**按 `1.3/quizbuks` 当时的最大号 + 1 重新编号（Flyway 不允许乱序；staging 由 `1.3/quizbuks` 部署）。平台的迁移（`db/jabiz`）只有 S1 加。
 6. **常有冲突的文件**（三语消息、`application.yml`、`QbParams`、`QbRoles`、`QbLedger`、`qb.admin.monthly`、两个 SPA 的 `src/qb/`）：经常把 `1.3/quizbuks` 合并进自己的分支，冲突时两边都保留；只合并，不变基。
-7. **PR 与 CI**：每项一个 PR，CI 绿才合并；能在本机跑的 e2e 先跑（`tools/quizbuks/e2e.sh`），跑不了的在 PR 中写明。PR 描述逐条对照规格的"验收"。
+7. **PR 与 CI**：每项一个 PR，CI 绿才合并；能在本机跑的 e2e 先跑（`tools/quizbuks/e2e.sh`），跑不了的在 PR 中写明。PR 描述逐条对照规格的"验收"。**只改文档的 PR**（改动的文件全在 `docs/` 下；判断在 `tools/quizbuks/ci/scope.sh`）直接开成正式 PR（不开草稿），只跑很快的 `docs` 检查（几十秒），通过后总控当即合并；有一个文件不在 `docs/` 下（包括工作流自己）就照常全跑，应先开草稿。
 8. **进度**：每个会话在 `docs/quizbuks/first-launch-progress.md` 中维护自己那几行（项目、状态、PR、未完成），只改自己的行。
 9. **称呼**：新写的界面文字一律用 学者 / テイカー / Taker、发起方 / 主催者 / Sponsor。
 

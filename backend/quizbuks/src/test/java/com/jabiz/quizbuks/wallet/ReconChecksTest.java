@@ -2,12 +2,20 @@ package com.jabiz.quizbuks.wallet;
 
 import org.junit.jupiter.api.Test;
 
+import java.io.IOException;
 import java.math.BigDecimal;
+import java.net.URISyntaxException;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class ReconChecksTest {
 
@@ -31,15 +39,46 @@ class ReconChecksTest {
     }
 
     @Test
-    void readsCodedRowsAndIgnoresUnknownChecks() {
+    void readsCodedRows() {
         List<ReconChecks.Item> items = ReconChecks.coded(List.of(
             Map.of("checkCode", "TOTAL_2110", "expected", 10, "actual", 0),
-            Map.of("checkCode", "TOPUP_FEE", "topUpId", "t1", "sponsorId", "s1", "expected", 180, "actual", 0),
-            Map.of("checkCode", "SOMETHING_ELSE", "expected", 1, "actual", 0)));
+            Map.of("checkCode", "TOPUP_FEE", "topUpId", "t1", "sponsorId", "s1", "expected", 180, "actual", 0)));
         assertThat(items).extracting(ReconChecks.Item::check).containsExactly(ReconChecks.TOTAL_2110,
             ReconChecks.TOPUP_FEE);
         assertThat(items.get(1).reference()).isEqualTo("t1");
         assertThat(items.get(1).partyId()).isEqualTo("s1");
+    }
+
+    /**
+     * A code the run does not know fails the run (and qb-reconcile-missing reports it) instead of the check being left
+     * out unseen: a typo, a code cut short by its column (as DISTRIBUTION_PRICE_OUT_OF_RANGE was) or a retired one.
+     */
+    @Test
+    void anUnknownCodeFailsTheRun() {
+        for (String code : List.of("SOMETHING_ELSE", "DISTRIBUTION_PRICE_OUT_OF_RANG",
+            ReconChecks.DISTRIBUTION_PRICE_OUT_OF_RANGE)) {
+            assertThatThrownBy(() -> ReconChecks.coded(List.of(
+                Map.of("checkCode", "TOTAL_2110", "expected", 10, "actual", 0),
+                Map.of("checkCode", code, "expected", 1, "actual", 0))))
+                .as(code).isInstanceOf(IllegalStateException.class).hasMessageContaining("'" + code + "'");
+        }
+        Map<String, Object> noCode = new java.util.HashMap<>(Map.of("expected", 1, "actual", 0));
+        assertThatThrownBy(() -> ReconChecks.coded(List.of(noCode))).isInstanceOf(IllegalStateException.class);
+    }
+
+    /** A retired code is no longer a check (never written) but stays readable: the sealed summaries name it. */
+    @Test
+    void aRetiredCodeIsReadableButNotACheck() {
+        assertThat(ReconChecks.RETIRED).contains(ReconChecks.DISTRIBUTION_PRICE_OUT_OF_RANGE)
+            .doesNotContainAnyElementsOf(ReconChecks.ALL);
+        var entries = new TopUpConfig("default").qbReconCheckDictionary().entries();
+        assertThat(entries).filteredOn(e -> ReconChecks.RETIRED.contains(e.code())).hasSize(ReconChecks.RETIRED.size())
+            .allSatisfy(e -> {
+                assertThat(e.enabled()).isFalse();
+                assertThat(e.labels()).hasSize(3);
+            });
+        assertThat(entries).filteredOn(e -> ReconChecks.ALL.contains(e.code())).hasSize(ReconChecks.ALL.size())
+            .allSatisfy(e -> assertThat(e.enabled()).isTrue());
     }
 
     static Map<String, Object> taker(String party, long balance, long cached, long out, long cachedOut) {
@@ -93,10 +132,12 @@ class ReconChecksTest {
         ReconChecks.Result result = ReconChecks.result(List.of(), 10);
         assertThat(result.status()).isEqualTo(ReconChecks.OK);
         assertThat(result.total()).isZero();
-        // Every check by name, the F-M6 notes (DISTRIBUTION_AT_FLOOR) among them.
-        assertThat(result.summary()).startsWith("{\"CASH_ACCOUNT\":0,\"CASH_LOTS\":0,\"CERTIFIED_GRANTS\":0,"
+        // Every check by name, the F-M6 notes (DISTRIBUTION_AT_FLOOR) and the F-M7 checks among them.
+        assertThat(result.summary()).startsWith("{\"AUDIENCE_FEE_NOT_LIVE\":0,\"AUDIENCE_REFUND_MISSING\":0,"
+            + "\"AUDIENCE_REFUND_NO_PERIOD\":0,\"CASH_ACCOUNT\":0,\"CASH_LOTS\":0,\"CERTIFIED_GRANTS\":0,"
+            + "\"CREDIT_NOTE_LIMITS\":0,\"CREDIT_NOTE_USES\":0,\"CREDIT_NOTE_USE_VOID\":0,\"CREDIT_UNUSED_WITH_DUE\":0,"
             + "\"DISTRIBUTION_AT_FLOOR\":0,\"DISTRIBUTION_DEPOSITS\":0,\"DISTRIBUTION_FINAL_MISSING\":0,"
-            + "\"DISTRIBUTION_PRICE_OUT_OF_RANGE\":0,\"DISTRIBUTION_UNSETTLED\":0,\"ENTRY_FEES_UNSETTLED\":0,"
+            + "\"DISTRIBUTION_PRICE_RANGE\":0,\"DISTRIBUTION_UNSETTLED\":0,\"ENTRY_FEES_UNSETTLED\":0,"
             + "\"FEES_RECEIVABLE\":0,\"FEE_CREDIT\":0,\"FEE_CREDIT_PROMOTION\":0,\"FEE_PAYMENTS\":0,")
             .contains("\"LEDGER_ZERO\":0").contains("\"TOPUP_FEE\":0");
     }
@@ -132,5 +173,45 @@ class ReconChecksTest {
             ReconChecks.TAKER_WALLET_LAG, ReconChecks.TAKER_WALLET, ReconChecks.SPONSOR_WALLET);
         assertThat(result.total()).isEqualTo(5);
         assertThat(result.differences()).isEqualTo(4);
+    }
+
+    /**
+     * A code longer than the column it is stored in is cut short by the templates' CAST, and {@link
+     * ReconChecks#coded} drops a code it does not know: the check would never be reported. Every code fits the
+     * column {@code qb_recon_item_version.check_code}, read from its migration.
+     */
+    @Test
+    void everyCodeFitsTheColumnItIsStoredIn() throws IOException, URISyntaxException {
+        Matcher column = Pattern.compile("check_code\\s+varchar\\((\\d+)\\)")
+            .matcher(Files.readString(resource("db/migration/V7__quizbuks_topups.sql")));
+        assertThat(column.find()).as("check_code's width in V7").isTrue();
+        int width = Integer.parseInt(column.group(1));
+        assertThat(ReconChecks.ALL).allSatisfy(code -> assertThat(code).as(code).hasSizeLessThanOrEqualTo(width));
+    }
+
+    /** Every code a reconciliation template writes is a known one, and fits the width it is cast to there. */
+    @Test
+    void everyCodeTheTemplatesWriteIsKnownAndFitsItsCast() throws IOException, URISyntaxException {
+        Pattern cast = Pattern.compile("CAST\\('([A-Z0-9_]+)' AS varchar\\((\\d+)\\)\\)");
+        List<String> found = new ArrayList<>();
+        try (Stream<Path> templates = Files.list(resource("queries/qb/system"))) {
+            for (Path template : templates.filter(p -> p.getFileName().toString().startsWith("recon-")).toList()) {
+                Matcher m = cast.matcher(Files.readString(template));
+                while (m.find()) {
+                    String code = m.group(1);
+                    found.add(code);
+                    assertThat(code).as(template.getFileName() + ": " + code)
+                        .hasSizeLessThanOrEqualTo(Integer.parseInt(m.group(2)));
+                    assertThat(ReconChecks.ALL).as(template.getFileName().toString()).contains(code);
+                }
+            }
+        }
+        assertThat(found).as("codes found in the templates").isNotEmpty();
+    }
+
+    private static Path resource(String name) throws URISyntaxException {
+        var url = ReconChecksTest.class.getClassLoader().getResource(name);
+        assertThat(url).as(name).isNotNull();
+        return Path.of(url.toURI());
     }
 }

@@ -35,7 +35,9 @@ import {
 } from '@jabiz/admin'
 import { EmptyState, LoadFailed, StatusBadge } from './components'
 import { FeeCreditGrants } from './FeeCreditGrants'
-import { FEES_KEY, INVOICE_STATUSES, readFeeCharges, readFeeInvoices, readFeeRequests, recordFeeRequest, REQUEST_REVIEW,
+import { FeeCreditNoteDialog } from './FeeCreditNoteDialog'
+import { FeeCreditNotes } from './FeeCreditNotes'
+import { FEES_KEY, INVOICE_STATUSES, invoiceOwed, readFeeCharges, readFeeInvoices, readFeeRequests, recordFeeRequest, REQUEST_REVIEW,
   REQUEST_STATUSES, type FeeCharge, type FeeInvoice, type FeeRequest, type RequestKind } from './fee-api'
 import { parseAmount } from './finance'
 import { StatusFilter } from './finance-components'
@@ -51,7 +53,9 @@ const CHARGE_SORTS = { chargedAt: 'chargedAt', total: 'total' } as const
 const INVOICE_SORTS = { issuedAt: 'issuedAt', dueOn: 'dueOn', total: 'total', status: 'status' } as const
 const REQUEST_SORTS = { requestedAt: 'requestedAt', status: 'status' } as const
 
-type Tab = 'charges' | 'invoices' | 'requests' | 'grants'
+type Tab = 'charges' | 'invoices' | 'creditNotes' | 'requests' | 'grants'
+/** The requests the generic dialog records (a credit note by hand has its own dialog, which reads the fee first). */
+type DialogKind = Exclude<RequestKind, 'CREDIT_NOTE'>
 
 /**
  * Records a fee request (`QB_FEE_REQUEST`, Q87): a fee by hand names the sponsor, the amount before tax and the
@@ -59,7 +63,7 @@ type Tab = 'charges' | 'invoices' | 'requests' | 'grants'
  * another administrator's approval and refuses an invoice already void, an unknown sponsor or one's own account. Its
  * refusals are shown as it words them.
  */
-function RequestDialog({ kind, invoiceId, onClose }: { kind: RequestKind; invoiceId?: string; onClose: () => void }) {
+function RequestDialog({ kind, invoiceId, onClose }: { kind: DialogKind; invoiceId?: string; onClose: () => void }) {
   const { t } = useTranslation(EXTENSION_NAMESPACE)
   const id = useId()
   const queryClient = useQueryClient()
@@ -221,7 +225,7 @@ function SponsorCell({ sponsorId, company }: { sponsorId: string; company: strin
 }
 
 /** The charges (`qb.admin.fee-charges`): every fee the platform charged, with the invoice it went on. */
-function Charges() {
+function Charges({ onCreditNote }: { onCreditNote: ((chargeId: string) => void) | null }) {
   const { t } = useTranslation(EXTENSION_NAMESPACE)
   const kind = useLabels(DICTIONARY.feeKind)
   const mode = useLabels(DICTIONARY.billingMode)
@@ -256,7 +260,20 @@ function Charges() {
         : '') },
     { id: 'chargedBy', header: t('fee.chargedBy'),
       cell: ({ row }) => (row.original.chargedBy ? <UserName id={row.original.chargedBy} /> : t('fee.system')) },
-  ], [t, kind, mode, invoiceStatus])
+    // F-M7: a credit note by hand on this fee; the dialog reads what may still be credited.
+    ...(onCreditNote ? [{
+      id: 'actions',
+      header: () => <span className="sr-only">{t('fee.creditNote')}</span>,
+      cell: ({ row }) => (
+        <span className="flex justify-end">
+          <Button size="sm" variant="outline" data-testid="fee-charge-credit-note"
+            onClick={() => onCreditNote(row.original.chargeId)}>
+            {t('fee.creditNote')}<span className="sr-only">: {row.original.period} {row.original.company ?? ''}</span>
+          </Button>
+        </span>
+      ),
+    } as ColumnDef<FeeCharge, unknown>] : []),
+  ], [t, kind, mode, invoiceStatus, onCreditNote])
   return (
     <div className="flex flex-col gap-4">
       {more.bar}
@@ -308,6 +325,15 @@ function Invoices({ onVoid }: { onVoid: ((invoiceId: string) => void) | null }) 
     // F-M1: an invoice may be paid in part.
     { id: 'paidAmount', header: t('fee.paidAmount'), meta: right,
       cell: ({ row }) => <span data-testid="fee-invoice-paid">{money(row.original.paidAmount)}</span> },
+    // F-M7: what credit notes paid of the total, and what is owed after both.
+    { id: 'creditApplied', header: t('fee.creditApplied'), meta: right,
+      cell: ({ row }) => <span data-testid="fee-invoice-credit-applied">{money(row.original.creditApplied)}</span> },
+    { id: 'owed', header: t('fee.owed'), meta: right,
+      cell: ({ row }) => (
+        <span data-testid="fee-invoice-owed">
+          {row.original.status === 'VOID' || row.original.status === 'PAID' ? money('0') : money(String(invoiceOwed(row.original)))}
+        </span>
+      ) },
     { id: 'dueOn', header: t('fee.dueOn'), cell: ({ row }) => row.original.dueOn ?? '' },
     { id: 'status', header: t('fee.status'),
       cell: ({ row }) => (
@@ -440,8 +466,9 @@ export default function FeesPage() {
   const approver = can(PERMISSION.bankApprove)
   const manager = can(PERMISSION.feeManage)
   const asked = search.get('tab')
-  const tab: Tab = asked === 'invoices' || asked === 'grants' || (asked === 'requests' && approver) ? asked : 'charges'
-  const [recording, setRecording] = useState<{ kind: RequestKind; invoiceId?: string } | null>(null)
+  const tab: Tab = asked === 'invoices' || asked === 'creditNotes' || asked === 'grants' || (asked === 'requests' && approver) ? asked : 'charges'
+  const [recording, setRecording] = useState<{ kind: DialogKind; invoiceId?: string } | null>(null)
+  const [crediting, setCrediting] = useState<string | null>(null)
   return (
     <div className="flex flex-col gap-4" data-testid="fees-page">
       <PageHeader title={t('fee.title')} description={t('fee.description')} className="pb-0"
@@ -460,16 +487,21 @@ export default function FeesPage() {
         <TabsList>
           <TabsTrigger value="charges" data-testid="tab-charges">{t('fee.tabs.charges')}</TabsTrigger>
           <TabsTrigger value="invoices" data-testid="tab-invoices">{t('fee.tabs.invoices')}</TabsTrigger>
+          <TabsTrigger value="creditNotes" data-testid="tab-credit-notes">{t('fee.tabs.creditNotes')}</TabsTrigger>
           {approver && <TabsTrigger value="requests" data-testid="tab-requests">{t('fee.tabs.requests')}</TabsTrigger>}
           <TabsTrigger value="grants" data-testid="tab-grants">{t('fee.tabs.grants')}</TabsTrigger>
         </TabsList>
-        <TabsContent value="charges">{tab === 'charges' && <Charges />}</TabsContent>
+        <TabsContent value="charges">
+          {tab === 'charges' && <Charges onCreditNote={manager ? setCrediting : null} />}
+        </TabsContent>
         <TabsContent value="invoices">
           {tab === 'invoices' && <Invoices onVoid={manager ? (invoiceId) => setRecording({ kind: 'VOID', invoiceId }) : null} />}
         </TabsContent>
+        <TabsContent value="creditNotes">{tab === 'creditNotes' && <FeeCreditNotes />}</TabsContent>
         {approver && <TabsContent value="requests">{tab === 'requests' && <Requests />}</TabsContent>}
         <TabsContent value="grants">{tab === 'grants' && <FeeCreditGrants />}</TabsContent>
       </Tabs>
+      {crediting && <FeeCreditNoteDialog chargeId={crediting} onClose={() => setCrediting(null)} />}
       {recording && <RequestDialog kind={recording.kind} invoiceId={recording.invoiceId} onClose={() => setRecording(null)} />}
     </div>
   )
