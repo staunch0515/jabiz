@@ -33,9 +33,9 @@ public class HelpUsageGauge implements BlockingStep<NoMetadata, ProcessContext> 
     public static final String NAME = "qb.help.usage.percent";
     public static final String COST_NAME = "qb.help.cost.percent";
     /** Where the processes leave the values and the month they belong to. */
-    static final String PERCENT = "helpUsagePercent";
-    static final String COST_PERCENT = "helpCostPercent";
-    static final String MONTH = "helpUsageMonth";
+    public static final String PERCENT = "helpUsagePercent";
+    public static final String COST_PERCENT = "helpCostPercent";
+    public static final String MONTH = "helpUsageMonth";
 
     /** A value and its month. */
     private record Reading(String month, long value) {}

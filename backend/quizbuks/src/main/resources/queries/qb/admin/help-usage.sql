@@ -15,7 +15,6 @@ datasets:
   SysParam: urn:jabiz:dataset:now:SysParam
 params:
   month: { like: QbHelpUsage.month, description: "If given, only this month (YYYY-MM, the deployment's zone)" }
-  zone:  { kind: { type: text, maxLength: 64 }, description: "The zone the months are in (jabiz.fiscal-year-zone); none: Asia/Tokyo, the deployment's default" }
 results:
   month:         { from: QbHelpUsage.month }
   questions:     { from: QbHelpUsage.questions }
@@ -34,6 +33,7 @@ results:
   totalUsd:      { kind: { type: numeric, precision: 14, scale: 2 } }
   alertUsd:      { kind: { type: numeric, precision: 9, scale: 2 } }
   percentOfAlert: { kind: { type: numeric, precision: 7, scale: 1 } }
+  reachedAlert:  { kind: { type: numeric, precision: 1, scale: 0 } }
 list:
   filters: [month]
   sorts:   [month]
@@ -44,7 +44,10 @@ permissions: [qb.admin.ai.read]
 -- Everybody's row of each month ("*"), with the number of people who asked that month and the monthly tokens in effect
 -- now (not a whole number, or none yet: its default, 20,000,000).
 -- F-M10: the alert as help.HelpSettings reads it (not a number, or none yet: 8; within 0 to 1,000,000). The checks are
--- the jobs of kind TRANSLATION_CHECK by the month they finished in; the percent is empty with no alert (0), not 0.
+-- the jobs of kind TRANSLATION_CHECK by the month they finished in, in the zone the job recorded (the deployment's
+-- fiscal-year zone when it ran, as the usage months are); the percent is empty with no alert (0), not 0, and
+-- reachedAlert compares the unrounded dollars. A month with checks but no help usage is not listed here (a known
+-- limit: the alert and the task count it all the same).
 -- F-C10b: an input token read from the prompt cache counts qb.help.cache-read-weight (0 to 1; none yet or not a
 -- number: its default, 0.1), rounded up, as the processes count it.
 WITH cap AS (
@@ -64,7 +67,7 @@ alert AS (
     FROM {{SysParam}} p
     WHERE p.{{SysParam.paramKey}} = 'qb.help.global-monthly-usd-alert'),
 checks AS (
-    SELECT to_char(j.{{QbAiJob.finishedAt}} AT TIME ZONE coalesce(CAST(:zone AS text), 'Asia/Tokyo'), 'YYYY-MM') AS month,
+    SELECT to_char(j.{{QbAiJob.finishedAt}} AT TIME ZONE j.{{QbAiJob.zone}}, 'YYYY-MM') AS month,
            count(*) AS jobs, coalesce(sum(j.{{QbAiJob.costUsd}}), 0) AS usd
     FROM {{QbAiJob}} j
     WHERE j.{{QbAiJob.kind}} = 'TRANSLATION_CHECK' AND j.{{QbAiJob.finishedAt}} IS NOT NULL
@@ -94,7 +97,9 @@ SELECT
     CAST(a.usd AS numeric(9, 2)) AS alertUsd,
     CAST(CASE WHEN a.usd > 0
               THEN round((coalesce(u.{{QbHelpUsage.costUsd}}, 0) + coalesce(k.usd, 0)) * 100.0 / a.usd, 1)
-         END AS numeric(7, 1)) AS percentOfAlert
+         END AS numeric(7, 1)) AS percentOfAlert,
+    CAST(CASE WHEN a.usd > 0 AND coalesce(u.{{QbHelpUsage.costUsd}}, 0) + coalesce(k.usd, 0) >= a.usd
+              THEN 1 ELSE 0 END AS numeric(1, 0)) AS reachedAlert
 FROM {{QbHelpUsage}} u
 CROSS JOIN cap c
 CROSS JOIN alert a

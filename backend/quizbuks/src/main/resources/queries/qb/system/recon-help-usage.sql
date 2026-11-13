@@ -20,8 +20,8 @@ list:
 permissions: [qb.wallet.system]
 ---*/
 -- One statement, one snapshot. The reference names the month and what was counted: 2026-10:questions. The items hold
--- whole numbers (QbReconItem is in yen): the dollars are compared and given in cents (costCents), each total and sum
--- rounded the same way, so a total that is not below the sum is never below it rounded.
+-- whole numbers (QbReconItem is in yen): the dollars are given in millionths of a dollar (costMicros), the unit the
+-- amounts are kept in, and compared before they are rounded, so a total that is not below the sum is never reported.
 WITH months AS (
     SELECT u.{{QbHelpUsage.month}} AS month,
            sum(u.{{QbHelpUsage.questions}})    FILTER (WHERE u.{{QbHelpUsage.userId}} <> '*') AS pQuestions,
@@ -44,5 +44,5 @@ UNION ALL
 SELECT 'HELP_USAGE_TOTAL', m.month || ':outputTokens', CAST(m.pOutput AS numeric(20, 0)), CAST(m.tOutput AS numeric(20, 0))
 FROM months m WHERE m.tOutput < coalesce(m.pOutput, 0)
 UNION ALL
-SELECT 'HELP_USAGE_TOTAL', m.month || ':costCents', CAST(round(m.pCost * 100) AS numeric(20, 0)), CAST(round(m.tCost * 100) AS numeric(20, 0))
-FROM months m WHERE round(m.tCost * 100) < round(coalesce(m.pCost, 0) * 100)
+SELECT 'HELP_USAGE_TOTAL', m.month || ':costMicros', CAST(round(m.pCost * 1000000) AS numeric(20, 0)), CAST(round(m.tCost * 1000000) AS numeric(20, 0))
+FROM months m WHERE m.tCost < coalesce(m.pCost, 0)

@@ -196,4 +196,105 @@ class HelpCostIT extends HelpItSupport {
         assertThat(tasksOf(source)).singleElement()
             .satisfies(task -> assertThat(task).containsEntry("assignee_permission", QbPermissions.RECONCILE));
     }
+
+    private void cancel(String operator, String jobId) {
+        client.post().uri("/api/external-jobs/" + jobId + "/cancel").header("Authorization", operator)
+            .contentType(org.springframework.http.MediaType.APPLICATION_JSON).bodyValue(Map.of()).exchange()
+            .expectStatus().isOk();
+    }
+
+    @SuppressWarnings("unchecked")
+    private List<Map<String, Object>> tasksOf(String token, String titleKey) {
+        Map<String, Object> result = client.get().uri("/api/tasks/mine")
+            .header(org.springframework.http.HttpHeaders.AUTHORIZATION, token).exchange().expectStatus().isOk()
+            .expectBody(MAP).returnResult().getResponseBody();
+        return ((List<Map<String, Object>>) result.get("tasks")).stream()
+            .filter(task -> titleKey.equals(String.valueOf(task.get("titleKey")))).toList();
+    }
+
+    /** The people's rows of a month added up, against everybody's row. */
+    private Map<String, Object> peoplesSum(String month) {
+        return query("SELECT coalesce(sum(questions), 0) AS q, coalesce(sum(input_tokens), 0) AS i, "
+            + "coalesce(sum(output_tokens), 0) AS o, coalesce(sum(cost_usd), 0) AS c FROM qb_help_usage "
+            + "WHERE month = ? AND user_id <> '*'", month).getFirst();
+    }
+
+    private Map<String, Object> everybody(String month) {
+        return query("SELECT questions AS q, input_tokens AS i, output_tokens AS o, cost_usd AS c FROM qb_help_usage "
+            + "WHERE month = ? AND user_id = '*'", month).getFirst();
+    }
+
+    private void assertTotalsAreThePeoplesSum(String month) {
+        Map<String, Object> people = peoplesSum(month);
+        Map<String, Object> all = everybody(month);
+        assertThat(number(all.get("q"))).isEqualTo(number(people.get("q")));
+        assertThat(number(all.get("i"))).isEqualTo(number(people.get("i")));
+        assertThat(number(all.get("o"))).isEqualTo(number(people.get("o")));
+        assertThat(new BigDecimal(String.valueOf(all.get("c")))).isEqualByComparingTo(
+            new BigDecimal(String.valueOf(people.get("c"))));
+    }
+
+    @Test
+    void everybodysRowIsThePeoplesSumAfterAnsweredFailedAndStoppedQuestions() {
+        ask(taker(newTaker("t-fm10-sum-a-" + UUID.randomUUID(), "JP")), null, QbHelp.APP, "Answered?", "wallet");
+        ask(taker(newTaker("t-fm10-sum-b-" + UUID.randomUUID(), "JP")), null, QbHelp.APP, "Answered too?", null);
+        runJobs();
+        CLAUDE.script(MESSAGES, com.jabiz.runtime.test.StubHttpServer.Answer.json(400,
+            "{\"type\":\"error\",\"error\":{\"type\":\"invalid_request_error\",\"message\":\"bad\"}}"));
+        Map<String, Object> failed = ask(taker(newTaker("t-fm10-sum-c-" + UUID.randomUUID(), "JP")), null, QbHelp.APP,
+            "Will this fail?", null);
+        runJobs();
+        assertThat(message(failed.get("messageId"))).containsEntry("job_status", QbHelp.FAILED);
+        String operator = TestTokens.bearer(tokens, "fm10-operator", "external-job.cancel");
+        Map<String, Object> waiting = ask(taker(newTaker("t-fm10-sum-d-" + UUID.randomUUID(), "JP")), null, QbHelp.APP,
+            "Stop me?", null);
+        cancel(operator, jobOf(waiting.get("threadId"), waiting.get("messageId")));
+        runJobs();
+        assertThat(message(waiting.get("messageId"))).containsEntry("job_status", QbHelp.CANCELLED);
+
+        assertThat(number(everybody(month()).get("q"))).isEqualTo(4);
+        assertTotalsAreThePeoplesSum(month());
+    }
+
+    @Test
+    void afterAnAccountIsErasedEverybodysRowStaysAndTheReconciliationStillFindsNoDifference() {
+        String taker = newTaker("t-fm10-erase-" + UUID.randomUUID(), "JP");
+        ask(taker(taker), null, QbHelp.APP, "Soon gone?", null);
+        runJobs();
+        BigDecimal before = new BigDecimal(String.valueOf(everybody(month()).get("c")));
+        runAsSystem("ACCOUNT_ERASE", Map.of("userId", taker, "requestedBy", "it-support"));
+        deliverEvents();
+        // The person's row is erased, everybody's stays: the total is above the people's sum now, never below.
+        assertThat(query("SELECT 1 FROM qb_help_usage WHERE user_id = ?", taker)).isEmpty();
+        assertThat(new BigDecimal(String.valueOf(everybody(month()).get("c")))).isEqualByComparingTo(before);
+        assertThat(number(everybody(month()).get("q"))).isGreaterThan(number(peoplesSum(month()).get("q")));
+        assertThat(items("qb.system.recon-help-usage", TestTokens.bearer(tokens, "fm10-recon",
+            QbPermissions.WALLET_SYSTEM), Map.of())).isEmpty();
+    }
+
+    @Test
+    void aConversationDeletedByTheRetentionBeforeTheAnswerComesAddsOnlyToEverybodysRow() {
+        String taker = newTaker("t-fm10-retention-" + UUID.randomUUID(), "JP");
+        ask(taker(taker), null, QbHelp.APP, "Deleted before the answer?", null);
+        String month = month();
+        long before = number(query("SELECT coalesce(max(questions), 0) AS q FROM qb_help_usage WHERE month = ? "
+            + "AND user_id = '*'", month).getFirst().get("q"));
+        // The conversation goes (a shorter retention than the job's wait would be a test of its own): its rows only.
+        execute("DELETE FROM qb_help_message WHERE thread_id IN (SELECT thread_id FROM qb_help_thread WHERE user_id = ?)",
+            taker);
+        execute("DELETE FROM qb_help_thread WHERE user_id = ?", taker);
+        runJobs();
+        assertThat(query("SELECT 1 FROM qb_help_usage WHERE user_id = ? AND month = ?", taker, month)).isEmpty();
+        assertThat(number(everybody(month).get("q"))).isEqualTo(before + 1);
+    }
+
+    @Test
+    void theCostTaskIsFinancesAndNotTheContentAdministratorsWhoReadTheHelp() {
+        oneHelpQuestion();
+        translationCheck("30");
+        runDaily(usageJob);
+        assertThat(tasksOf(finance(), "task.qb.help.cost-high")).singleElement()
+            .satisfies(task -> assertThat(String.valueOf(task.get("title"))).contains(month()));
+        assertThat(tasksOf(hqHelp(), "task.qb.help.cost-high")).isEmpty();
+    }
 }

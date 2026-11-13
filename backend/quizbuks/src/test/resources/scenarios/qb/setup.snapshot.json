@@ -4398,14 +4398,12 @@
       "processSeqId" : "#op:214"
     }, {
       "paramId" : "#uuid:417",
-      "paramKey" : "qb.help.user-daily",
+      "paramKey" : "qb.reward.kudos.enabled",
       "valueKind" : {
-        "precision" : 4,
-        "scale" : 0,
-        "type" : "numeric"
+        "type" : "bool"
       },
-      "value" : "20",
-      "description" : "The questions to the AI help one person asks a day (0: none)",
+      "value" : "true",
+      "description" : "Whether a publication may offer the reward method PLATFORM (Kudos paid by QuizBuks); off at the first launch (F-F10a)",
       "versionNo" : 1,
       "effectStartTime" : "2026-10-01T00:00:00Z",
       "createdTime" : "2026-10-01T00:00:00Z",
@@ -6052,13 +6050,13 @@
       "targetKey" : "qb.reward.kudos.enabled",
       "effectiveTime" : null,
       "reason" : "First value of the QuizBuks parameter, proposed by QB_SETUP",
-      "status" : "PROPOSED",
+      "status" : "PUBLISHED",
       "proposedBy" : "installer",
-      "publishedBy" : null,
-      "versionNo" : 1,
+      "publishedBy" : "publisher",
+      "versionNo" : 2,
       "effectStartTime" : "2026-10-01T00:00:00Z",
       "createdTime" : "2026-10-01T00:00:00Z",
-      "processSeqId" : "#op:107"
+      "processSeqId" : "#op:215"
     }, {
       "changeId" : "#uuid:521",
       "targetEntity" : "SysParam",
@@ -6068,13 +6066,13 @@
       "targetKey" : "qb.help.user-daily",
       "effectiveTime" : null,
       "reason" : "First value of the QuizBuks parameter, proposed by QB_SETUP",
-      "status" : "PUBLISHED",
+      "status" : "PROPOSED",
       "proposedBy" : "installer",
-      "publishedBy" : "publisher",
-      "versionNo" : 2,
+      "publishedBy" : null,
+      "versionNo" : 1,
       "effectStartTime" : "2026-10-01T00:00:00Z",
       "createdTime" : "2026-10-01T00:00:00Z",
-      "processSeqId" : "#op:215"
+      "processSeqId" : "#op:107"
     }, {
       "changeId" : "#uuid:522",
       "targetEntity" : "SysApprovalRule",

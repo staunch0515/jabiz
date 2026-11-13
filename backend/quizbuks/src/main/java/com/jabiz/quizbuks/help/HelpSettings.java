@@ -16,8 +16,7 @@ import java.math.RoundingMode;
  */
 public record HelpSettings(boolean enabled, String model, int userDaily, long globalMonthlyTokens, int historyTurns,
     int retentionDays, long manualMaxBytes, int pollSeconds, int pollMaxMinutes, int remindDays, int autoCloseDays,
-    int questionMaxLength, int answerMaxLength, int maxLinks, BigDecimal cacheReadWeight,
-    BigDecimal globalMonthlyUsdAlert) {
+    int questionMaxLength, int answerMaxLength, int maxLinks, BigDecimal cacheReadWeight) {
 
     /** The most turns sent with a question, whatever the parameter says. */
     public static final int MAX_HISTORY_TURNS = 20;
@@ -39,8 +38,7 @@ public record HelpSettings(boolean enabled, String model, int userDaily, long gl
             (int) Math.clamp(number(params, QbParams.HELP_QUESTION_MAX_LENGTH), 100, QbHelp.TEXT_LENGTH),
             (int) Math.clamp(number(params, QbParams.HELP_ANSWER_MAX_LENGTH), 500, QbHelp.ANSWER_LENGTH),
             (int) Math.clamp(number(params, QbParams.HELP_MAX_LINKS), 0, HelpAnswers.MAX_LINKS),
-            weight(params, QbParams.HELP_CACHE_READ_WEIGHT),
-            alert(params));
+            weight(params, QbParams.HELP_CACHE_READ_WEIGHT));
     }
 
     /**
@@ -52,19 +50,6 @@ public record HelpSettings(boolean enabled, String model, int userDaily, long gl
         long weighted = cacheReadWeight.multiply(BigDecimal.valueOf(read)).setScale(0, RoundingMode.CEILING)
             .longValue();
         return inputTokens - read + weighted + outputTokens;
-    }
-
-    /** The most the dollar alert may be set to. */
-    public static final BigDecimal MAX_USD_ALERT = new BigDecimal("1000000");
-
-    /** The dollar threshold (F-M10) in cents, 0 to 1,000,000; its declared value while it is not there; 0 is no alert. */
-    static BigDecimal alert(ParamValues params) {
-        BigDecimal value = params == null ? null : params.find(QbParams.HELP_GLOBAL_MONTHLY_USD_ALERT, BigDecimal.class)
-            .orElse(null);
-        if (value == null) {
-            value = new BigDecimal(QbParams.defaultOf(QbParams.HELP_GLOBAL_MONTHLY_USD_ALERT));
-        }
-        return value.max(BigDecimal.ZERO).min(MAX_USD_ALERT).setScale(2, RoundingMode.DOWN);
     }
 
     /** A weight between 0 and 1 a parameter gives; its declared value while it is not there. */

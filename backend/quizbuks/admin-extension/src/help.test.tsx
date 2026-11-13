@@ -78,7 +78,7 @@ beforeEach(() => {
   server.usage = [{ month: '2026-11', questions: 120, failedJobs: 3, cancelledJobs: 1, inputTokens: 900000,
     outputTokens: 50000, cacheReadTokens: 700000, cacheWriteTokens: 40000, estimatedUsd: '1.23', people: 40,
     monthlyTokens: 20000000, percentUsed: 1.4, checkJobs: 2, checksUsd: '6.00', totalUsd: '7.23', alertUsd: '8.00',
-    percentOfAlert: 90.4 }]
+    percentOfAlert: 90.4, reachedAlert: false }]
   server.manuals = [
     { id: 'man-app', version: 3, attributes: { entry: 'app', body: { zh: '学者', ja: 'テイカー', en: 'Takers' },
       publishedBody: { zh: '学者', ja: 'テイカー', en: 'Takers' }, publishedAt: '2026-11-08T00:00:00Z',
@@ -254,9 +254,9 @@ describe('the AI page\'s help usage', () => {
 describe('the AI costs against the dollar alert (F-M10)', () => {
   it('says when a month reached the alert, and shows no share (empty, not 0) when there is no alert', async () => {
     server.usage = [
-      { ...server.usage[0], month: '2026-11', totalUsd: '9.10', percentOfAlert: 113.8 },
+      { ...server.usage[0], month: '2026-11', totalUsd: '9.10', percentOfAlert: 113.8, reachedAlert: true },
       { ...server.usage[0], month: '2026-10', checkJobs: 0, checksUsd: '0.00', totalUsd: '1.23', alertUsd: '0.00',
-        percentOfAlert: null },
+        percentOfAlert: null, reachedAlert: false },
     ]
     renderAt('/qb/ai', <Route path="/qb/ai" element={<AiPage />} />)
     const section = await screen.findByTestId('help-usage-section')

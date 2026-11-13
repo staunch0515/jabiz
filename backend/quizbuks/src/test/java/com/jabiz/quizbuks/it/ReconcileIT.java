@@ -80,7 +80,7 @@ class ReconcileIT extends TopUpItSupport {
         List<Map<String, Object>> found = items(run.get("run_id")).stream()
             .filter(item -> "HELP_USAGE_TOTAL".equals(item.get("check_code"))).toList();
         assertThat(found).extracting(item -> item.get("reference")).containsExactlyInAnyOrder("2031-06:questions",
-            "2031-06:outputTokens", "2031-06:costCents");
+            "2031-06:outputTokens", "2031-06:costMicros");
         assertThat(found).allSatisfy(item -> assertThat(new java.math.BigDecimal(String.valueOf(item.get("difference"))))
             .isNegative());
     }

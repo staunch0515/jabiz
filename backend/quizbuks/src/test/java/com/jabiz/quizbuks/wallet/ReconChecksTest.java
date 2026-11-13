@@ -219,14 +219,18 @@ class ReconChecksTest {
     @Test
     void theHelpUsageTotalCheckIsReadFromItsTemplateAsADifference() {
         assertThat(ReconChecks.ALL).contains(ReconChecks.HELP_USAGE_TOTAL);
-        assertThat(ReconChecks.NOTES).doesNotContain(ReconChecks.HELP_USAGE_TOTAL);
+        assertThat(ReconChecks.NOTES).contains(ReconChecks.HELP_USAGE_TOTAL);
         List<ReconChecks.Item> items = ReconChecks.coded(List.of(Map.of("checkCode", "HELP_USAGE_TOTAL",
-            "reference", "2026-10:costCents", "expected", new BigDecimal("150"), "actual", new BigDecimal("125"))));
+            "reference", "2026-10:costMicros", "expected", new BigDecimal("1500000"), "actual", new BigDecimal("1250000"))));
         assertThat(items).singleElement().satisfies(item -> {
             assertThat(item.check()).isEqualTo("HELP_USAGE_TOTAL");
-            assertThat(item.reference()).isEqualTo("2026-10:costCents");
-            assertThat(item.difference()).isEqualByComparingTo("-25");
+            assertThat(item.reference()).isEqualTo("2026-10:costMicros");
+            assertThat(item.difference()).isEqualByComparingTo("-250000");
         });
-        assertThat(ReconChecks.result(items, 10).status()).isEqualTo(ReconChecks.DIFF);
+        // A note, not a difference: the run stays OK (no alert, the journal export is not stopped, no task every day).
+        ReconChecks.Result result = ReconChecks.result(items, 10);
+        assertThat(result.status()).isEqualTo(ReconChecks.OK);
+        assertThat(result.differences()).isZero();
+        assertThat(result.items()).hasSize(1);
     }
 }

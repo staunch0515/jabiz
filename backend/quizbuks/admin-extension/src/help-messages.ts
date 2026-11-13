@@ -74,7 +74,7 @@ export const helpMessages = {
       checksValue: '{{count}} · {{usd}} USD',
       noAlert: 'No alert',
       ofAlertValue: '{{percent}}%',
-      reached: 'The estimated AI dollars of {{months}} have reached the alert. Finance has a task; look at the usage, and at the provider’s bill.',
+      reached: 'The estimated AI dollars of {{months}} have reached the alert. The daily check makes finance a task; look at the usage, and at the provider’s bill.',
       used: '{{percent}}% of {{tokens}}',
     },
     manuals: {
@@ -175,7 +175,7 @@ export const helpMessages = {
       checksValue: '{{count}} 次 · {{usd}} 美元',
       noAlert: '不提醒',
       ofAlertValue: '{{percent}}%',
-      reached: '{{months}} 的 AI 估算费用已达到提醒线。财务已收到待办：请查看用量，并与 AI 提供方的账单对照。',
+      reached: '{{months}} 的 AI 估算费用已达到提醒线。每日检查会给财务建待办：请查看用量，并与 AI 提供方的账单对照。',
       used: '{{tokens}} 的 {{percent}}%',
     },
     manuals: {
@@ -275,7 +275,7 @@ export const helpMessages = {
       checksValue: '{{count}} 回・{{usd}} USD',
       noAlert: '通知なし',
       ofAlertValue: '{{percent}}%',
-      reached: '{{months}} の AI の概算費用が通知の基準に達しました。経理にタスクが届いています。使用量と AI 提供元の請求を確認してください。',
+      reached: '{{months}} の AI の概算費用が通知の基準に達しました。毎日の確認で経理にタスクが作られます。使用量と AI 提供元の請求を確認してください。',
       used: '{{tokens}} の {{percent}}%',
     },
     manuals: {

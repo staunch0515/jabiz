@@ -193,7 +193,7 @@ export function HelpUsageSection({ month }: { month: string | null }) {
       </div>
     )
   }
-  const reached = usage.data?.filter((row) => row.percentOfAlert != null && row.percentOfAlert >= 100) ?? []
+  const reached = usage.data?.filter((row) => row.reachedAlert) ?? []
   return (
     <Section title={t('help.usage.title')} testId="help-usage-section">
       <p className="text-muted-foreground text-sm">{t('help.usage.description')}</p>

@@ -4,7 +4,7 @@ description: >-
   F-M10: the estimated dollars the platform paid for AI in one month, the AI help (everybody's row of the month) and
   the reviewers' translation checks (the jobs of kind TRANSLATION_CHECK finished in the month) apart, the dollar alert
   now in effect, and whether the month's task exists already (open or closed). Read by the help's job outcomes (the
-  gauge), the daily check qb.help-usage (the task) and the reconciliation
+  gauge, also from the completion of a translation check) and the daily check qb.help-usage (the task)
 entities: [QbHelpUsage, QbAiJob, SysTask, SysParam]
 datasets:
   QbHelpUsage: urn:jabiz:dataset:default:QbHelpUsage

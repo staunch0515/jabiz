@@ -166,6 +166,9 @@ public final class HelpUpkeep {
                 })
                 .outputMapper(ctx -> new UsageCheckOutput(ctx.contains(HelpUsageGauge.PERCENT)
                     ? ((Number) ctx.get(HelpUsageGauge.PERCENT)).longValue() : 0))
+                // One check at a time (F-M10 review L2): two of them (a replay on another instance, a manual run beside
+                // the scheduled one) would each see no task of the month and make two.
+                .step("Take the check's turn", HoldLock.<ProcessContext>exclusive(ctx -> HelpCosts.LOCK))
                 .step("Load the monthly tokens", LoadParams.<ProcessContext>optional(ProcessContext::opTime, PARAMS,
                     QbParams.HELP_GLOBAL_MONTHLY_TOKENS, QbParams.HELP_CACHE_READ_WEIGHT))
                 .step("Load everybody's usage", QueryEntities.<ProcessContext>of(QbHelp.defaultDataset(QbHelp.USAGE),

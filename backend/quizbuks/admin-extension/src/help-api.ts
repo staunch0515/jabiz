@@ -154,6 +154,8 @@ export interface HelpUsageRow {
   totalUsd: string | null
   alertUsd: string | null
   percentOfAlert: number | null
+  /** Whether the unrounded dollars reached the alert (an alert of 0 never). */
+  reachedAlert: boolean
 }
 
 export async function readHelpUsage(month: string | null): Promise<HelpUsageRow[]> {
@@ -176,6 +178,7 @@ export async function readHelpUsage(month: string | null): Promise<HelpUsageRow[
     totalUsd: str(row.totalUsd),
     alertUsd: str(row.alertUsd),
     percentOfAlert: row.percentOfAlert == null ? null : num(row.percentOfAlert),
+    reachedAlert: num(row.reachedAlert) > 0,
   }))
 }
 

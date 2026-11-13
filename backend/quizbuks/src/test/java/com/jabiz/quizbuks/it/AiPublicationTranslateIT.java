@@ -22,6 +22,9 @@ import static org.assertj.core.api.Assertions.assertThat;
  */
 class AiPublicationTranslateIT extends AiItSupport {
 
+    @org.springframework.beans.factory.annotation.Autowired
+    com.jabiz.quizbuks.help.HelpUsageGauge gauge;
+
     @BeforeEach
     void freshDay() {
         aiOn();
@@ -115,9 +118,14 @@ class AiPublicationTranslateIT extends AiItSupport {
             "language", "zh"), 403);
         assertThat(codes(refused(AiProcesses.TRANSLATION_CHECK_REQUEST, reviewer(), body("publicationId",
             publicationId, "language", "ja"), 422))).contains("QB_TRANSLATION_LANGUAGE");
+        // F-M10: the platform pays for the check; what it costs counts towards the dollar alert of the help, and the
+        // gauge moves as the check finishes (not at the next daily check). A small alert makes the cost show.
+        setParam(com.jabiz.quizbuks.setup.QbParams.HELP_GLOBAL_MONTHLY_USD_ALERT, "0.01");
+        long gaugeBefore = gauge.costValue();
         Object aiJobId = run(AiProcesses.TRANSLATION_CHECK_REQUEST, reviewer(), body("publicationId", publicationId,
             "language", "zh")).get("aiJobId");
         runJobs();
+        assertThat(gauge.costValue()).isGreaterThan(gaugeBefore);
 
         Map<String, Object> job = job(aiJobId);
         assertThat(job).containsEntry("kind", QbAi.KIND_TRANSLATION_CHECK).containsEntry("status", QbAi.READY)

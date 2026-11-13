@@ -97,17 +97,6 @@ class HelpCostsTest {
     }
 
     @Test
-    void theAlertIsWithinZeroAndAMillionAndItsDeclaredValueWhileItIsNotThere() {
-        assertThat(HelpSettings.of(null).globalMonthlyUsdAlert()).isEqualByComparingTo(usd("8"));
-        assertThat(HelpSettings.of(new ParamValues(Instant.EPOCH, Map.of(QbParams.HELP_GLOBAL_MONTHLY_USD_ALERT, usd("12.345"))))
-            .globalMonthlyUsdAlert()).isEqualByComparingTo(usd("12.34"));
-        assertThat(HelpSettings.of(new ParamValues(Instant.EPOCH, Map.of(QbParams.HELP_GLOBAL_MONTHLY_USD_ALERT, usd("-3"))))
-            .globalMonthlyUsdAlert()).isEqualByComparingTo(BigDecimal.ZERO);
-        assertThat(HelpSettings.of(new ParamValues(Instant.EPOCH, Map.of(QbParams.HELP_GLOBAL_MONTHLY_USD_ALERT, usd("99999999"))))
-            .globalMonthlyUsdAlert()).isEqualByComparingTo(usd("1000000"));
-    }
-
-    @Test
     void theDailyQuestionsAreControlledAndTheAlertIsNot() {
         assertThat(QbParams.CONTROLLED).contains(QbParams.HELP_USER_DAILY).doesNotContain(
             QbParams.HELP_GLOBAL_MONTHLY_USD_ALERT);

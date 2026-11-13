@@ -141,8 +141,14 @@ public final class ReconChecks {
     /** Codes no longer reported that runs written before may still name: readable, never written. */
     public static final List<String> RETIRED = List.of(DISTRIBUTION_PRICE_OUT_OF_RANGE);
 
-    /** The checks that only note something: a run with notes alone is {@code OK}. */
-    public static final Set<String> NOTES = Set.of(TAKER_WALLET_LAG, DISTRIBUTION_AT_FLOOR);
+    /**
+     * The checks that only note something: a run with notes alone is {@code OK}. {@link #HELP_USAGE_TOTAL} is one until
+     * the reconciliation grades its checks (F-M14): as a difference it would raise the page-level alert
+     * {@code qb-reconcile-diff}, stop the monthly journal export (QB_JOURNAL_RECON_NOT_OK) and make finance a task every
+     * day, none of which the help's counters deserve; it does not mend itself either (the rows are erased or kept as they
+     * are). It becomes an "attention" check owned by {@code qb.admin.help.gaps} when F-M14 is in.
+     */
+    public static final Set<String> NOTES = Set.of(TAKER_WALLET_LAG, DISTRIBUTION_AT_FLOOR, HELP_USAGE_TOTAL);
 
     public static final String OK = "OK";
     public static final String DIFF = "DIFF";

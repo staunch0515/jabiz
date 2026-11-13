@@ -39,6 +39,9 @@ import com.jabiz.runtime.process.steps.LoadEntity;
 import com.jabiz.runtime.process.steps.LoadParams;
 import com.jabiz.runtime.process.steps.QueryEntities;
 import com.jabiz.runtime.process.steps.RunTemplate;
+import com.jabiz.quizbuks.help.HelpCostGauge;
+import com.jabiz.quizbuks.help.HelpUsageGauge;
+import com.jabiz.process.NoMetadata;
 import com.jabiz.runtime.process.steps.StartExternalJob;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.AssertTrue;
@@ -856,9 +859,17 @@ public final class AiProcesses {
                     ctx -> ctx.get(INPUT, ExternalJobCompletion.class).jobId(),
                     ctx -> ctx.get(INPUT, ExternalJobCompletion.class).requestedBy(),
                     ctx -> ctx.get(INPUT, ExternalJobCompletion.class).finishedTime(), true))
+                // F-M10: a reviewer's translation check is paid by the platform and counts towards the dollar alert: the
+                // month's dollars are read before this job's cost is written, and its cost is added to them.
+                .step("Read the platform's AI dollars of the month", HelpCostGauge.<ProcessContext>read(
+                    ctx -> unfinishedCheck(ctx, ctx.get(INPUT, ExternalJobCompletion.class).requestedBy()),
+                    ctx -> ctx.get(INPUT, ExternalJobCompletion.class).finishedTime(), zone))
                 .compute("Keep the candidates", (metadata, ctx) -> complete(ctx, zone))
                 .step("Ask the sponsor to review the draft", CreateTask.<ProcessContext>when(
-                    SiteProfileProcesses::draftReady, SiteProfileProcesses::reviewTask)));
+                    SiteProfileProcesses::draftReady, SiteProfileProcesses::reviewTask))
+                .compute("Work out the share of the alert", (metadata, ctx) -> HelpCostGauge.share(ctx,
+                    ctx.get(INPUT, ExternalJobCompletion.class).finishedTime(), zone, checkCost(ctx)))
+                .afterCommit("Show the dollars on the gauge", HelpUsageGauge.class, NoMetadata.INSTANCE));
     }
 
     public static ProcessDefinition<ExternalJobFailure, JobOutput, ProcessContext> failed(ZoneId zone) {
@@ -876,7 +887,13 @@ public final class AiProcesses {
                     ctx -> ctx.get(INPUT, ExternalJobFailure.class).jobId(),
                     ctx -> ctx.get(INPUT, ExternalJobFailure.class).requestedBy(),
                     ctx -> ctx.get(INPUT, ExternalJobFailure.class).finishedTime(), false))
-                .compute("Record the failure", (metadata, ctx) -> fail(ctx, zone)));
+                .step("Read the platform's AI dollars of the month", HelpCostGauge.<ProcessContext>read(
+                    ctx -> unfinishedCheck(ctx, ctx.get(INPUT, ExternalJobFailure.class).requestedBy()),
+                    ctx -> ctx.get(INPUT, ExternalJobFailure.class).finishedTime(), zone))
+                .compute("Record the failure", (metadata, ctx) -> fail(ctx, zone))
+                .compute("Work out the share of the alert", (metadata, ctx) -> HelpCostGauge.share(ctx,
+                    ctx.get(INPUT, ExternalJobFailure.class).finishedTime(), zone, checkCost(ctx)))
+                .afterCommit("Show the dollars on the gauge", HelpUsageGauge.class, NoMetadata.INSTANCE));
     }
 
     static ProcessContext context(com.jabiz.process.ProcessStart start, Object input) {
@@ -1066,8 +1083,22 @@ public final class AiProcesses {
         }
         ctx.changes().update(QbAi.JOB, job.id(), job.version(), values);
         addUsage(ctx, completion.requestedBy(), month, usage, cost, failed);
+        ctx.put(CHECK_COST, cost);
         ctx.put(OUTPUT, new JobOutput(String.valueOf(job.id()), (String) values.getOrDefault("status",
             job.get("status"))));
+    }
+
+    /** Set to the cost when the outcome finished a reviewer's translation check (it counts towards the dollar alert). */
+    static final String CHECK_COST = "checkCost";
+
+    static java.math.BigDecimal checkCost(ProcessContext ctx) {
+        return ctx.contains(CHECK_COST) ? (java.math.BigDecimal) ctx.get(CHECK_COST) : null;
+    }
+
+    /** Whether the outcome is of a reviewer's translation check still unfinished (the dollars are read for it only). */
+    static boolean unfinishedCheck(ProcessContext ctx, String requestedBy) {
+        EntityInstance job = unfinished(ctx, requestedBy);
+        return job != null && QbAi.KIND_TRANSLATION_CHECK.equals(job.get("kind"));
     }
 
     static void fail(ProcessContext ctx, ZoneId zone) {
@@ -1086,6 +1117,9 @@ public final class AiProcesses {
         }
         ctx.changes().update(QbAi.JOB, job.id(), job.version(), values);
         addUsage(ctx, failure.requestedBy(), AiLimits.month(failure.finishedTime(), zone), usage, cost, true);
+        if (QbAi.KIND_TRANSLATION_CHECK.equals(job.get("kind"))) {
+            ctx.put(CHECK_COST, cost);
+        }
         ctx.put(OUTPUT, new JobOutput(String.valueOf(job.id()), (String) values.getOrDefault("status",
             job.get("status"))));
     }
