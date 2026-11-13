@@ -119,7 +119,7 @@ public interface StorageEngine {
 
     /**
      * Total of {@code column} over the rows matching the plan's condition, 0 when none match; sorting and paging of the
-     * plan are ignored. The column comes from metadata (validated by the caller with {@code SqlIdentifiers.require}).
+     * plan are ignored. The column comes from metadata; the engine validates it as an identifier.
      */
     Mono<java.math.BigDecimal> sum(PhysicalQueryPlan plan, String column);
 

@@ -1039,14 +1039,13 @@ public class DatasetEntityManager {
      *
      * @throws IllegalArgumentException when the entity has no such field
      */
-    public Mono<java.math.BigDecimal> sum(DatasetDefinition dataset, EntityDefinition def, EntityQuery query,
-        String field) {
-        com.jabiz.entity.FieldDefinition fd = def.findField(field)
+    public Mono<BigDecimal> sum(DatasetDefinition dataset, EntityDefinition def, EntityQuery query, String field) {
+        FieldDefinition fd = def.findField(field)
             .orElseThrow(() -> new IllegalArgumentException("Entity " + def.name + " has no field " + field));
-        String column = com.jabiz.query.SqlIdentifiers.require(fd.physicalColumn());
-        return RequestContexts.current().flatMap(request -> readEngine(dataset)
-            .sum(queryCompiler.compile(dataset, def, query, dataset.scope().resolve(request),
-                timeSlice(dataset, def, null, null)), column));
+        return observations.mono(PlatformObservations.DATASET_QUERY, "sum " + def.name, tags(dataset),
+            RequestContexts.current().flatMap(request -> readEngine(dataset)
+                .sum(queryCompiler.compile(dataset, def, query, dataset.scope().resolve(request),
+                    timeSlice(dataset, def, null, null)), fd.physicalColumn())));
     }
 
     /**

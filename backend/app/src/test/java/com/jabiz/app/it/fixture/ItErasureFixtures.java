@@ -10,7 +10,8 @@ import org.springframework.context.annotation.Configuration;
 
 /**
  * Many rows per user for the loads of the notices before an account is deleted (ROADMAP 17zz22): a status, an amount, a
- * region the second dataset's scope fixes, and a sensitive and a masked field the loads must not filter on nor add up.
+ * region the second dataset's scope fixes, a flag (no {@code IN} on it), and a sensitive and a masked field the loads
+ * must not filter on nor add up.
  */
 public final class ItErasureFixtures extends BaseEntityDefinitions {
 
@@ -29,6 +30,7 @@ public final class ItErasureFixtures extends BaseEntityDefinitions {
         eb.field("region", f -> f.physicalColumn("f_region").asText(10));
         eb.field("amount", f -> f.physicalColumn("f_amount").asMonetary("JPY", 0));
         eb.field("note", f -> f.physicalColumn("f_note").asText(100));
+        eb.field("flag", f -> f.physicalColumn("f_flag").asBool());
         eb.field("secret", f -> f.physicalColumn("f_secret").asText(100).sensitive());
         eb.field("card", f -> f.physicalColumn("f_card").asText(30).masked("it.card.reveal", MaskStyle.LAST4));
         eb.field("rowVersion", rowVersion("f_version"));

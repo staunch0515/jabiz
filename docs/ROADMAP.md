@@ -5624,9 +5624,9 @@ QuizBuks 的 #545、#546、#547 用了 43.5–45 分钟，#545 到点被取消�
 | 17zz22-1 | core `ErasureLoad`：读法 `ROWS`（`of`，照旧）、`COUNT`（`count`）、`SUM`（`sum(…, 字段)`）；`.where(字段, 值…)` 加固定条件（一个值为等于，几个为 `IN`，几个条件都要成立；值是代码中的常量）。原来的三参数构造与 `of` 不变 |
 | 17zz22-2 | core `ErasureSubject`：加 `counts`、`sums`，以 `count(名)`（long）、`sum(名)`（BigDecimal）取用；名字没有声明或读法不对时抛错，不给 0。原来的两参数构造保留 |
 | 17zz22-3 | runtime：`ErasureNotices` 按读法读：整行照旧至多 100 行（多取一行发现超限）、个数用 `DatasetEntityManager.count`、合计用新的 `DatasetEntityManager.sum` → `StorageEngine.sum`（`SELECT coalesce(sum(列), 0) …`，列名来自元数据并经 `SqlIdentifiers.require`，值都参数绑定）；都在数据视图的范围内、时态实体读当前版本 |
-| 17zz22-4 | 启动检查（`AccountDeletionChecks`，类别 `ERASURE`）：条件或合计的字段不存在、是敏感或遮蔽的字段、条件的值字段保存不了（字典外的码等）、合计的字段不是数值或金额、同名的预读读法或条件不同 → 错误 |
+| 17zz22-4 | 启动检查（`AccountDeletionChecks`，类别 `ERASURE`）：条件或合计的字段不存在、是敏感或遮蔽的字段、条件要用的运算（一个值为等于、几个为 `IN`）字段不允许、条件的值字段保存不了（字典外的码等）、合计的字段不是数值或金额、同名的预读读法或条件不同 → 错误 |
 | 17zz22-5 | 语句数：每个预读一条语句（与原来相同），个数与合计只返回一行、与行数无关；示范应用 `CustomerPersonalData` 改用 `count` |
-| 17zz22-6 | 测试：core `ErasureLoadTest`；`ErasureLoadTotalsIT`（测试夹具 `ItErasureFixtures`、测试迁移 V1021：一人 150 行，个数、按状态的个数、合计、两个条件、没有行的合计为 0，五个预读五条语句；数据视图的固定范围照旧；读整行 150 行照旧报错，加条件后读得到 30 行；时态实体的个数；启动检查的九种错误）；`AccountDeletionIT`、`ErasureIT` 照旧 |
+| 17zz22-6 | 测试：core `ErasureLoadTest`；`ErasureLoadTotalsIT`（测试夹具 `ItErasureFixtures`、测试迁移 V1021：一人 150 行，个数、按状态的个数、合计、两个条件、没有行的合计为 0，五个预读五条语句；数据视图的固定范围照旧；读整行 150 行照旧报错，加条件后读得到 30 行；时态实体的个数；启动检查的十种错误；同名的预读条件顺序不同或 `10` 与 `10L` 视为相同）；`AccountDeletionIT`、`ErasureIT` 照旧 |
 | 17zz22-7 | 文档：设计 10 §17.3（示例、预读、启动检查、测试）、21 §2.5、决策 D62 后加一行带日期的说明（不改变 D62 的规则）、`CLAUDE.md` 第 4 节"账号删除" |
 
 不做：`SignInLoad`（登录与注册守卫的预读）的 100 行上限与按参数的条件不变；几个预读不合成一条语句。

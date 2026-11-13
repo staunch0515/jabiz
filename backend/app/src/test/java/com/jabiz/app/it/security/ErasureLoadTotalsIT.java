@@ -188,13 +188,24 @@ class ErasureLoadTotalsIT extends SecurityItSupport {
             ErasureLoad.sum("g", ItErasureFixtures.DATASET, "userId", "nothing"),
             ErasureLoad.sum("h", ItErasureFixtures.DATASET, "userId", "card"),
             ErasureLoad.count("i", ItErasureFixtures.DATASET, "userId").where("status", "OPEN"),
+            // IN on a flag: its kind allows only an equality.
+            ErasureLoad.count("j", ItErasureFixtures.DATASET, "userId").where("flag", true, false),
+            ErasureLoad.count("k", ItErasureFixtures.DATASET, "userId").where("flag", true),
             ErasureLoad.sum("ok", ItErasureFixtures.DATASET, "userId", "amount").where("status", "OPEN", "USED")),
             new AtomicReference<>());
-        // The same name with another condition elsewhere.
+        // The same name with another condition elsewhere; the same conditions in another order, and 10L for 10, are
+        // the same load.
         PersonalDataEraser other = eraser(List.of(
-            ErasureLoad.count("i", ItErasureFixtures.DATASET, "userId").where("status", "USED")),
+            ErasureLoad.count("i", ItErasureFixtures.DATASET, "userId").where("status", "USED"),
+            ErasureLoad.sum("ok", ItErasureFixtures.DATASET, "userId", "amount").where("status", "USED", "OPEN")),
             new AtomicReference<>());
-        PersonalDataErasers erasers = erasers(broken, other);
+        PersonalDataEraser same = eraser(List.of(
+            ErasureLoad.count("m", ItErasureFixtures.DATASET, "userId").where("status", "OPEN").where("amount", 10)),
+            new AtomicReference<>());
+        PersonalDataEraser reordered = eraser(List.of(
+            ErasureLoad.count("m", ItErasureFixtures.DATASET, "userId").where("amount", 10L).where("status", "OPEN")),
+            new AtomicReference<>());
+        PersonalDataErasers erasers = erasers(broken, other, same, reordered);
         String location = "PersonalDataEraser " + broken.getClass().getName();
         String otherLocation = "PersonalDataEraser " + other.getClass().getName();
         MockEnvironment development = new MockEnvironment();
@@ -215,6 +226,8 @@ class ErasureLoadTotalsIT extends SecurityItSupport {
                 "ERROR " + location + ": load f: entity ItErasurePoint adds up secret, a sensitive or masked field",
                 "ERROR " + location + ": load g: entity ItErasurePoint has no field nothing (to add up)",
                 "ERROR " + location + ": load h: entity ItErasurePoint adds up card, a sensitive or masked field",
+                "ERROR " + location + ": load j: entity ItErasurePoint: the condition on flag needs IN, which the"
+                    + " field does not allow",
                 "ERROR " + otherLocation + ": load i is declared with another dataset, field, kind or conditions"
                     + " elsewhere");
     }

@@ -6,6 +6,7 @@ CREATE TABLE it_erasure_point (
     f_region  varchar(10),
     f_amount  numeric(19, 0),
     f_note    varchar(100),
+    f_flag    boolean,
     f_secret  varchar(100),
     f_card    varchar(30),
     f_version bigint        NOT NULL DEFAULT 1

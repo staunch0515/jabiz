@@ -85,12 +85,15 @@ public class ErasureNotices {
     private Mono<ErasureSubject> load(String userId) {
         Map<String, ErasureLoad> loads = new LinkedHashMap<>();
         erasers.all().forEach(eraser -> eraser.loads().forEach(load -> loads.putIfAbsent(load.name(), load)));
-        Map<String, List<Map<String, Object>>> rows = new LinkedHashMap<>();
-        Map<String, Long> counts = new LinkedHashMap<>();
-        Map<String, BigDecimal> sums = new LinkedHashMap<>();
-        return Flux.fromIterable(loads.values())
-            .concatMap(load -> read(load, userId, rows, counts, sums))
-            .then(Mono.fromSupplier(() -> new ErasureSubject(userId, rows, counts, sums)));
+        // The maps are made for each subscription: a retry starts empty.
+        return Mono.defer(() -> {
+            Map<String, List<Map<String, Object>>> rows = new LinkedHashMap<>();
+            Map<String, Long> counts = new LinkedHashMap<>();
+            Map<String, BigDecimal> sums = new LinkedHashMap<>();
+            return Flux.fromIterable(loads.values())
+                .concatMap(load -> read(load, userId, rows, counts, sums))
+                .then(Mono.fromSupplier(() -> new ErasureSubject(userId, rows, counts, sums)));
+        });
     }
 
     private Mono<Void> read(ErasureLoad load, String userId, Map<String, List<Map<String, Object>>> rows,
@@ -100,24 +103,28 @@ public class ErasureNotices {
         EntityDefinition def = definitions.getOrThrow(dataset.targetEntityType());
         return switch (load.kind()) {
             // One past the limit, so that more rows than allowed are noticed instead of cut off.
-            case ROWS -> entities.queryAll(dataset, def, query(load, userId, ErasureSubject.MAX_ROWS + 1))
+            case ROWS -> entities.queryAll(dataset, def, EntityQuery.builder().where(condition(load, userId))
+                    .limit(ErasureSubject.MAX_ROWS + 1).build())
                 .map(EntityInstance::attributes).collectList()
                 .flatMap(found -> found.size() > ErasureSubject.MAX_ROWS
                     ? Mono.error(new IllegalStateException("Load " + load.name() + " found more than "
                         + ErasureSubject.MAX_ROWS + " rows"))
                     : Mono.fromRunnable(() -> rows.put(load.name(), List.copyOf(found))));
-            case COUNT -> entities.count(dataset, def, query(load, userId, 1))
+            // A count and a total ignore paging: the query's limit is the builder's default and has no effect.
+            case COUNT -> entities.count(dataset, def, EntityQuery.builder().where(condition(load, userId)).build())
                 .doOnNext(count -> counts.put(load.name(), count)).then();
-            case SUM -> entities.sum(dataset, def, query(load, userId, 1), load.field())
+            case SUM -> entities.sum(dataset, def, EntityQuery.builder().where(condition(load, userId)).build(),
+                    load.field())
                 .doOnNext(sum -> sums.put(load.name(), sum)).then();
         };
     }
 
     /**
      * The user's rows, with the load's fixed conditions: the user id as text and the conditions' constants, converted
-     * to the fields' types by the query compiler. No order: none is needed to count, add up or show a few rows.
+     * to the fields' types by the query compiler (one value an equality, several an {@code IN}). No order: none is
+     * needed to count, add up or show a few rows.
      */
-    static EntityQuery query(ErasureLoad load, String userId, int limit) {
+    public static QueryPredicate condition(ErasureLoad load, String userId) {
         List<QueryPredicate> all = new ArrayList<>();
         all.add(new QueryPredicate.Eq(load.userField(), userId));
         for (ErasureLoad.Condition condition : load.conditions()) {
@@ -125,8 +132,7 @@ public class ErasureNotices {
                 ? new QueryPredicate.Eq(condition.field(), condition.values().getFirst())
                 : new QueryPredicate.In(condition.field(), condition.values()));
         }
-        QueryPredicate where = all.size() == 1 ? all.getFirst() : new QueryPredicate.And(all);
-        return EntityQuery.builder().where(where).limit(limit).build();
+        return all.size() == 1 ? all.getFirst() : new QueryPredicate.And(all);
     }
 
     /** The codes of the notices that {@code acknowledged} does not name. */
