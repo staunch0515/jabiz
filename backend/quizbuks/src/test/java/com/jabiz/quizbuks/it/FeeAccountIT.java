@@ -138,7 +138,7 @@ class FeeAccountIT extends PlayItSupport {
     /** What the daily check finds for the sponsor (none: the account agrees with its lots and payments). */
     List<Map<String, Object>> differences(String sponsor) {
         String system = TestTokens.bearer(tokens, "recon-test", QbPermissions.WALLET_SYSTEM);
-        List<Map<String, Object>> found = new java.util.ArrayList<>(items("qb.system.recon-fee-account", system, Map.of()));
+        List<Map<String, Object>> found = new java.util.ArrayList<>(feeAccountItems(system, Map.of()));
         found.addAll(items("qb.system.recon-fee-receivable", system, Map.of()));
         return found.stream().filter(row -> sponsor.equals(row.get("sponsorId"))).toList();
     }

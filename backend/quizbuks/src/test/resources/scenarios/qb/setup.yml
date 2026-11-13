@@ -38,8 +38,7 @@ steps:
         qb.fee-credit.expiry-notice-days, qb.sponsor.bottom-bar,
         qb.ai.site-profile.daily, qb.ai.site-profile.max-pages, qb.ai.site-profile.questions,
         qb.ai.site-profile.options, qb.ai.site-profile.materials-max, qb.ai.site-profile.handle-alternatives,
-        qb.sponsor-verification.link-hours, qb.prepayment.release.overdue-days, qb.content.import.batch-bytes,
-        qb.audience.refund.missing-after-hours]
+        qb.sponsor-verification.link-hours, qb.content.import.batch-bytes]
       paramsProposed: [qb.creator-fee-rate, qb.transfer.threshold, qb.transfer.review-above, qb.transfer.enabled,
         qb.review.sponsor.auto, qb.review.publication.auto, qb.topup.min, qb.topup.max, qb.transfer.fee,
         qb.transfer.hold-days, qb.topup.new-sponsor.days, qb.topup.new-sponsor.max-total,
@@ -68,6 +67,7 @@ steps:
         qb.distribution.billing.enabled, qb.distribution.rate.min, qb.distribution.rate.max, qb.distribution.unit-floor.min,
         qb.distribution.unit-floor.max, qb.distribution.unit-ceiling.max, qb.distribution.minimum-deposit.max,
         qb.distribution.final.end-grace-sec, qb.distribution.unsettled-after-hours, qb.distribution.final-missing-after-hours,
+        qb.prepayment.release.overdue-days, qb.audience.refund.missing-after-hours,
         qb.reward.kudos.enabled]
       rulesProposed: [qb.publication.review, qb.sponsor.review, qb.transfer.review, qb.topup-bank.review,
         qb.topup-manual.review, qb.operator-settlement.review, qb.sponsor-page.review, qb.operator-plan.review, qb.operator-withdrawal.review, qb.fee-request.review,

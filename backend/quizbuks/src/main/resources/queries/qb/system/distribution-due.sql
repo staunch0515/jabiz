@@ -21,14 +21,14 @@ permissions: [qb.fee.system]
 ---*/
 -- Due (F-M.md §9.5): a sponsor's publication with a price per start frozen, on (started and approved) before the month's end,
 -- not ended before the month's start, without a final settlement; and without a row of the month. The same condition
--- is in qb.system.fee-invoices-due and qb.system.recon-fee-account (DISTRIBUTION_UNSETTLED): change them together.
+-- is in qb.system.fee-invoices-due and qb.system.recon-prepayments (DISTRIBUTION_UNSETTLED): change them together.
 -- The item reads everything again under the sponsor's wallet lock.
 SELECT CAST(p.{{QbPublication.publicationId}} AS text) AS publicationId, p.{{QbPublication.publisherId}} AS sponsorId
 FROM {{QbPublication}} p
 JOIN {{QbPublicationCard}} c ON c.{{QbPublicationCard.publicationId}} = p.{{QbPublication.publicationId}}
 WHERE p.{{QbPublication.distributionUnit}} IS NOT NULL
   AND p.{{QbPublication.publisherKind}} = 'SPONSOR'
-  -- When it went on (N1): greatest(its start, its approval); the same expression in qb.system.distribution-due, qb.system.fee-invoices-due and qb.system.recon-fee-account (DistributionDueConditionTest).
+  -- When it went on (N1): greatest(its start, its approval); the same expression in qb.system.distribution-due, qb.system.fee-invoices-due and qb.system.recon-prepayments (DistributionDueConditionTest).
   AND greatest(c.{{QbPublicationCard.startAt}}, p.{{QbPublication.approvedAt}}) < :periodEnd
   AND (c.{{QbPublicationCard.endedAt}} IS NULL OR c.{{QbPublicationCard.endedAt}} >= :periodStart)
   AND NOT EXISTS (SELECT 1 FROM {{QbDistributionSettlement}} s
