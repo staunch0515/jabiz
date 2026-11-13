@@ -601,6 +601,7 @@ FROM pg_stat_statements ORDER BY total_exec_time DESC LIMIT 20;
 - **方案**（Q48e-2）：五种方案（每月固定费、平台分成；受控参数 `qb.operator.plan.<1..5>.fee|share`，`QB_SETUP` 提出 0/50%、20,000/40%、40,000/30%、60,000/20%、100,000/10%）。新运营商为方案 1；总部在运营商页面提出从以后某月起的方案，另一位管理员（`qb.topup.bank.approve`）在待办中批准后生效。
 - **月结算**（Q48b、Q48e-2）：每月 2 日 01:13（日本时间）任务 `qb.operator-settlement` 为每个运营商结算上个月：其发起方发布的抽成 ×（1 − 当月方案的平台分成），减去当月方案的固定费（停用的运营商不收）与获客费用，记入运营商的账户（不够扣的结转到下月），并可签发结算单。前提：`qb.creator-fee-rate` 大于 0、分录导出的 `qb.journal.account.2140` / `5130` 已设。
 - **提现**（Q48e-2）：钱都在平台。运营商负责人在运营商管理系统「账户」设银行账户（改后 `qb.operator.withdrawal.cooldown-hours` 小时内不能提现）、申请提现（至少 `qb.operator.withdrawal.min`，至多余额，同时一笔）；财务在「运营商提现」银行付款后点"登记付款"，另一位管理员在待办中批准后才过账（2140 / 1120），驳回即回到"已申请"；财务也可驳回申请并写理由。手续费由平台承担。Q48e-2 之前签发的结算单照旧逐张付款。
+- **平台运营商不开放提现**（F-M12 a0，需求方 2026-11-13）：平台运营商（`defaultForNew` 为真的那一个，即自助注册的发起方所归的默认运营商）的账户不能提现：负责人申请即 422 `QB_OPERATOR_WITHDRAWAL_PLATFORM`，什么也不写；「账户」页不显示提现表单，改为一行说明。结算照常记入它的账户，转给直营发起方照常可用。默认运营商改为另一家后，以申请时的标志为准：新的默认运营商被拒，原来的可以申请。**部署本项前**查一次有没有平台运营商未结的提现申请：`SELECT w.withdrawal_id, w.amount, w.status FROM qb_operator_withdrawal w JOIN qb_operator o ON o.operator_id = w.operator_id WHERE o.default_for_new AND w.status IN ('REQUESTED', 'PAYING')`；有的照现有流程由财务处理（驳回或登记付款），本项不自动改它们。
 
 ### 7.14 AI 获客（Q48c）
 

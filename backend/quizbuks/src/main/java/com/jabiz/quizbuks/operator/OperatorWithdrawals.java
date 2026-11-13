@@ -174,6 +174,7 @@ public final class OperatorWithdrawals {
     static final String INPUT = "input";
     static final String OPERATOR_ID = "operatorId";
     static final String ACCOUNT = "account";
+    static final String OPERATOR = "operator";
     static final String BALANCE = "balance";
     static final String OPEN = "open";
     static final String PARAMS = "params";
@@ -293,7 +294,10 @@ public final class OperatorWithdrawals {
                     .outputMapper(OperatorWithdrawals::output);
                 CallerChecks.refuseBanned(pb);
                 lead(pb);
-                pb.step("Load the account and the open withdrawal", QueryEntities.<ProcessContext>all(
+                pb.step("Load the operator, the account and the open withdrawal", QueryEntities.<ProcessContext>all(
+                        // F-M12 (question 6): whether it is the platform operator, read in this transaction.
+                        QueryEntities.query(QbOperators.defaultDataset(QbOperators.OPERATOR),
+                            ctx -> ofOperator(ctx.get(OPERATOR_ID)), OPERATOR),
                         QueryEntities.query(QbOperators.defaultDataset(BANK_ACCOUNT),
                             ctx -> ofOperator(ctx.get(OPERATOR_ID)), ACCOUNT),
                         QueryEntities.query(QbOperators.defaultDataset(WITHDRAWAL), ctx -> EntityQuery.builder()
@@ -313,6 +317,13 @@ public final class OperatorWithdrawals {
     }
 
     static void requested(ProcessContext ctx) {
+        // F-M12 (requester 2026-11-13, question 6): the platform operator's account is not withdrawn from. The
+        // default operator (defaultForNew) is the platform's; told alone, since nothing else would help.
+        EntityInstance operator = first(ctx, OPERATOR);
+        if (operator != null && Boolean.TRUE.equals(operator.get("defaultForNew"))) {
+            throw new BusinessRuleViolationException(new Violation(null, OperatorCodes.WITHDRAWAL_PLATFORM,
+                "The platform operator's account is not withdrawn from", Map.of()));
+        }
         RequestInput input = ctx.get(INPUT, RequestInput.class);
         EntityInstance account = first(ctx, ACCOUNT);
         List<Violation> problems = new ArrayList<>();
