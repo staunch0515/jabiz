@@ -1058,6 +1058,7 @@ public final class FeeProcesses {
                     .contextFactory(FeeProcesses::context)
                     .outputMapper(ctx -> new BillingOutput(billingInput(ctx).userId(), billingInput(ctx).billingMode(),
                         billingInput(ctx).creditLimit(), Boolean.TRUE.equals(ctx.get(OUTCOME))));
+                CallerChecks.refuseBanned(pb);
                 // Q48e-1: an operator's member is checked within the act; headquarters passes.
                 OperatorChecks.memberWhenScoped(pb);
                 pb.step("Lock the sponsor's account", HoldLock.<ProcessContext>exclusive(
