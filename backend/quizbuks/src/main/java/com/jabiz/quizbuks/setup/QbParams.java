@@ -513,13 +513,16 @@ public final class QbParams {
      * not what may be spent. Rule of thumb: the monthly tokens times the model's output price times 0.8 per million.
      */
     public static final String HELP_GLOBAL_MONTHLY_USD_ALERT = "qb.help.global-monthly-usd-alert";
+    /** The help's controlled parameters (last, in this order). */
+    public static final List<String> HELP_CONTROLLED = List.of(HELP_ENABLED, HELP_GLOBAL_MONTHLY_TOKENS,
+        HELP_CACHE_READ_WEIGHT);
     /**
-     * The help's controlled parameters (last, in this order). F-M10: {@code qb.help.user-daily} is one of them, as the
-     * specification asks (the limit parameters are controlled): changing how many questions a person asks a day takes a
-     * second administrator.
+     * F-M10: {@code qb.help.user-daily} is controlled too, as the specification asks (the limit parameters are
+     * controlled): changing how many questions a person asks a day takes a second administrator. The last of
+     * {@link #CONTROLLED}, after {@link #REWARD_KUDOS}: a controlled parameter added later goes at the end, so that the
+     * proposals before it keep their places.
      */
-    public static final List<String> HELP_CONTROLLED = List.of(HELP_ENABLED, HELP_USER_DAILY,
-        HELP_GLOBAL_MONTHLY_TOKENS, HELP_CACHE_READ_WEIGHT);
+    public static final List<String> HELP_USER_LIMITS = List.of(HELP_USER_DAILY);
     public static final List<String> HELP = List.of(HELP_ENABLED, HELP_MODEL, HELP_USER_DAILY,
         HELP_GLOBAL_MONTHLY_TOKENS, HELP_HISTORY_TURNS, HELP_RETENTION_DAYS, HELP_MANUAL_MAX_BYTES, HELP_POLL_SECONDS,
         HELP_POLL_MAX_MINUTES, HELP_ESCALATION_REMIND_DAYS, HELP_AUTO_CLOSE_DAYS, HELP_QUESTION_MAX_LENGTH,
@@ -582,7 +585,7 @@ public final class QbParams {
         OPERATOR_PLANS, OPERATOR_WITHDRAWAL, List.of(TOPUP_BANK_MIN, TOPUP_BANK_MAX), BANK_RECEIVING, WITHDRAWAL_BANK, AUDIENCE_BILLING_PARAMS,
         CASH_ACCOUNT_PARAMS, FEE_PARAMS,
         List.of(ENTRY_FEE_ENABLED), List.of(USAGE_FREE_BYTES), List.of(VIDEO_MAINLAND_SITES), HELP_CONTROLLED, FEE_CREDIT_PARAMS,
-        SITE_PROFILE_CONTROLLED, DISTRIBUTION_CONTROLLED, REWARD_KUDOS)
+        SITE_PROFILE_CONTROLLED, DISTRIBUTION_CONTROLLED, REWARD_KUDOS, HELP_USER_LIMITS)
         .flatMap(List::stream).toList();
 
     /** A parameter: its key, kind (as the platform writes kinds) and first value. */
@@ -910,8 +913,6 @@ public final class QbParams {
             "The estimated dollars a month, the AI help and the reviewers' translation checks together, from which the "
                 + "alert and the task say so (0 to 1,000,000; 0: no alert)"),
         new Param(HELP_ENABLED, BOOL, false, "Whether Takers and Sponsors may ask the AI help (Claude)"),
-        new Param(HELP_USER_DAILY, Map.of("type", "numeric", "precision", 4, "scale", 0), "20",
-            "The questions to the AI help one person asks a day (0: none)"),
         new Param(HELP_GLOBAL_MONTHLY_TOKENS, TOKENS, "20000000",
             "The tokens the AI help may use a month, everybody together"),
         new Param(HELP_CACHE_READ_WEIGHT, Map.of("type", "numeric", "precision", 3, "scale", 2), "0.10",
@@ -983,6 +984,9 @@ public final class QbParams {
         new Param(REWARD_KUDOS_ENABLED, BOOL, true,
             "Whether a publication may offer the reward method PLATFORM (Kudos paid by QuizBuks); off at the first "
                 + "launch (F-F10a)"),
+        // F-M10: the AI help's daily questions (controlled; the last of CONTROLLED).
+        new Param(HELP_USER_DAILY, Map.of("type", "numeric", "precision", 4, "scale", 0), "20",
+            "The questions to the AI help one person asks a day (0: none)"),
         // F-M3: company verification (ordinary; last).
         new Param(VERIFICATION_LINK_HOURS, Map.of("type", "numeric", "precision", 3, "scale", 0), "48",
             "How many hours the link mailed to a company address to verify a sponsor's company stays good (1 to 168)"),

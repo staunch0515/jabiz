@@ -77,7 +77,8 @@ beforeEach(() => {
   ]
   server.usage = [{ month: '2026-11', questions: 120, failedJobs: 3, cancelledJobs: 1, inputTokens: 900000,
     outputTokens: 50000, cacheReadTokens: 700000, cacheWriteTokens: 40000, estimatedUsd: '1.23', people: 40,
-    monthlyTokens: 20000000, percentUsed: 1.4 }]
+    monthlyTokens: 20000000, percentUsed: 1.4, checkJobs: 2, checksUsd: '6.00', totalUsd: '7.23', alertUsd: '8.00',
+    percentOfAlert: 90.4 }]
   server.manuals = [
     { id: 'man-app', version: 3, attributes: { entry: 'app', body: { zh: '学者', ja: 'テイカー', en: 'Takers' },
       publishedBody: { zh: '学者', ja: 'テイカー', en: 'Takers' }, publishedAt: '2026-11-08T00:00:00Z',
@@ -238,8 +239,34 @@ describe('the AI page\'s help usage', () => {
     expect(within(row).getByTestId('help-usage-cache-write')).toHaveTextContent('40,000')
     expect(within(row).getByTestId('help-usage-percent')).toHaveTextContent('1.4% of 20,000,000')
     expect(row).toHaveTextContent('1.23')
+    // F-M10: the reviewers' translation checks, the dollars together, the alert and the share of it.
+    expect(within(row).getByTestId('help-usage-checks')).toHaveTextContent('2 · 6.00 USD')
+    expect(within(row).getByTestId('help-usage-total')).toHaveTextContent('7.23')
+    expect(within(row).getByTestId('help-usage-alert')).toHaveTextContent('8.00')
+    expect(within(row).getByTestId('help-usage-of-alert')).toHaveTextContent('90.4%')
+    expect(screen.queryByTestId('help-usage-reached')).not.toBeInTheDocument()
     expect(screen.getByTestId('ai-usage-section')).not.toContainElement(section)
     expect(screen.getByTestId('help-gaps-link')).toHaveAttribute('href', expect.stringMatching(/\/qb\/help-gaps\?month=/))
+    await expectAccessible()
+  })
+})
+
+describe('the AI costs against the dollar alert (F-M10)', () => {
+  it('says when a month reached the alert, and shows no share (empty, not 0) when there is no alert', async () => {
+    server.usage = [
+      { ...server.usage[0], month: '2026-11', totalUsd: '9.10', percentOfAlert: 113.8 },
+      { ...server.usage[0], month: '2026-10', checkJobs: 0, checksUsd: '0.00', totalUsd: '1.23', alertUsd: '0.00',
+        percentOfAlert: null },
+    ]
+    renderAt('/qb/ai', <Route path="/qb/ai" element={<AiPage />} />)
+    const section = await screen.findByTestId('help-usage-section')
+    expect(await within(section).findByTestId('help-usage-reached')).toHaveTextContent('2026-11')
+    expect(within(section).getByTestId('help-usage-reached')).not.toHaveTextContent('2026-10')
+    const rows = await within(section).findAllByTestId('help-usage-row')
+    expect(within(rows[0]).getByTestId('help-usage-of-alert')).toHaveTextContent('113.8%')
+    expect(within(rows[1]).getByTestId('help-usage-alert')).toHaveTextContent('No alert')
+    expect(within(rows[1]).getByTestId('help-usage-of-alert')).toBeEmptyDOMElement()
+    expect(within(rows[1]).getByTestId('help-usage-checks')).toBeEmptyDOMElement()
     await expectAccessible()
   })
 })

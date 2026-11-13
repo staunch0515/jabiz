@@ -56,6 +56,41 @@ class ReconcileIT extends TopUpItSupport {
             String.valueOf(runId));
     }
 
+    /**
+     * F-M10: everybody's row of a month of the AI help's usage may be above the people's rows (a deleted account's row
+     * is erased, a deleted conversation adds only to everybody's), never below: the check names the month and what was
+     * counted, and a clean month is not reported.
+     */
+    @Test
+    void theHelpUsageOfEverybodyIsNeverBelowThePeoplesSum() {
+        String month = "2031-04";
+        helpUsage(month, "*", 10, 1_000, 500, "1.50");
+        helpUsage(month, "u-recon-a", 6, 600, 300, "0.90");
+        helpUsage(month, "u-recon-b", 4, 400, 200, "0.60");
+        // Another month: everybody's is above (an erased account), and a month with only people's rows below.
+        helpUsage("2031-05", "*", 12, 1_200, 600, "1.80");
+        helpUsage("2031-05", "u-recon-a", 6, 600, 300, "0.90");
+        helpUsage("2031-06", "*", 3, 100, 50, "0.10");
+        helpUsage("2031-06", "u-recon-a", 4, 100, 80, "0.30");
+        Instant at = now().plus(Duration.ofMinutes(7));
+        JobRunner.Outcome outcome = reconcile(at);
+        assertThat(outcome).isEqualTo(JobRunner.Outcome.SUCCEEDED);
+        Map<String, Object> run = run(at);
+        assertThat(run).isNotNull();
+        List<Map<String, Object>> found = items(run.get("run_id")).stream()
+            .filter(item -> "HELP_USAGE_TOTAL".equals(item.get("check_code"))).toList();
+        assertThat(found).extracting(item -> item.get("reference")).containsExactlyInAnyOrder("2031-06:questions",
+            "2031-06:outputTokens", "2031-06:costCents");
+        assertThat(found).allSatisfy(item -> assertThat(new java.math.BigDecimal(String.valueOf(item.get("difference"))))
+            .isNegative());
+    }
+
+    private static void helpUsage(String month, String user, int questions, int in, int out, String usd) {
+        execute("INSERT INTO qb_help_usage (usage_id, user_id, month, questions, failed_jobs, cancelled_jobs, "
+            + "input_tokens, output_tokens, cost_usd, version) VALUES (?, ?, ?, ?, 0, 0, ?, ?, ?, 1)",
+            java.util.UUID.randomUUID().toString(), user, month, questions, in, out, new java.math.BigDecimal(usd));
+    }
+
     /** Some of everything: a paid top-up with a fee and a refund, rewards paid and pending. */
     void business(String name) {
         String sponsor = newSponsor("s-recon-" + name);

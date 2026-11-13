@@ -214,4 +214,19 @@ class ReconChecksTest {
         assertThat(url).as(name).isNotNull();
         return Path.of(url.toURI());
     }
+
+    /** F-M10: the help's usage check names the month and what was counted, and is a difference, not a note. */
+    @Test
+    void theHelpUsageTotalCheckIsReadFromItsTemplateAsADifference() {
+        assertThat(ReconChecks.ALL).contains(ReconChecks.HELP_USAGE_TOTAL);
+        assertThat(ReconChecks.NOTES).doesNotContain(ReconChecks.HELP_USAGE_TOTAL);
+        List<ReconChecks.Item> items = ReconChecks.coded(List.of(Map.of("checkCode", "HELP_USAGE_TOTAL",
+            "reference", "2026-10:costCents", "expected", new BigDecimal("150"), "actual", new BigDecimal("125"))));
+        assertThat(items).singleElement().satisfies(item -> {
+            assertThat(item.check()).isEqualTo("HELP_USAGE_TOTAL");
+            assertThat(item.reference()).isEqualTo("2026-10:costCents");
+            assertThat(item.difference()).isEqualByComparingTo("-25");
+        });
+        assertThat(ReconChecks.result(items, 10).status()).isEqualTo(ReconChecks.DIFF);
+    }
 }

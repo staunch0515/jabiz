@@ -455,6 +455,8 @@ class SetupIT extends QbItSupport {
         expected.put(QbParams.HELP_GLOBAL_MONTHLY_TOKENS, "20000000");
         // F-C10b: a cache read's weight towards the monthly tokens (controlled).
         expected.put(QbParams.HELP_CACHE_READ_WEIGHT, "0.10");
+        // F-M10: the dollar alert of the AI costs (ordinary); the help's daily questions are controlled now.
+        expected.put(QbParams.HELP_GLOBAL_MONTHLY_USD_ALERT, "8.00");
         expected.put(QbParams.HELP_HISTORY_TURNS, "6");
         expected.put(QbParams.HELP_RETENTION_DAYS, "180");
         expected.put(QbParams.HELP_MANUAL_MAX_BYTES, "204800");

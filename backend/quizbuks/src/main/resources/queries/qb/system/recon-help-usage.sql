@@ -11,15 +11,17 @@ datasets:
 results:
   checkCode: { kind: { type: text, maxLength: 30 } }
   reference: { kind: { type: text, maxLength: 100 } }
-  expected:  { kind: { type: numeric, precision: 20, scale: 6 } }
-  actual:    { kind: { type: numeric, precision: 20, scale: 6 } }
+  expected:  { kind: { type: numeric, precision: 20, scale: 0 } }
+  actual:    { kind: { type: numeric, precision: 20, scale: 0 } }
 list:
   sorts: [reference]
   defaultSort: { field: reference, asc: true }
   key: [reference]
 permissions: [qb.wallet.system]
 ---*/
--- One statement, one snapshot. The reference names the month and what was counted: 2026-10:questions.
+-- One statement, one snapshot. The reference names the month and what was counted: 2026-10:questions. The items hold
+-- whole numbers (QbReconItem is in yen): the dollars are compared and given in cents (costCents), each total and sum
+-- rounded the same way, so a total that is not below the sum is never below it rounded.
 WITH months AS (
     SELECT u.{{QbHelpUsage.month}} AS month,
            sum(u.{{QbHelpUsage.questions}})    FILTER (WHERE u.{{QbHelpUsage.userId}} <> '*') AS pQuestions,
@@ -33,14 +35,14 @@ WITH months AS (
     FROM {{QbHelpUsage}} u
     GROUP BY u.{{QbHelpUsage.month}})
 SELECT CAST('HELP_USAGE_TOTAL' AS varchar(30)) AS checkCode, CAST(m.month || ':questions' AS varchar(100)) AS reference,
-       CAST(m.pQuestions AS numeric(20, 6)) AS expected, CAST(m.tQuestions AS numeric(20, 6)) AS actual
+       CAST(m.pQuestions AS numeric(20, 0)) AS expected, CAST(m.tQuestions AS numeric(20, 0)) AS actual
 FROM months m WHERE m.tQuestions < coalesce(m.pQuestions, 0)
 UNION ALL
-SELECT 'HELP_USAGE_TOTAL', m.month || ':inputTokens', CAST(m.pInput AS numeric(20, 6)), CAST(m.tInput AS numeric(20, 6))
+SELECT 'HELP_USAGE_TOTAL', m.month || ':inputTokens', CAST(m.pInput AS numeric(20, 0)), CAST(m.tInput AS numeric(20, 0))
 FROM months m WHERE m.tInput < coalesce(m.pInput, 0)
 UNION ALL
-SELECT 'HELP_USAGE_TOTAL', m.month || ':outputTokens', CAST(m.pOutput AS numeric(20, 6)), CAST(m.tOutput AS numeric(20, 6))
+SELECT 'HELP_USAGE_TOTAL', m.month || ':outputTokens', CAST(m.pOutput AS numeric(20, 0)), CAST(m.tOutput AS numeric(20, 0))
 FROM months m WHERE m.tOutput < coalesce(m.pOutput, 0)
 UNION ALL
-SELECT 'HELP_USAGE_TOTAL', m.month || ':costUsd', CAST(m.pCost AS numeric(20, 6)), CAST(m.tCost AS numeric(20, 6))
-FROM months m WHERE m.tCost < coalesce(m.pCost, 0)
+SELECT 'HELP_USAGE_TOTAL', m.month || ':costCents', CAST(round(m.pCost * 100) AS numeric(20, 0)), CAST(round(m.tCost * 100) AS numeric(20, 0))
+FROM months m WHERE round(m.tCost * 100) < round(coalesce(m.pCost, 0) * 100)
