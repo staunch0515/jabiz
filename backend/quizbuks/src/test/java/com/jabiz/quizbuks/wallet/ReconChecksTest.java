@@ -209,6 +209,138 @@ class ReconChecksTest {
         assertThat(found).as("codes found in the templates").isNotEmpty();
     }
 
+    // ---- F-M14: levels, owners, order (docs/quizbuks/plans/impl/F-M14.md §1.2, §3.1) -----------------------------
+
+    @Test
+    void everyCheckHasOneLevelAndAnOwner() {
+        assertThat(ReconChecks.ALL).doesNotHaveDuplicates();
+        assertThat(ReconChecks.NOTES).allSatisfy(code -> assertThat(ReconChecks.ALL).contains(code));
+        assertThat(ReconChecks.ATTENTION).allSatisfy(code -> assertThat(ReconChecks.ALL).contains(code))
+            .doesNotContainAnyElementsOf(ReconChecks.NOTES);
+        assertThat(ReconChecks.OWNERS.keySet()).allSatisfy(code -> assertThat(ReconChecks.ALL).contains(code));
+        assertThat(ReconChecks.ALL).allSatisfy(code -> assertThat(ReconChecks.owner(code)).as(code).isNotBlank());
+        // The merged checks: three need attention, two are notes, the rest are differences.
+        assertThat(ReconChecks.ATTENTION).containsExactlyInAnyOrder(ReconChecks.DISTRIBUTION_PRICE_RANGE,
+            ReconChecks.AUDIENCE_REFUND_NO_PERIOD, ReconChecks.CREDIT_UNUSED_WITH_DUE);
+        assertThat(ReconChecks.ALL.stream().filter(c -> ReconChecks.level(c) == ReconChecks.Level.DIFFERENCE))
+            .hasSize(ReconChecks.ALL.size() - 5);
+    }
+
+    @Test
+    void theLevelDictionaryNamesEveryChecksLevelInThreeLanguages() {
+        var entries = new TopUpConfig("default").qbReconLevelDictionary().entries();
+        assertThat(entries).extracting(e -> e.code()).containsExactlyInAnyOrderElementsOf(ReconChecks.ALL);
+        assertThat(entries).allSatisfy(e -> {
+            assertThat(e.labels()).hasSize(3);
+            String labels = String.valueOf(e.labels());
+            switch (ReconChecks.level(e.code())) {
+                case DIFFERENCE -> assertThat(labels).contains("en=Difference");
+                case ATTENTION -> assertThat(labels).contains("en=Needs attention");
+                case NOTE -> assertThat(labels).contains("en=Note");
+            }
+        });
+    }
+
+    /** Attention and notes alone: the run is OK, nothing is a difference (the gauge and the export see none). */
+    @Test
+    void attentionAndNotesAloneLeaveTheRunOk() {
+        ReconChecks.Result result = ReconChecks.result(List.of(
+            new ReconChecks.Item(ReconChecks.DISTRIBUTION_PRICE_RANGE, "op", null, BigDecimal.ZERO, BigDecimal.ONE),
+            new ReconChecks.Item(ReconChecks.CREDIT_UNUSED_WITH_DUE, "s", null, BigDecimal.ZERO, BigDecimal.TEN),
+            new ReconChecks.Item(ReconChecks.DISTRIBUTION_AT_FLOOR, "s", null, BigDecimal.ZERO, BigDecimal.ONE)), 10);
+        assertThat(result.status()).isEqualTo(ReconChecks.OK);
+        assertThat(result.differences()).isZero();
+        assertThat(result.attention()).isEqualTo(2);
+        assertThat(result.total()).isEqualTo(3);
+        assertThat(result.checksDiffering()).isZero();
+        // One difference more: DIFF, one check differing.
+        ReconChecks.Result diff = ReconChecks.result(List.of(
+            new ReconChecks.Item(ReconChecks.DISTRIBUTION_PRICE_RANGE, "op", null, BigDecimal.ZERO, BigDecimal.ONE),
+            new ReconChecks.Item(ReconChecks.LEDGER_ZERO, null, null, BigDecimal.ZERO, BigDecimal.ONE),
+            new ReconChecks.Item(ReconChecks.LEDGER_ZERO, null, "t2", BigDecimal.ZERO, BigDecimal.ONE)), 10);
+        assertThat(diff.status()).isEqualTo(ReconChecks.DIFF);
+        assertThat(diff.differences()).isEqualTo(2);
+        assertThat(diff.checksDiffering()).isEqualTo(1);
+    }
+
+    /** Review M5: past the cap, the takers' first, then the differences, those for attention, the notes. */
+    @Test
+    void aCappedRunKeepsTheDifferencesBeforeAttentionAndNotes() {
+        List<ReconChecks.Item> found = new ArrayList<>();
+        for (int i = 0; i < 1_005; i++) {
+            found.add(new ReconChecks.Item(ReconChecks.DISTRIBUTION_AT_FLOOR, "n" + i, null, BigDecimal.ZERO,
+                BigDecimal.ONE));
+        }
+        for (int i = 0; i < 3; i++) {
+            found.add(new ReconChecks.Item(ReconChecks.DISTRIBUTION_PRICE_RANGE, "a" + i, null, BigDecimal.ZERO,
+                BigDecimal.ONE));
+        }
+        for (int i = 0; i < 4; i++) {
+            found.add(new ReconChecks.Item(ReconChecks.SPONSOR_WALLET, "d" + i, null, BigDecimal.ONE,
+                BigDecimal.TEN));
+        }
+        found.add(new ReconChecks.Item(ReconChecks.TAKER_WALLET_LAG, "t", null, BigDecimal.ONE, BigDecimal.TEN));
+        ReconChecks.Result result = ReconChecks.result(found, WalletLimits.MAX_RECON_ITEMS);
+        assertThat(result.items()).hasSize(WalletLimits.MAX_RECON_ITEMS);
+        assertThat(result.items().subList(0, 8)).extracting(ReconChecks.Item::check).containsExactly(
+            ReconChecks.TAKER_WALLET_LAG, ReconChecks.SPONSOR_WALLET, ReconChecks.SPONSOR_WALLET,
+            ReconChecks.SPONSOR_WALLET, ReconChecks.SPONSOR_WALLET, ReconChecks.DISTRIBUTION_PRICE_RANGE,
+            ReconChecks.DISTRIBUTION_PRICE_RANGE, ReconChecks.DISTRIBUTION_PRICE_RANGE);
+        assertThat(result.counts()).containsEntry(ReconChecks.DISTRIBUTION_AT_FLOOR, 1_005)
+            .containsEntry(ReconChecks.SPONSOR_WALLET, 4);
+        assertThat(result.total()).isEqualTo(1_013);
+    }
+
+    /**
+     * The summary is every check's count as JSON in a column of 2,000 characters (V7): a run whose summary does not
+     * fit fails. With every count at seven digits it fits, with 150 characters to spare (F-M14 §2: the next check
+     * added sees this first).
+     */
+    @Test
+    void theSummaryFitsItsColumnWithRoomToSpare() {
+        List<ReconChecks.Item> found = new ArrayList<>();
+        Map<String, Integer> counts = new java.util.TreeMap<>();
+        ReconChecks.ALL.forEach(code -> counts.put(code, 9_999_999));
+        StringBuilder json = new StringBuilder("{");
+        counts.forEach((code, n) -> json.append(json.length() > 1 ? "," : "").append('"').append(code).append("\":")
+            .append(n));
+        json.append('}');
+        assertThat(json.length()).as("the summary with every count at seven digits")
+            .isLessThanOrEqualTo(2_000 - 150);
+        assertThat(ReconChecks.result(found, 1).summary().length()).isLessThan(json.length());
+    }
+
+    /**
+     * The source key of a task for attention ({@code recon-attn:<check>:<object>}) fits the task's column
+     * ({@code sys_task_version.source_key}, 200, the platform's V14): {@code recon-attn:} (11), a check (at most 30), a
+     * colon and an object (a reference of at most 100 or a party of at most 128, the items' columns). The jobs' item key
+     * is its md5 (32), within the platform's 36.
+     */
+    @Test
+    void anAttentionTasksSourceFitsItsColumn() {
+        String longest = ReconChecks.ALL.stream().max(java.util.Comparator.comparingInt(String::length)).orElseThrow();
+        assertThat(ReconTasks.sourceKey(longest, null, "x".repeat(128))).hasSizeLessThanOrEqualTo(200);
+        assertThat(ReconTasks.sourceKey(ReconChecks.DISTRIBUTION_PRICE_RANGE, "op-1", null))
+            .isEqualTo("recon-attn:DISTRIBUTION_PRICE_RANGE:op-1");
+        assertThat(ReconTasks.sourceKey(ReconChecks.CREDIT_UNUSED_WITH_DUE, "s-1", "ref"))
+            .isEqualTo("recon-attn:CREDIT_UNUSED_WITH_DUE:ref");
+        assertThat(ReconTasks.sourceKey(ReconChecks.LEDGER_ZERO, null, null)).isEqualTo("recon-attn:LEDGER_ZERO:-");
+    }
+
+    /** Review L6: every check for attention has its task's title, naming it in words, in the three languages. */
+    @Test
+    void everyCheckForAttentionHasItsTasksTitle() throws IOException, URISyntaxException {
+        for (String language : List.of("zh", "ja", "en")) {
+            java.util.Properties messages = new java.util.Properties();
+            try (var in = Files.newBufferedReader(resource("messages_" + language + ".properties"))) {
+                messages.load(in);
+            }
+            assertThat(ReconChecks.ATTENTION).allSatisfy(check -> assertThat(messages.getProperty(
+                ReconTasks.ATTENTION_TITLE + "." + check)).as(language + " " + check).isNotBlank()
+                .doesNotContain(check));
+        }
+    }
+
     private static Path resource(String name) throws URISyntaxException {
         var url = ReconChecksTest.class.getClassLoader().getResource(name);
         assertThat(url).as(name).isNotNull();

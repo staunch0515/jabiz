@@ -144,7 +144,7 @@ abstract class PrepaymentItSupport extends TreeItSupport {
         Map<String, Object> params = new HashMap<>(Map.of("at", clock.instant().toString(), "zone", "Asia/Tokyo"));
         params.put("unsettledHours", paramValue(QbParams.DISTRIBUTION_UNSETTLED_AFTER_HOURS));
         params.put("missingHours", paramValue(QbParams.DISTRIBUTION_FINAL_MISSING_AFTER_HOURS));
-        return items("qb.system.recon-fee-account", TestTokens.bearer(tokens, "fm5-recon", QbPermissions.WALLET_SYSTEM),
+        return feeAccountItems(TestTokens.bearer(tokens, "fm5-recon", QbPermissions.WALLET_SYSTEM),
             Map.of("params", params)).stream()
             .filter(row -> sponsor.equals(String.valueOf(row.get("sponsorId")))
                 && !"FEE_CREDIT_PROMOTION".equals(row.get("checkCode"))

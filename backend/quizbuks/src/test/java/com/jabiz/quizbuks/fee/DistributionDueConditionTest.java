@@ -20,7 +20,7 @@ class DistributionDueConditionTest {
 
     static final Path SYSTEM = Path.of("src/main/resources/queries/qb/system");
     static final List<String> TEMPLATES = List.of("distribution-due.sql", "fee-invoices-due.sql",
-        "recon-fee-account.sql");
+        "recon-prepayments.sql");
     static final Pattern WENT_ON = Pattern.compile(
         "greatest\\((\\w+)\\.\\{\\{QbPublicationCard\\.startAt}}, (\\w+)\\.\\{\\{QbPublication\\.approvedAt}}\\)");
 
