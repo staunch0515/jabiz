@@ -70,8 +70,7 @@ class FirstLaunchSwitchesCheckTest {
     void theSwitchesThatMustBeOffAreTheRegistrysFalseRowsAndTheWaitingOnesWhoseKeyExists() {
         assertThat(FirstLaunchSwitchesCheck.MUST_BE_OFF).containsExactlyInAnyOrder(QbParams.KUDOS_BUY_ENABLED,
             QbParams.KUDOS_SELL_ENABLED, QbParams.TRANSFER_ENABLED, QbParams.WITHDRAWAL_BANK_ENABLED,
-            QbParams.REWARD_KUDOS_ENABLED, QbParams.ENTRY_FEE_ENABLED, QbParams.AUDIENCE_BILLING_ENABLED,
-            QbParams.SITE_PROFILE_ENABLED);
+            QbParams.REWARD_KUDOS_ENABLED, QbParams.ENTRY_FEE_ENABLED, QbParams.SITE_PROFILE_ENABLED);
         // A waiting row whose key does not exist yet never counts: there is nothing to turn on.
         FirstLaunchSwitches.ALL.stream().filter(row -> row.status() == FirstLaunchSwitches.Status.WAITING)
             .filter(row -> !FirstLaunchSwitches.KEY_BEFORE_MEANING.contains(row.key()))
@@ -80,9 +79,10 @@ class FirstLaunchSwitchesCheckTest {
 
     @Test
     void aWaitingFeatureSwitchThatIsAlreadyOnWarns() {
+        // F-M7: the audience fee's switch is no longer waiting (on at the launch): it does not warn.
         assertThat(FirstLaunchSwitchesCheck.problems(Map.of(QbParams.AUDIENCE_BILLING_ENABLED, "true",
-            QbParams.SITE_PROFILE_ENABLED, "false", QbParams.REWARD_KUDOS_ENABLED, "false"))).singleElement()
+            QbParams.SITE_PROFILE_ENABLED, "true", QbParams.REWARD_KUDOS_ENABLED, "false"))).singleElement()
             .satisfies(problem -> assertThat(problem.location())
-                .isEqualTo("parameter " + QbParams.AUDIENCE_BILLING_ENABLED));
+                .isEqualTo("parameter " + QbParams.SITE_PROFILE_ENABLED));
     }
 }

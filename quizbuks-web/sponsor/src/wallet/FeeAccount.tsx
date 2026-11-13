@@ -98,6 +98,10 @@ export function FeeAccount({ wallet }: { wallet: SponsorWallet }) {
         ...(wallet.prepaymentHeld > 0
           ? [{ key: 'prepaymentHeld', label: t('wallet.feeAccount.prepaymentHeld'),
             value: <span data-testid="fee-account-prepayment-held">{formatKudos(wallet.prepaymentHeld)}</span> }] : []),
+        // F-M7: the credit of credit notes not used yet; the next invoices take it first.
+        ...(wallet.creditNoteCredit > 0
+          ? [{ key: 'creditNoteCredit', label: t('wallet.feeAccount.creditNoteCredit'),
+            value: <span data-testid="fee-account-credit-note">{formatKudos(wallet.creditNoteCredit)}</span> }] : []),
       ]} />
       <h3 className="font-semibold">{t('wallet.feeAccount.lots')}</h3>
       {lots.isError

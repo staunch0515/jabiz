@@ -16,6 +16,7 @@ results:
   issuedAt:    { from: QbFeeInvoice.issuedAt }
   dueOn:       { from: QbFeeInvoice.dueOn }
   status:      { from: QbFeeInvoice.status }
+  creditApplied: { from: QbFeeInvoice.creditApplied }
   amount:      { from: QbFeeInvoice.amount }
   tax:         { from: QbFeeInvoice.tax }
   total:       { from: QbFeeInvoice.total }
@@ -32,6 +33,7 @@ SELECT
     i.{{QbFeeInvoice.issuedAt}}    AS issuedAt,
     i.{{QbFeeInvoice.dueOn}}       AS dueOn,
     i.{{QbFeeInvoice.status}}      AS status,
+    i.{{QbFeeInvoice.creditApplied}} AS creditApplied,
     i.{{QbFeeInvoice.amount}}      AS amount,
     i.{{QbFeeInvoice.tax}}         AS tax,
     i.{{QbFeeInvoice.total}}       AS total

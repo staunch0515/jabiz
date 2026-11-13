@@ -48,13 +48,19 @@ class DistributionStatementBudgetIT extends PrepaymentItSupport {
      */
     static final int ON_AUDIENCE = 42;
 
-    /** N3: the monthly fee item of a prepaid sponsor [18, as before F-M6]. */
-    static final int MONTHLY_PREPAID = 18;
+    /**
+     * N3: the monthly fee item of a prepaid sponsor [19: 18 as before F-M6, and F-M7's read of the credit notes'
+     * credit left (H1 of its review: summed in SQL, before the fee is written, only when no prepayment pays it all)].
+     */
+    static final int MONTHLY_PREPAID = 19;
     /** N3: the monthly fee item of a postpaid sponsor [11, as before: the month's invoice read joins a read]. */
     static final int MONTHLY_POSTPAID = 11;
-    /** N3: a fee by hand, charged when its approval is delivered [25, as before F-M6]. */
-    static final int MANUAL = 25;
-    /** N3: the audience fee charged from its prepayment as the publication goes on [25, as before F-M6]. */
+    /** N3: a fee by hand, charged when its approval is delivered [26: 25 as before F-M6, and the credit left read]. */
+    static final int MANUAL = 26;
+    /**
+     * N3: the audience fee charged from its prepayment as the publication goes on [25, as before F-M6: its prepayment
+     * pays it all, so the credit left is not read].
+     */
     static final int AUDIENCE_LIVE = 25;
 
     void distributionPrice(String sponsor) {

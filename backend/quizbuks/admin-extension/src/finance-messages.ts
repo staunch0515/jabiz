@@ -56,6 +56,7 @@ export const financeMessages = {
       DISTRIBUTION_CHARGED: 'Distribution fees charged',
       DISTRIBUTION_DEPOSIT: 'Distribution fee deposits set aside',
       DISTRIBUTION_RELEASED: 'Distribution fee deposits given back',
+      FEE_CREDIT_NOTE: 'Credit notes',
       OTHER: 'Other postings',
     },
     overview: {
@@ -379,6 +380,7 @@ export const financeMessages = {
       DISTRIBUTION_CHARGED: '配送费记费',
       DISTRIBUTION_DEPOSIT: '配送费预付冻结',
       DISTRIBUTION_RELEASED: '配送费预付退回',
+      FEE_CREDIT_NOTE: '贷项凭证',
       OTHER: '其他分录',
     },
     overview: {
@@ -702,6 +704,7 @@ export const financeMessages = {
       DISTRIBUTION_CHARGED: '配信料の請求',
       DISTRIBUTION_DEPOSIT: '配信料の前払いの確保',
       DISTRIBUTION_RELEASED: '配信料の前払いの返却',
+      FEE_CREDIT_NOTE: '返還インボイス',
       OTHER: 'その他の仕訳',
     },
     overview: {

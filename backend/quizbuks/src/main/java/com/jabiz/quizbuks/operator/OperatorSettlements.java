@@ -113,7 +113,7 @@ public final class OperatorSettlements {
         .party("issuer", ISSUER_TEMPLATE, "name", "address", "registrationNo")
         .party("operator", DOCUMENT_TEMPLATE, "operatorName", "contactName")
         .facts(DOCUMENT_TEMPLATE, "month", "plan", "revenue", "platformFees", "platformShare", "operatorShare",
-            "fixedFee", "prospectingCost", "carriedIn", "carriedOut")
+            "fixedFee", "prospectingCost", "creditNoteDeduction", "carriedIn", "carriedOut")
         .totals(DOCUMENT_TEMPLATE, "payable")
         .note("note"));
 
@@ -142,6 +142,12 @@ public final class OperatorSettlements {
         // Q48e-2: the operator's plan that month and its fixed fee (0 while the operator is suspended).
         eb.field("plan", f -> f.physicalColumn("plan").immutable(true).asText(2));
         eb.field("fixedFee", f -> f.physicalColumn("fixed_fee").immutable(true).required(true)
+            .asMonetary("JPY", 0));
+        // F-M7 (C3): the credit notes issued in the month on its sponsors' fees (before tax), and the operator's share of
+        // them taken back as a cost of the month (carried as the prospecting cost is).
+        eb.field("creditNotes", f -> f.physicalColumn("credit_notes").immutable(true).required(true)
+            .asMonetary("JPY", 0));
+        eb.field("creditNoteDeduction", f -> f.physicalColumn("credit_note_deduction").immutable(true).required(true)
             .asMonetary("JPY", 0));
         eb.field("carriedIn", f -> f.physicalColumn("carried_in").immutable(true).required(true)
             .asMonetary("JPY", 0));
@@ -239,6 +245,14 @@ public final class OperatorSettlements {
     }
 
     /**
+     * F-M7 (C3): what the operator gives back of the credit notes issued on its sponsors' fees in a month, before tax:
+     * the share it was given of them, ⌊notes × (1 − the platform's share that month)⌋.
+     */
+    public static BigDecimal creditNoteDeduction(BigDecimal creditNotes, BigDecimal platformShare) {
+        return operatorShare(creditNotes, platformShare);
+    }
+
+    /**
      * What is payable and carried out: the share less the month's prospecting cost and what was carried in, never
      * below 0 (§6 item 4); the rest is carried to the next month.
      */
@@ -326,7 +340,10 @@ public final class OperatorSettlements {
             throw new BusinessRuleViolationException(new Violation(null, OperatorCodes.NO_RATE,
                 "The yen of a dollar the prospecting cost is deducted at is not set", Map.of()));
         }
-        BigDecimal[] payable = payable(operatorShare, cost.add(fixedFee), carriedIn);
+        // F-M7 (C3): the share the operator was given of the fees credited this month comes back as a cost.
+        BigDecimal creditNotes = money(feesRow.get("creditNotes"));
+        BigDecimal deduction = creditNoteDeduction(creditNotes, share);
+        BigDecimal[] payable = payable(operatorShare, cost.add(fixedFee).add(deduction), carriedIn);
         Map<String, Object> values = new LinkedHashMap<>();
         values.put("operatorId", input.operatorId());
         values.put("month", input.month());
@@ -339,6 +356,8 @@ public final class OperatorSettlements {
         values.put("prospectingCost", cost);
         values.put("plan", plan);
         values.put("fixedFee", fixedFee);
+        values.put("creditNotes", creditNotes);
+        values.put("creditNoteDeduction", deduction);
         values.put("carriedIn", carriedIn);
         values.put("payable", payable[0]);
         values.put("carriedOut", payable[1]);

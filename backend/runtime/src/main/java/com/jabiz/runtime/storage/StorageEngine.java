@@ -118,6 +118,12 @@ public interface StorageEngine {
     Mono<Long> count(PhysicalQueryPlan plan);
 
     /**
+     * Total of {@code column} over the rows matching the plan's condition, 0 when none match; sorting and paging of the
+     * plan are ignored. The column comes from metadata; the engine validates it as an identifier.
+     */
+    Mono<java.math.BigDecimal> sum(PhysicalQueryPlan plan, String column);
+
+    /**
      * Runs a query the platform itself built (operation records, versions of temporal entities, advisory locks)
      * in the same transaction as the other calls of the pipeline. Identifiers in {@code sql} come from metadata
      * only and all values are bound; no row limit is added.

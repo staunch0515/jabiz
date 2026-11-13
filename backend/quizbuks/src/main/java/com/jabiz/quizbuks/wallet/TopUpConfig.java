@@ -266,10 +266,29 @@ class TopUpConfig {
                 "zh", "某月未结算的配送费", "ja", "未精算の月がある配信料")
             .item(ReconChecks.DISTRIBUTION_FINAL_MISSING, "en", "Ended publications without their final distribution "
                 + "settlement", "zh", "已结束但无最终结算的配送费", "ja", "終了後に最終精算がない配信料")
-            .item(ReconChecks.DISTRIBUTION_PRICE_OUT_OF_RANGE, "en", "Distribution prices outside the headquarters' "
+            .item(ReconChecks.DISTRIBUTION_PRICE_RANGE, "en", "Distribution prices outside the headquarters' "
                 + "range", "zh", "超出总部范围的配送费价目", "ja", "本部の範囲外の配信料の価格")
             .item(ReconChecks.DISTRIBUTION_AT_FLOOR, "en", "Publications charged the least distribution price (a note)",
-                "zh", "按下限计费的配送费（仅提示）", "ja", "下限で計算した配信料（お知らせのみ）"));
+                "zh", "按下限计费的配送费（仅提示）", "ja", "下限で計算した配信料（お知らせのみ）")
+            .item(ReconChecks.AUDIENCE_REFUND_MISSING, "en", "Audience fees of ended publications not decided",
+                "zh", "已结束发布中未判定的受众规则费", "ja", "終了した公開で未判定の対象者ルール料")
+            .item(ReconChecks.AUDIENCE_REFUND_NO_PERIOD, "en", "Audience fees without a period to count the unused days "
+                + "by", "zh", "没有计费期间、无法计算未用天数的受众规则费", "ja", "未使用日数を数える期間がない対象者ルール料")
+            .item(ReconChecks.AUDIENCE_FEE_NOT_LIVE, "en", "Audience fees of publications that never went on",
+                "zh", "从未上架的发布的受众规则费", "ja", "公開されなかった公開の対象者ルール料")
+            .item(ReconChecks.CREDIT_NOTE_USES, "en", "Credit notes against what they gave back and paid",
+                "zh", "贷项凭证与其退回和抵用", "ja", "返還インボイスと返金・充当")
+            .item(ReconChecks.CREDIT_NOTE_LIMITS, "en", "Fees whose credit notes come to more than them",
+                "zh", "贷项凭证合计超过原费用的费用", "ja", "返還インボイスの合計が料金を超える料金")
+            .item(ReconChecks.CREDIT_NOTE_USE_VOID, "en", "Credit used on voided invoices",
+                "zh", "抵用到已作废账单的贷项", "ja", "取消済みの請求書への充当")
+            .item(ReconChecks.CREDIT_UNUSED_WITH_DUE, "en", "Credit left while an invoice is unpaid",
+                "zh", "有未用贷项却有未付账单", "ja", "返還インボイスの残高があるのに未払いの請求書")
+
+            // Retired: named in the summaries of runs written before its rename (ReconChecks.RETIRED).
+            .disabledItem(ReconChecks.DISTRIBUTION_PRICE_OUT_OF_RANGE, "en", "Distribution prices outside the "
+                + "headquarters' range (former name)", "zh", "超出总部范围的配送费价目（旧名）", "ja",
+                "本部の範囲外の配信料の価格（旧名）"));
     }
 
     /** Accounting evidence is kept ten years from the end of its fiscal year (Q10b, item 13; L-4). */
@@ -311,7 +330,7 @@ class TopUpConfig {
     @Bean
     RetentionPolicy qbDocumentRunRetention() {
         return RetentionPolicy.of("DocumentRun").only("layoutId", TopUpReceipts.LAYOUT_ID, OperatorSettlements.LAYOUT_ID,
-                com.jabiz.quizbuks.fee.FeeProcesses.LAYOUT_ID)
+                com.jabiz.quizbuks.fee.FeeProcesses.LAYOUT_ID, com.jabiz.quizbuks.fee.QbCreditNotes.LAYOUT_ID)
             .keep(RETENTION).from("issuedTime").afterFiscalYearEnd();
     }
 

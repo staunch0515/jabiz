@@ -169,7 +169,7 @@ public final class Reconciliation {
                 // F-M6 (review L4): the distribution checks' hours are the parameters' values, none written in the SQL.
                 .step("Load the distribution checks' hours", LoadParams.<ProcessContext>optional(ProcessContext::opTime,
                     DISTRIBUTION_PARAMS, QbParams.DISTRIBUTION_UNSETTLED_AFTER_HOURS,
-                    QbParams.DISTRIBUTION_FINAL_MISSING_AFTER_HOURS))
+                    QbParams.DISTRIBUTION_FINAL_MISSING_AFTER_HOURS, QbParams.AUDIENCE_REFUND_MISSING_AFTER_HOURS))
                 .step("Compare the fee account", RunTemplate.<ProcessContext>of(FEE_ACCOUNT_TEMPLATE,
                     ctx -> feeAccountParams(ctx, zone), FEE_ACCOUNT))
                 // The takers' cache follows by events: one found behind counts only when the previous run found them.
@@ -298,6 +298,9 @@ public final class Reconciliation {
         values.put("unsettledHours", params.find(QbParams.DISTRIBUTION_UNSETTLED_AFTER_HOURS, java.math.BigDecimal.class)
             .orElse(null));
         values.put("missingHours", params.find(QbParams.DISTRIBUTION_FINAL_MISSING_AFTER_HOURS,
+            java.math.BigDecimal.class).orElse(null));
+        // F-M7 (N9): the audience fees not decided yet.
+        values.put("refundHours", params.find(QbParams.AUDIENCE_REFUND_MISSING_AFTER_HOURS,
             java.math.BigDecimal.class).orElse(null));
         return values;
     }

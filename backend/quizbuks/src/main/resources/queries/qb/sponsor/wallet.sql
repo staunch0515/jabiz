@@ -1,7 +1,7 @@
 /*---
 id: qb.sponsor.wallet
-description: The sponsor's wallet (M-04) - the balance, the rewards waiting for a top-up, what came in and went out, (Q87a) the cash account, (F-M1) the fee credit and (F-M5) what its publications' prepayments hold
-entities: [QbWallet, QbTopUp, LedgerEntry, LedgerAccount, QbFeeInvoice, QbFeeCharge, QbSponsor, QbCashLot, QbPrepayment, SysParam]
+description: The sponsor's wallet (M-04) - the balance, the rewards waiting for a top-up, what came in and went out, (Q87a) the cash account, (F-M1) the fee credit, (F-M5) what its publications' prepayments hold and (F-M7) the credit notes' credit left
+entities: [QbWallet, QbTopUp, LedgerEntry, LedgerAccount, QbFeeInvoice, QbFeeCharge, QbSponsor, QbCashLot, QbPrepayment, QbFeeCreditNote, QbFeeCreditNoteUse, SysParam]
 datasets:
   QbWallet: urn:jabiz:dataset:sponsor:QbWallet
   QbFeeInvoice: urn:jabiz:dataset:sponsor:QbFeeInvoice
@@ -12,6 +12,8 @@ datasets:
   LedgerEntry: urn:jabiz:dataset:sponsor:LedgerEntry
   QbCashLot: urn:jabiz:dataset:sponsor:QbCashLot
   QbPrepayment: urn:jabiz:dataset:sponsor:QbPrepayment
+  QbFeeCreditNote: urn:jabiz:dataset:sponsor:QbFeeCreditNote
+  QbFeeCreditNoteUse: urn:jabiz:dataset:sponsor:QbFeeCreditNoteUse
 results:
   balance:       { from: QbWallet.balance }
   held:          { from: QbWallet.held }
@@ -33,6 +35,7 @@ results:
   feeCreditBalance: { kind: { type: monetary, currency: JPY, scale: 0 } }
   cashFromOperator: { kind: { type: monetary, currency: JPY, scale: 0 } }
   prepaymentHeld: { kind: { type: monetary, currency: JPY, scale: 0 } }
+  creditNoteCredit: { kind: { type: monetary, currency: JPY, scale: 0 } }
 permissions: [qb.sponsor.finance.read]
 ---*/
 -- Every dataset is the caller's own (their wallet, top-ups and ledger lines), so this is one row. The balance is the
@@ -58,8 +61,15 @@ SELECT
     coalesce(ef.ef_total, 0)        AS entryFeesUnsettled,
     coalesce(fc.fc_balance, 0)      AS feeCreditBalance,
     coalesce(ol.ol_remaining, 0)    AS cashFromOperator,
-    coalesce(pp.pp_remaining, 0)    AS prepaymentHeld
+    coalesce(pp.pp_remaining, 0)    AS prepaymentHeld,
+    coalesce(cn.cn_left, 0)         AS creditNoteCredit
 FROM (SELECT 1 AS one) base
+-- F-M7: the credit notes' credit not used yet, which the next invoices take first (their total less what they gave
+-- back and what their credit paid).
+CROSS JOIN (
+    SELECT sum(n.{{QbFeeCreditNote.total}} - n.{{QbFeeCreditNote.refundedCash}} - n.{{QbFeeCreditNote.refundedCredit}})
+           - coalesce((SELECT sum(u.{{QbFeeCreditNoteUse.amount}}) FROM {{QbFeeCreditNoteUse}} u), 0) AS cn_left
+    FROM {{QbFeeCreditNote}} n) cn
 -- F-M5: what the Sponsor's publications set aside of the account and still hold (given back when they go back to
 -- their drafts or a day after they end): not a fee, not in the balances above.
 CROSS JOIN (
@@ -98,7 +108,7 @@ LEFT JOIN (
     WHERE x.{{QbWallet.kind}} = 'FEE_CREDIT') fc ON true
 -- Q87b: the platform fees still owed (F-M1: less what is paid of them), and the billing mode in effect (the sponsor's own, else the platform's default).
 CROSS JOIN (
-    SELECT sum(i.{{QbFeeInvoice.total}} - i.{{QbFeeInvoice.paidAmount}}) AS f_total, count(*) AS f_count,
+    SELECT sum(i.{{QbFeeInvoice.total}} - i.{{QbFeeInvoice.creditApplied}} - i.{{QbFeeInvoice.paidAmount}}) AS f_total, count(*) AS f_count,
            count(*) FILTER (WHERE i.{{QbFeeInvoice.status}} = 'OVERDUE') AS f_overdue
     FROM {{QbFeeInvoice}} i
     WHERE i.{{QbFeeInvoice.status}} IN ('OPEN', 'PARTIAL', 'OVERDUE')) f
