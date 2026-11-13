@@ -285,7 +285,7 @@ public final class CreditNotes {
                     }
                     com.jabiz.runtime.document.DocumentProcesses.IssueOutput issued = ctx.get(FeeProcesses.ISSUED,
                         com.jabiz.runtime.document.DocumentProcesses.IssueOutput.class);
-                    EntityInstance note = FeeGate.first(ctx, NOTE);
+                    EntityInstance note = ctx.get(NOTE, EntityInstance.class);
                     Map<String, Object> values = new LinkedHashMap<>();
                     values.put("creditNoteId", String.valueOf(note.id()));
                     values.put("sponsorId", note.get("sponsorId"));
@@ -297,7 +297,7 @@ public final class CreditNotes {
     }
 
     static DocumentOutput documentOutput(ProcessContext ctx) {
-        EntityInstance note = FeeGate.first(ctx, NOTE);
+        EntityInstance note = ctx.get(NOTE, EntityInstance.class);
         EntityInstance document = FeeGate.first(ctx, NOTE_DOCUMENT);
         com.jabiz.runtime.document.DocumentProcesses.IssueOutput issued = ctx.contains(FeeProcesses.ISSUED)
             ? ctx.get(FeeProcesses.ISSUED, com.jabiz.runtime.document.DocumentProcesses.IssueOutput.class) : null;
