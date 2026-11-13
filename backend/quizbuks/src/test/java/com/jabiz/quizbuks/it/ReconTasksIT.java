@@ -38,6 +38,17 @@ class ReconTasksIT extends TopUpItSupport {
     @Qualifier("qbReconcileJob")
     JobDefinition<?> reconcileJob;
 
+    /**
+     * F-M12 c: the operators' months are settled by a job, which the tests switch off, so an operator created years
+     * before the days of this class would be reported as waiting for its settlements in every run of a clean ledger.
+     * The operators are made to begin with the first day: this class is about the other checks, and the waiting check is
+     * tried in OperatorSettlementReconIT.
+     */
+    @org.junit.jupiter.api.BeforeEach
+    void operatorsBeginWithTheFirstDay() {
+        execute("UPDATE qb_operator SET created_at = ?", Timestamp.from(day(0)));
+    }
+
     @Autowired
     @Qualifier("qbReconAttentionJob")
     JobDefinition<?> attentionJob;

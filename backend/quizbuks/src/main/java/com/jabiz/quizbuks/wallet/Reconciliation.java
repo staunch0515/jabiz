@@ -64,6 +64,8 @@ public final class Reconciliation {
     static final String PREPAYMENTS_TEMPLATE = "qb.system.recon-prepayments";
     /** F-M7: the audience fees' refunds and the credit notes. */
     static final String CREDIT_NOTES_TEMPLATE = "qb.system.recon-credit-notes";
+    /** F-M12 c: the operators' settlements against their lines, the credit taken back against 5140, the waiting ones. */
+    static final String OPERATOR_SETTLEMENT_TEMPLATE = "qb.system.recon-operator-settlement";
     /** F-M10: everybody's row of the AI help's usage against the people's rows. */
     static final String HELP_USAGE_TEMPLATE = "qb.system.recon-help-usage";
 
@@ -132,6 +134,7 @@ public final class Reconciliation {
     static final String PREPAYMENTS = "prepayments";
     static final String CREDIT_NOTES = "creditNotes";
     static final String HELP_USAGE = "helpUsage";
+    static final String OPERATOR_SETTLEMENT = "operatorSettlement";
     static final String DISTRIBUTION_PARAMS = "distributionParams";
     static final String PREVIOUS = "previous";
     static final String PREVIOUS_TAKERS = "previousTakers";
@@ -181,7 +184,8 @@ public final class Reconciliation {
                 // F-M6 (review L4): the distribution checks' hours are the parameters' values, none written in the SQL.
                 .step("Load the distribution checks' hours", LoadParams.<ProcessContext>optional(ProcessContext::opTime,
                     DISTRIBUTION_PARAMS, QbParams.DISTRIBUTION_UNSETTLED_AFTER_HOURS,
-                    QbParams.DISTRIBUTION_FINAL_MISSING_AFTER_HOURS, QbParams.AUDIENCE_REFUND_MISSING_AFTER_HOURS))
+                    QbParams.DISTRIBUTION_FINAL_MISSING_AFTER_HOURS, QbParams.AUDIENCE_REFUND_MISSING_AFTER_HOURS,
+                    QbParams.OPERATOR_SETTLEMENT_WAITING_AFTER_HOURS))
                 // The fee account's checks are four statements by domain (F-M14 G10), each with the parameters it declares.
                 .step("Compare the fee credit", RunTemplate.<ProcessContext>of(FEE_CREDIT_TEMPLATE,
                     ctx -> Map.of(), FEE_CREDIT))
@@ -191,6 +195,8 @@ public final class Reconciliation {
                     ctx -> feeAccountParams(ctx, zone, "at", "zone", "unsettledHours", "missingHours"), PREPAYMENTS))
                 .step("Compare the credit notes", RunTemplate.<ProcessContext>of(CREDIT_NOTES_TEMPLATE,
                     ctx -> feeAccountParams(ctx, zone, "at", "refundHours"), CREDIT_NOTES))
+                .step("Compare the operators' settlements", RunTemplate.<ProcessContext>of(OPERATOR_SETTLEMENT_TEMPLATE,
+                    ctx -> feeAccountParams(ctx, zone, "at", "zone", "waitingHours"), OPERATOR_SETTLEMENT))
                 .step("Compare the AI help's usage", RunTemplate.<ProcessContext>of(HELP_USAGE_TEMPLATE,
                     ctx -> Map.of(), HELP_USAGE))
                 // The takers' cache follows by events: one found behind counts only when the previous run found them.
@@ -244,6 +250,7 @@ public final class Reconciliation {
         found.addAll(ReconChecks.coded(rows(ctx, OPERATOR_ACCOUNT)));
         found.addAll(ReconChecks.coded(rows(ctx, PREPAYMENTS)));
         found.addAll(ReconChecks.coded(rows(ctx, CREDIT_NOTES)));
+        found.addAll(ReconChecks.coded(rows(ctx, OPERATOR_SETTLEMENT)));
         found.addAll(ReconChecks.coded(rows(ctx, HELP_USAGE)));
         java.util.Set<String> foundBefore = new java.util.HashSet<>();
         TopUpCrediting.list(ctx, PREVIOUS_TAKERS).forEach(item -> foundBefore.add(item.get("partyId")));
@@ -332,6 +339,9 @@ public final class Reconciliation {
             java.math.BigDecimal.class).orElse(null));
         // F-M7 (N9): the audience fees not decided yet.
         values.put("refundHours", params.find(QbParams.AUDIENCE_REFUND_MISSING_AFTER_HOURS,
+            java.math.BigDecimal.class).orElse(null));
+        // F-M12 c: the hours after which a month without an operator's settlement is reported.
+        values.put("waitingHours", params.find(QbParams.OPERATOR_SETTLEMENT_WAITING_AFTER_HOURS,
             java.math.BigDecimal.class).orElse(null));
         values.keySet().retainAll(java.util.Set.of(names));
         return values;

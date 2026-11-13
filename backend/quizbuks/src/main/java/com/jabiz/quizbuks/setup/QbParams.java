@@ -181,10 +181,16 @@ public final class QbParams {
      * F-M12 b (plan §3.1, §5): how many days after a month's end the settlement waits for the step before it (the
      * distribution fees and the monthly invoices of the operator's sponsors) before it settles anyway; 0 to 31. Controlled
      * (it decides when money is counted), proposed after {@link #OPERATOR_SHARE} so earlier proposals keep their places.
-     * {@code qb.operator.settlement.waiting-after-hours} belongs to the reconciliation check (part c).
      */
     public static final String OPERATOR_SETTLEMENT_READINESS_MAX_DAYS = "qb.operator.settlement.readiness-max-days";
+    /**
+     * F-M12 c (plan §3.1, §5): how many hours after a month's end an operator without a settlement for it is reported
+     * by the daily check ({@code OPERATOR_SETTLEMENT_WAITING}); controlled, last of {@link #CONTROLLED}.
+     */
+    public static final String OPERATOR_SETTLEMENT_WAITING_AFTER_HOURS = "qb.operator.settlement.waiting-after-hours";
     public static final List<String> OPERATOR_SETTLEMENT = List.of(OPERATOR_SETTLEMENT_READINESS_MAX_DAYS);
+    /** The settlement's own settings are above; this one is the daily check's, which the settlement does not read. */
+    public static final List<String> OPERATOR_SETTLEMENT_CHECK = List.of(OPERATOR_SETTLEMENT_WAITING_AFTER_HOURS);
     /** The controlled AI parameters, in the order the administrators' page shows them. */
     public static final List<String> AI_CONTROLLED = List.of(AI_ENABLED, AI_MODEL, AI_EFFORT, AI_SPONSOR_DAILY_JOBS,
         AI_SPONSOR_MONTHLY_TOKENS, AI_GLOBAL_MONTHLY_TOKENS);
@@ -647,7 +653,7 @@ public final class QbParams {
         List.of(ENTRY_FEE_ENABLED), List.of(USAGE_FREE_BYTES), List.of(VIDEO_MAINLAND_SITES), HELP_CONTROLLED, FEE_CREDIT_PARAMS,
         SITE_PROFILE_CONTROLLED, DISTRIBUTION_CONTROLLED, EXPOSURE_CONTROLLED, REWARD_KUDOS, RECON_THRESHOLDS,
         HELP_USER_LIMITS,
-        OPERATOR_SHARE, OPERATOR_SETTLEMENT)
+        OPERATOR_SHARE, OPERATOR_SETTLEMENT, OPERATOR_SETTLEMENT_CHECK)
         .flatMap(List::stream).toList();
 
     /** A parameter: its key, kind (as the platform writes kinds) and first value. */
@@ -1120,7 +1126,11 @@ public final class QbParams {
         // share settings so the proposals before it keep their places).
         new Param(OPERATOR_SETTLEMENT_READINESS_MAX_DAYS, Map.of("type", "numeric", "precision", 2, "scale", 0), "5",
             "How many days after a month's end an operator's settlement waits for its sponsors' distribution fees and "
-                + "monthly invoices before it settles anyway (0 to 31; 0: it does not wait)"));
+                + "monthly invoices before it settles anyway (0 to 31; 0: it does not wait)"),
+        // F-M12 c: when the daily check reports a month an operator has no settlement for (controlled; the last).
+        new Param(OPERATOR_SETTLEMENT_WAITING_AFTER_HOURS, Map.of("type", "numeric", "precision", 4, "scale", 0), "48",
+            "How many hours after a month's end an operator still without its settlement for the month is reported "
+                + "by the daily check, with the step it waits for (0 to 9999)"));
 
     /** The declared value of a parameter: what {@code QB_SETUP} writes. */
     public static String defaultOf(String key) {

@@ -287,6 +287,19 @@ class TopUpConfig {
                 "zh", "抵用到已作废账单的贷项", "ja", "取消済みの請求書への充当")
             .item(ReconChecks.CREDIT_UNUSED_WITH_DUE, "en", "Credit left while an invoice is unpaid",
                 "zh", "有未用贷项却有未付账单", "ja", "返還インボイスの残高があるのに未払いの請求書")
+            .item(ReconChecks.OPERATOR_SETTLEMENT_WAITING, "en", "Operators without their settlement of a month "
+                + "(and the step they wait for)", "zh", "尚无某月结算的运营商（及其等待的步骤）",
+                "ja", "月の精算がまだない運営パートナー（待っている手順つき）")
+            .item(ReconChecks.OPERATOR_SETTLEMENT_COVERAGE, "en", "Operators' settlements against their lines, and "
+                + "fees or credit used not counted", "zh", "运营商结算与明细行，及未算入的费用或赠送额度支付",
+                "ja", "運営パートナーの精算と明細行、および未計上の料金・クレジット利用")
+            .item(ReconChecks.GIFT_RECOVERY, "en", "Granted credit taken back from operators (5140, by month)",
+                "zh", "向运营商扣回的赠送额度（5140，按月）", "ja", "運営パートナーから回収した付与クレジット（5140、月別）")
+            .item(ReconChecks.OPERATOR_CHARGE_NO_OPERATOR, "en", "Platform fees without an operator",
+                "zh", "没有运营商的平台费", "ja", "運営パートナーのないプラットフォーム料金")
+            .item(ReconChecks.OPERATOR_GIFT_CARRY_OPEN, "en", "Suspended operators that still carry credit to take "
+                + "back (a note)", "zh", "已停用的运营商仍有待扣回的赠送额度（仅提示）",
+                "ja", "停止中の運営パートナーに回収待ちのクレジットが残っている（お知らせのみ）")
 
             // Retired: named in the summaries of runs written before its rename (ReconChecks.RETIRED).
             .disabledItem(ReconChecks.DISTRIBUTION_PRICE_OUT_OF_RANGE, "en", "Distribution prices outside the "
