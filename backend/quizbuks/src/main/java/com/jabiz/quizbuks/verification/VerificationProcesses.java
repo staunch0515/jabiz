@@ -578,6 +578,7 @@ public final class VerificationProcesses {
                     .requiresVerifiedEmail()
                     .contextFactory((start, input) -> start(start, input, null))
                     .outputMapper(ctx -> ctx.get(OUTPUT, VerificationOutput.class));
+                CallerChecks.refuseBanned(pb);
                 // An operator's member is checked within the act (Q48e-1); headquarters passes.
                 OperatorChecks.memberWhenScoped(pb);
                 OperatorChecks.ownSponsor(pb, ctx -> ctx.get(INPUT, RevokeInput.class).sponsorId().strip());

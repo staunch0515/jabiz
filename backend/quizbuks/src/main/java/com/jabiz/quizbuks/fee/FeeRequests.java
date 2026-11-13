@@ -8,6 +8,8 @@ import com.jabiz.process.ProcessDefinition;
 import com.jabiz.query.EntityQuery;
 import com.jabiz.query.QueryPredicate;
 import com.jabiz.quizbuks.QbPermissions;
+import com.jabiz.quizbuks.identity.AccountEditing;
+import com.jabiz.quizbuks.identity.BanRules;
 import com.jabiz.quizbuks.identity.QbAccounts;
 import com.jabiz.quizbuks.identity.SponsorStatus;
 import com.jabiz.quizbuks.setup.QbParams;
@@ -128,6 +130,7 @@ public final class FeeRequests {
     static final String DO_VOID = "doVoid";
     static final String DO_CHARGE = "doCharge";
     static final String DO_GRANT = "doGrant";
+    static final String BAN = "ban";
     static final String GRANTED = "granted";
     static final String CAP = "cap";
     static final String CHARGE = "charge";
@@ -162,11 +165,13 @@ public final class FeeRequests {
             // F-M2: the cap of a grant by hand; not set (the setup does not create it) is no cap.
             .step("Load the cap of a grant by hand", LoadParams.<ProcessContext>optional(ProcessContext::opTime, CAP,
                 QbParams.FEE_CREDIT_MANUAL_MAX))
-            .step("Load the sponsor, the invoice and the review rule", QueryEntities.<ProcessContext>all(
+            .step("Load the sponsor, their ban, the invoice and the review rule", QueryEntities.<ProcessContext>all(
                 QueryEntities.query(QbAccounts.defaultDataset(QbAccounts.SPONSOR), ctx -> EntityQuery.builder()
                     .where(new QueryPredicate.And(List.of(
                         new QueryPredicate.In("userId", FeeGate.ids(sponsorOf(ctx))),
                         new QueryPredicate.Eq("reviewStatus", SponsorStatus.APPROVED)))).limit(1).build(), SPONSOR),
+                // F-M15 a0: a grant by hand is not asked for a banned sponsor (a fee by hand still is).
+                QueryEntities.query(QbAccounts.defaultDataset(QbAccounts.BAN), ctx -> banOf(sponsorOf(ctx)), BAN),
                 QueryEntities.query(QbFees.defaultDataset(QbFees.INVOICE),
                     ctx -> FeeProcesses.byId("invoiceId", input(ctx).invoiceId()), INVOICE),
                 QueryEntities.query(ApprovalEntities.RULE_DATASET, ctx -> EntityQuery.builder()
@@ -230,6 +235,10 @@ public final class FeeRequests {
                 problems.add(new Violation("sponsorId", credit ? FeeCodes.FEE_CREDIT_SPONSOR : FeeCodes.FEE_SPONSOR,
                     credit ? "Only an approved sponsor is granted platform fee Kudos" : "Only an approved sponsor is charged",
                     Map.of()));
+            }
+            if (credit && banned(ctx)) {
+                problems.add(new Violation("sponsorId", FeeCodes.FEE_CREDIT_BANNED,
+                    "A banned sponsor is granted no platform fee Kudos", Map.of()));
             }
             if (credit && input.amount() != null && !FeeCreditRules.withinCap(input.amount(), cap(ctx))) {
                 problems.add(new Violation("amount", FeeCodes.FEE_CREDIT_MAX,
@@ -311,6 +320,18 @@ public final class FeeRequests {
                 Map.of("creditable", creditable.toPlainString(), "amount", amount.toPlainString()));
         }
         return null;
+    }
+
+    /** The ban of the sponsor a request names (none for none). */
+    static EntityQuery banOf(Object sponsorId) {
+        return EntityQuery.builder().where(new QueryPredicate.In("userId", AccountEditing.uuids(sponsorId))).limit(1)
+            .build();
+    }
+
+    /** Whether the sponsor read is banned now. */
+    static boolean banned(ProcessContext ctx) {
+        EntityInstance ban = first(ctx, BAN);
+        return BanRules.banned(ban == null ? null : ban.attributes());
     }
 
     /** Whether a kind of request names its sponsor and an amount (a fee or a grant by hand), not an invoice. */
@@ -416,6 +437,9 @@ public final class FeeRequests {
                             new QueryPredicate.In("userId", FeeGate.ids(first(ctx, FOUND) == null ? null
                                 : first(ctx, FOUND).get("sponsorId"))),
                             new QueryPredicate.Eq("reviewStatus", SponsorStatus.APPROVED)))).limit(1).build(), SPONSOR),
+                    // F-M15 a0: banned while the grant by hand was in review: rejected, not stuck.
+                    QueryEntities.query(QbAccounts.defaultDataset(QbAccounts.BAN), ctx -> banOf(first(ctx, FOUND) == null
+                        ? null : first(ctx, FOUND).get("sponsorId")), BAN),
                     QueryEntities.query(QbFees.defaultDataset(QbFees.INVOICE), ctx -> FeeProcesses.byId("invoiceId",
                         first(ctx, FOUND) == null ? null : (String) first(ctx, FOUND).get("invoiceId")), INVOICE),
                     // Both keyed by the lookup: the row above is read in this same statement, not yet in hand.
@@ -554,6 +578,10 @@ public final class FeeRequests {
                 return;
             }
             if (manual && first(ctx, SPONSOR) == null) {
+                ctx.put(STATUS_AFTER, QbFees.REJECTED);
+                return;
+            }
+            if (credit && banned(ctx)) {
                 ctx.put(STATUS_AFTER, QbFees.REJECTED);
                 return;
             }

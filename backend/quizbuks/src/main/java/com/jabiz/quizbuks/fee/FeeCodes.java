@@ -36,6 +36,8 @@ public final class FeeCodes {
     public static final String FEE_CREDIT_MAX = "QB_FEE_CREDIT_MAX";
     /** F-M2: only a lead of the sponsor's operator confirms the sponsor. */
     public static final String FEE_CREDIT_LEAD = "QB_FEE_CREDIT_LEAD";
+    /** F-M15 a0: a banned sponsor is granted no platform fee Kudos (a lot their key already has is still given back). */
+    public static final String FEE_CREDIT_BANNED = "QB_FEE_CREDIT_BANNED";
 
     /** F-M5: what a publication sets aside is more than the account (prepaid) or the credit limit (postpaid) allows. */
     public static final String PUBLICATION_FUNDS = "QB_PUBLICATION_FUNDS";
@@ -62,7 +64,7 @@ public final class FeeCodes {
 
     public static final List<String> ALL = List.of(PUBLICATION_FUNDS, FEE_UNPAID, FEE_CASH_SHORT, FEE_INVOICE_STATE, FEE_SPONSOR,
         FEE_PERIOD, FEE_PARAMS, FEE_NO_REVIEW, FEE_BILLING_MODE, FEE_OWN, FEE_NOTHING_DUE, FEE_CREDIT_OFF,
-        FEE_CREDIT_SPONSOR, FEE_CREDIT_GIVEN, FEE_CREDIT_MAX, FEE_CREDIT_LEAD, DISTRIBUTION_PRICE_REQUIRED,
+        FEE_CREDIT_SPONSOR, FEE_CREDIT_GIVEN, FEE_CREDIT_MAX, FEE_CREDIT_LEAD, FEE_CREDIT_BANNED, DISTRIBUTION_PRICE_REQUIRED,
         DISTRIBUTION_PRICE_RANGE, DISTRIBUTION_FLOOR_ABOVE_CEILING, DISTRIBUTION_DEPOSIT_RANGE,
         DISTRIBUTION_RANGE_MISSING, CREDIT_NOTE_VOIDED, CREDIT_NOTE_EXCEEDS, INVOICE_HAS_CREDIT_NOTE,
         AUDIENCE_REFUND_NOT_OPEN);

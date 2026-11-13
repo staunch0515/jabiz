@@ -147,8 +147,9 @@ public class SponsorErasure {
                     // The onboarding: tombstoned; the purge overwrites who they are in every version.
                     ErasedEntity.delete(QbAccounts.SPONSOR, "userId", "contactName", "company", "intro", "avatar",
                         "introTranslations"),
-                    // Money stays (ten years): only who paid a bank transfer is overwritten.
-                    ErasedEntity.keep(QbTopUps.TOPUP, "sponsorId", "payerName"),
+                    // Money stays (ten years): only who paid a bank transfer and why one was entered by hand
+                    // (F-M15 a0) are overwritten. The fees' texts: FeeErasure.
+                    ErasedEntity.keep(QbTopUps.TOPUP, "sponsorId", "payerName", "manualReason"),
                     // F-M7: credit notes stay as the invoices they credit do; the purge overwrites finance's
                     // explanation (it may name the company), and their documents, which name it, unless retained with
                     // the receipts' (RetentionPolicy of DocumentRun).
