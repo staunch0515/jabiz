@@ -2,10 +2,11 @@ import { readFileSync } from 'node:fs'
 import { certificatesOf, verifyPage } from './certificates'
 import { query } from './content'
 import { decideAsOperator, reviewerFor } from './operators'
-import { searchHome } from './play'
+import { searchHome, taker } from './play'
 import { publicationOf } from './publishing'
 import { boundPublicationOf, CAPITALS, operatorTree, platformMap, pass } from './tree'
 import { answerQuiz, GRANT, loopCast, phone, rememberParams, STEP_TIMEOUT_MS, type Loop } from './launch-loop'
+import { sharedVideos } from './exposure-videos'
 import { contentAdmin } from './legal'
 import { approvedSponsor, fund } from './wallet'
 import {
@@ -36,6 +37,8 @@ import {
  *   7b F-M7: an audience-rule publication ends early (its one winner's place taken): with the refund switch on, the
  *      daily job (run every minute here) issues a credit note for the unused days and the cash goes back; the
  *      publication's page lists the note
+ *   7c F-M8: the exposure fee: bought when submitted, counted by two takers, settled by the final job once it ends
+ *      and the rest given back
  *
  * Not repeated here: the editor's keyboard (tree-graph.spec), certificates turned off and the deleted account
  * (certificates.spec), and mainland China's view of a publication with a foreign video (foreign-video.spec: the
@@ -646,6 +649,62 @@ test.describe.serial('the first launch\'s loop', () => {
       await restore()
     }
   })
+
+  test('7c. F-M8 the exposure fee: bought when submitted, counted by takers, settled once it ends, the rest given back',
+    async ({ request }) => {
+      // A short run (the minute's check ends it when the exposures are used up, the final job settles after a grace).
+      test.setTimeout(STEP_TIMEOUT_MS + 300_000)
+      const { sora, operator, map } = loop
+      const restore = await rememberParams(request, [
+        { key: 'qb.exposure.min-purchase', absent: '100' },
+        { key: 'qb.exposure.final.end-grace-sec', absent: '3600' },
+      ])
+      try {
+        await setControlledParam(request, 'qb.exposure.min-purchase', '2', { type: 'numeric', precision: 9, scale: 0 })
+        await setControlledParam(request, 'qb.exposure.final.end-grace-sec', '60',
+          { type: 'numeric', precision: 5, scale: 0 })
+        // Her operator's lead prices an exposure at 2 yen (within the headquarters' range of 1 to 100).
+        await run(request, operator.operatorToken, 'QB_OPERATOR_EXPOSURE_PRICE_SET', { unit: '2.0000',
+          reason: 'Closed loop' })
+        await fund(request, sora.token, 1000)
+        const videos = await sharedVideos(request, unique('loop'))
+        // Three exposures bought (3 x 2 = 6 yen and its tax, set aside); two takers watch it, so the third is given back.
+        const made = await boundPublicationOf(request, sora.token, map!.treeId, map!.basics, unique('Video sprint '),
+          { reward: 0, endInMs: 90_000, sharedVideoId: videos.vertical, exposureRequested: 3 })
+        const [held] = (await query(request, sora.token, 'qb.sponsor.publication-prepayments',
+          { publicationId: made.publicationId })).filter((row) => row.purpose === 'EXPOSURE')
+        expect(held).toEqual(expect.objectContaining({ status: 'OPEN' }))
+        const [bought] = await query(request, sora.token, 'qb.sponsor.publication-exposure',
+          { publicationId: made.publicationId })
+        expect(Number(bought.unit)).toBe(2)
+        expect(Number(bought.purchased)).toBe(3)
+
+        for (const name of ['Exa', 'Exb']) {
+          const watcher = await taker(request, name)
+          const reported = await run(request, watcher.token, 'QB_EXPOSURE_REPORT', { reports: [{
+            publicationId: made.publicationId, kind: 'EXPOSURE', surface: 'VERTICAL', seconds: 95,
+            timer: 'SCREEN' }] })
+          expect(reported.counted).toBe(1)
+        }
+
+        // Ended by the minute's tick, then the final job charges the two exposures and gives back the third.
+        await expect.poll(async () => {
+          const [row] = await query(request, sora.token, 'qb.sponsor.publication-exposure',
+            { publicationId: made.publicationId })
+          if (row.finalSettled === true) return true
+          await runJobNow(request, 'qb.exposure-final').catch(() => undefined)
+          return false
+        }, { message: 'the final settlement', timeout: 270_000, intervals: [10_000] }).toBe(true)
+        const settlements = await query(request, sora.token, 'qb.sponsor.publication-exposure-settlements',
+          { publicationId: made.publicationId })
+        expect(settlements).toEqual([expect.objectContaining({ final: true, toCount: 2, amount: 4 })])
+        const [after] = (await query(request, sora.token, 'qb.sponsor.publication-prepayments',
+          { publicationId: made.publicationId })).filter((row) => row.purpose === 'EXPOSURE')
+        expect(after).toEqual(expect.objectContaining({ status: 'RELEASED', remaining: 0 }))
+      } finally {
+        await restore()
+      }
+    })
 })
 
 /** An approved Sponsor moved to the operator (a Sponsor signs up with the default operator). */
