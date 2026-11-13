@@ -391,7 +391,7 @@ describe('ReconciliationPage by level (F-M14)', () => {
     const price = level('DISTRIBUTION_PRICE_RANGE')
     expect(within(price).getByTestId('recon-level')).toHaveAttribute('data-level', 'ATTENTION')
     expect(within(price).getByTestId('recon-level')).toHaveTextContent('Needs attention')
-    expect(within(price).getByTestId('recon-help')).toHaveTextContent(/outside the headquarters. range.*operations §7\.53/)
+    expect(within(price).getByTestId('recon-help')).toHaveTextContent(/outside the headquarters. range.*operations §7\.54/)
     await waitFor(() => expect(within(price).getByTestId('recon-days')).toHaveTextContent('Needs attention for 2 days'))
     expect(within(level('CREDIT_UNUSED_WITH_DUE')).getByTestId('recon-days'))
       .toHaveTextContent('Needs attention for 0 days')
