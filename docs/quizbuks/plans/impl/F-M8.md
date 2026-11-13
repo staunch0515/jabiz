@@ -44,7 +44,7 @@
 
 ### 3.2 价目与范围
 - `QB_OPERATOR_EXPOSURE_PRICE_SET`（运营商负责人，`OperatorChecks.member` 且是负责人）与 `QB_EXPOSURE_PRICE_SET`（总部财务 `qb.fee.manage`，为某运营商设）。锁用自己的 `qb.exposure-price:<运营商>`（不取 `qb.operator:<运营商>` 之后的成员共享锁，理由同 F-M6 实施记录第 5 条）。理由必填；只影响此后提交的发布。
-- 总部范围为受控参数（见第 5 节）；保存时按当时范围检查；范围改窄后已有价目不自动改，每日核对报 `EXPOSURE_PRICE_OUT_OF_RANGE`。
+- 总部范围为受控参数（见第 5 节）；保存时按当时范围检查；范围改窄后已有价目不自动改，每日核对报 `EXPOSURE_PRICE_RANGE`。
 
 ### 3.3 提交（`PublicationPrepayments.items` 加一项 `EXPOSURE`）
 - 开关 `qb.exposure.billing.enabled` **只在提交时看**，关掉不追溯（同 F-M6 总控决定 8）。
@@ -146,7 +146,7 @@
   - `EXPOSURE_DEPOSITS`：2180 用途 `EXPOSURE` 按发布 = `OPEN` 预付款剩余；
   - `EXPOSURE_SETTLED_OVER`：某发布各结算行的次数之和 > 已购次数（结算次数 ≤ 已购，规格）；
   - `EXPOSURE_UNSETTLED`、`EXPOSURE_FINAL_MISSING`：同配送费（用 `qb.exposure.unsettled-after-hours`、`.final-missing-after-hours`）；
-  - `EXPOSURE_PRICE_OUT_OF_RANGE`：运营商价目超出总部范围；
+  - `EXPOSURE_PRICE_RANGE`：运营商价目超出总部范围；
   - `EXPOSURE_UNPURCHASED`（只提示，不算差异，放 `ReconChecks.NOTES`）：进行中、用他人视频、却没有已购的发布（开关打开前提交的，或运营商没有价目的），供运营商与总部查看。
   - F-S13 的 `qb.exposure-check`（成功 ≤ 已购 + 容差）不变。
 - **月报**（`qb.admin.monthly`，`monthly.sql`，分类按参照 `prepay_exposure` / `fee_exposure_<月>` 分出，仿 `DISTRIBUTION_*`）：`EXPOSURE_DEPOSIT`（冻结与追加）、`EXPOSURE_RELEASED`、`EXPOSURE_CHARGED`；`PREPAYMENT_FROZEN / RELEASED` 不再含这些；`AdminFinanceIT` 逐行。
