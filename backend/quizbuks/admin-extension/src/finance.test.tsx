@@ -9,9 +9,9 @@ import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { ApiError, AppearanceProvider, EXTENSION_NAMESPACE, Toaster } from '@jabiz/admin'
 import { expectAccessible } from '@jabiz/admin/testing'
 import FinanceOverviewPage from './FinanceOverviewPage'
-import { byCheck, transferFilterOf } from './finance'
+import { byCheck, levelCounts, transferFilterOf } from './finance'
 import { monthPeriod, monthRange, previousMonth, type ReconItem } from './finance-api'
-import { TEMPLATE } from './ids'
+import { DICTIONARY, TEMPLATE } from './ids'
 import { messages } from './messages'
 import ReconciliationPage from './ReconciliationPage'
 import ReportsPage from './ReportsPage'
@@ -76,7 +76,9 @@ beforeEach(() => {
       takerBalance: 1500, takerPendingOut: 0, transfersInReview: 3, transfersInDoubt: 1, heldTakers: 2,
       entryFeesUnsettled: 120 }]],
     [TEMPLATE.reconSummary, [{ lastRunId: RUN, lastRunAt: '2026-10-15T18:37:00Z', lastRunStatus: 'DIFF',
-      lastRunItems: 4, openTasks: 5 }]],
+      lastRunItems: 4, openTasks: 5,
+      lastRunSummary: '{"LEDGER_ZERO":1,"TOPUP_REFUNDS":2,"DISTRIBUTION_PRICE_RANGE":3,"CREDIT_UNUSED_WITH_DUE":1,'
+        + '"DISTRIBUTION_AT_FLOOR":4,"TAKER_WALLET_LAG":1,"SPONSOR_WALLET":0}' }]],
     [TEMPLATE.accountBalances, [{ accountCode: '2110', accountName: 'Sponsor prepayments', balance: -9000 },
       { accountCode: '1110', accountName: 'Stripe balance', balance: 10500 }]],
     [TEMPLATE.transfers, [transfer()]],
@@ -100,6 +102,8 @@ beforeEach(() => {
       { itemId: 'i4', checkCode: 'LEDGER_ZERO', partyId: null, reference: null, expected: 0, actual: 1,
         difference: 1 },
     ]],
+    [TEMPLATE.reconAttentionDays, [{ checkCode: 'DISTRIBUTION_PRICE_RANGE', objectKey: 'op-1', days: 2 },
+      { checkCode: 'CREDIT_UNUSED_WITH_DUE', objectKey: '-', days: 0 }]],
     [TEMPLATE.monthly, [{ seq: 1, category: 'TOPUP', transactionCount: 1, amount: 10000, stripeBalance: 10000,
       sponsorWallets: -10000 }]],
     [TEMPLATE.investorMetrics, [
@@ -128,8 +132,13 @@ beforeEach(() => {
   server.runProcess.mockReset().mockResolvedValue({ runId: 'run-1', contentHash: 'f'.repeat(64), rowCount: 12 })
   server.sessionFetch.mockReset().mockResolvedValue(new Response('kind,count\r\n', {
     status: 200, headers: { 'Content-Disposition': 'attachment; filename="qb.admin.monthly-20261101.csv"' } }))
-  server.get.mockReset().mockImplementation(async (path: string, options?: { params?: { path?: { runId?: string } } }) => {
-    if (path === '/api/dictionaries/{urn}') return []
+  server.get.mockReset().mockImplementation(async (path: string, options?: { params?: { path?: { runId?: string; urn?: string } } }) => {
+    if (path === '/api/dictionaries/{urn}') {
+      return options?.params?.path?.urn === DICTIONARY.reconLevel ? [
+        { code: 'LEDGER_ZERO', label: 'Difference' }, { code: 'TOPUP_REFUNDS', label: 'Difference' },
+        { code: 'DISTRIBUTION_PRICE_RANGE', label: 'Needs attention' }, { code: 'CREDIT_UNUSED_WITH_DUE', label: 'Needs attention' },
+        { code: 'TAKER_WALLET_LAG', label: 'Note' }] : []
+    }
     // Two runs of the monthly report: October's (current) and September's; only the period shown is listed.
     if (path === '/api/reports/runs') return [
       { runId: 'run-0', period: '2026-10-01 – 2026-11-01', rowCount: 12, contentHash: 'a'.repeat(64),
@@ -184,6 +193,10 @@ describe('FinanceOverviewPage', () => {
     expect(screen.getByTestId('finance-last-run')).toHaveAttribute('href', `/qb/finance/reconciliation?run=${RUN}`)
     expect(screen.getByTestId('finance-last-run')).toHaveTextContent('Differences, 4 differences')
     expect(screen.getByTestId('finance-tasks')).toHaveAttribute('href', '/tasks')
+    // F-M14: the latest run's counts by level, from its summary, leading to that run.
+    const levels = screen.getByTestId('finance-last-run-levels')
+    expect(levels).toHaveAttribute('href', `/qb/finance/reconciliation?run=${RUN}`)
+    expect(levels).toHaveTextContent('Differences 3 / needs attention 4 / notes 5')
     // The staleness is the server's: the page only says since when.
     expect(calledWith(TEMPLATE.financeSummary)[0][1].params.staleBefore).toMatch(/^\d{4}-\d{2}-\d{2}T/)
     const accounts = await screen.findAllByTestId('finance-account')
@@ -338,6 +351,73 @@ describe('ReconciliationPage', () => {
     expect(within(groups[1]).getByTestId('recon-party')).toHaveAttribute('href', `/qb/users/${TAKER}`)
     expect(within(groups[2]).queryByTestId('recon-reference')).not.toBeInTheDocument()
     expect(calledWith(TEMPLATE.reconItems)[0][1].params).toEqual({ runId: RUN })
+  })
+})
+
+describe('levelCounts', () => {
+  it('counts the summary by the level of each check', () => {
+    expect(levelCounts('{"LEDGER_ZERO":1,"TOPUP_REFUNDS":2,"DISTRIBUTION_PRICE_RANGE":3,"CREDIT_UNUSED_WITH_DUE":1,'
+      + '"AUDIENCE_REFUND_NO_PERIOD":2,"DISTRIBUTION_AT_FLOOR":4,"TAKER_WALLET_LAG":1}'))
+      .toEqual({ differences: 3, attention: 6, notes: 5 })
+    expect(levelCounts(null)).toEqual({ differences: 0, attention: 0, notes: 0 })
+    expect(levelCounts('not json')).toEqual({ differences: 0, attention: 0, notes: 0 })
+  })
+})
+
+describe('ReconciliationPage by level (F-M14)', () => {
+  function items(): Row[] {
+    return [
+      { itemId: 'a1', checkCode: 'DISTRIBUTION_PRICE_RANGE', partyId: 'op-1', reference: null, expected: 0, actual: 1,
+        difference: 1 },
+      { itemId: 'a2', checkCode: 'CREDIT_UNUSED_WITH_DUE', partyId: null, reference: null, expected: 0, actual: 5,
+        difference: 5 },
+      { itemId: 'a3', checkCode: 'TAKER_WALLET_LAG', partyId: TAKER, reference: null, expected: 1, actual: 2,
+        difference: 1 },
+      { itemId: 'a4', checkCode: 'LEDGER_ZERO', partyId: null, reference: null, expected: 0, actual: 1, difference: 1 },
+    ]
+  }
+
+  it('shows each group its level, what to do and, for attention, for how many days', async () => {
+    server.templates.set(TEMPLATE.reconItems, items())
+    renderAt(`/qb/finance/reconciliation?run=${RUN}`, '/qb/finance/reconciliation', <ReconciliationPage />)
+    const groups = await screen.findAllByTestId('recon-group')
+    const level = (check: string) => groups.find((group) => group.dataset.check === check)!
+    expect(within(level('LEDGER_ZERO')).getByTestId('recon-level')).toHaveAttribute('data-level', 'DIFFERENCE')
+    expect(within(level('TAKER_WALLET_LAG')).getByTestId('recon-level')).toHaveAttribute('data-level', 'NOTE')
+    expect(within(level('TAKER_WALLET_LAG')).getByTestId('recon-level')).toHaveTextContent('Note')
+    const price = level('DISTRIBUTION_PRICE_RANGE')
+    expect(within(price).getByTestId('recon-level')).toHaveAttribute('data-level', 'ATTENTION')
+    expect(within(price).getByTestId('recon-level')).toHaveTextContent('Needs attention')
+    expect(within(price).getByTestId('recon-help')).toHaveTextContent(/outside the headquarters. range.*operations §7\.53/)
+    await waitFor(() => expect(within(price).getByTestId('recon-days')).toHaveTextContent('Needs attention for 2 days'))
+    expect(within(level('CREDIT_UNUSED_WITH_DUE')).getByTestId('recon-days'))
+      .toHaveTextContent('Needs attention for 0 days')
+    expect(within(level('LEDGER_ZERO')).queryByTestId('recon-days')).not.toBeInTheDocument()
+    expect(calledWith(TEMPLATE.reconAttentionDays)[0][1].params).toMatchObject({ runId: RUN })
+  })
+
+  it('asks for the days only when the run has an item for attention', async () => {
+    renderAt(`/qb/finance/reconciliation?run=${RUN}`, '/qb/finance/reconciliation', <ReconciliationPage />)
+    await screen.findAllByTestId('recon-group')
+    expect(calledWith(TEMPLATE.reconAttentionDays)).toHaveLength(0)
+  })
+
+  it('links a reference or a user only to someone who may open the page it leads to', async () => {
+    server.permissions = new Set(['qb.reconcile', 'task.read'])
+    renderAt(`/qb/finance/reconciliation?run=${RUN}`, '/qb/finance/reconciliation', <ReconciliationPage />)
+    const groups = await screen.findAllByTestId('recon-group')
+    const references = within(groups[0]).getAllByTestId('recon-reference')
+    expect(references[0].tagName).toBe('SPAN')
+    expect(references[0]).toHaveTextContent('The top-up')
+    expect(within(groups[1]).getByTestId('recon-reference').tagName).toBe('SPAN')
+    expect(within(groups[1]).getByTestId('recon-party').tagName).toBe('SPAN')
+    expect(within(groups[1]).getByTestId('recon-party')).toHaveTextContent(TAKER)
+    cleanup()
+    server.permissions = new Set(['qb.reconcile', 'qb.admin.finance.read'])
+    renderAt(`/qb/finance/reconciliation?run=${RUN}`, '/qb/finance/reconciliation', <ReconciliationPage />)
+    const again = await screen.findAllByTestId('recon-group')
+    expect(within(again[1]).getByTestId('recon-reference').tagName).toBe('A')
+    expect(within(again[1]).getByTestId('recon-party').tagName).toBe('SPAN')
   })
 })
 
