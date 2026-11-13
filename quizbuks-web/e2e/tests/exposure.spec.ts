@@ -138,7 +138,7 @@ test('the home does not count; the vertical mode and the start page do; used up 
     const unlimited = await live(request, sponsor.token, `${base} unlimited`, { shared: videos.vertical })
     const wide = await live(request, sponsor.token, `${base} wide`, { shared: videos.horizontal })
     // One exposure bought for the first (F-M8's purchase, through the tests' own root of its sub-process).
-    await run(request, videos.hq, 'QB_E2E_EXPOSURE_PURCHASE', { publicationId: limited, purchased: 1 })
+    await run(request, videos.hq, 'QB_E2E_EXPOSURE_PURCHASE', { publicationId: limited, purchased: 1, unit: 1 })
     expect((await figures(request, sponsor.token, limited)).purchased).toBe(1)
 
     // 1. The home's preview never counts: another taker (a browser of their own) stays on the home, then leaves it
