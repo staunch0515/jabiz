@@ -155,7 +155,7 @@ export default function FinanceOverviewPage() {
             data-status={r.lastRunStatus ?? ''}>
             {t('finance.overview.lastRunValue', { time: when(r.lastRunAt),
               status: t(`finance.recon.status.${r.lastRunStatus === 'DIFF' ? 'DIFF' : 'OK'}`),
-              n: r.lastRunItems })}
+              n: levels.differences })}
           </Link>
         )
         : t('finance.overview.noRun') },

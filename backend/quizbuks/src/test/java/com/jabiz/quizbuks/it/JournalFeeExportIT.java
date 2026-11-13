@@ -113,6 +113,26 @@ class JournalFeeExportIT extends CreditNoteItSupport {
         assertThat(sponsorsOf(voucherTwo, "1130", "CREDIT")).isEqualTo(paying);
         assertThat(sponsorsOf(voucherTwo, "2180", "DEBIT")).isEmpty();
         assertThat(sponsorsOf(voucherTwo, "2180", "CREDIT")).isEmpty();
+        // #688 review L10: the amounts too. Each paying Sponsor's month-two fee with its tax, charged (debit) and paid
+        // (credit) within the month: both lines are that fee.
+        for (String sponsor : paying) {
+            List<Map<String, Object>> fees = query("SELECT amount + tax AS total FROM qb_fee_charge_version "
+                + "WHERE sponsor_id = ? AND kind = 'MONTHLY' AND period = ?", sponsor, first.plusMonths(1).toString());
+            assertThat(fees).as("month two's fee of " + sponsor).hasSize(1);
+            BigDecimal total = new BigDecimal(String.valueOf(fees.getFirst().get("total")));
+            assertThat(total).isPositive();
+            assertThat(side(voucherTwo, "1130", "DEBIT", sponsor)).as("1130 debit " + sponsor)
+                .isEqualByComparingTo(total);
+            assertThat(side(voucherTwo, "1130", "CREDIT", sponsor)).as("1130 credit " + sponsor)
+                .isEqualByComparingTo(total);
+        }
+    }
+
+    /** A Sponsor's lines on one side of an account on the voucher, added up. */
+    private static BigDecimal side(Voucher voucher, String account, String side, String sponsor) {
+        return voucher.lines().stream().filter(l -> account.equals(l.get("platform_account"))
+                && side.equals(l.get("side")) && sponsor.equals(l.get("sponsor_id")))
+            .map(l -> new BigDecimal(l.get("amount"))).reduce(BigDecimal.ZERO, BigDecimal::add);
     }
 
     /** A Sponsor whose audience fee is set aside, paid from by a taker's place and the rest given back. */

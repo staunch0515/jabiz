@@ -247,7 +247,8 @@ class MonthlyKindsIT extends PayoutItSupport {
             "CASH_REFUND", "CASH_DISPUTE", "BANK_TOPUP", "CASH_BANK_TOPUP", "MANUAL_TOPUP", "GRANT", "KUDOS_BOUGHT",
             "KUDOS_SOLD", "REWARD", "TRANSFER_SENT", "TRANSFER_SETTLED", "TRANSFER_REVERSED", "TRANSFER_FAILED",
             "WITHDRAWAL_PAID", "PAYOUT", "PAYOUT_FAILED"), query(MonthlyKinds.SOURCES_SQL),
-            ((Number) query(MonthlyKinds.NO_SOURCE_SQL).getFirst().get("n")).longValue());
+            ((Number) query(MonthlyKinds.NO_SOURCE_SQL).getFirst().get("n")).longValue(),
+            query(MonthlyKinds.TOTALS_SQL).getFirst());
         assertBooksBalance();
     }
 }

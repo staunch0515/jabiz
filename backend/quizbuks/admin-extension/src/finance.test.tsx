@@ -192,7 +192,8 @@ describe('FinanceOverviewPage', () => {
     expect(screen.getByTestId('finance-in-doubt')).toHaveAttribute('href', '/qb/finance/transfers?stale=1')
     expect(screen.getByTestId('finance-held')).toHaveAttribute('href', '/qb/finance/transfers?held=1')
     expect(screen.getByTestId('finance-last-run')).toHaveAttribute('href', `/qb/finance/reconciliation?run=${RUN}`)
-    expect(screen.getByTestId('finance-last-run')).toHaveTextContent('Differences, 4 differences')
+    // #688 review M2: the differences of the summary (3), not every item the run found (4).
+    expect(screen.getByTestId('finance-last-run')).toHaveTextContent('Differences, 3 differences')
     expect(screen.getByTestId('finance-tasks')).toHaveAttribute('href', '/tasks')
     // F-M14: the latest run's counts by level, from its summary, leading to that run.
     const levels = screen.getByTestId('finance-last-run-levels')
@@ -397,6 +398,8 @@ describe('ReconciliationPage by level (F-M14)', () => {
       .toHaveTextContent('Needs attention for 0 days')
     expect(within(level('LEDGER_ZERO')).queryByTestId('recon-days')).not.toBeInTheDocument()
     expect(calledWith(TEMPLATE.reconAttentionDays)[0][1].params).toMatchObject({ runId: RUN })
+    // #688 review M3: the run with the three levels, their help and the days passes axe.
+    await expectAccessible()
   })
 
   it('asks for the days only when the run has an item for attention', async () => {

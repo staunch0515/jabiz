@@ -50,8 +50,8 @@ import static org.assertj.core.api.Assertions.assertThat;
  * (its lead moves part of it to their cash) and OPERATOR_PAID (a withdrawal paid).
  *
  * <p>Not driven (too costly for a guard; each has its own row-by-row tests): REFERRAL_REWARD ({@code ReferralIT}: needs
- * a tree prerequisite, a claim and a pass) and FEE_CREDIT_RECOVERED ({@code OperatorSettlementGiftIT}: granted credit
- * used, then taken back from the operator's settlement). Their sources are in the table and their rows in the report.
+ * a tree prerequisite, a claim and a pass) and FEE_CREDIT_RECOVERED ({@code OperatorSettlementMonthlyIT}, its April
+ * and May: the take-back of granted credit, and its negative after a credit note). Their sources are in the table and their rows in the report.
  */
 class MonthlyKindsFeeIT extends CreditNoteItSupport {
 
@@ -226,7 +226,8 @@ class MonthlyKindsFeeIT extends CreditNoteItSupport {
             "FEE_CREDIT_GRANTED", "FEE_CREDIT_VOIDED", "ENTRY_FEE", "ENTRY_FEE_SETTLED", "DISTRIBUTION_DEPOSIT",
             "DISTRIBUTION_CHARGED", "DISTRIBUTION_RELEASED", "OPERATOR_SHARE", "OPERATOR_TRANSFER_TO_DIRECT",
             "OPERATOR_PAID"), query(MonthlyKinds.SOURCES_SQL),
-            ((Number) query(MonthlyKinds.NO_SOURCE_SQL).getFirst().get("n")).longValue());
+            ((Number) query(MonthlyKinds.NO_SOURCE_SQL).getFirst().get("n")).longValue(),
+            query(MonthlyKinds.TOTALS_SQL).getFirst());
         assertBooksBalance();
     }
 }
