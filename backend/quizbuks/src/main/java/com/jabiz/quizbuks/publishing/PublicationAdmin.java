@@ -1,5 +1,6 @@
 package com.jabiz.quizbuks.publishing;
 
+import com.jabiz.quizbuks.identity.CallerChecks;
 import com.jabiz.entity.Violation;
 import com.jabiz.process.ProcessContext;
 import com.jabiz.process.ProcessDefinition;
@@ -125,6 +126,9 @@ public final class PublicationAdmin {
                 .outputMapper(ctx -> ctx.get(OUTPUT, PublicationOutput.class))
                 .steps(b -> {
                     if (operator) {
+                        // F-ban-coverage: a banned member's still valid token is refused before anything else (the
+                        // headquarters variant cannot be banned). Not readBan's, which is the sponsor's.
+                        CallerChecks.refuseBanned(b);
                         OperatorChecks.member(b);
                     }
                 })

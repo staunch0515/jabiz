@@ -434,6 +434,8 @@ public final class HelpProcesses {
                 .permissions(QbPermissions.ADMIN_HELP)
                 .contextFactory(HelpProcesses::context)
                 .outputMapper(ctx -> ctx.get(OUTPUT, ThreadOutput.class))
+                // F-ban-coverage: a banned member's still valid token is refused before anything else.
+                .steps(CallerChecks::refuseBanned)
                 .step("Take the conversation's turn", HoldLock.<ProcessContext>exclusive(
                     ctx -> QbHelp.threadLock(ctx.get(INPUT, ReplyInput.class).threadId())))
                 .step("Load the conversation", QueryEntities.<ProcessContext>of(QbHelp.defaultDataset(QbHelp.THREAD),
