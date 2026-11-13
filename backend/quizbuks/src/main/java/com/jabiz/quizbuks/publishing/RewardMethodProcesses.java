@@ -1,5 +1,7 @@
 package com.jabiz.quizbuks.publishing;
 
+import com.jabiz.quizbuks.operator.OperatorChecks;
+import com.jabiz.quizbuks.identity.CallerChecks;
 import com.jabiz.entity.Violation;
 import com.jabiz.process.ProcessContext;
 import com.jabiz.process.ProcessDefinition;
@@ -60,6 +62,10 @@ public final class RewardMethodProcesses {
                 return ctx;
             })
             .outputMapper(ctx -> ctx.get(OUTPUT, SetOutput.class))
+            // F-ban-coverage: a banned member's valid token is refused first, then a member removed from the team (or
+            // whose operator is suspended); headquarters, whose token is no operator's, passes both.
+            .steps(CallerChecks::refuseBanned)
+            .steps(OperatorChecks::memberWhenScoped)
             .step("Lock the sponsor's account", HoldLock.<ProcessContext>exclusive(
                 ctx -> QbAccounts.lockName(ctx.get(INPUT, SetInput.class).userId())))
             .step("Load the sponsor's onboarding", QueryEntities.<ProcessContext>of(

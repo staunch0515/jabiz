@@ -1,6 +1,6 @@
 /*---
 id: qb.operator.account
-description: "The caller operator's account (Q48e-2): the balance, what its settlements credited, its withdrawals took and it moved to its direct Sponsor (F-M4), whether it has a direct Sponsor, the least it may withdraw, and its bank account (the number masked) with when withdrawals to it are possible"
+description: "The caller operator's account (Q48e-2): the balance, what its settlements credited, its withdrawals took and it moved to its direct Sponsor (F-M4), whether it has a direct Sponsor, whether it is the platform operator (which does not withdraw, F-M12), the least it may withdraw, and its bank account (the number masked) with when withdrawals to it are possible"
 entities: [QbOperatorMember, QbOperatorSettlement, QbOperatorWithdrawal, QbOperatorTransfer, QbOperatorBankAccount, QbOperator, SysParam]
 datasets:
   QbOperatorMember: urn:jabiz:dataset:operator:QbOperatorMember
@@ -17,6 +17,7 @@ results:
   withdrawn:     { kind: { type: monetary, currency: JPY, scale: 0 } }
   transferred:   { kind: { type: monetary, currency: JPY, scale: 0 } }
   hasDirectSponsor: { kind: { type: bool } }
+  platformOperator: { kind: { type: bool } }
   balance:       { kind: { type: monetary, currency: JPY, scale: 0 } }
   minimum:       { kind: { type: monetary, currency: JPY, scale: 0 } }
   cooldownHours: { kind: { type: numeric, precision: 4, scale: 0 } }
@@ -49,6 +50,10 @@ SELECT
     EXISTS (SELECT 1 FROM {{QbOperator}} o
             WHERE o.{{QbOperator.operatorId}} = me.{{QbOperatorMember.operatorId}}
               AND o.{{QbOperator.directSponsorId}} IS NOT NULL) AS hasDirectSponsor,
+    -- F-M12 (question 6): the platform operator (the default one) does not withdraw; the request refuses it.
+    EXISTS (SELECT 1 FROM {{QbOperator}} o
+            WHERE o.{{QbOperator.operatorId}} = me.{{QbOperatorMember.operatorId}}
+              AND o.{{QbOperator.defaultForNew}}) AS platformOperator,
     (SELECT coalesce(sum(s.{{QbOperatorSettlement.payable}}), 0) FROM {{QbOperatorSettlement}} s
      WHERE s.{{QbOperatorSettlement.operatorId}} = me.{{QbOperatorMember.operatorId}}
        AND s.{{QbOperatorSettlement.status}} = 'CREDITED')

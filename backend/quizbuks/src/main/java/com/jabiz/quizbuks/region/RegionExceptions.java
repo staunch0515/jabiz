@@ -1,5 +1,6 @@
 package com.jabiz.quizbuks.region;
 
+import com.jabiz.quizbuks.identity.CallerChecks;
 import com.jabiz.entity.Violation;
 import com.jabiz.process.ProcessContext;
 import com.jabiz.process.ProcessDefinition;
@@ -86,9 +87,11 @@ public final class RegionExceptions {
                     ctx.put(INPUT, input);
                     return ctx;
                 })
-                .outputMapper(ctx -> ctx.get(OUTPUT, ExceptionOutput.class))
-                // Before anything is read: an operator's wrong input is told as such, not as another's sponsor.
-                .compute("Check the target", (metadata, ctx) -> checkTarget(ctx.get(INPUT, AddInput.class)));
+                .outputMapper(ctx -> ctx.get(OUTPUT, ExceptionOutput.class));
+            // F-ban-coverage: a banned member's still valid token is refused before anything else.
+            CallerChecks.refuseBanned(pb);
+            // Before anything else is read: an operator's wrong input is told as such, not as another's sponsor.
+            pb.compute("Check the target", (metadata, ctx) -> checkTarget(ctx.get(INPUT, AddInput.class)));
             // Q48e-1: an operator's member is checked within the act; headquarters passes.
             OperatorChecks.memberWhenScoped(pb);
             pb.step("Find the publication or the sponsor", QueryEntities.<ProcessContext>all(
@@ -154,6 +157,8 @@ public final class RegionExceptions {
         pb.permissions(QbPermissions.ADMIN_REGION_WRITE)
             .requiresVerifiedEmail()
             .outputMapper(ctx -> ctx.get(OUTPUT, ExceptionOutput.class));
+        // F-ban-coverage: a banned member's still valid token is refused before anything else.
+        CallerChecks.refuseBanned(pb);
         OperatorChecks.memberWhenScoped(pb);
         pb.step("Lock the exception", HoldLock.<ProcessContext>exclusive(ctx -> lockName(ctx.get(FOUND + ".id"))))
             .step("Load the exception", QueryEntities.<ProcessContext>of(
