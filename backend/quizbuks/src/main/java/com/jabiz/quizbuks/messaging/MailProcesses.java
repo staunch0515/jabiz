@@ -346,7 +346,7 @@ public final class MailProcesses {
             ctx -> publicationMail(ctx, messages, values), messages, NotificationMails.PUBLICATION_APPROVED,
             NotificationMails.PUBLICATION_REJECTED, NotificationMails.PUBLICATION_TAKEN_DOWN,
             NotificationMails.PUBLICATION_FUNDS_SHORT, NotificationMails.PUBLICATION_ENDED,
-            com.jabiz.quizbuks.sharedvideo.SharedVideoMails.PUBLICATION_ENDED);
+            NotificationMails.PUBLICATION_EXPOSURE_LOW, com.jabiz.quizbuks.sharedvideo.SharedVideoMails.PUBLICATION_ENDED);
     }
 
     /** Whether the event names a sponsor's publication (S0): only sponsors have a mailbox with the platform. */
@@ -395,6 +395,15 @@ public final class MailProcesses {
             // know their publication stopped).
             case PublicationNotices.SHARED_VIDEO_ENDED ->
                 decide(ctx, com.jabiz.quizbuks.sharedvideo.SharedVideoMails.PUBLICATION_ENDED, params);
+            // F-M8: the reason is "left/bought" (the job's item decided; the mail only says it).
+            case PublicationNotices.EXPOSURE_LOW -> {
+                String[] parts = input.reason() == null ? new String[0] : input.reason().split("/");
+                if (parts.length == 2) {
+                    params.put("left", MailValues.count(Long.parseLong(parts[0])));
+                    params.put("purchased", MailValues.count(Long.parseLong(parts[1])));
+                    decide(ctx, NotificationMails.PUBLICATION_EXPOSURE_LOW, params);
+                }
+            }
             case PublicationNotices.FUNDS_SHORT -> {
                 if (freshNotification(ctx) && addressed(ctx)) {
                     fundsShortMail(ctx, input.publisherId());

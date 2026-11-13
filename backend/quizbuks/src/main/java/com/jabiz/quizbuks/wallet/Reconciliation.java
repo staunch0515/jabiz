@@ -64,6 +64,8 @@ public final class Reconciliation {
     static final String PREPAYMENTS_TEMPLATE = "qb.system.recon-prepayments";
     /** F-M7: the audience fees' refunds and the credit notes. */
     static final String CREDIT_NOTES_TEMPLATE = "qb.system.recon-credit-notes";
+    /** F-M8: the exposure fee's deposits, settlements and prices. */
+    static final String EXPOSURE_TEMPLATE = "qb.system.recon-exposure";
     /** F-M10: everybody's row of the AI help's usage against the people's rows. */
     static final String HELP_USAGE_TEMPLATE = "qb.system.recon-help-usage";
 
@@ -131,6 +133,7 @@ public final class Reconciliation {
     static final String OPERATOR_ACCOUNT = "operatorAccount";
     static final String PREPAYMENTS = "prepayments";
     static final String CREDIT_NOTES = "creditNotes";
+    static final String EXPOSURE = "exposure";
     static final String HELP_USAGE = "helpUsage";
     static final String DISTRIBUTION_PARAMS = "distributionParams";
     static final String PREVIOUS = "previous";
@@ -181,7 +184,8 @@ public final class Reconciliation {
                 // F-M6 (review L4): the distribution checks' hours are the parameters' values, none written in the SQL.
                 .step("Load the distribution checks' hours", LoadParams.<ProcessContext>optional(ProcessContext::opTime,
                     DISTRIBUTION_PARAMS, QbParams.DISTRIBUTION_UNSETTLED_AFTER_HOURS,
-                    QbParams.DISTRIBUTION_FINAL_MISSING_AFTER_HOURS, QbParams.AUDIENCE_REFUND_MISSING_AFTER_HOURS))
+                    QbParams.DISTRIBUTION_FINAL_MISSING_AFTER_HOURS, QbParams.AUDIENCE_REFUND_MISSING_AFTER_HOURS,
+                    QbParams.EXPOSURE_UNSETTLED_AFTER_HOURS, QbParams.EXPOSURE_FINAL_MISSING_AFTER_HOURS))
                 // The fee account's checks are four statements by domain (F-M14 G10), each with the parameters it declares.
                 .step("Compare the fee credit", RunTemplate.<ProcessContext>of(FEE_CREDIT_TEMPLATE,
                     ctx -> Map.of(), FEE_CREDIT))
@@ -189,6 +193,9 @@ public final class Reconciliation {
                     ctx -> Map.of(), OPERATOR_ACCOUNT))
                 .step("Compare the prepayments", RunTemplate.<ProcessContext>of(PREPAYMENTS_TEMPLATE,
                     ctx -> feeAccountParams(ctx, zone, "at", "zone", "unsettledHours", "missingHours"), PREPAYMENTS))
+                // F-M8: the exposure fee's, with its own hours.
+                .step("Compare the exposure fees", RunTemplate.<ProcessContext>of(EXPOSURE_TEMPLATE,
+                    ctx -> exposureParams(ctx, zone), EXPOSURE))
                 .step("Compare the credit notes", RunTemplate.<ProcessContext>of(CREDIT_NOTES_TEMPLATE,
                     ctx -> feeAccountParams(ctx, zone, "at", "refundHours"), CREDIT_NOTES))
                 .step("Compare the AI help's usage", RunTemplate.<ProcessContext>of(HELP_USAGE_TEMPLATE,
@@ -244,6 +251,7 @@ public final class Reconciliation {
         found.addAll(ReconChecks.coded(rows(ctx, OPERATOR_ACCOUNT)));
         found.addAll(ReconChecks.coded(rows(ctx, PREPAYMENTS)));
         found.addAll(ReconChecks.coded(rows(ctx, CREDIT_NOTES)));
+        found.addAll(ReconChecks.coded(rows(ctx, EXPOSURE)));
         found.addAll(ReconChecks.coded(rows(ctx, HELP_USAGE)));
         java.util.Set<String> foundBefore = new java.util.HashSet<>();
         TopUpCrediting.list(ctx, PREVIOUS_TAKERS).forEach(item -> foundBefore.add(item.get("partyId")));
@@ -334,6 +342,19 @@ public final class Reconciliation {
         values.put("refundHours", params.find(QbParams.AUDIENCE_REFUND_MISSING_AFTER_HOURS,
             java.math.BigDecimal.class).orElse(null));
         values.keySet().retainAll(java.util.Set.of(names));
+        return values;
+    }
+
+    /** F-M8: the exposure fee's checks' parameters: when it runs and the two hours (none handed in: not checked). */
+    static Map<String, Object> exposureParams(ProcessContext ctx, java.time.ZoneId zone) {
+        com.jabiz.param.ParamValues params = ctx.get(DISTRIBUTION_PARAMS, com.jabiz.param.ParamValues.class);
+        Map<String, Object> values = new java.util.HashMap<>();
+        values.put("at", ctx.get(INPUT, ReconcileInput.class).scheduledTime());
+        values.put("zone", zone.getId());
+        values.put("unsettledHours", params.find(QbParams.EXPOSURE_UNSETTLED_AFTER_HOURS, java.math.BigDecimal.class)
+            .orElse(null));
+        values.put("missingHours", params.find(QbParams.EXPOSURE_FINAL_MISSING_AFTER_HOURS, java.math.BigDecimal.class)
+            .orElse(null));
         return values;
     }
 }

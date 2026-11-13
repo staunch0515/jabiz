@@ -39,8 +39,11 @@ public final class PublicationNotices {
     /** F-S12: it ended because the shared video it used was taken down (not the sponsor's breach). */
     public static final String SHARED_VIDEO_ENDED = "SHARED_VIDEO_ENDED";
 
+    /** F-M8: what is left of the exposures bought is low (the reason is {@code left/bought}). */
+    public static final String EXPOSURE_LOW = "EXPOSURE_LOW";
+
     public static final List<String> KINDS = List.of(APPROVED, REJECTED, TAKEN_DOWN, FUNDS_SHORT, ENDED,
-        SHARED_VIDEO_ENDED);
+        SHARED_VIDEO_ENDED, EXPOSURE_LOW);
 
     static final String NOTICE = "publicationNotice";
 

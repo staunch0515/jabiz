@@ -12,27 +12,37 @@ import java.util.regex.Pattern;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * F-M6 (N1 of Fable's second review): the places that decide which months a publication's distribution fee is due
- * for (the monthly job's items, the postpaid invoice's wait, the daily check and, from F-M12 b, the operator settlement's wait) start from when it went on: the
+ * F-M6 (N1 of Fable's second review): the three places that decide which months a publication's distribution fee is due
+ * for (the monthly job's items, the postpaid invoice's wait and the daily check) start from when it went on: the
  * greater of its start and its approval, written the same in each, and none of them reads the start alone.
  */
 class DistributionDueConditionTest {
 
     static final Path SYSTEM = Path.of("src/main/resources/queries/qb/system");
-    static final List<String> TEMPLATES = List.of("distribution-due.sql", "fee-invoices-due.sql",
-        "recon-prepayments.sql", "operator-settlement-readiness.sql");
+    /**
+     * The templates and how many fees' due conditions each holds (F-M8: the invoice's wait holds two, F-M12 b's operator settlement readiness the distribution fee's; the daily check's
+     * prepayments statement holds the distribution fee's, F-M8c adds the exposure fee's to it).
+     */
+    static final java.util.Map<String, Integer> TEMPLATES = java.util.Map.of("distribution-due.sql", 1,
+        "exposure-due.sql", 1, "fee-invoices-due.sql", 2, "recon-prepayments.sql", 1,
+        "recon-exposure.sql", 1, "operator-settlement-readiness.sql", 1);
     static final Pattern WENT_ON = Pattern.compile(
         "greatest\\((\\w+)\\.\\{\\{QbPublicationCard\\.startAt}}, (\\w+)\\.\\{\\{QbPublication\\.approvedAt}}\\)");
 
     @Test
-    void theFourStartFromTheGreaterOfTheStartAndTheApproval() throws IOException {
-        for (String template : TEMPLATES) {
+    void theThreeStartFromTheGreaterOfTheStartAndTheApproval() throws IOException {
+        for (var entry : TEMPLATES.entrySet()) {
+            String template = entry.getKey();
             String sql = Files.readString(SYSTEM.resolve(template));
             Matcher matcher = WENT_ON.matcher(sql);
-            assertThat(matcher.find()).as(template).isTrue();
-            assertThat(matcher.find()).as(template + ": once").isFalse();
+            int found = 0;
+            while (matcher.find()) {
+                found++;
+            }
+            assertThat(found).as(template).isEqualTo(entry.getValue());
             // The start is read only inside that expression.
-            assertThat(sql.split("\\{\\{QbPublicationCard\\.startAt}}", -1)).as(template).hasSize(2);
+            assertThat(sql.split("\\{\\{QbPublicationCard\\.startAt}}", -1)).as(template)
+                .hasSize(entry.getValue() + 1);
         }
     }
 }

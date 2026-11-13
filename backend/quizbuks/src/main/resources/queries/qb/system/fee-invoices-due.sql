@@ -1,13 +1,14 @@
 /*---
 id: qb.system.fee-invoices-due
-description: The sponsors with postpaid platform fees of an earlier month and no invoice of it yet, once every distribution fee due for the month is settled; each sponsor's earliest such month (the items of the daily job qb.fee-invoice, Q87, F-M6)
-entities: [QbFeeCharge, QbFeeInvoice, QbPublication, QbPublicationCard, QbDistributionSettlement]
+description: The sponsors with postpaid platform fees of an earlier month and no invoice of it yet, once every distribution fee and exposure fee due for the month is settled; each sponsor's earliest such month (the items of the daily job qb.fee-invoice, Q87, F-M6)
+entities: [QbFeeCharge, QbFeeInvoice, QbPublication, QbPublicationCard, QbDistributionSettlement, QbExposureSettlement]
 datasets:
   QbFeeCharge: urn:jabiz:dataset:default:QbFeeCharge
   QbFeeInvoice: urn:jabiz:dataset:default:QbFeeInvoice
   QbPublication: urn:jabiz:dataset:default:QbPublication
   QbPublicationCard: urn:jabiz:dataset:default:QbPublicationCard
   QbDistributionSettlement: urn:jabiz:dataset:default:QbDistributionSettlement
+  QbExposureSettlement: urn:jabiz:dataset:default:QbExposureSettlement
 params:
   current: { like: QbFeeCharge.period, required: true, description: "The month of the run (yyyy-MM, the fiscal year's zone): earlier months only" }
   zone:    { kind: { type: text, maxLength: 64 }, required: true, description: "The fiscal year's zone (a region name or UTC)" }
@@ -55,6 +56,23 @@ WITH owed AS (
                           WHERE s.{{QbDistributionSettlement.publicationId}} = CAST(p.{{QbPublication.publicationId}} AS text)
                             AND (s.{{QbDistributionSettlement.final}}
                                  OR s.{{QbDistributionSettlement.period}} = o.period)))
+      -- F-M8: and every exposure fee due for the month (the condition of qb.system.exposure-due).
+      AND NOT EXISTS (
+        SELECT 1
+        FROM {{QbPublication}} p
+        JOIN {{QbPublicationCard}} pc ON pc.{{QbPublicationCard.publicationId}} = p.{{QbPublication.publicationId}}
+        WHERE p.{{QbPublication.publisherId}} = o.sponsor_id
+          AND p.{{QbPublication.exposureUnit}} IS NOT NULL
+          AND p.{{QbPublication.exposurePurchased}} IS NOT NULL
+          AND p.{{QbPublication.publisherKind}} = 'SPONSOR'
+          AND greatest(pc.{{QbPublicationCard.startAt}}, p.{{QbPublication.approvedAt}})
+              < (CAST(o.period || '-01' AS date) + interval '1 month') AT TIME ZONE :zone
+          AND (pc.{{QbPublicationCard.endedAt}} IS NULL
+               OR pc.{{QbPublicationCard.endedAt}} >= CAST(o.period || '-01' AS timestamp) AT TIME ZONE :zone)
+          AND NOT EXISTS (SELECT 1 FROM {{QbExposureSettlement}} x
+                          WHERE x.{{QbExposureSettlement.publicationId}} = CAST(p.{{QbPublication.publicationId}} AS text)
+                            AND (x.{{QbExposureSettlement.final}}
+                                 OR x.{{QbExposureSettlement.period}} = o.period)))
 )
 SELECT r.sponsor_id AS sponsorId, min(r.period) AS period
 FROM ready r
