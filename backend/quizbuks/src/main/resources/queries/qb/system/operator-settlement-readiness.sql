@@ -1,6 +1,6 @@
 /*---
 id: qb.system.operator-settlement-readiness
-description: "The steps before an operator's settlement of a month that are not done yet: a distribution fee due for one of its publications, an invoice of its sponsors' postpaid fees (F-M12 b)"
+description: "The steps before an operator's settlement of a month that are not done yet: a distribution fee or an exposure fee due for one of its publications, an invoice of its sponsors' postpaid fees (F-M12 b)"
 entities: [QbPublication, QbPublicationCard, QbDistributionSettlement, QbExposureSettlement, QbFeeCharge, QbFeeInvoice]
 datasets:
   QbPublication: urn:jabiz:dataset:default:QbPublication

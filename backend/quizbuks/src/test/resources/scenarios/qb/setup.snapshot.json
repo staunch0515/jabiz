@@ -6380,7 +6380,7 @@
       "targetEntity" : "SysParam",
       "targetId" : null,
       "changeAction" : "UPSERT",
-      "changeValues" : "{\"paramKey\":\"qb.operator.settlement.readiness-max-days\",\"valueKind\":{\"precision\":2,\"scale\":0,\"type\":\"numeric\"},\"value\":\"5\",\"description\":\"How many days after a month's end an operator's settlement waits for its sponsors' distribution fees and monthly invoices before it settles anyway (0 to 31; 0: it does not wait)\"}",
+      "changeValues" : "{\"paramKey\":\"qb.operator.settlement.readiness-max-days\",\"valueKind\":{\"precision\":2,\"scale\":0,\"type\":\"numeric\"},\"value\":\"5\",\"description\":\"How many days after a month's end an operator's settlement waits for its sponsors' distribution fees, exposure fees and monthly invoices before it settles anyway (0 to 31; 0: it does not wait)\"}",
       "targetKey" : "qb.operator.settlement.readiness-max-days",
       "effectiveTime" : null,
       "reason" : "First value of the QuizBuks parameter, proposed by QB_SETUP",

@@ -196,7 +196,7 @@
 
 ### 7.1 与 F-M12 b 的衔接：运营商结算的"曝光就绪"条件
 
-F-M12 b（S3）的就绪模板 `qb.system.operator-settlement-readiness`（`READINESS EXTENSION POINT`，每行一个 `blockedBy` 原因，现有 `DISTRIBUTION`、`INVOICE`）还没有合入 1.3/quizbuks，所以本 PR 不接，**b 合并时加 `EXPOSURE` 一支**（总控 2026-11-13 定先后：F-M8c 先合并、b 后合，S3 加分支）。条件：该月应做曝光结算、**冻结的运营商**（`QbPublication.billingOperatorId`，不是发起方现在的运营商）是该运营商的发布，还没有该月或 `final` 的 `QbExposureSettlement` 行；"该月应做曝光结算"的表达式与 `qb.system.exposure-due` 的取项条件相同（`DistributionDueConditionTest` 的单一表达式不另写第三份：`TEMPLATES` 里加该模板，期望的 `greatest(startAt, approvedAt)` 出现次数加 1）。已结束过宽限的发布月度项不写行、由结束任务写 `final`（审查 H1、L3），所以这一支要把"已有 `final` 行"当作就绪，没有 `final` 行的已结束发布则要等到结束任务（每天 03:12）之后。`ExposureOperatorShareIT` 证明曝光费进分成基数（取自冻结的运营商、不扣除成本）。
+F-M12 b（S3）的就绪模板 `qb.system.operator-settlement-readiness`（每行一个 `blockedBy` 原因：`DISTRIBUTION`、`INVOICE`、`EXPOSURE`；`READINESS EXTENSION POINT` 留给 F-M9 的 `AI`）有 `EXPOSURE` 一支（F-M8c 先合并、b 后合时加的）。条件：该月应做曝光结算、**冻结的运营商**（`QbPublication.billingOperatorId`，不是发起方现在的运营商）是该运营商的发布，还没有该月或 `final` 的 `QbExposureSettlement` 行；"该月应做曝光结算"的表达式与 `qb.system.exposure-due` 的取项条件相同（`DistributionDueConditionTest` 的单一表达式不另写第三份：`TEMPLATES` 里加该模板，期望的 `greatest(startAt, approvedAt)` 出现次数加 1）。已结束过宽限的发布月度项不写行、由结束任务写 `final`（审查 H1、L3），所以这一支要把"已有 `final` 行"当作就绪，没有 `final` 行的已结束发布则要等到结束任务（每天 03:12）之后。`ExposureOperatorShareIT` 证明曝光费进分成基数（取自冻结的运营商、不扣除成本）。
 
 ## 8. 与 F-M7 的关系（"依赖 F-M7（未合并）"一览）
 

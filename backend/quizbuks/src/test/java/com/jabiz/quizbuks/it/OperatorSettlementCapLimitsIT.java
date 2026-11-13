@@ -58,6 +58,9 @@ class OperatorSettlementCapLimitsIT extends CapItSupport {
             total += gifts.size();
         }
         assertThat(total).isEqualTo(129);
+        // The credit used adds up: the 10,500 of the first part and 129 of 1 yen.
+        assertThat(query("SELECT sum(gift_gross) AS g FROM qb_operator_settlement_line_version WHERE line_kind = 'GIFT'")
+            .getFirst().get("g")).isEqualTo(new java.math.BigDecimal("10629"));
         // Each part once.
         assertThat(query("SELECT source_id, charge_id FROM qb_operator_settlement_line_version WHERE line_kind = "
             + "'GIFT' GROUP BY source_id, charge_id HAVING count(*) > 1")).isEmpty();
@@ -108,6 +111,9 @@ class OperatorSettlementCapLimitsIT extends CapItSupport {
                 + "settlement_id = ?", settled.get("settlement_id")).getFirst().get("n")).longValue();
             assertThat(lines).as("lines of month " + (3 + i)).isLessThanOrEqualTo(40);
             assertThat(settled).containsEntry("capped", true);
+            // 40, 40, 40, 10: what the cap lets each month take of the 130 parts.
+            assertThat(lineCharges(settled.get("settlement_id"), "GIFT")).as("month " + (3 + i))
+                .hasSize(new int[] {40, 40, 40, 10}[i]);
             counted130 += lineCharges(settled.get("settlement_id"), "GIFT").size();
             assertThat(lineCharges(settled.get("settlement_id"), "CHARGE")).isEmpty();
         }
