@@ -155,11 +155,11 @@ public final class VerificationProcesses {
                         return ctx;
                     })
                     .outputMapper(ctx -> ctx.get(OUTPUT, VerificationOutput.class));
+                CallerChecks.refuseBanned(pb);
                 pb.step("Load the link's validity", LoadParams.<ProcessContext>of(ProcessContext::opTime, PARAMS,
                     QbParams.VERIFICATION_LINK_HOURS));
                 pb.step("Lock the Sponsor's verification", HoldLock.<ProcessContext>exclusive(
                     ctx -> QbVerifications.lockName(ctx.request().actorId())));
-                CallerChecks.refuseBanned(pb);
                 pb.step("Load the onboarding, the submissions, the domain, the operator and the account",
                     QueryEntities.<ProcessContext>all(
                         QueryEntities.query(QbAccounts.defaultDataset(QbAccounts.SPONSOR), ctx -> EntityQuery.builder()
@@ -373,11 +373,11 @@ public final class VerificationProcesses {
                     .requiresVerifiedEmail()
                     .contextFactory((start, input) -> start(start, input, null))
                     .outputMapper(ctx -> ctx.get(OUTPUT, VerificationOutput.class));
+                CallerChecks.refuseBanned(pb);
                 pb.step("Load the link's validity", LoadParams.<ProcessContext>of(ProcessContext::opTime, PARAMS,
                     QbParams.VERIFICATION_LINK_HOURS));
                 pb.step("Lock the Sponsor's verification", HoldLock.<ProcessContext>exclusive(
                     ctx -> QbVerifications.lockName(ctx.request().actorId())));
-                CallerChecks.refuseBanned(pb);
                 pb.step("Use the link", MailTokens.<ProcessContext>consume(VerificationMails.PURPOSE,
                     ctx -> ctx.get(INPUT, ConfirmInput.class).token(), USED));
                 pb.step("Load the submission and the operator", QueryEntities.<ProcessContext>all(
@@ -578,6 +578,7 @@ public final class VerificationProcesses {
                     .requiresVerifiedEmail()
                     .contextFactory((start, input) -> start(start, input, null))
                     .outputMapper(ctx -> ctx.get(OUTPUT, VerificationOutput.class));
+                CallerChecks.refuseBanned(pb);
                 // An operator's member is checked within the act (Q48e-1); headquarters passes.
                 OperatorChecks.memberWhenScoped(pb);
                 OperatorChecks.ownSponsor(pb, ctx -> ctx.get(INPUT, RevokeInput.class).sponsorId().strip());

@@ -36,7 +36,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  * The fixtures of the F-M5 tests ({@link PrepaymentIT}, {@link SubmitStatementBudgetIT}): Sponsors of an operator that
  * prices the gender rule, drafts using it, granted credit and cash, and the reads that check the books.
  */
-abstract class PrepaymentItSupport extends PlayItSupport {
+abstract class PrepaymentItSupport extends TreeItSupport {
 
     @Autowired
     JobDefinition<Prepayments.ReleaseRef> qbPrepaymentReleaseJob;

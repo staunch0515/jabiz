@@ -38,7 +38,7 @@ public final class FirstLaunchSwitches {
      * @param status     how the row stands
      * @param value      the first launch's value, typed as {@link QbParams.Param#value()} (Boolean or text); null for
      *                   "the declared value stands" (amounts), and for the intent of nothing
-     * @param waitingFor the feature a {@link Status#WAITING} row waits for (F-M7)
+     * @param waitingFor the feature a {@link Status#WAITING} row waits for (F-M8)
      * @param why        why the value differs from the declared one; required then
      */
     public record Row(String key, String group, Status status, Object value, String waitingFor, String why) {}
@@ -80,7 +80,11 @@ public final class FirstLaunchSwitches {
             "publications pay the distribution fee at the launch (declared off: the tests rely on it); the requester "
                 + "confirms qb.distribution.unit-floor.min before the proposal is published"),
         keep(QbParams.DISTRIBUTION_UNIT_FLOOR_MIN, "distribution"),
-        waiting(QbParams.AUDIENCE_BILLING_ENABLED, "audience", true, "F-M7"),
+        // F-M7 (§10.3-13): on at the launch, then whether an early end gives back the unused days, which the requester
+        // decides apart (off: no refund is promised, the wizard says so).
+        active(QbParams.AUDIENCE_BILLING_ENABLED, "audience", true,
+            "publications pay for the audience rules they use at the launch (declared off: the tests rely on it)"),
+        keep(QbParams.AUDIENCE_REFUND_UNUSED_DAYS, "audience"),
         waiting("qb.exposure.billing.enabled", "exposure", true, "F-M8"),
         waiting("qb.ai.fee.enabled", "aifee", true, "F-M9"),
         // F-C7a's key exists (declared off, controlled) but drafting from a website is only charged once F-M9 can
@@ -94,7 +98,7 @@ public final class FirstLaunchSwitches {
      * The keys that are already in {@link QbParams#ALL} while their row still {@link Status#WAITING}: the key exists,
      * what it means does not do yet. Any other waiting key found in {@code ALL} is a feature that forgot its row.
      */
-    public static final Set<String> KEY_BEFORE_MEANING = Set.of(QbParams.AUDIENCE_BILLING_ENABLED, QbParams.SITE_PROFILE_ENABLED);
+    public static final Set<String> KEY_BEFORE_MEANING = Set.of(QbParams.SITE_PROFILE_ENABLED);
 
     /** Whether a system of this {@code jabiz.web.environment} proposes the first launch's values. */
     public static boolean appliesTo(String environment) {

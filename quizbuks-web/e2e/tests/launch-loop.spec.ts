@@ -3,6 +3,7 @@ import { certificatesOf, verifyPage } from './certificates'
 import { query } from './content'
 import { decideAsOperator, reviewerFor } from './operators'
 import { searchHome } from './play'
+import { publicationOf } from './publishing'
 import { boundPublicationOf, CAPITALS, operatorTree, platformMap, pass } from './tree'
 import { answerQuiz, GRANT, loopCast, phone, rememberParams, STEP_TIMEOUT_MS, type Loop } from './launch-loop'
 import { contentAdmin } from './legal'
@@ -32,6 +33,9 @@ import {
  *      digital prizes arrive
  *   7  F-M6: the distribution fee set aside when submitted; the publication ends, the final job charges its one start
  *      from the prepayment and gives back the rest
+ *   7b F-M7: an audience-rule publication ends early (its one winner's place taken): with the refund switch on, the
+ *      daily job (run every minute here) issues a credit note for the unused days and the cash goes back; the
+ *      publication's page lists the note
  *
  * Not repeated here: the editor's keyboard (tree-graph.spec), certificates turned off and the deleted account
  * (certificates.spec), and mainland China's view of a publication with a foreign video (foreign-video.spec: the
@@ -590,6 +594,58 @@ test.describe.serial('the first launch\'s loop', () => {
         await restore()
       }
     })
+
+  test('7b. an audience-rule publication ended early gives back its unused days by a credit note', async ({ page,
+    request }) => {
+    test.setTimeout(STEP_TIMEOUT_MS + 180_000)
+    const { sora, operator, rin, map } = loop
+    const restore = await rememberParams(request, [
+      { key: 'qb.audience.billing.enabled', absent: 'false' },
+      { key: 'qb.audience.fee.refund-unused-days', absent: 'false' },
+    ])
+    try {
+      await setControlledParam(request, 'qb.audience.billing.enabled', 'true')
+      await setControlledParam(request, 'qb.audience.fee.refund-unused-days', 'true')
+      // Her operator prices the gender rule at 100 a day (step 2'); one winner's place (a reward of 10), for
+      // women, seven days.
+      await run(request, operator.operatorToken, 'QB_OPERATOR_AUDIENCE_PRICES_SET', { minimumFee: 0,
+        prices: [{ ruleKey: 'gender', dailyPrice: 100 }], reason: 'Closed loop' })
+      await fund(request, sora.token, 2000)
+      const made = await boundPublicationOf(request, sora.token, map!.treeId, map!.basics, unique('Coffee for one '),
+        { reward: 10, maxWinners: 1, audience: [{ key: 'gender', options: ['FEMALE'] }] })
+      const [charged] = (await query(request, sora.token, 'qb.sponsor.publication-prepayments',
+        { publicationId: made.publicationId })).filter((row) => row.purpose === 'AUDIENCE')
+      expect(charged).toBeTruthy()
+
+      // Rin (a woman, she says) takes the one place on its first day: it ends early.
+      await run(request, rin.token, 'QB_PROFILE_ATTRIBUTES_SAVE', { profileAnswers: [{ key: 'gender',
+        options: ['FEMALE'], number: null }] })
+      await pass(request, rin.token, made.publicationId)
+      await expect.poll(async () => (await publicationOf(request, sora.token, made.publicationId)).status,
+        { message: 'ended by its one winner' }).toBe('ENDED')
+
+      // The job's next run decides it: one day used, the other days and their tax back as a credit note.
+      let note: Record<string, unknown> | undefined
+      await expect.poll(async () => {
+        note = (await query(request, sora.token, 'qb.sponsor.fee-credit-notes', {}))
+          .find((row) => row.publicationId === made.publicationId)
+        if (note) return true
+        await runJobNow(request, 'qb.audience-refund').catch(() => undefined)
+        return false
+      }, { message: 'the credit note', timeout: 150_000, intervals: [10_000] }).toBe(true)
+      expect(note).toEqual(expect.objectContaining({ reason: 'AUDIENCE_UNUSED', usedDays: 1 }))
+      // Prepaid: all of it went back where it was paid from (the balances themselves: CreditNoteIT).
+      expect(Number(note!.refundedCash) + Number(note!.refundedCredit)).toBe(Number(note!.total))
+
+      // Her publication's page lists it.
+      await signIn(page, '/sponsor/', sora.email)
+      await expect(page.getByTestId('dashboard-status')).toBeVisible()
+      await page.goto(`/sponsor/publications/${made.publicationId}/fees`)
+      await expect(page.getByTestId('publication-credit-note-number')).toHaveText(String(note!.creditNoteNo))
+    } finally {
+      await restore()
+    }
+  })
 })
 
 /** An approved Sponsor moved to the operator (a Sponsor signs up with the default operator). */

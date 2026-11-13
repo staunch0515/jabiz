@@ -11,6 +11,7 @@ import com.jabiz.process.ProcessDefinitionBuilder;
 import com.jabiz.process.ProcessStart;
 import com.jabiz.query.EntityQuery;
 import com.jabiz.query.QueryPredicate;
+import com.jabiz.quizbuks.identity.CallerChecks;
 import com.jabiz.quizbuks.QbPermissions;
 import com.jabiz.quizbuks.setup.QbParams;
 import com.jabiz.quizbuks.wallet.BankAccounts;
@@ -233,6 +234,7 @@ public final class OperatorWithdrawals {
                     .requiresMfa(MfaRequirement.ALWAYS)
                     .contextFactory(OperatorWithdrawals::context)
                     .outputMapper(ctx -> ctx.get(SAVED, BankAccountOutput.class));
+                CallerChecks.refuseBanned(pb);
                 lead(pb);
                 pb.step("Load the account and the cooling-off", QueryEntities.<ProcessContext>of(
                         QbOperators.defaultDataset(BANK_ACCOUNT), ctx -> ofOperator(ctx.get(OPERATOR_ID)), ACCOUNT))
@@ -289,6 +291,7 @@ public final class OperatorWithdrawals {
                     .requiresMfa(MfaRequirement.ALWAYS)
                     .contextFactory(OperatorWithdrawals::context)
                     .outputMapper(OperatorWithdrawals::output);
+                CallerChecks.refuseBanned(pb);
                 lead(pb);
                 pb.step("Load the account and the open withdrawal", QueryEntities.<ProcessContext>all(
                         QueryEntities.query(QbOperators.defaultDataset(BANK_ACCOUNT),
@@ -373,6 +376,7 @@ public final class OperatorWithdrawals {
                     .requiresVerifiedEmail()
                     .contextFactory(OperatorWithdrawals::context)
                     .outputMapper(OperatorWithdrawals::output);
+                CallerChecks.refuseBanned(pb);
                 lead(pb);
                 pb.step("Load the withdrawal", QueryEntities.<ProcessContext>of(QbOperators.defaultDataset(WITHDRAWAL),
                         ctx -> byId(ctx.get(INPUT, WithdrawalRef.class).withdrawalId()), ROW))

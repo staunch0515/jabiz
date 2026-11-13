@@ -23,7 +23,7 @@ import { PublicationActions, usePublicationLanguage } from './PublicationActions
 import { PublicationQrPanel } from './PublicationQrDialog'
 import { PublicationTabs } from './PublicationTabs'
 import { StaleBanner, PublicationWizard } from './PublicationWizard'
-import { DistributionSection, PrepaymentsSection } from './FundsPanel'
+import { CreditNotesSection, DistributionSection, PrepaymentsSection } from './FundsPanel'
 import { ReferralsSection } from './ReferralsSection'
 import { ExposureSection } from '../exposure/ExposureCounts'
 import { VideoUseSection } from '../videouses/VideoUseSection'
@@ -206,6 +206,8 @@ function PublicationView({ detail, stale, onStale, tab }: {
             <VideoUseSection publicationId={id} />
             {/* F-M5: what its submission set aside, and what became of it (nothing while there are no rows). */}
             <PrepaymentsSection publicationId={id} />
+            {/* F-M7: the credit notes of its audience fee (nothing while there are none). */}
+            <CreditNotesSection publicationId={id} />
             <DistributionSection publicationId={id} />
           </>
         )}

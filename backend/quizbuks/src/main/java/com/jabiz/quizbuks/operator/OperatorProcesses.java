@@ -6,6 +6,7 @@ import com.jabiz.process.ProcessDefinition;
 import com.jabiz.process.ProcessStart;
 import com.jabiz.query.EntityQuery;
 import com.jabiz.query.QueryPredicate;
+import com.jabiz.quizbuks.identity.CallerChecks;
 import com.jabiz.quizbuks.QbPermissions;
 import com.jabiz.quizbuks.identity.AccountEditing;
 import com.jabiz.quizbuks.identity.DirectSponsors;
@@ -531,6 +532,7 @@ public final class OperatorProcesses {
                 .requiresVerifiedEmail()
                 .contextFactory((start, input) -> start(start, input, null))
                 .outputMapper(ctx -> ctx.get(OUTPUT, MemberOutput.class))
+                .steps(CallerChecks::refuseBanned)
                 // Both memberships exclusively, in the order of the users' ids: two leads removing each other take
                 // their turns.
                 .step("Lock the first membership", HoldLock.<ProcessContext>exclusive(

@@ -1,6 +1,8 @@
 package com.jabiz.quizbuks.it;
 
 import com.jabiz.job.JobDefinition;
+import com.jabiz.quizbuks.wallet.ReconChecks;
+import com.jabiz.quizbuks.wallet.Reconciliation;
 import com.jabiz.runtime.job.JobRunner;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -68,6 +70,48 @@ class ReconcileIT extends TopUpItSupport {
         assertThat(attempt(first)).containsEntry("status", "IN_PROGRESS");
         // Settled rewards refresh the takers' wallet caches by event (D-Q6-11); undelivered, the lag is a note.
         deliverEvents();
+    }
+
+    /**
+     * A run written before DISTRIBUTION_PRICE_OUT_OF_RANGE was renamed holds the old name in its sealed summary: the
+     * administrators' lists and the overview still read it, and the dictionary still labels it (disabled).
+     */
+    @Test
+    void aRunWrittenBeforeTheRenameIsStillRead() {
+        business("retired");
+        Instant at = now().plus(Duration.ofMinutes(3));
+        assertThat(reconcile(at)).isEqualTo(JobRunner.Outcome.SUCCEEDED);
+        Map<String, Object> current = run(at);
+        assertThat((String) current.get("summary")).contains("\"DISTRIBUTION_PRICE_RANGE\":0")
+            .doesNotContain(ReconChecks.DISTRIBUTION_PRICE_OUT_OF_RANGE);
+        // The old run as it was written (inserted, as the sealed rows are never changed): its summary names the old code.
+        String oldRun = java.util.UUID.randomUUID().toString();
+        execute("INSERT INTO entity_registry (entity_id, entity_type, created_seq_id) SELECT ?::uuid, entity_type, "
+            + "created_seq_id FROM entity_registry WHERE entity_id = ?::uuid", oldRun, String.valueOf(current.get("run_id")));
+        execute("INSERT INTO qb_recon_run_version (run_id, version_no, effect_start_time, created_time, process_seq_id, "
+            + "scheduled_time, status, checked_at, item_count, summary) SELECT ?::uuid, version_no, "
+            + "effect_start_time - interval '1000 days', created_time - interval '1000 days', process_seq_id, "
+            + "scheduled_time - interval '1000 days', status, checked_at - interval '1000 days', item_count, "
+            + "replace(summary, 'DISTRIBUTION_PRICE_RANGE', 'DISTRIBUTION_PRICE_OUT_OF_RANGE') "
+            + "FROM qb_recon_run_version WHERE run_id = ?::uuid", oldRun, String.valueOf(current.get("run_id")));
+        String finance = tokenOf("recon-retired", com.jabiz.quizbuks.setup.QbRoles.ADMIN_FINANCE);
+        assertThat(items("qb.admin.recon-runs", finance, Map.of("limit", 500)))
+            .filteredOn(r -> oldRun.equals(String.valueOf(r.get("runId")))).singleElement()
+            .satisfies(r -> assertThat(String.valueOf(r.get("summary")))
+                .contains("\"DISTRIBUTION_PRICE_OUT_OF_RANGE\":0"));
+        assertThat(items("qb.admin.recon-items", finance, Map.of("params", Map.of("runId", oldRun)))).isEmpty();
+        assertThat(items("qb.admin.recon-summary", finance, Map.of())).singleElement()
+            .satisfies(r -> assertThat(r).containsKey("lastRunStatus"));
+        List<Map<String, Object>> labels = client.get().uri("/api/dictionaries/{urn}", Reconciliation.CHECK_DICTIONARY)
+            .header(org.springframework.http.HttpHeaders.AUTHORIZATION, finance).exchange().expectStatus().isOk()
+            .expectBodyList(new org.springframework.core.ParameterizedTypeReference<Map<String, Object>>() { })
+            .returnResult().getResponseBody();
+        assertThat(labels).filteredOn(i -> ReconChecks.DISTRIBUTION_PRICE_OUT_OF_RANGE.equals(i.get("code")))
+            .singleElement().satisfies(i -> {
+                assertThat(i).containsEntry("enabled", false);
+                assertThat(String.valueOf(i.get("label"))).isNotBlank();
+            });
+        assertWriteOnce();
     }
 
     @Test

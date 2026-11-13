@@ -231,7 +231,8 @@ public final class PublicationPrepayments {
             BigDecimal tax = FeeRules.tax(quote.fee(), rate);
             BigDecimal fee = quote.fee().setScale(0, java.math.RoundingMode.CEILING);
             BigDecimal withTax = fee.add(tax == null ? BigDecimal.ZERO : tax);
-            items.add(new PrepaymentRules.Item(QbPrepayments.AUDIENCE, withTax, fee, detail(quote, withTax)));
+            items.add(new PrepaymentRules.Item(QbPrepayments.AUDIENCE, withTax, fee, detail(quote, withTax,
+                instant(publication.get("startAt")), instant(publication.get("endAt")))));
         }
         // F-M6: the distribution fee's deposit; nothing is charged from it when the publication goes on (the
         // settlements charge it a month at a time), so its fee before tax is 0.
@@ -254,8 +255,12 @@ public final class PublicationPrepayments {
             + quote.depositBeforeTax().toPlainString() + ",\"deposit\":" + quote.deposit().toPlainString() + "}";
     }
 
-    /** The audience fee's quote as stored with its prepayment: whose list, the days, the rules and the figures. */
-    static String detail(AudienceBilling.Quote quote, BigDecimal withTax) {
+    /**
+     * The audience fee's quote as stored with its prepayment: whose list, the days, the rules and the figures; and
+     * (F-M7, N5) the start and end it was billed for, from which the unused days of an early end are counted.
+     */
+    static String detail(AudienceBilling.Quote quote, BigDecimal withTax, java.time.Instant startAt,
+        java.time.Instant endAt) {
         StringBuilder json = new StringBuilder("{\"owner\":").append(quote.owner() == null ? "null"
             : "\"" + quote.owner() + "\"").append(",\"days\":").append(quote.days()).append(",\"items\":[");
         for (int i = 0; i < quote.items().size(); i++) {
@@ -266,7 +271,9 @@ public final class PublicationPrepayments {
         return json.append("],\"subtotal\":").append(quote.subtotal().toPlainString())
             .append(",\"minimumFee\":").append(quote.minimumFee().toPlainString())
             .append(",\"fee\":").append(quote.fee().toPlainString())
-            .append(",\"withTax\":").append(withTax.toPlainString()).append('}').toString();
+            .append(",\"withTax\":").append(withTax.toPlainString())
+            .append(",\"startAt\":").append(startAt == null ? "null" : "\"" + startAt + "\"")
+            .append(",\"endAt\":").append(endAt == null ? "null" : "\"" + endAt + "\"").append('}').toString();
     }
 
     /**
