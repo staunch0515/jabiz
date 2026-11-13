@@ -301,7 +301,8 @@ public class OperatorConfig {
             .targetEntityType(QbSettlementLines.LINE)
             .asDefault()
             .permissions(QbPermissions.ADMIN_FINANCE_READ, QbPermissions.SPONSOR_VIEW_WRITE)
-            .policy(p -> p.processOnlyWrites())
+            // One settlement writes all its lines in one transaction: up to MAX_LINES, not the default batch of 100.
+            .policy(p -> p.processOnlyWrites().maxWriteBatchSize(OperatorSettlements.MAX_LINES))
             .storage(s -> s.driver("r2dbc-postgresql").connectionPoolRef(poolRef)));
     }
 
