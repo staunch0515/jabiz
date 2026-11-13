@@ -310,7 +310,12 @@ class ReconChecksTest {
         assertThat(ReconChecks.result(found, 1).summary().length()).isLessThan(json.length());
     }
 
-    /** The source key of a task for attention fits the task's column (200, the platform's V14). */
+    /**
+     * The source key of a task for attention ({@code recon-attn:<check>:<object>}) fits the task's column
+     * ({@code sys_task_version.source_key}, 200, the platform's V14): {@code recon-attn:} (11), a check (at most 30), a
+     * colon and an object (a reference of at most 100 or a party of at most 128, the items' columns). The jobs' item key
+     * is its md5 (32), within the platform's 36.
+     */
     @Test
     void anAttentionTasksSourceFitsItsColumn() {
         String longest = ReconChecks.ALL.stream().max(java.util.Comparator.comparingInt(String::length)).orElseThrow();
@@ -320,6 +325,20 @@ class ReconChecksTest {
         assertThat(ReconTasks.sourceKey(ReconChecks.CREDIT_UNUSED_WITH_DUE, "s-1", "ref"))
             .isEqualTo("recon-attn:CREDIT_UNUSED_WITH_DUE:ref");
         assertThat(ReconTasks.sourceKey(ReconChecks.LEDGER_ZERO, null, null)).isEqualTo("recon-attn:LEDGER_ZERO:-");
+    }
+
+    /** Review L6: every check for attention has its task's title, naming it in words, in the three languages. */
+    @Test
+    void everyCheckForAttentionHasItsTasksTitle() throws IOException, URISyntaxException {
+        for (String language : List.of("zh", "ja", "en")) {
+            java.util.Properties messages = new java.util.Properties();
+            try (var in = Files.newBufferedReader(resource("messages_" + language + ".properties"))) {
+                messages.load(in);
+            }
+            assertThat(ReconChecks.ATTENTION).allSatisfy(check -> assertThat(messages.getProperty(
+                ReconTasks.ATTENTION_TITLE + "." + check)).as(language + " " + check).isNotBlank()
+                .doesNotContain(check));
+        }
     }
 
     private static Path resource(String name) throws URISyntaxException {

@@ -2,7 +2,7 @@
 id: qb.system.recon-attention-due
 description: >-
   F-M14 (docs/quizbuks/plans/impl/F-M14.md §3.1b): the items for attention of the latest reconciliation within a day
-  before :at, one per check and object, that have no open task of their own (the items of the job qb.recon-attention;
+  before :at, if no later one exists, one per check and object, that have no open task of their own (the items of the job qb.recon-attention;
   none when the reconciliation did not run)
 entities: [QbReconRun, QbReconItem, SysTask]
 datasets:
@@ -33,6 +33,9 @@ WITH latest AS (
     FROM {{QbReconRun}} r
     WHERE r.{{QbReconRun.scheduledTime}} <= CAST(:at AS timestamptz)
       AND r.{{QbReconRun.scheduledTime}} > CAST(:at AS timestamptz) - interval '1 day'
+      -- A run of an earlier time made up later (JOB_RUN_REQUEST): nothing, while a later run stands.
+      AND NOT EXISTS (SELECT 1 FROM {{QbReconRun}} n
+                      WHERE n.{{QbReconRun.scheduledTime}} > r.{{QbReconRun.scheduledTime}})
     ORDER BY r.{{QbReconRun.scheduledTime}} DESC
     LIMIT 1),
 found AS (

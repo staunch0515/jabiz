@@ -77,7 +77,7 @@ class ReconTasksIT extends TopUpItSupport {
 
     /** The latest version of each task of a source key. */
     static List<Map<String, Object>> taskRows(String sourceKey) {
-        return query("SELECT DISTINCT ON (task_id) task_id, task_type, status, assignee_permission, title_params "
+        return query("SELECT DISTINCT ON (task_id) task_id, task_type, status, assignee_permission, title_key, title_params, link "
             + "FROM sys_task_version WHERE source_key = ? ORDER BY task_id, version_no DESC", sourceKey);
     }
 
@@ -105,7 +105,9 @@ class ReconTasksIT extends TopUpItSupport {
         assertThat(reconcileDay(1)).isEqualTo(ReconChecks.OK);
         assertThat(openTasks(attention(operator))).singleElement().satisfies(task -> {
             assertThat(task).containsEntry("task_type", ReconTasks.ATTENTION_TASK)
-                .containsEntry("assignee_permission", QbPermissions.RECONCILE);
+                .containsEntry("assignee_permission", QbPermissions.RECONCILE)
+                .containsEntry("title_key", ReconTasks.ATTENTION_TITLE + "." + ReconChecks.DISTRIBUTION_PRICE_RANGE)
+                .containsEntry("link", ReconTasks.RECONCILIATION_PAGE);
             assertThat(String.valueOf(task.get("title_params"))).contains(ReconChecks.DISTRIBUTION_PRICE_RANGE)
                 .contains(operator);
         });
@@ -179,13 +181,59 @@ class ReconTasksIT extends TopUpItSupport {
         assertThat(openTasks(attention("op-fm14-guard-2"))).isEmpty();
     }
 
-    /** Last: it leaves many prices outside the range. */
+    /** Review L11: a note asks nobody. */
     @Test
     @Order(4)
+    void aNoteAsksNobody() {
+        String taker = newTaker("t-fm14-lag", null);
+        // A taker's cache ahead of the ledger, found by one run only: a note (TAKER_WALLET_LAG).
+        execute("INSERT INTO qb_wallet (wallet_id, owner_id, kind, balance, pending_count, pending_amount, pending_out, "
+            + "version) VALUES (?, ?, 'TAKER', 5, 0, 0, 0, 1) ON CONFLICT (owner_id, kind) DO UPDATE SET balance = "
+            + "qb_wallet.balance + 5, version = qb_wallet.version + 1", UUID.randomUUID().toString(), taker);
+        reconcileDay(25);
+        assertThat(query("SELECT 1 FROM qb_recon_item_version i JOIN qb_recon_run_version r ON r.run_id = i.run_id "
+            + "WHERE r.scheduled_time = ? AND i.check_code = 'TAKER_WALLET_LAG' AND i.party_id = ?",
+            Timestamp.from(day(25)), taker)).hasSize(1);
+        assertThat(query("SELECT 1 FROM sys_task_version WHERE source_key LIKE 'recon-attn:TAKER_WALLET_LAG:%'"))
+            .isEmpty();
+        execute("UPDATE qb_wallet SET balance = balance - 5, version = version + 1 WHERE owner_id = ? AND kind = "
+            + "'TAKER'", taker);
+    }
+
+    /**
+     * Review M3: a reconciliation of an earlier time made up later (JOB_RUN_REQUEST), and its tasks' jobs run for that
+     * time: while a later run stands, nothing is asked or closed.
+     */
+    @Test
+    @Order(5)
+    void aRunMadeUpForAnEarlierTimeTouchesNoTask() {
+        String operator = "op-fm14-backfill";
+        price(operator, "2");
+        reconcileDay(41);
+        assertThat(openTasks(attention(operator))).hasSize(1);
+        // Put right; then day 40, earlier, made up: its run no longer finds the price, but day 41's run is later.
+        price(operator, "0.05");
+        price("op-fm14-backfill-2", "2");
+        reconcileDay(40);
+        assertThat(status(40)).isNotNull();
+        assertThat(openTasks(attention(operator))).hasSize(1);
+        assertThat(taskRows(attention("op-fm14-backfill-2"))).isEmpty();
+        // The next day's run settles both.
+        reconcileDay(42);
+        assertThat(openTasks(attention(operator))).isEmpty();
+        assertThat(openTasks(attention("op-fm14-backfill-2"))).hasSize(1);
+        price("op-fm14-backfill-2", "0.05");
+        reconcileDay(43);
+        assertThat(openTasks(attention("op-fm14-backfill-2"))).isEmpty();
+    }
+
+    /** Last: it leaves many prices outside the range. */
+    @Test
+    @Order(6)
     void aRunThatKeptOnlyPartOfItsItemsClosesNothing() {
         String operator = "op-fm14-trunc";
         price(operator, "2");
-        reconcileDay(30);
+        reconcileDay(50);
         assertThat(openTasks(attention(operator))).hasSize(1);
         // Put right, while more prices than a run keeps are outside the range: the run kept only part of its items,
         // so not finding this one does not mean it is gone.
@@ -193,9 +241,9 @@ class ReconTasksIT extends TopUpItSupport {
         execute("INSERT INTO qb_distribution_price (price_id, operator_id, rate, unit_floor, unit_ceiling, "
             + "minimum_deposit, reason, updated_at, updated_by, version) SELECT gen_random_uuid()::text, "
             + "'op-fm14-many-' || n, 2, 1, 20, 500, 'F-M14', now(), 'it', 1 FROM generate_series(1, 1005) n");
-        reconcileDay(31);
+        reconcileDay(51);
         Map<String, Object> run = query("SELECT run_id, item_count FROM qb_recon_run_version WHERE scheduled_time = ?",
-            Timestamp.from(day(31))).getFirst();
+            Timestamp.from(day(51))).getFirst();
         assertThat(((Number) run.get("item_count")).intValue()).isGreaterThan(1000);
         assertThat(openTasks(attention(operator))).hasSize(1);
         // At most 200 asked a run.
