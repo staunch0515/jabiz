@@ -121,6 +121,26 @@ public class ExposureConfig {
             .maxItems(PublishingLimits.TICK_BATCH);
     }
 
+    /** F-M8: the sponsor is told when the exposures bought are nearly used up. */
+    @Bean
+    ProcessDefinition<ExposureLowNotices.LowRef, ExposureLowNotices.LowOutput, ProcessContext> qbExposureLowNoticeItem() {
+        return ExposureLowNotices.item();
+    }
+
+    /** F-M8: every ten minutes (deployment setting {@code quizbuks.exposure.low-cron}), one transaction a publication. */
+    @Bean
+    JobDefinition<ExposureLowNotices.LowRef> qbExposureLowJob(
+        ProcessDefinition<ExposureLowNotices.LowRef, ExposureLowNotices.LowOutput, ProcessContext>
+            qbExposureLowNoticeItem,
+        @org.springframework.beans.factory.annotation.Value("${quizbuks.exposure.low-cron:" + ExposureLowNotices.CRON
+            + "}") String cron) {
+        return JobDefinition.forEach(ExposureLowNotices.JOB, cron, ZoneOffset.UTC,
+                JobItems.template(ExposureLowNotices.DUE_TEMPLATE, scheduledTime -> Map.of(), "publicationId"),
+                qbExposureLowNoticeItem, (scheduledTime, row) -> new ExposureLowNotices.LowRef(
+                    String.valueOf(row.get("publicationId"))))
+            .maxItems(PublishingLimits.TICK_BATCH);
+    }
+
     /**
      * The end-to-end tests' purchase ({@value #E2E_PURCHASE}): only with their switch {@code quizbuks.e2e.enabled}
      * ({@code QB_E2E_ENABLED}, refused next to Stripe's live mode by {@code TransferScheduleCheck}), a root that runs

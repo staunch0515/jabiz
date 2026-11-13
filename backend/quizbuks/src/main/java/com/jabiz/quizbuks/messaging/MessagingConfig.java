@@ -116,6 +116,11 @@ class MessagingConfig {
     }
 
     @Bean
+    MailTemplate qbPublicationExposureLowMail() {
+        return NotificationMails.PUBLICATION_EXPOSURE_LOW;
+    }
+
+    @Bean
     ProcessDefinition<MailProcesses.TransferMailInput, MailProcesses.MailOutput, ProcessContext> qbMailTransfer(
         MessageCatalog messages) {
         return MailProcesses.transfer(messages);

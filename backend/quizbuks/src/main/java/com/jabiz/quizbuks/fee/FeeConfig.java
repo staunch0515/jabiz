@@ -843,6 +843,46 @@ public class FeeConfig {
             .maxItems(10_000);
     }
 
+    /** F-M8: a publication's exposure fee settled for a month (the item of both jobs). */
+    @Bean
+    ProcessDefinition<ExposureSettlements.SettleRef, FeeProcesses.ItemOutput, ProcessContext> qbExposureSettle() {
+        return ExposureSettlements.settle(zone);
+    }
+
+    /** F-M8: the exposure fees of the month that ended, on the 2nd at 00:47 in the fiscal year's zone. */
+    @Bean
+    JobDefinition<ExposureSettlements.SettleRef> qbExposureMonthlyJob(
+        ProcessDefinition<ExposureSettlements.SettleRef, FeeProcesses.ItemOutput, ProcessContext> qbExposureSettle,
+        @Value("${quizbuks.exposure.monthly-cron:0 47 0 2 * *}") String cron) {
+        return JobDefinition.forEach(ExposureSettlements.MONTHLY_JOB, cron, zone,
+                JobItems.template(ExposureSettlements.DUE_TEMPLATE, scheduledTime -> {
+                    String period = previousPeriod(scheduledTime);
+                    return Map.of("period", period, "periodStart", FeeRules.periodStart(period, zone),
+                        "periodEnd", FeeRules.periodStart(FeeRules.period(scheduledTime, zone), zone));
+                }, "publicationId"),
+                qbExposureSettle,
+                (scheduledTime, row) -> new ExposureSettlements.SettleRef(String.valueOf(row.get("publicationId")),
+                    String.valueOf(row.get("sponsorId")), previousPeriod(scheduledTime), false))
+            .maxItems(10_000);
+    }
+
+    /**
+     * F-M8: the final settlement of the publications that ended, every day at 03:12 in the fiscal year's zone (after the
+     * distribution fee's at 03:07, before the prepayments' release at 03:23).
+     */
+    @Bean
+    JobDefinition<ExposureSettlements.SettleRef> qbExposureFinalJob(
+        ProcessDefinition<ExposureSettlements.SettleRef, FeeProcesses.ItemOutput, ProcessContext> qbExposureSettle,
+        @Value("${quizbuks.exposure.final-cron:0 12 3 * * *}") String cron) {
+        return JobDefinition.forEach(ExposureSettlements.FINAL_JOB, cron, zone,
+                JobItems.template(ExposureSettlements.FINAL_DUE_TEMPLATE,
+                    scheduledTime -> Map.of("at", scheduledTime), "publicationId"),
+                qbExposureSettle,
+                (scheduledTime, row) -> new ExposureSettlements.SettleRef(String.valueOf(row.get("publicationId")),
+                    String.valueOf(row.get("sponsorId")), null, true))
+            .maxItems(10_000);
+    }
+
     /** Every day at 02:37 (Japan): the invoices past their due day whose reminder is due. */
     @Bean
     JobDefinition<FeeProcesses.InvoiceRef> qbFeeOverdueJob(

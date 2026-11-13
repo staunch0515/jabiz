@@ -279,6 +279,25 @@ class TopUpConfig {
                 "zh", "从未上架的发布的受众规则费", "ja", "公開されなかった公開の対象者ルール料")
             .item(ReconChecks.HELP_USAGE_TOTAL, "en", "AI help usage of a month: everybody's row below the people's",
                 "zh", "AI 帮助某月用量：全平台行小于各人之和", "ja", "AIヘルプの月間利用量：全体の行が個人の合計を下回る")
+            .item(ReconChecks.EXPOSURE_DEPOSITS, "en", "Exposure fee deposits (2180, by publication)",
+                "zh", "曝光费预付（2180，按发布）", "ja", "露出料の前払い（2180、掲載ごと）")
+            .item(ReconChecks.EXPOSURE_SETTLED_OVER, "en", "Exposures charged beyond what was bought",
+                "zh", "结算次数超过已购次数", "ja", "購入数を超えて請求した露出")
+            .item(ReconChecks.EXPOSURE_UNSETTLED, "en", "Exposure fees not settled for a month",
+                "zh", "某月未结算的曝光费", "ja", "未精算の月がある露出料")
+            .item(ReconChecks.EXPOSURE_FINAL_MISSING, "en", "Ended publications without their final exposure "
+                + "settlement", "zh", "已结束但无最终结算的曝光费", "ja", "終了後に最終精算がない露出料")
+            .item(ReconChecks.EXPOSURE_PRICE_RANGE, "en", "Exposure prices outside the headquarters' range",
+                "zh", "超出总部范围的曝光价目", "ja", "本部の範囲外の露出単価")
+            .item(ReconChecks.EXPOSURE_UNIT_MISMATCH, "en", "Exposures bought without a price frozen, or a price "
+                + "without a purchase", "zh", "有已购次数却没有冻结单价，或有单价却没有已购", "ja",
+                "購入数があるのに単価が固定されていない、またはその逆")
+            .item(ReconChecks.EXPOSURE_SETTLED_SHORT, "en", "Final exposure settlements that counted fewer than "
+                + "were counted", "zh", "最终结算的次数少于已计入的次数", "ja", "最終精算の回数が計上済みの回数より少ない")
+            .item(ReconChecks.EXPOSURE_AMOUNT_MISMATCH, "en", "Exposure settlements whose amounts do not add up to "
+                + "the count", "zh", "曝光结算的金额之和与次数不符", "ja", "精算額の合計が回数と一致しない露出料")
+            .item(ReconChecks.EXPOSURE_UNPURCHASED, "en", "Publications of another's video that bought no exposures "
+                + "(a note)", "zh", "用他人视频却没有购买曝光的发布（仅提示）", "ja", "他人の動画を使い露出を購入していない公開（お知らせのみ）")
             .item(ReconChecks.CREDIT_NOTE_USES, "en", "Credit notes against what they gave back and paid",
                 "zh", "贷项凭证与其退回和抵用", "ja", "返還インボイスと返金・充当")
             .item(ReconChecks.CREDIT_NOTE_LIMITS, "en", "Fees whose credit notes come to more than them",

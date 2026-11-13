@@ -40,6 +40,8 @@ class OperatorSettlementReconIT extends CapItSupport {
         Map<String, Object> params = new HashMap<>();
         params.put("at", clock.instant().toString());
         params.put("zone", TOKYO.getId());
+        // The settlement waits 5 days for its steps (qb.operator.settlement.readiness-max-days, as published).
+        params.put("readinessDays", 5);
         if (waitingHours != null) {
             params.put("waitingHours", waitingHours);
         }
@@ -141,11 +143,14 @@ class OperatorSettlementReconIT extends CapItSupport {
         billing(sponsor, "POSTPAID", 20_000);
         assertThat(monthly(sponsor)).isEqualTo("CHARGED");
 
-        // January ended at Tokyo's midnight (Jan 31, 15:00 UTC): 33 hours after it, nothing is reported yet.
-        clock.set(Instant.parse("2027-02-02T00:00:00Z"));
-        assertThat(of(operatorId)).isEmpty();
-        // 81 hours after it: January's monthly invoice is the step it waits for.
+        // January ended at Tokyo's midnight (Jan 31, 15:00 UTC). The month waits for its invoice, which the settlement
+        // may wait for 5 days (to Feb 5, 15:00 UTC): inside that wait, and 48 hours after it, nothing is reported (a).
         clock.set(Instant.parse("2027-02-04T00:00:00Z"));
+        assertThat(of(operatorId)).isEmpty();
+        clock.set(Instant.parse("2027-02-07T00:00:00Z"));
+        assertThat(of(operatorId)).isEmpty();
+        // 57 hours after the deadline: it is reported, with the step it waits for (b).
+        clock.set(Instant.parse("2027-02-08T00:00:00Z"));
         assertThat(of(operatorId)).singleElement().satisfies(row -> assertRow(row,
             ReconChecks.OPERATOR_SETTLEMENT_WAITING, "2027-01:INVOICE", "0", "1"));
         // Not checked without the hours (the parameter not published).
@@ -165,6 +170,27 @@ class OperatorSettlementReconIT extends CapItSupport {
             ReconChecks.OPERATOR_SETTLEMENT_WAITING, "2027-02", "0", "1"));
         systemRun(OperatorSettlements.RUN, body("operatorId", operatorId, "month", "2027-02"));
         assertThat(of(operatorId)).isEmpty();
+    }
+
+    @Test
+    @Order(9)
+    void aMonthReadyButNotSettledBecauseTheJobDidNotRunIsReportedTheHoursAfterItBecameReady() {
+        clock.set(Instant.parse("2036-01-10T01:00:00Z"));
+        String operatorId = newOperator(hq(), unique("Ready"));
+        String sponsor = newSponsor(unique("fm12c-ready"));
+        assign(sponsor, operatorId);
+        billing(sponsor, "POSTPAID", 20_000);
+        assertThat(monthly(sponsor)).isEqualTo("CHARGED");
+        // The invoice is issued 30 hours after the month's end (Feb 1, 21:00 UTC): the month is ready from then, and the
+        // settlement job does not run. Reported 48 hours after that, which is inside the 5 days' wait: start is the
+        // moment it was ready, not the deadline and not the month's end.
+        clock.set(Instant.parse("2036-02-01T21:00:00Z"));
+        invoice(sponsor, "2036-01");
+        clock.set(Instant.parse("2036-02-03T20:00:00Z"));
+        assertThat(of(operatorId)).isEmpty();
+        clock.set(Instant.parse("2036-02-03T22:00:00Z"));
+        assertThat(of(operatorId)).singleElement().satisfies(row -> assertRow(row,
+            ReconChecks.OPERATOR_SETTLEMENT_WAITING, "2036-01", "0", "1"));
     }
 
     // ---- OPERATOR_SETTLEMENT_COVERAGE: the columns, GIFT_RECOVERY ---------------------------------------------------

@@ -28,6 +28,7 @@ class OperatorSettlementReconCapIT extends CapItSupport {
         params.put("at", clock.instant().toString());
         params.put("zone", TOKYO.getId());
         params.put("waitingHours", 48);
+        params.put("readinessDays", 5);
         return items(OperatorSettlementReconIT.TEMPLATE, TestTokens.bearer(tokens, "fm12c-cap-recon",
             QbPermissions.WALLET_SYSTEM), Map.of("params", params, "limit", 1000)).stream()
             .filter(row -> operatorId.equals(row.get("sponsorId"))).toList();

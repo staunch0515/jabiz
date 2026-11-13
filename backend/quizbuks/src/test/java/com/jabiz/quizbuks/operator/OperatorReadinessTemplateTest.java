@@ -12,8 +12,8 @@ import java.util.regex.Pattern;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * F-M12 b: the steps an operator's settlement waits for are the branches of one template, and the place where F-M8
- * (exposure fees) and F-M9 (the AI monthly charge), which are not merged yet, add theirs is marked in it. Adding a
+ * F-M12 b: the steps an operator's settlement waits for are the branches of one template, and the place where F-M9
+ * (the AI monthly charge), which is not merged yet, add theirs is marked in it. Adding a
  * branch is a deliberate change of this list.
  */
 class OperatorReadinessTemplateTest {
@@ -30,9 +30,9 @@ class OperatorReadinessTemplateTest {
         while (matcher.find()) {
             branches.add(matcher.group(1));
         }
-        // F-M8 adds EXPOSURE and F-M9 adds AI here, when they merge.
-        assertThat(branches).containsExactly("DISTRIBUTION", "INVOICE");
-        assertThat(sql).contains("READINESS EXTENSION POINT (F-M12 b)").contains("F-M8").contains("F-M9");
+        // F-M9 adds AI here, when it merges.
+        assertThat(branches).containsExactly("DISTRIBUTION", "INVOICE", "EXPOSURE");
+        assertThat(sql).contains("READINESS EXTENSION POINT (F-M12 b)").contains("F-M9");
     }
 
     /**
@@ -53,5 +53,32 @@ class OperatorReadinessTemplateTest {
             expressions.add(sql.substring(from, to));
         }
         assertThat(expressions.get(0)).isEqualTo(expressions.get(1)).contains("COLLATE \"C\"");
+    }
+
+    /**
+     * F-M12 c: the daily check names the steps a month waits for with the readiness template's own conditions, copied
+     * into it: each branch's EXISTS, with the parameters renamed to the check's columns, is the same text.
+     */
+    @Test
+    void theDailyChecksStepsAreTheReadinessBranchesWrittenTheSame() throws IOException {
+        Path system = Path.of("src/main/resources/queries/qb/system");
+        String readiness = code(Files.readString(system.resolve("operator-settlement-readiness.sql")));
+        String check = code(Files.readString(system.resolve("recon-operator-settlement.sql")));
+        for (String step : List.of("DISTRIBUTION", "INVOICE", "EXPOSURE")) {
+            Matcher a = Pattern.compile("SELECT '" + step + "' AS blockedBy WHERE EXISTS \\((.*?)\\)\\s*(?:UNION ALL|$)")
+                .matcher(readiness);
+            assertThat(a.find()).as(step + " in the readiness template").isTrue();
+            Matcher b = Pattern.compile("CASE WHEN EXISTS \\(((?:(?!CASE WHEN).)*?)\\) THEN '" + step + "' END").matcher(check);
+            assertThat(b.find()).as(step + " in the check").isTrue();
+            String expected = a.group(1).replace(":operatorId", "b.r_operator").replace(":month", "b.r_month")
+                .replace(":periodStart", "b.r_from").replace(":periodEnd", "b.r_to");
+            assertThat(b.group(1)).as(step).isEqualTo(expected);
+        }
+    }
+
+    /** The statement without comments, its white space and the aliases the copies are free to differ in. */
+    private static String code(String sql) {
+        return sql.lines().filter(line -> !line.strip().startsWith("--")).collect(java.util.stream.Collectors.joining(" "))
+            .replaceAll("\\s+", " ").trim();
     }
 }

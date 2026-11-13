@@ -1,7 +1,7 @@
 /*---
 id: qb.system.recon-operator-settlement
 description: Whether the operators' settlements agree with their lines and with the ledger (F-M12 c) - the operators still without a settlement for a month and the step they wait for, what a settlement counted against its own columns and the fees and parts of payments made with granted credit that nothing counted, the granted credit taken back against 5140 and month by month, the fees without an operator, and (a note) the suspended operators that still carry credit to take back
-entities: [QbOperator, QbOperatorSettlement, QbOperatorSettlementLine, QbFeeCharge, QbFeeInvoice, QbFeePayment, QbFeeCreditNote, QbPublication, QbPublicationCard, QbDistributionSettlement, LedgerEntry, LedgerAccount, LedgerTransaction]
+entities: [QbOperator, QbOperatorSettlement, QbOperatorSettlementLine, QbFeeCharge, QbFeeInvoice, QbFeePayment, QbFeeCreditNote, QbPublication, QbPublicationCard, QbDistributionSettlement, QbExposureSettlement, LedgerEntry, LedgerAccount, LedgerTransaction]
 datasets:
   QbOperator: urn:jabiz:dataset:default:QbOperator
   QbOperatorSettlement: urn:jabiz:dataset:default:QbOperatorSettlement
@@ -13,9 +13,11 @@ datasets:
   QbPublication: urn:jabiz:dataset:default:QbPublication
   QbPublicationCard: urn:jabiz:dataset:default:QbPublicationCard
   QbDistributionSettlement: urn:jabiz:dataset:default:QbDistributionSettlement
+  QbExposureSettlement: urn:jabiz:dataset:default:QbExposureSettlement
 params:
   at: { like: QbOperatorSettlement.issuedAt, description: "The run's time: the months before the one it falls in are due (none: the waiting ones are not checked)" }
   zone: { kind: { type: text, maxLength: 64 }, description: "The fiscal year's zone, whose months the settlements are of (none: the waiting ones are not checked)" }
+  readinessDays: { kind: { type: numeric, precision: 2, scale: 0 }, description: "F-M12 b: qb.operator.settlement.readiness-max-days (none: counted as 0, from the month's end)" }
   waitingHours: { kind: { type: numeric, precision: 4, scale: 0 }, description: "F-M12 c: qb.operator.settlement.waiting-after-hours (none: the waiting ones are not checked)" }
 results:
   checkCode: { kind: { type: text, maxLength: 30 } }
@@ -36,7 +38,7 @@ permissions: [qb.wallet.system]
 -- OPERATOR_SETTLEMENT_WAITING: an operator's earliest month without a settlement (head of the line: the months after
 --   it wait for it, they are not listed) when :waitingHours hours have passed since that month's end, as the daily job's
 --   items take it (qb.system.operator-settlements-due). The reference is "<month>:<steps>": the steps of the month that are
---   not done yet, the branches of qb.system.operator-settlement-readiness (DISTRIBUTION, INVOICE; the month alone when
+--   not done yet, the branches of qb.system.operator-settlement-readiness (DISTRIBUTION, INVOICE, EXPOSURE, written the same: OperatorReadinessTemplateTest compares them; the month alone when
 --   nothing is pending, which is the job's own failure). Expected 0, actual how many months it is behind.
 -- OPERATOR_SETTLEMENT_COVERAGE, reference "<month>:<column>": a settlement's column against what its lines say (the
 --   platform fees and the part not shared of the CHARGE lines, the credit used and not shared in the batch of its fees,
@@ -255,13 +257,108 @@ unsettled AS (
                       WHERE s.{{QbOperatorSettlement.operatorId}} = d.r_operator
                         AND s.{{QbOperatorSettlement.month}} = to_char(d.r_local_start, 'YYYY-MM'))
 ),
-waiting AS (
+behind AS (
     SELECT h.r_operator, h.r_month, h.r_behind,
            (CAST(h.r_month || '-01' AS timestamp) AT TIME ZONE CAST(:zone AS text)) AS r_from,
-           ((CAST(h.r_month || '-01' AS timestamp) + interval '1 month') AT TIME ZONE CAST(:zone AS text)) AS r_to
+           ((CAST(h.r_month || '-01' AS timestamp) + interval '1 month') AT TIME ZONE CAST(:zone AS text)) AS r_to,
+           (((CAST(h.r_month || '-01' AS timestamp) + interval '1 month') + make_interval(days => coalesce(CAST(:readinessDays AS int), 0)))
+               AT TIME ZONE CAST(:zone AS text)) AS r_deadline
     FROM (SELECT u.r_operator, min(u.r_month) AS r_month, count(*) AS r_behind
           FROM unsettled u GROUP BY u.r_operator) h
-    WHERE ((CAST(h.r_month || '-01' AS timestamp) + interval '1 month') AT TIME ZONE CAST(:zone AS text))
+),
+waiting AS (
+    -- The steps it waits for, and when it is reported (General Controller's rule, 2026-11-13): a month that waits for a
+    -- step is allowed the readiness wait (the settlement itself waits that long: qb.operator.settlement.readiness-max-days
+    -- after the month's end, in the zone; a number not published counts as 0, so the month's end) and is reported the
+    -- waiting hours after that; a month that waits for nothing (the job did not run) is reported the waiting hours after
+    -- the month's end, inside the readiness wait too.
+    SELECT w0.r_operator, w0.r_month, w0.r_behind, w0.r_steps
+    FROM (
+        SELECT b.*, concat_ws(',',
+           CASE WHEN EXISTS (
+               SELECT 1
+               FROM {{QbPublicationCard}} pc
+               JOIN {{QbPublication}} p ON p.{{QbPublication.publicationId}} = pc.{{QbPublicationCard.publicationId}}
+               WHERE pc.{{QbPublicationCard.operatorId}} = b.r_operator
+                 AND p.{{QbPublication.billingOperatorId}} = b.r_operator
+                 AND p.{{QbPublication.distributionUnit}} IS NOT NULL
+                 AND p.{{QbPublication.publisherKind}} = 'SPONSOR'
+                 AND greatest(pc.{{QbPublicationCard.startAt}}, p.{{QbPublication.approvedAt}}) < b.r_to
+                 AND (pc.{{QbPublicationCard.endedAt}} IS NULL OR pc.{{QbPublicationCard.endedAt}} >= b.r_from)
+                 AND NOT EXISTS (SELECT 1 FROM {{QbDistributionSettlement}} s
+                                 WHERE s.{{QbDistributionSettlement.publicationId}} = CAST(p.{{QbPublication.publicationId}} AS text)
+                                   AND (s.{{QbDistributionSettlement.final}} OR s.{{QbDistributionSettlement.period}} = b.r_month)))
+               THEN 'DISTRIBUTION' END,
+           CASE WHEN EXISTS (
+               SELECT 1
+               FROM {{QbFeeCharge}} c
+               WHERE c.{{QbFeeCharge.operatorId}} = b.r_operator
+                 AND c.{{QbFeeCharge.period}} = b.r_month
+                 AND c.{{QbFeeCharge.billingMode}} = 'POSTPAID'
+                 AND NOT EXISTS (SELECT 1 FROM {{QbFeeInvoice}} i
+                                 WHERE i.{{QbFeeInvoice.sponsorId}} = c.{{QbFeeCharge.sponsorId}}
+                                   AND ((i.{{QbFeeInvoice.period}} = c.{{QbFeeCharge.period}} AND i.{{QbFeeInvoice.chargeId}} IS NULL)
+                                        OR i.{{QbFeeInvoice.chargeId}} = CAST(c.{{QbFeeCharge.chargeId}} AS text))))
+               THEN 'INVOICE' END,
+           CASE WHEN EXISTS (
+               SELECT 1
+               FROM {{QbPublicationCard}} pc
+               JOIN {{QbPublication}} p ON p.{{QbPublication.publicationId}} = pc.{{QbPublicationCard.publicationId}}
+               WHERE pc.{{QbPublicationCard.operatorId}} = b.r_operator
+                 AND p.{{QbPublication.billingOperatorId}} = b.r_operator
+                 AND p.{{QbPublication.exposureUnit}} IS NOT NULL
+                 AND p.{{QbPublication.exposurePurchased}} IS NOT NULL
+                 AND p.{{QbPublication.publisherKind}} = 'SPONSOR'
+                 AND greatest(pc.{{QbPublicationCard.startAt}}, p.{{QbPublication.approvedAt}}) < b.r_to
+                 AND (pc.{{QbPublicationCard.endedAt}} IS NULL OR pc.{{QbPublicationCard.endedAt}} >= b.r_from)
+                 AND NOT EXISTS (SELECT 1 FROM {{QbExposureSettlement}} s
+                                 WHERE s.{{QbExposureSettlement.publicationId}} = CAST(p.{{QbPublication.publicationId}} AS text)
+                                   AND (s.{{QbExposureSettlement.final}} OR s.{{QbExposureSettlement.period}} = b.r_month)))
+               THEN 'EXPOSURE' END) AS r_steps,
+               -- readyAt: when the last step it needed was satisfied, by the rows' own times (settledAt of the month's or the
+               -- final distribution / exposure row of each publication, issuedAt of the invoice of each postpaid fee); none
+               -- when nothing was needed.
+               greatest(
+                   (SELECT max(t.r_at) FROM (
+                       SELECT (SELECT min(s.{{QbDistributionSettlement.settledAt}}) FROM {{QbDistributionSettlement}} s
+                               WHERE s.{{QbDistributionSettlement.publicationId}} = CAST(p.{{QbPublication.publicationId}} AS text)
+                                 AND (s.{{QbDistributionSettlement.final}} OR s.{{QbDistributionSettlement.period}} = b.r_month)) AS r_at
+                       FROM {{QbPublicationCard}} pc
+                       JOIN {{QbPublication}} p ON p.{{QbPublication.publicationId}} = pc.{{QbPublicationCard.publicationId}}
+                       WHERE pc.{{QbPublicationCard.operatorId}} = b.r_operator
+                         AND p.{{QbPublication.billingOperatorId}} = b.r_operator
+                         AND p.{{QbPublication.distributionUnit}} IS NOT NULL
+                         AND p.{{QbPublication.publisherKind}} = 'SPONSOR'
+                         AND greatest(pc.{{QbPublicationCard.startAt}}, p.{{QbPublication.approvedAt}}) < b.r_to
+                         AND (pc.{{QbPublicationCard.endedAt}} IS NULL OR pc.{{QbPublicationCard.endedAt}} >= b.r_from)) t),
+                   (SELECT max(t.r_at) FROM (
+                       SELECT (SELECT min(i.{{QbFeeInvoice.issuedAt}}) FROM {{QbFeeInvoice}} i
+                               WHERE i.{{QbFeeInvoice.sponsorId}} = c.{{QbFeeCharge.sponsorId}}
+                                 AND ((i.{{QbFeeInvoice.period}} = c.{{QbFeeCharge.period}} AND i.{{QbFeeInvoice.chargeId}} IS NULL)
+                                      OR i.{{QbFeeInvoice.chargeId}} = CAST(c.{{QbFeeCharge.chargeId}} AS text))) AS r_at
+                       FROM {{QbFeeCharge}} c
+                       WHERE c.{{QbFeeCharge.operatorId}} = b.r_operator
+                         AND c.{{QbFeeCharge.period}} = b.r_month
+                         AND c.{{QbFeeCharge.billingMode}} = 'POSTPAID') t),
+                   (SELECT max(t.r_at) FROM (
+                       SELECT (SELECT min(s.{{QbExposureSettlement.settledAt}}) FROM {{QbExposureSettlement}} s
+                               WHERE s.{{QbExposureSettlement.publicationId}} = CAST(p.{{QbPublication.publicationId}} AS text)
+                                 AND (s.{{QbExposureSettlement.final}} OR s.{{QbExposureSettlement.period}} = b.r_month)) AS r_at
+                       FROM {{QbPublicationCard}} pc
+                       JOIN {{QbPublication}} p ON p.{{QbPublication.publicationId}} = pc.{{QbPublicationCard.publicationId}}
+                       WHERE pc.{{QbPublicationCard.operatorId}} = b.r_operator
+                         AND p.{{QbPublication.billingOperatorId}} = b.r_operator
+                         AND p.{{QbPublication.exposureUnit}} IS NOT NULL
+                         AND p.{{QbPublication.exposurePurchased}} IS NOT NULL
+                         AND p.{{QbPublication.publisherKind}} = 'SPONSOR'
+                         AND greatest(pc.{{QbPublicationCard.startAt}}, p.{{QbPublication.approvedAt}}) < b.r_to
+                         AND (pc.{{QbPublicationCard.endedAt}} IS NULL OR pc.{{QbPublicationCard.endedAt}} >= b.r_from)) t)) AS r_ready
+        FROM behind b
+    ) w0
+    -- start = a month that waits for a step: the deadline; one that waits for nothing: min(max(month end, readyAt),
+    -- deadline). Reported when the run is past start + the waiting hours.
+    WHERE (CASE WHEN w0.r_steps <> '' THEN w0.r_deadline
+                ELSE least(greatest(w0.r_to, coalesce(w0.r_ready, w0.r_to)), w0.r_deadline) END)
           + make_interval(hours => CAST(:waitingHours AS int)) < CAST(:at AS timestamptz)
 ),
 carried AS (
@@ -272,32 +369,7 @@ carried AS (
       AND s.r_month = (SELECT max(n.r_month) FROM new_settlements n WHERE n.r_operator = o.{{QbOperator.operatorId}})
 )
 SELECT CAST('OPERATOR_SETTLEMENT_WAITING' AS varchar(30)) AS checkCode, CAST(w.r_operator AS varchar(128)) AS sponsorId,
-       CAST(rtrim(w.r_month || ':' || concat_ws(',',
-           CASE WHEN EXISTS (
-               SELECT 1
-               FROM {{QbPublicationCard}} pc
-               JOIN {{QbPublication}} p ON p.{{QbPublication.publicationId}} = pc.{{QbPublicationCard.publicationId}}
-               WHERE pc.{{QbPublicationCard.operatorId}} = w.r_operator
-                 AND p.{{QbPublication.billingOperatorId}} = w.r_operator
-                 AND p.{{QbPublication.distributionUnit}} IS NOT NULL
-                 AND p.{{QbPublication.publisherKind}} = 'SPONSOR'
-                 AND greatest(pc.{{QbPublicationCard.startAt}}, p.{{QbPublication.approvedAt}}) < w.r_to
-                 AND (pc.{{QbPublicationCard.endedAt}} IS NULL OR pc.{{QbPublicationCard.endedAt}} >= w.r_from)
-                 AND NOT EXISTS (SELECT 1 FROM {{QbDistributionSettlement}} ds
-                                 WHERE ds.{{QbDistributionSettlement.publicationId}} = CAST(p.{{QbPublication.publicationId}} AS text)
-                                   AND (ds.{{QbDistributionSettlement.final}} OR ds.{{QbDistributionSettlement.period}} = w.r_month)))
-               THEN 'DISTRIBUTION' END,
-           CASE WHEN EXISTS (
-               SELECT 1
-               FROM {{QbFeeCharge}} c
-               WHERE c.{{QbFeeCharge.operatorId}} = w.r_operator
-                 AND c.{{QbFeeCharge.period}} = w.r_month
-                 AND c.{{QbFeeCharge.billingMode}} = 'POSTPAID'
-                 AND NOT EXISTS (SELECT 1 FROM {{QbFeeInvoice}} i
-                                 WHERE i.{{QbFeeInvoice.sponsorId}} = c.{{QbFeeCharge.sponsorId}}
-                                   AND ((i.{{QbFeeInvoice.period}} = c.{{QbFeeCharge.period}} AND i.{{QbFeeInvoice.chargeId}} IS NULL)
-                                        OR i.{{QbFeeInvoice.chargeId}} = CAST(c.{{QbFeeCharge.chargeId}} AS text))))
-               THEN 'INVOICE' END), ':') AS varchar(128)) AS reference,
+       CAST(rtrim(w.r_month || ':' || w.r_steps, ':') AS varchar(128)) AS reference,
        CAST(0 AS numeric) AS expected, CAST(w.r_behind AS numeric) AS actual
 FROM waiting w
 UNION ALL
