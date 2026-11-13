@@ -57,6 +57,11 @@ class OperatorSettlementStatementBudgetIT extends CreditNoteItSupport {
      * (set straight in the tables: the point is the settlement's read and write, not 10,000 approvals).
      */
     private void clone(String[] seeded, int count, String operatorId, String sponsor) {
+        // No statistics, as right after a bulk load: autovacuum must not make up for a query that needs them.
+        for (String table : List.of("qb_fee_charge_version", "qb_fee_payment_version",
+            "qb_operator_settlement_line_version", "entity_registry")) {
+            execute("ALTER TABLE " + table + " SET (autovacuum_enabled = false)");
+        }
         String table = "it_clone_" + Math.abs(System.nanoTime() % 1_000_000);
         execute("CREATE TABLE " + table + " AS SELECT n, gen_random_uuid() AS cid, gen_random_uuid() AS pid "
             + "FROM generate_series(1, CAST(? AS int)) n", count);
@@ -78,9 +83,7 @@ class OperatorSettlementStatementBudgetIT extends CreditNoteItSupport {
             + "t.amount, t.paid_at + c.n * interval '1 second', t.transaction_id, t.prepayment_id FROM " + table
             + " c JOIN qb_fee_payment_version t ON t.payment_id = ?::uuid", sponsor, seeded[1]);
         execute("DROP TABLE " + table);
-        // As autovacuum would have by the time a month's settlement runs: without statistics the planner sees one row.
-        execute("ANALYZE qb_fee_charge_version");
-        execute("ANALYZE qb_fee_payment_version");
+
     }
 
     /** Each statement cut short (the batches of lines are megabytes). */
@@ -151,5 +154,15 @@ class OperatorSettlementStatementBudgetIT extends CreditNoteItSupport {
     @Order(3)
     void twentyThousandLinesTakeNoMoreThan450StatementsAnd80Seconds() {
         measure(2030, 10_000, 10_000, 450, Duration.ofSeconds(80), "20,000 lines");
+    }
+
+    /**
+     * Review H2: the credit used by every other operator's sponsors (100,000 payments here) is not read for this operator's
+     * settlement: the payments are found from the operator's own fees. No statistics either (nothing runs ANALYZE here).
+     */
+    @Test
+    @Order(4)
+    void anotherOperatorsHundredThousandCreditPaymentsDoNotSlowASettlement() {
+        measure(2033, 100, 100_000, 20, Duration.ofSeconds(5), "100 fees among 100,000 other gift rows");
     }
 }

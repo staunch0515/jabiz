@@ -30,64 +30,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.MOCK,
     properties = "quizbuks.operator-settlement.max-lines=4")
 @TestMethodOrder(MethodOrderer.OrderAnnotation.class)
-class OperatorSettlementCapIT extends CreditNoteItSupport {
-
-    private String hq() {
-        return TestTokens.bearer(tokens, "fm12b-cap-hq", QbPermissions.OPERATORS_WRITE, QbPermissions.OPERATORS_READ);
-    }
-
-    /** A new operator with a sponsor and cash, in February of {@code year}. */
-    private String[] start(int year) {
-        clock.set(Instant.parse(year + "-02-01T01:00:00Z"));
-        param(QbParams.FEE_TAX_RATE, "0.1");
-        return another(year);
-    }
-
-    /** As {@link #start}, in the same schema and year (the tax rate is set already). */
-    private String[] another(int year) {
-        clock.set(Instant.parse(year + "-02-01T02:00:00Z"));
-        String operatorId = newOperator(hq(), unique("Cap " + year));
-        String sponsor = newSponsor(unique("fm12b-cap-" + year));
-        run(OperatorProcesses.ASSIGN, hq(), body("userId", sponsor, "operatorId", operatorId, "reason", "F-M12 b"));
-        cash(sponsor, 100_000);
-        return new String[] {operatorId, sponsor};
-    }
-
-    /** {@code count} fees of {@code amount}, a minute apart from {@code first}; their ids, oldest first. */
-    private List<String> fees(String sponsor, int count, long amount, String first) {
-        List<String> ids = new ArrayList<>();
-        Instant at = Instant.parse(first);
-        for (int i = 0; i < count; i++) {
-            clock.set(at.plus(Duration.ofMinutes(i)));
-            ids.add(String.valueOf(manualFee(sponsor, amount)));
-        }
-        return ids;
-    }
-
-    private Map<String, Object> settle(String operatorId, String month, String at) {
-        clock.set(Instant.parse(at));
-        systemRun(OperatorSettlements.RUN, body("operatorId", operatorId, "month", month));
-        return settlement(operatorId, month);
-    }
-
-    private static Map<String, Object> settlement(String operatorId, String month) {
-        return query("SELECT * FROM qb_operator_settlement WHERE operator_id = ? AND month = ?", operatorId, month)
-            .getFirst();
-    }
-
-    private static List<Object> lineCharges(Object settlementId, String kind) {
-        return query("SELECT charge_id FROM qb_operator_settlement_line_version WHERE settlement_id = ? AND line_kind "
-            + "= ? ORDER BY occurred_at, charge_id", settlementId, kind).stream().map(r -> r.get("charge_id"))
-            .toList();
-    }
-
-    private static BigDecimal n(Map<String, Object> row, String column) {
-        return (BigDecimal) row.get(column);
-    }
-
-    private static List<Map<String, Object>> capTasks(String source) {
-        return query("SELECT DISTINCT task_id FROM sys_task_version WHERE source_key = ?", source);
-    }
+class OperatorSettlementCapIT extends CapItSupport {
 
     // ---- over the cap, at the original rates, a backlog-only month --------------------------------------------------
 
@@ -232,23 +175,55 @@ class OperatorSettlementCapIT extends CreditNoteItSupport {
 
     // ---- the order --------------------------------------------------------------------------------------------------
 
+    /** A copy of a fee under a given id (the registry row too), as if charged at the same instant. */
+    static void copyFee(String template, String id) {
+        execute("INSERT INTO entity_registry (entity_id, entity_type, created_seq_id) SELECT ?::uuid, entity_type, "
+            + "created_seq_id FROM entity_registry WHERE entity_id = ?::uuid", id, template);
+        execute("INSERT INTO qb_fee_charge_version (charge_id, version_no, effect_start_time, created_time, "
+            + "process_seq_id, sponsor_id, operator_id, billing_mode, kind, period, amount, tax_rate, tax, total, "
+            + "reason, source_key, charged_at, charged_by, share_excluded) SELECT ?::uuid, version_no, "
+            + "effect_start_time, created_time, process_seq_id, sponsor_id, operator_id, billing_mode, kind, period, "
+            + "amount, tax_rate, tax, total, reason, NULL, charged_at, charged_by, share_excluded "
+            + "FROM qb_fee_charge_version WHERE charge_id = ?::uuid", id, template);
+    }
+
+    /**
+     * Review M2: fees charged at the same instant, with ids that sort in no order of their creation (hyphens, digits and
+     * letters at different places), are taken in the order the database numbers them (COLLATE "C") and the code sorts them
+     * (string order): the watermark is the fourth, and the two after it are the ones the template says a capped settlement
+     * left (originMonth), the first four not.
+     */
     @Test
     @Order(7)
-    void feesChargedAtTheSameInstantAreTakenInTheOrderOfTheirIds() {
+    void feesChargedAtTheSameInstantAreTakenInTheOrderOfTheirIdsAndTheWatermarkSeparatesThem() {
         String[] who = start(2033);
         clock.set(Instant.parse("2033-02-10T01:00:00Z"));
-        List<String> ids = new ArrayList<>();
-        for (int i = 0; i < 6; i++) {
-            ids.add(String.valueOf(manualFee(who[1], 100)));
+        String template = String.valueOf(manualFee(who[1], 100));
+        List<String> ids = new ArrayList<>(List.of(template));
+        for (String id : List.of("ffffffff-0000-4000-8000-000000000001", "00000000-ffff-4000-8000-000000000002",
+            "0000000a-0000-4000-8000-00000000000a", "00000009-ffff-4000-8000-000000000003",
+            "a0000000-0000-4000-8000-000000000004")) {
+            copyFee(template, id);
+            ids.add(id);
         }
         List<String> sorted = ids.stream().sorted().toList();
         Map<String, Object> february = settle(who[0], "2033-02", "2033-03-02T00:00:00Z");
         assertThat(query("SELECT DISTINCT charged_at FROM qb_fee_charge_version WHERE sponsor_id = ? AND kind = "
             + "'MANUAL'", who[1])).hasSize(1);
-        assertThat(lineCharges(february.get("settlement_id"), "CHARGE")).containsExactlyElementsOf(sorted.subList(0, 4));
-        assertThat(february).containsEntry("watermark_charge_id", sorted.get(3));
+        assertThat(lineCharges(february.get("settlement_id"), "CHARGE")).containsExactlyInAnyOrderElementsOf(
+            sorted.subList(0, 4));
+        assertThat(february).containsEntry("watermark_charge_id", sorted.get(3)).containsEntry("uncounted", 2);
+
+        // The template (as March reads it) says which fees the February settlement left: those after its watermark.
+        List<Map<String, Object>> waiting = items(OperatorSettlements.CHARGES_TEMPLATE, TestTokens.bearer(tokens,
+            "fm12b-cap-system", QbPermissions.OPERATOR_SETTLEMENT_SYSTEM), Map.of("params", Map.of("operatorId",
+            who[0], "coveredFrom", "1970-01-01T00:00:00Z", "month", "2033-03", "maxFees", 100), "limit", 100));
+        assertThat(waiting).extracting(row -> String.valueOf(row.get("chargeId")))
+            .containsExactlyInAnyOrderElementsOf(sorted.subList(4, 6));
+        assertThat(waiting).allSatisfy(row -> assertThat(row).containsEntry("originMonth", "2033-02"));
         Map<String, Object> march = settle(who[0], "2033-03", "2033-04-02T00:00:00Z");
-        assertThat(lineCharges(march.get("settlement_id"), "CHARGE")).containsExactlyElementsOf(sorted.subList(4, 6));
+        assertThat(lineCharges(march.get("settlement_id"), "CHARGE")).containsExactlyInAnyOrderElementsOf(
+            sorted.subList(4, 6));
     }
 
     // ---- a credit note on a fee left -------------------------------------------------------------------------------

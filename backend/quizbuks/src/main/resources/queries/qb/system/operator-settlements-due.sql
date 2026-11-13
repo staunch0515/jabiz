@@ -20,7 +20,7 @@ permissions: [qb.operator.settlement.system]
 -- F-M12 b (plan §3.1): an operator's earliest month without a settlement, as qb.system.fee-invoices-due takes a sponsor's
 -- earliest month: a month that is stuck stays the one picked until it is settled, and the next day's run takes the one
 -- after it. An operator created after a month's end has no item for that month (its months start with the one it was
--- created in). Condition 1 of the plan: the previous month has its row (unless the operator was created in or after
+-- created in, or the one after its last settlement of the old kind). Condition 1 of the plan: the previous month has its row (unless the operator was created in or after
 -- this month); it never waits for a deadline. The conditions on the steps before it (the distribution fees, the
 -- invoices) need the controlled setting of how long to wait, which a template cannot read: the item checks them
 -- (qb.system.operator-settlement-readiness). The item reads again under the operator's lock and does nothing when the
@@ -28,9 +28,19 @@ permissions: [qb.operator.settlement.system]
 WITH months AS (
     SELECT o.{{QbOperator.operatorId}} AS operator_id,
            to_char(m.start_of_month, 'YYYY-MM') AS month,
-           (m.start_of_month = date_trunc('month', o.{{QbOperator.createdAt}} AT TIME ZONE :zone)) AS first_month
+           (m.start_of_month = lo.lower_month) AS first_month
     FROM {{QbOperator}} o
-    CROSS JOIN LATERAL generate_series(date_trunc('month', o.{{QbOperator.createdAt}} AT TIME ZONE :zone),
+    -- The first month an operator is settled by the daily job: the one after its last settlement of the old kind (no
+    -- covered_from: the monthly job's), which the switch point of F-M12 §3.0 leaves alone, or the month it was created
+    -- in. Months before it are never taken, whatever the old job left.
+    CROSS JOIN LATERAL (
+        SELECT COALESCE((SELECT CAST(max(os.{{QbOperatorSettlement.month}}) || '-01' AS timestamp) + interval '1 month'
+                         FROM {{QbOperatorSettlement}} os
+                         WHERE os.{{QbOperatorSettlement.operatorId}} = o.{{QbOperator.operatorId}}
+                           AND os.{{QbOperatorSettlement.coveredFrom}} IS NULL),
+                        date_trunc('month', o.{{QbOperator.createdAt}} AT TIME ZONE :zone)) AS lower_month
+    ) lo
+    CROSS JOIN LATERAL generate_series(lo.lower_month,
                                        CAST(CAST(:current AS text) || '-01' AS timestamp) - interval '1 month',
                                        interval '1 month') AS m(start_of_month)
 )

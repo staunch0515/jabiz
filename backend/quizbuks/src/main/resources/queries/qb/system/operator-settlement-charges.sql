@@ -47,17 +47,7 @@ WITH waiting AS (
            c.{{QbFeeCharge.shareExcluded}} AS share_excluded,
            c.{{QbFeeCharge.total}} AS total,
            c.{{QbFeeCharge.chargedAt}} AS charged_at,
-           (c.{{QbFeeCharge.period}} < :month) AS late,
-           (SELECT min(s.{{QbOperatorSettlement.month}}) FROM {{QbOperatorSettlement}} s
-             WHERE s.{{QbOperatorSettlement.operatorId}} = :operatorId
-               AND s.{{QbOperatorSettlement.capped}}
-               AND c.{{QbFeeCharge.period}} <= s.{{QbOperatorSettlement.month}}
-               AND c.{{QbFeeCharge.chargedAt}} < s.{{QbOperatorSettlement.issuedAt}}
-               AND (s.{{QbOperatorSettlement.watermarkChargedAt}} IS NULL
-                    OR c.{{QbFeeCharge.chargedAt}} > s.{{QbOperatorSettlement.watermarkChargedAt}}
-                    OR (c.{{QbFeeCharge.chargedAt}} = s.{{QbOperatorSettlement.watermarkChargedAt}}
-                        AND CAST(c.{{QbFeeCharge.chargeId}} AS text) COLLATE "C"
-                            > s.{{QbOperatorSettlement.watermarkChargeId}} COLLATE "C"))) AS origin_month
+           (c.{{QbFeeCharge.period}} < :month) AS late
     FROM {{QbFeeCharge}} c
     WHERE c.{{QbFeeCharge.operatorId}} = :operatorId
       AND c.{{QbFeeCharge.chargedAt}} >= :coveredFrom
@@ -78,12 +68,27 @@ WITH waiting AS (
     SELECT w.*, row_number() OVER (ORDER BY w.charged_at, CAST(w.charge_id AS text) COLLATE "C") AS seq,
            count(*) OVER () AS all_waiting
     FROM waiting w
+), limited AS (
+    -- Only the numbered rows within the limit: the origin is worked out for them alone.
+    SELECT n.*,
+           (SELECT min(s.{{QbOperatorSettlement.month}}) FROM {{QbOperatorSettlement}} s
+             WHERE s.{{QbOperatorSettlement.operatorId}} = :operatorId
+               AND s.{{QbOperatorSettlement.capped}}
+               AND c.{{QbFeeCharge.period}} <= s.{{QbOperatorSettlement.month}}
+               AND c.{{QbFeeCharge.chargedAt}} < s.{{QbOperatorSettlement.issuedAt}}
+               AND (s.{{QbOperatorSettlement.watermarkChargedAt}} IS NULL
+                    OR c.{{QbFeeCharge.chargedAt}} > s.{{QbOperatorSettlement.watermarkChargedAt}}
+                    OR (c.{{QbFeeCharge.chargedAt}} = s.{{QbOperatorSettlement.watermarkChargedAt}}
+                        AND CAST(c.{{QbFeeCharge.chargeId}} AS text) COLLATE "C"
+                            > s.{{QbOperatorSettlement.watermarkChargeId}} COLLATE "C"))) AS origin_month
+    FROM numbered n
+    JOIN {{QbFeeCharge}} c ON c.{{QbFeeCharge.chargeId}} = n.charge_id
+    WHERE n.seq <= :maxFees
 )
 SELECT n.charge_id AS chargeId, n.sponsor_id AS sponsorId, n.kind AS kind, n.period AS period, n.amount AS amount,
        n.share_excluded AS shareExcluded, n.total AS total, n.charged_at AS chargedAt, n.late AS late,
        n.all_waiting AS waitingTotal, n.origin_month AS originMonth,
        o.{{QbOperatorSettlement.platformShare}} AS originShare, o.{{QbOperatorSettlement.cappedTerms}} AS originTerms
-FROM numbered n
+FROM limited n
 LEFT JOIN {{QbOperatorSettlement}} o ON o.{{QbOperatorSettlement.operatorId}} = :operatorId
     AND o.{{QbOperatorSettlement.month}} = n.origin_month
-WHERE n.seq <= :maxFees

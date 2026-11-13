@@ -53,6 +53,9 @@ public final class OperatorShareRules {
     public record Terms(Set<String> shareKinds, boolean aiCostInBase, boolean recoverOutsideBase,
         BigDecimal recoveryRate, Map<String, String> treatments) {
 
+        /** The version of {@link #toText()}. */
+        static final String VERSION = "v1:";
+
         public Terms {
             shareKinds = Set.copyOf(shareKinds);
             treatments = Map.copyOf(treatments);
@@ -60,18 +63,24 @@ public final class OperatorShareRules {
 
         /**
          * The terms as text, to keep with a capped settlement (the fees it left are counted later at them): {@code
-         * kinds|aiCost|outside|rate|SOURCE=TREATMENT,...}, in a fixed order.
+         * v1:kinds|aiCost|outside|rate|SOURCE=TREATMENT,...}, in a fixed order. The version prefix lets the format
+         * grow; {@link #fromText} still reads the text without one (the first form).
          */
         public String toText() {
             String treated = new java.util.TreeMap<>(treatments).entrySet().stream()
                 .map(e -> e.getKey() + "=" + e.getValue()).collect(java.util.stream.Collectors.joining(","));
-            return String.join("|", String.join(",", new java.util.TreeSet<>(shareKinds)), String.valueOf(aiCostInBase),
+            return VERSION + String.join("|", String.join(",", new java.util.TreeSet<>(shareKinds)),
+                String.valueOf(aiCostInBase),
                 String.valueOf(recoverOutsideBase), recoveryRate.toPlainString(), treated);
         }
 
         /** The terms {@link #toText()} wrote. */
         public static Terms fromText(String text) {
-            String[] parts = text.split("\\|", -1);
+            String body = text.startsWith(VERSION) ? text.substring(VERSION.length()) : text;
+            if (body.matches("v\\d+:.*")) {
+                throw new IllegalArgumentException("Terms text of a version this code does not read: " + text);
+            }
+            String[] parts = body.split("\\|", -1);
             Map<String, String> treated = new java.util.LinkedHashMap<>();
             if (!parts[4].isEmpty()) {
                 for (String pair : parts[4].split(",")) {

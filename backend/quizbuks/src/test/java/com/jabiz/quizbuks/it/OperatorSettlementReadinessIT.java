@@ -147,6 +147,10 @@ class OperatorSettlementReadinessIT extends CreditNoteItSupport {
         String operatorId = operator("Not ready");
         String sponsor = postpaidSponsor("fm12b-wait", operatorId);
 
+        // What it waits for is in the item's output (part c's check of a settlement long overdue reads it).
+        clock.set(at("2028-04-02", 1));
+        assertThat(((OperatorSettlements.SettlementOutput) systemRun(OperatorSettlements.RUN, body("operatorId",
+            operatorId, "month", "2028-03"))).blockedBy()).containsExactly("INVOICE");
         runDay("2028-04-02");
         runDay("2028-04-03");
         assertThat(settlements(operatorId)).isEmpty();
@@ -294,6 +298,33 @@ class OperatorSettlementReadinessIT extends CreditNoteItSupport {
         awaitRequest(at("2033-04-04", 2));
         assertThat(months(operatorId)).containsExactly("2033-03");
         param(QbParams.OPERATOR_SETTLEMENT_READINESS_MAX_DAYS, "5");
+    }
+
+    /**
+     * Review M3: the first month the daily job takes of an operator with settlements of the old kind (no covered_from, the
+     * monthly job's) is the month after the last of them; whatever months before it have no row (the old job left gaps, or
+     * the operator is older than the first settlement) are never taken.
+     */
+    @Test
+    @Order(8)
+    void anOperatorWithOldSettlementsIsTakenFromTheMonthAfterTheLastOfThemAndNeverFromBefore() {
+        clock.set(Instant.parse("2034-01-10T01:00:00Z"));
+        String operatorId = operator("Old settlements");
+        String fresh = operator("No old settlement");
+        // January has no row; February was settled by the old job (a row without covered_from).
+        execute("INSERT INTO qb_operator_settlement (settlement_id, operator_id, month, period_start, period_end, "
+            + "revenue, platform_share, operator_share, prospecting_cost, carried_in, payable, carried_out, status, "
+            + "issued_at, revision, version) VALUES (gen_random_uuid()::text, ?, '2034-02', "
+            + "'2034-01-31T15:00:00Z', '2034-02-28T15:00:00Z', 0, 0.5, 0, 0, 0, 0, 0, 'CREDITED', now(), 1, 0)",
+            operatorId);
+        assertThat(due(operatorId, "2034-06")).singleElement().satisfies(item -> assertThat(item)
+            .containsEntry("month", "2034-03"));
+        assertThat(due(operatorId, "2034-03")).isEmpty();
+        // An operator without one starts from the month it was created in.
+        assertThat(due(fresh, "2034-06")).singleElement().satisfies(item -> assertThat(item)
+            .containsEntry("month", "2034-01"));
+        runDay("2034-06-02");
+        assertThat(months(operatorId)).containsExactly("2034-02", "2034-03");
     }
 
     /** JOB_RUN_REQUEST for the settlement job at {@code scheduledTime}, done when its run is recorded. */

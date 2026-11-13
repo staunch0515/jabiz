@@ -252,9 +252,22 @@ public final class OperatorSettlements {
     public record PayInput(@NotBlank @Size(max = 36) String settlementId, @NotNull LocalDate paidOn,
         @NotBlank @Size(max = BankTransfers.REFERENCE_LENGTH) String bankReference) {}
 
-    /** @param approvalRequestId the request another administrator decides (a payment) */
+    /**
+     * @param approvalRequestId the request another administrator decides (a payment)
+     * @param blockedBy         the steps the settlement is waiting for (DISTRIBUTION, INVOICE, ...), when it did nothing
+     *                          today for that reason (the readiness of F-M12 b); empty otherwise
+     */
     public record SettlementOutput(String settlementId, String status, BigDecimal payable, String documentNo,
-        String approvalRequestId) {}
+        String approvalRequestId, List<String> blockedBy) {
+        public SettlementOutput {
+            blockedBy = blockedBy == null ? List.of() : List.copyOf(blockedBy);
+        }
+
+        public SettlementOutput(String settlementId, String status, BigDecimal payable, String documentNo,
+            String approvalRequestId) {
+            this(settlementId, status, payable, documentNo, approvalRequestId, List.of());
+        }
+    }
 
     static final String INPUT = "input";
     static final String OPERATOR = "operator";
@@ -273,6 +286,9 @@ public final class OperatorSettlements {
     static final String COUNTED_NOW = "countedNow";
     static final String SKIP = "skip";
     static final String READINESS = "readiness";
+    static final String BLOCKED_BY = "blockedBy";
+    static final String DEFERRED_VOIDS = "deferredVoids";
+    static final String DEFERRED_PAYMENTS = "deferredPayments";
     static final String ALERT_SOURCE = "alertSource";
     static final String ALERT_ROWS = "alertRows";
     static final String DEFERRED = "deferred";
@@ -404,11 +420,11 @@ public final class OperatorSettlements {
                 ctx -> Map.of("operatorId", runInput(ctx).operatorId(), "coveredFrom", ctx.get(COVERED_FROM),
                     "month", runInput(ctx).month(), "maxFees", (long) maxLines + 1), CHARGES))
             .step("Read the voided fees", RunTemplate.<ProcessContext>when(ctx -> !skip(ctx), VOIDS_TEMPLATE,
-                ctx -> Map.of("operatorId", runInput(ctx).operatorId()), VOIDS))
+                ctx -> Map.of("operatorId", runInput(ctx).operatorId(), "maxVoids", (long) maxLines + 1), VOIDS))
             .step("Read the credit used", RunTemplate.<ProcessContext>when(ctx -> !skip(ctx), GIFTS_TEMPLATE,
                 // The gifts of every fee that waits (the cap decides below which are counted now).
                 ctx -> Map.of("operatorId", runInput(ctx).operatorId(), "coveredFrom", ctx.get(COVERED_FROM),
-                    "countedNow", candidateIds(ctx)), GIFTS))
+                    "countedNow", candidateIds(ctx), "maxPrior", (long) maxLines + 1), GIFTS))
             .compute("Count the fees", (metadata, ctx) -> countCharges(ctx, maxLines))
             .compute("Settle", (metadata, ctx) -> settle(ctx, zone))
             .step("Save the settlement", SaveChanges.now())
@@ -438,7 +454,20 @@ public final class OperatorSettlements {
     static void decideReadiness(ProcessContext ctx) {
         if (!skip(ctx) && !rows(ctx, READINESS).isEmpty()) {
             ctx.put(SKIP, true);
+            ctx.put(BLOCKED_BY, blockers(ctx, true));
         }
+    }
+
+    private static List<String> blockers(ProcessContext ctx) {
+        return ctx.contains(BLOCKED_BY) ? blockers(ctx, false) : List.of();
+    }
+
+    @SuppressWarnings("unchecked")
+    private static List<String> blockers(ProcessContext ctx, boolean fromRows) {
+        if (!fromRows) {
+            return (List<String>) ctx.get(BLOCKED_BY);
+        }
+        return rows(ctx, READINESS).stream().map(row -> String.valueOf(row.get("blockedBy"))).sorted().toList();
     }
 
     /**
@@ -515,6 +544,8 @@ public final class OperatorSettlements {
     @SuppressWarnings("unchecked")
     static void countCharges(ProcessContext ctx, int maxLines) {
         ctx.put(DEFERRED, Set.<String>of());
+        ctx.put(DEFERRED_VOIDS, Set.<String>of());
+        ctx.put(DEFERRED_PAYMENTS, Set.<String>of());
         ctx.put(CHARGE_TERMS, Map.<String, OperatorShareRules.Terms>of());
         ctx.put(CAPPED, false);
         ctx.put(UNCOUNTED, 0);
@@ -535,22 +566,50 @@ public final class OperatorSettlements {
         for (Map<String, Object> row : waiting) {
             waitingIds.add(String.valueOf(row.get("chargeId")));
         }
-        // The credit-used lines each fee brings (one a part of a payment this operator's fee was paid with, not written
-        // yet), and those of fees counted before, which no cap decides.
+        // 1. The voids come first, the oldest fee first (all of them if the cap allows; the rest wait).
+        List<Map<String, Object>> voids = new ArrayList<>(rows(ctx, VOIDS));
+        voids.sort(Comparator.comparing((Map<String, Object> row) -> time(row.get("chargedAt")))
+            .thenComparing(row -> String.valueOf(row.get("chargeId"))));
+        int voidsTaken = Math.min(voids.size(), maxLines);
+        Set<String> deferredVoids = new java.util.HashSet<>();
+        for (int i = voidsTaken; i < voids.size(); i++) {
+            deferredVoids.add(String.valueOf(voids.get(i).get("chargeId")));
+        }
+        // 2. The credit-used lines: those each waiting fee brings (decided with the fee, never cut), those of a payment that
+        // also touches a waiting fee (written with it), and the new ones on fees counted before, which wait by payment,
+        // the oldest first, in what the voids leave.
         Map<String, Integer> giftLines = new LinkedHashMap<>();
-        int priorGiftLines = 0;
+        int fixedLines = 0;
+        Map<String, List<Map<String, Object>>> priorByPayment = new LinkedHashMap<>();
         for (Map<String, Object> row : rows(ctx, GIFTS)) {
             if (input.operatorId().equals(String.valueOf(row.get("chargeOperatorId")))
                 && Boolean.TRUE.equals(row.get("counted")) && !Boolean.TRUE.equals(row.get("done"))) {
                 String chargeId = String.valueOf(row.get("chargeId"));
                 if (waitingIds.contains(chargeId)) {
                     giftLines.merge(chargeId, 1, Integer::sum);
+                } else if (Boolean.TRUE.equals(row.get("forNewFee"))) {
+                    fixedLines++;
                 } else {
-                    priorGiftLines++;
+                    priorByPayment.computeIfAbsent(String.valueOf(row.get("paymentId")), k -> new ArrayList<>()).add(row);
                 }
             }
         }
-        long budget = (long) maxLines - rows(ctx, VOIDS).size() - priorGiftLines;
+        List<Map.Entry<String, List<Map<String, Object>>>> priorOrder = new ArrayList<>(priorByPayment.entrySet());
+        priorOrder.sort(Comparator.comparing((Map.Entry<String, List<Map<String, Object>>> e) ->
+            time(e.getValue().getFirst().get("paidAt"))).thenComparing(Map.Entry::getKey));
+        long room = (long) maxLines - voidsTaken - fixedLines;
+        Set<String> deferredPayments = new java.util.HashSet<>();
+        int deferredPriorLines = 0;
+        for (Map.Entry<String, List<Map<String, Object>>> entry : priorOrder) {
+            if (!deferredPayments.isEmpty() || entry.getValue().size() > room) {
+                deferredPayments.add(entry.getKey());
+                deferredPriorLines += entry.getValue().size();
+            } else {
+                room -= entry.getValue().size();
+            }
+        }
+        // 3. The fees, oldest first, with their credit-used lines, in what is left.
+        long budget = room;
         List<Map<String, Object>> taken = new ArrayList<>();
         for (Map<String, Object> row : waiting) {
             long cost = 1 + giftLines.getOrDefault(String.valueOf(row.get("chargeId")), 0);
@@ -561,7 +620,8 @@ public final class OperatorSettlements {
             taken.add(row);
         }
         long all = waiting.isEmpty() ? 0 : ((Number) waiting.getFirst().get("waitingTotal")).longValue();
-        int uncounted = (int) (all - taken.size());
+        int uncountedFees = (int) (all - taken.size());
+        int uncounted = uncountedFees + deferredVoids.size() + deferredPriorLines;
         Set<String> deferred = new java.util.HashSet<>();
         for (int i = taken.size(); i < waiting.size(); i++) {
             deferred.add(String.valueOf(waiting.get(i).get("chargeId")));
@@ -570,6 +630,8 @@ public final class OperatorSettlements {
             ctx.put(CAPPED, true);
             ctx.put(UNCOUNTED, uncounted);
             ctx.put(DEFERRED, deferred);
+            ctx.put(DEFERRED_VOIDS, deferredVoids);
+            ctx.put(DEFERRED_PAYMENTS, deferredPayments);
             if (!taken.isEmpty()) {
                 Map<String, Object> last = taken.getLast();
                 ctx.put(WATERMARK, Map.of("at", time(last.get("chargedAt")), "id", String.valueOf(last.get("chargeId"))));
@@ -665,6 +727,9 @@ public final class OperatorSettlements {
         List<Map<String, Object>> voidLines = new ArrayList<>();
         for (Map<String, Object> row : rows(ctx, VOIDS)) {
             String chargeId = String.valueOf(row.get("chargeId"));
+            if (deferredVoids(ctx).contains(chargeId)) {
+                continue;
+            }
             BigDecimal amount = money(row.get("amount"));
             BigDecimal excluded = money(row.get("excluded"));
             BigDecimal rate = money(row.get("shareRate"));
@@ -909,7 +974,8 @@ public final class OperatorSettlements {
                 Map<String, Object> row = group.get(i);
                 if (input.operatorId().equals(String.valueOf(row.get("chargeOperatorId")))
                     && Boolean.TRUE.equals(row.get("counted")) && !Boolean.TRUE.equals(row.get("done"))
-                    && !deferred.contains(String.valueOf(row.get("chargeId")))) {
+                    && !deferred.contains(String.valueOf(row.get("chargeId")))
+                    && !((Set<?>) ctx.get(DEFERRED_PAYMENTS)).contains(String.valueOf(row.get("paymentId")))) {
                     contributions.add(contribution(row, parts.get(i)));
                 }
             }
@@ -1008,6 +1074,11 @@ public final class OperatorSettlements {
                 : String.valueOf(row.get("grantSource")), row.get("grantId") == null ? null
                 : String.valueOf(row.get("grantId")), row.get("priorNoShare") == null ? null
                 : Boolean.valueOf(String.valueOf(row.get("priorNoShare"))));
+    }
+
+    @SuppressWarnings("unchecked")
+    private static Set<String> deferredVoids(ProcessContext ctx) {
+        return (Set<String>) ctx.get(DEFERRED_VOIDS);
     }
 
     @SuppressWarnings("unchecked")
@@ -1510,7 +1581,7 @@ public final class OperatorSettlements {
     private static SettlementOutput output(ProcessContext ctx) {
         EntityInstance row = first(ctx, NEW_ROW) != null ? first(ctx, NEW_ROW) : first(ctx, SETTLEMENT_ROW);
         if (row == null) {
-            return new SettlementOutput(null, null, null, null, null);
+            return new SettlementOutput(null, null, null, null, null, blockers(ctx));
         }
         String status = ctx.contains(STATUS_AFTER) ? (String) ctx.get(STATUS_AFTER) : row.get("status");
         ApprovalOutcome approval = ctx.contains(APPROVAL) ? ctx.get(APPROVAL, ApprovalOutcome.class) : null;

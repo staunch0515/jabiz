@@ -1,4 +1,4 @@
--- F-M12 b. PLACEHOLDER NAME: the number is the next free one when the PR opens (V122 is F-M12 a's, V121 F-M8a's).
+-- F-M12 b.
 --
 -- cost_offset (L3): the part of a gift refund that offset the cost carried instead of being paid out (posted to 4110 in
 -- the take-back posting).

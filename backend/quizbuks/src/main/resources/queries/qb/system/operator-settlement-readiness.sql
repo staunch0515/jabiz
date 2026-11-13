@@ -31,9 +31,12 @@ permissions: [qb.operator.settlement.system]
 SELECT 'DISTRIBUTION' AS blockedBy
 WHERE EXISTS (
     SELECT 1
-    FROM {{QbPublication}} p
-    JOIN {{QbPublicationCard}} pc ON pc.{{QbPublicationCard.publicationId}} = p.{{QbPublication.publicationId}}
-    WHERE p.{{QbPublication.billingOperatorId}} = :operatorId
+    FROM {{QbPublicationCard}} pc
+    JOIN {{QbPublication}} p ON p.{{QbPublication.publicationId}} = pc.{{QbPublicationCard.publicationId}}
+    -- Started from the card (an ordinary table that froze the operator when the publication went on, indexed by it), not
+    -- from the temporal publication by a field that can change; the publication's billing operator must agree.
+    WHERE pc.{{QbPublicationCard.operatorId}} = :operatorId
+      AND p.{{QbPublication.billingOperatorId}} = :operatorId
       AND p.{{QbPublication.distributionUnit}} IS NOT NULL
       AND p.{{QbPublication.publisherKind}} = 'SPONSOR'
       -- When it went on (N1): greatest(its start, its approval); the same expression in qb.system.distribution-due, qb.system.fee-invoices-due and qb.system.recon-prepayments (DistributionDueConditionTest).

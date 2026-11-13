@@ -337,4 +337,19 @@ class OperatorShareRulesTest {
         assertThatThrownBy(() -> OperatorShareRules.split(new BigDecimal("100"), List.of(BigDecimal.ZERO),
             List.of("a"))).isInstanceOf(IllegalArgumentException.class);
     }
+
+    @Test
+    void termsTextWithoutAVersionIsStillReadAndOneOfAnotherVersionIsRefused() {
+        // The first form, as the first settlements wrote it.
+        OperatorShareRules.Terms old = OperatorShareRules.Terms.fromText("MANUAL,MONTHLY|false|true|0.5000|ONBOARDING=OPERATOR");
+        assertThat(old.shareKinds()).containsExactlyInAnyOrder("MANUAL", "MONTHLY");
+        assertThat(old.recoverOutsideBase()).isTrue();
+        assertThat(old.recoveryRate()).isEqualByComparingTo("0.5");
+        assertThat(old.treatmentOf("ONBOARDING")).isEqualTo(OperatorShareRules.OPERATOR);
+        assertThat(OperatorShareRules.Terms.fromText("v1:" + "MANUAL,MONTHLY|false|true|0.5000|ONBOARDING=OPERATOR"))
+            .isEqualTo(old);
+        assertThatThrownBy(() -> OperatorShareRules.Terms.fromText("v2:MANUAL|false|true|0.5|"))
+            .isInstanceOf(IllegalArgumentException.class);
+        assertThat(old.toText()).startsWith("v1:");
+    }
 }
