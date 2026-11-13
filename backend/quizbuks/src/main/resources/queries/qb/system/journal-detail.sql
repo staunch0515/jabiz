@@ -3,7 +3,7 @@ id: qb.system.journal-detail
 description: >-
   One part of a journal export's detail (Q9d, D-Q9d-3): the postings of the transactions from firstTransaction to
   lastTransaction (both included, in the order of their keys) that the export takes, by account and side (and the
-  sponsor on 2110); the parts come from qb.system.journal-parts, each within the platform's read limit
+  sponsor on the accounts kept per sponsor: 2110, 2160, 2190, 1130, 2180); the parts come from qb.system.journal-parts, each within the platform's read limit
 entities: [LedgerAccount, LedgerTransaction, LedgerEntry]
 params:
   to:               { like: LedgerTransaction.bookingTime, required: true, description: "The period's end: transactions booked before it" }
@@ -36,7 +36,7 @@ SELECT
     t.{{LedgerTransaction.createdTime}}   AS recordedAt,
     a.{{LedgerAccount.accountCode}}       AS accountCode,
     e.{{LedgerEntry.direction}}           AS direction,
-    CAST(CASE WHEN a.{{LedgerAccount.accountCode}} IN ('2110', '2160', '2190', '1130') THEN e.{{LedgerEntry.dimension1}} END AS varchar(128))
+    CAST(CASE WHEN a.{{LedgerAccount.accountCode}} IN ('2110', '2160', '2190', '1130', '2180') THEN e.{{LedgerEntry.dimension1}} END AS varchar(128))
                                           AS party,
     sum(e.{{LedgerEntry.amount}})         AS amount,
     t.{{LedgerTransaction.sourceEntity}}  AS sourceEntity,
@@ -54,5 +54,5 @@ WHERE t.{{LedgerTransaction.transactionId}} >= :firstTransaction
        OR t.{{LedgerTransaction.createdTime}} > :previousKnownAt)
 GROUP BY t.{{LedgerTransaction.transactionId}}, t.{{LedgerTransaction.bookingTime}},
          t.{{LedgerTransaction.createdTime}}, a.{{LedgerAccount.accountCode}}, e.{{LedgerEntry.direction}},
-         CASE WHEN a.{{LedgerAccount.accountCode}} IN ('2110', '2160', '2190', '1130') THEN e.{{LedgerEntry.dimension1}} END,
+         CASE WHEN a.{{LedgerAccount.accountCode}} IN ('2110', '2160', '2190', '1130', '2180') THEN e.{{LedgerEntry.dimension1}} END,
          t.{{LedgerTransaction.sourceEntity}}, t.{{LedgerTransaction.sourceId}}, t.{{LedgerTransaction.reference}}
