@@ -87,4 +87,9 @@ abstract class ExposureFeeItSupport extends PrepaymentItSupport {
             .as(table).singleElement().satisfies(row -> org.assertj.core.api.Assertions
                 .assertThat(((Number) row.get("changed")).longValue()).as(table).isZero());
     }
+
+    static long outboxEvents(String type, String key, String value) {
+        return ((Number) query("SELECT count(*) AS n FROM sys_outbox_event WHERE event_type = ? "
+            + "AND payload::jsonb ->> ? = ?", type, key, value).getFirst().get("n")).longValue();
+    }
 }

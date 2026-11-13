@@ -33,6 +33,15 @@ class ExposureSettleIT extends ExposureFeeItSupport {
     JobDefinition<ExposureSettlements.SettleRef> qbExposureMonthlyJob;
     @Autowired
     JobDefinition<ExposureSettlements.SettleRef> qbExposureFinalJob;
+    @Autowired
+    JobDefinition<com.jabiz.quizbuks.exposure.ExposureLowNotices.LowRef> qbExposureLowJob;
+
+    void lowRun() {
+        execute("UPDATE jabiz_shedlock SET lock_until = locked_at");
+        jobRunner.run(qbExposureLowJob, clock.instant().plusSeconds(lowRuns++));
+    }
+
+    private int lowRuns;
 
     /** A live week-long publication of a new Sponsor using another's video, {@code purchased} exposures bought. */
     String[] boughtPublication(String name, long purchased) {
@@ -188,5 +197,45 @@ class ExposureSettleIT extends ExposureFeeItSupport {
     String contentAdmin() {
         return com.jabiz.runtime.test.TestTokens.bearer(tokens, "fm8-content-admin",
             com.jabiz.quizbuks.QbPermissions.ADMIN_CONTENT_WRITE);
+    }
+
+    @Test
+    void theSponsorIsToldOnceWhenAtMostATenthIsLeftAndAgainAfterABiggerPurchaseRunsLow() {
+        String[] p = boughtPublication("fm8-low", 100);
+        long base = events(p[1]);
+        // 100 bought, low-ratio 0.1: told at 10 left or fewer; looked at again only when more are counted.
+        successes(p[1], p[0], p[2], 50, clock.instant());
+        lowRun();
+        successes(p[1], p[0], p[2], 30, clock.instant());
+        lowRun();
+        assertThat(events(p[1])).isEqualTo(base);
+        assertThat(query("SELECT notified_for, checked_used FROM qb_exposure_notice WHERE publication_id = ?", p[1]))
+            .singleElement().satisfies(row -> {
+                assertThat(dec(row.get("notified_for"))).isEqualByComparingTo("0");
+                assertThat(dec(row.get("checked_used"))).isEqualByComparingTo("80");
+            });
+        // 9 left: told, once.
+        successes(p[1], p[0], p[2], 11, clock.instant());
+        lowRun();
+        assertThat(events(p[1])).isEqualTo(base + 1);
+        assertThat(query("SELECT notified_for FROM qb_exposure_notice WHERE publication_id = ?", p[1]))
+            .singleElement().satisfies(row -> assertThat(dec(row.get("notified_for"))).isEqualByComparingTo("100"));
+        successes(p[1], p[0], p[2], 3, clock.instant());
+        lowRun();
+        assertThat(events(p[1])).isEqualTo(base + 1);
+        // A top-up to 200: 106 left of 200 is not low; used up to 185 later it is: told again for 200.
+        run(com.jabiz.quizbuks.publishing.PublicationExposureTopUp.TOP_UP, sponsorToken(p[0]), body("publicationId",
+            p[1], "expectedPurchased", 100, "additional", 100));
+        lowRun();
+        assertThat(events(p[1])).isEqualTo(base + 1);
+        successes(p[1], p[0], p[2], 91, clock.instant());
+        lowRun();
+        assertThat(events(p[1])).isEqualTo(base + 2);
+        assertThat(query("SELECT notified_for FROM qb_exposure_notice WHERE publication_id = ?", p[1]))
+            .singleElement().satisfies(row -> assertThat(dec(row.get("notified_for"))).isEqualByComparingTo("200"));
+    }
+
+    long events(String publicationId) {
+        return outboxEvents(com.jabiz.quizbuks.publishing.PublicationNotices.EVENT, "publicationId", publicationId);
     }
 }
