@@ -8,6 +8,7 @@ import com.jabiz.query.EntityQuery;
 import com.jabiz.query.QueryPredicate;
 import com.jabiz.quizbuks.QbPermissions;
 import com.jabiz.quizbuks.content.QbContent;
+import com.jabiz.quizbuks.identity.CallerChecks;
 import com.jabiz.runtime.EntityInstance;
 import com.jabiz.runtime.process.steps.HoldLock;
 import com.jabiz.runtime.process.steps.QueryEntities;
@@ -83,6 +84,9 @@ public final class SettingsProcesses {
                 .permissions(QbPermissions.ACCOUNT_READ)
                 .contextFactory(SettingsProcesses::start)
                 .outputMapper(ctx -> ctx.get(OUTPUT, SettingsOutput.class));
+            // F-ban-coverage: the settings hold the unique public name and the public certification page anyone can
+            // read, so a banned caller's still valid token is refused before anything else.
+            CallerChecks.refuseBanned(pb);
             // F-S9: the words liked, to check those liked anew (none given: no statement).
             TopicSteps.loadWords(pb, ctx -> {
                 List<String> liked = ctx.get(INPUT, SaveInput.class).likedTopics();

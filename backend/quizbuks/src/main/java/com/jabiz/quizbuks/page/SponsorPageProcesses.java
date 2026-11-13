@@ -537,6 +537,8 @@ public final class SponsorPageProcesses {
                 .contextFactory((start, input) -> start(start, input, input.userId()))
                 .outputMapper(ctx -> ctx.get(OUTPUT, PageOutput.class));
             if (operator) {
+                // F-ban-coverage: a banned member's still valid token is refused before anything else.
+                CallerChecks.refuseBanned(pb);
                 OperatorChecks.member(pb);
             }
             lockAccount(pb);

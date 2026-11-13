@@ -473,6 +473,8 @@ public final class SponsorProductProcesses {
     private static <I, O> void lockAndLoad(ProcessDefinitionBuilder<I, O, ProcessContext> pb, boolean operator,
         java.util.function.Function<ProcessContext, String> productId) {
         if (operator) {
+            // F-ban-coverage: a banned member's still valid token is refused before anything else.
+            CallerChecks.refuseBanned(pb);
             OperatorChecks.member(pb);
         }
         pb.step("Find the product", QueryEntities.<ProcessContext>of(QbSponsorProducts.DEFAULT_DATASET,
