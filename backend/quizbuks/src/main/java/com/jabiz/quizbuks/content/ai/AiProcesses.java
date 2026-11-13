@@ -343,7 +343,17 @@ public final class AiProcesses {
             .step("Lock everybody's usage", HoldLock.<ProcessContext>exclusive(ctx -> QbAi.GLOBAL_LOCK))
             .step("Load everybody's unfinished jobs", RunTemplate.<ProcessContext>of(OPEN_TEMPLATE,
                     ctx -> Map.of(), GLOBAL_OPEN))
-            .step("Load where the sponsor stands", QueryEntities.<ProcessContext>all(
+            .step("Load where the sponsor stands", QueryEntities.<ProcessContext>all(standingQueries(zone)))
+            .compute("Check the limits", (metadata, ctx) -> checkLimits(ctx, zone));
+    }
+
+    /**
+     * What a request reads of where the caller stands, in one statement: their unfinished jobs, today's requests, the
+     * month's usage and (F-M9) their AI credit, charged jobs not yet in a charge, and operator.
+     */
+    @SuppressWarnings("unchecked")
+    private static QueryEntities.Metadata<ProcessContext>[] standingQueries(ZoneId zone) {
+        List<QueryEntities.Metadata<ProcessContext>> queries = new ArrayList<>(List.of(
                     QueryEntities.query(QbAi.defaultDataset(QbAi.JOB), ctx -> EntityQuery.builder()
                     .where(and(new QueryPredicate.Eq("sponsorId", ctx.request().actorId()),
                             new QueryPredicate.Or(List.of(new QueryPredicate.Eq("status", QbAi.QUEUED),
@@ -356,8 +366,9 @@ public final class AiProcesses {
                             new QueryPredicate.IsNull("fromSiteDraftId")))
                     .limit(ctx.get(SETTINGS, AiSettings.class).dailyJobs() + 1).build(), TODAY),
                     QueryEntities.query(QbAi.defaultDataset(QbAi.USAGE), ctx -> usageOf(ctx.request().actorId(),
-                        AiLimits.month(ctx.opTime(), zone)), USAGE)))
-            .compute("Check the limits", (metadata, ctx) -> checkLimits(ctx, zone));
+                        AiLimits.month(ctx.opTime(), zone)), USAGE)));
+        queries.addAll(AiFees.queries(ctx -> ctx.request().actorId(), true));
+        return queries.toArray(new QueryEntities.Metadata[0]);
     }
 
     /** The PDF files of the chosen materials, as the request found them (for the file reads before it). */
@@ -814,6 +825,20 @@ public final class AiProcesses {
         if (!problems.isEmpty()) {
             throw new BusinessRuleViolationException(problems);
         }
+        // F-M9: the AI fee, frozen on the job to come (a charged kind reserves the most it may cost of the credit).
+        boolean site = QbAi.KIND_SITE_PROFILE.equals(kind);
+        AiFees.reserve(ctx, ctx.get(SETTINGS, AiSettings.class), kind, () -> unrecordedAttempt(toCome(ctx)),
+            site ? SiteProfileJob.ATTEMPTS : AiQuestionsJob.ATTEMPTS, site ? AiFees.SITE_SEARCHES : 0);
+    }
+
+    /** The job a request is about to record, as {@link #unrecordedAttempt} reads a job: its kind, model, size and params. */
+    private static EntityInstance toCome(ProcessContext ctx) {
+        Map<String, Object> values = new LinkedHashMap<>();
+        values.put("kind", ctx.get(KIND));
+        values.put("model", ctx.get(MODEL));
+        values.put("inputBytes", BigDecimal.valueOf((int) ctx.get(INPUT_BYTES)));
+        values.put("params", ctx.get(JOB_PARAMS));
+        return new EntityInstance("new", QbAi.JOB, 1, null, values);
     }
 
     /** What everybody's unfinished jobs may still use ({@value #OPEN_TEMPLATE}'s one row). */
@@ -840,6 +865,7 @@ public final class AiProcesses {
         values.put("outputTokens", BigDecimal.ZERO);
         values.put("requestedAt", ctx.opTime());
         values.put("zone", zone.getId());
+        values.putAll(AiFees.recordValues(ctx));
         Object id = ctx.changes().insert(QbAi.JOB, values);
         ctx.put(OUTPUT, new RequestOutput(String.valueOf(id), String.valueOf((Object) ctx.get(EXTERNAL_JOB_ID)), QbAi.QUEUED,
             estimate));
@@ -920,6 +946,8 @@ public final class AiProcesses {
             QueryEntities.query(QbAi.defaultDataset(QbAi.USAGE), ctx -> usageOf(sponsorId.apply(ctx),
                 AiLimits.month(finished.apply(ctx), zone)), USAGE),
             settingsQuery()));
+        // F-M9: the sponsor's AI credit and charged jobs, in the same statement (a charged job's fee is settled here).
+        queries.addAll(AiFees.queries(sponsorId, false));
         if (withHandles) {
             // In the same statement as the rest (F-C7): who holds the link name a site draft proposes; no names for
             // any other job.
@@ -967,6 +995,8 @@ public final class AiProcesses {
         AiQuestionsJob.Result result = completion.result(AiQuestionsJob.Result.class);
         BigDecimal cost = AiCost.of(job.get("model"), result.servedModel(), usage, settings(ctx).price());
         Map<String, Object> values = finished(usage, cost, completion.attempts(), completion.finishedTime());
+        AiFees.settle(ctx, job, values, usage(completion.usage()), result.servedModel(), cost, BigDecimal.ZERO,
+            completion.finishedTime());
         boolean failed = false;
         if (QbAi.QUEUED.equals(job.get("status"))) {
             values.put("servedModel", result.servedModel());
@@ -1004,6 +1034,8 @@ public final class AiProcesses {
         ClaudeApi.Usage usage, String month) {
         BigDecimal cost = AiCost.of(job.get("model"), (String) job.get("model"), usage, settings(ctx).price());
         Map<String, Object> values = finished(usage, cost, completion.attempts(), completion.finishedTime());
+        AiFees.settle(ctx, job, values, usage(completion.usage()), (String) job.get("model"), cost, BigDecimal.ZERO,
+            completion.finishedTime());
         if (QbAi.QUEUED.equals(job.get("status"))) {
             values.put("status", QbAi.FAILED);
             values.put("failureCode", AiCodes.COVER_WITHDRAWN);
@@ -1025,6 +1057,8 @@ public final class AiProcesses {
         AiTranslateJob.Result result = completion.result(AiTranslateJob.Result.class);
         BigDecimal cost = AiCost.of(job.get("model"), result.servedModel(), usage, settings(ctx).price());
         Map<String, Object> values = finished(usage, cost, completion.attempts(), completion.finishedTime());
+        AiFees.settle(ctx, job, values, usage(completion.usage()), result.servedModel(), cost, BigDecimal.ZERO,
+            completion.finishedTime());
         boolean failed = false;
         if (QbAi.QUEUED.equals(job.get("status"))) {
             values.put("servedModel", result.servedModel());
@@ -1065,6 +1099,8 @@ public final class AiProcesses {
         AiCheckJob.Result result = completion.result(AiCheckJob.Result.class);
         BigDecimal cost = AiCost.of(job.get("model"), result.servedModel(), usage, settings(ctx).price());
         Map<String, Object> values = finished(usage, cost, completion.attempts(), completion.finishedTime());
+        AiFees.settle(ctx, job, values, usage(completion.usage()), result.servedModel(), cost, BigDecimal.ZERO,
+            completion.finishedTime());
         boolean failed = false;
         if (QbAi.QUEUED.equals(job.get("status"))) {
             values.put("servedModel", result.servedModel());
@@ -1113,6 +1149,7 @@ public final class AiProcesses {
         ClaudeApi.Usage usage = charged(failure.usage(), failure.unrecordedAttempts(), job);
         BigDecimal cost = AiCost.of(job.get("model"), null, usage, settings(ctx).price());
         Map<String, Object> values = finished(usage, cost, failure.attempts(), failure.finishedTime());
+        AiFees.settle(ctx, job, values, usage(failure.usage()), null, cost, BigDecimal.ZERO, failure.finishedTime());
         if (QbAi.QUEUED.equals(job.get("status"))) {
             values.put("status", QbAi.FAILED);
             values.put("failureCode", clip(failure.errorCode(), 100));
@@ -1127,7 +1164,10 @@ public final class AiProcesses {
             job.get("status"))));
     }
 
-    /** The usage of every attempt, by metric, as the platform added it up. */
+    /**
+     * The usage the provider's answers reported, by metric, as the platform added it up: the estimates of the calls that
+     * got no answer are not in it ({@link AiUsageMetrics}, F-M9 H1; {@link #charged} adds them).
+     */
     static ClaudeApi.Usage usage(Map<String, Long> metrics) {
         return new ClaudeApi.Usage(metrics.getOrDefault(AiQuestionsJob.INPUT_TOKENS, 0L),
             metrics.getOrDefault(AiQuestionsJob.OUTPUT_TOKENS, 0L),
@@ -1145,7 +1185,13 @@ public final class AiProcesses {
      * is in {@code metrics} and that attempt is no longer counted, so nothing is charged twice.
      */
     static ClaudeApi.Usage charged(Map<String, Long> metrics, int unrecordedAttempts, EntityInstance job) {
-        ClaudeApi.Usage recorded = usage(metrics);
+        // F-M9 (H1): the answered usage and the handlers' estimates of the calls that got no answer, both charged.
+        ClaudeApi.Usage answered = usage(metrics);
+        ClaudeApi.Usage estimated = AiUsageMetrics.estimated(metrics);
+        ClaudeApi.Usage recorded = new ClaudeApi.Usage(answered.inputTokens() + estimated.inputTokens(),
+            answered.outputTokens() + estimated.outputTokens(), answered.fallbackInputTokens(),
+            answered.fallbackOutputTokens(), answered.longPromptInputTokens() + estimated.longPromptInputTokens(),
+            answered.longPromptOutputTokens() + estimated.longPromptOutputTokens());
         if (unrecordedAttempts <= 0) {
             return recorded;
         }
@@ -1278,6 +1324,8 @@ public final class AiProcesses {
             ? charged(cancellation.usage(), cancellation.unrecordedAttempts(), job) : new ClaudeApi.Usage(0, 0);
         BigDecimal cost = AiCost.of(job.get("model"), null, usage, settings(ctx).price());
         Map<String, Object> values = finished(usage, cost, cancellation.attempts(), cancellation.finishedTime());
+        AiFees.settle(ctx, job, values, cancellation.attemptRan() ? usage(cancellation.usage())
+            : new ClaudeApi.Usage(0, 0), null, cost, BigDecimal.ZERO, cancellation.finishedTime());
         if (QbAi.QUEUED.equals(job.get("status"))) {
             // Not the sponsor's own cancellation (that closed the job already): an operator's.
             values.put("status", QbAi.CANCELLED);

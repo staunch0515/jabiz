@@ -25,7 +25,6 @@ export interface WaitingRow {
  * `KEY_BEFORE_MEANING_ROWS`.
  */
 export const WAITING_ROWS: readonly WaitingRow[] = [
-  { key: 'qb.ai.fee.enabled', group: 'aifee', waitingFor: 'F-M9' },
   { key: 'qb.fee.auto-pay.enabled', group: 'autopay', waitingFor: 'F-M13' },
 ]
 
@@ -36,6 +35,7 @@ export const WAITING_ROWS: readonly WaitingRow[] = [
  */
 export const KEY_BEFORE_MEANING_ROWS: readonly WaitingRow[] = [
   { key: 'qb.exposure.billing.enabled', group: 'exposure', waitingFor: 'F-M8' },
+  { key: 'qb.ai.fee.enabled', group: 'aifee', waitingFor: 'F-M9' },
   { key: 'qb.ai.site-profile.enabled', group: 'aifee', waitingFor: 'F-M9' },
 ]
 

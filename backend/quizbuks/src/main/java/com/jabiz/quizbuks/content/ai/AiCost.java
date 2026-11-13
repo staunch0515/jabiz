@@ -90,6 +90,41 @@ public final class AiCost {
         return total.divide(MILLION, 6, RoundingMode.HALF_UP);
     }
 
+    /**
+     * F-M9 (plan §3, review M7): the most a request may cost, in dollars to six places, which it reserves of the
+     * sponsor's AI credit: every attempt's usage at the dearer of the requested model and the model it may fall back to
+     * (the smallest model has none), at the long-prompt rate where {@code attempt} carries that part, and the searches at
+     * their price; null when a price is missing.
+     *
+     * @param attempt  the most one attempt may use (its reserved input and all the output it asks for)
+     * @param attempts the attempts the job may make
+     * @param searches the most searches one attempt may make
+     * @param fallback the price of a model QuizBuks does not know (the parameters), or null
+     */
+    public static BigDecimal maxOf(String model, ClaudeApi.Usage attempt, int attempts, long searches, Price fallback) {
+        BigDecimal own = of(model, null, attempt, fallback);
+        if (own == null) {
+            return null;
+        }
+        BigDecimal most = own;
+        if (!ClaudeService.HAIKU.equals(model)) {
+            // All of it at the fallback's price (A-10): a refusal hands the request to a dearer model.
+            ClaudeApi.Usage fellBack = new ClaudeApi.Usage(attempt.inputTokens(), attempt.outputTokens(),
+                attempt.inputTokens(), attempt.outputTokens(), 0, 0);
+            BigDecimal other = of(model, null, fellBack, fallback);
+            if (other != null && other.compareTo(most) > 0) {
+                most = other;
+            }
+        }
+        return most.add(searches(searches)).multiply(BigDecimal.valueOf(Math.max(1, attempts)))
+            .setScale(6, RoundingMode.HALF_UP);
+    }
+
+    /** F-M9: what web searches cost, at the provider's price ({@link ClaudeWebResearch#SEARCH_PRICE_USD}). */
+    public static BigDecimal searches(long searches) {
+        return ClaudeWebResearch.searchCost(searches);
+    }
+
     /** What a prompt-cache write costs above the input price it is already counted at: a quarter more (5 minutes). */
     static final BigDecimal CACHE_WRITE_PREMIUM = new BigDecimal("0.25");
 

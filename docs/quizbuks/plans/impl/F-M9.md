@@ -2,7 +2,7 @@
 
 状态：已批准实施（总控 2026-11-13）。
 
-规格 `docs/quizbuks/first-launch-spec.md` F-M9（规则、参数、运营闭合、验收）；上下文是 F-M1、F-M5、F-M6 已合入的"账户 + 预付款 + 记费"，以及 F-C7（官网生成）、F-C10（帮助 AI）。格式照 `F-M.md` §8、§9。分支 `1.3/quizbuks-FM9-ai-credit`；分三个 PR：**a-1 后端**（数据、计价、请求时的预留与作业结束时的结算；`qb.ai.fee.enabled` 仍关着），**a-2 后端**（购买、退回、到期、月度记费、核对与月报、运营商分成的 AI 种类），**b 页面**（发起方 AI 额度页与各 AI 面板、总部 AI 页、帮助、`operations.md`）。迁移号 **V125**（总控 2026-11-13；V121–V124 已由 F-M8、F-M12a、F-M12b 使用），只在 a-1，开 PR 前再与总控确认。
+规格 `docs/quizbuks/first-launch-spec.md` F-M9（规则、参数、运营闭合、验收）；上下文是 F-M1、F-M5、F-M6 已合入的"账户 + 预付款 + 记费"，以及 F-C7（官网生成）、F-C10（帮助 AI）。格式照 `F-M.md` §8、§9。分支 `1.3/quizbuks-FM9-ai-credit`；分三个 PR：**a-1 后端**（数据、计价、购买、请求时的预留与作业结束时的结算；`qb.ai.fee.enabled` 仍关着），**a-2 后端**（退回、到期、月度记费、核对与月报、运营商分成的 AI 种类），**b 页面**（发起方 AI 额度页与各 AI 面板、总部 AI 页、帮助、`operations.md`）。迁移号 **V125**（总控 2026-11-13；V121–V124 已由 F-M8、F-M12a、F-M12b 使用），只在 a-1，开 PR 前再与总控确认。
 
 ## 1 现状与范围
 
@@ -229,6 +229,8 @@
     - **答复**：需求方 2026-11-13：按推荐。
 
 ## 12 审查（Fable）与总控的决定（2026-11-12）
+
+**实施时的修订（a-1，2026-11-13）**：§2 "`amount` 保持不变"不成立——`qb_prepayment` 有 `CHECK (remaining <= amount)`，再次购买只加 `remaining` 会被拒；而 F-M8 已为曝光的追加解除了 `amount` 的 `immutable`（`QB_PREPAYMENT_TOP_UP`）。所以 AI 额度的购买首次用 `QB_PREPAYMENT_FREEZE`（无发布）、之后用 `QB_PREPAYMENT_TOP_UP`（用途放宽到 `AI`，按发起方找那一笔），`amount` = 累计购入、`remaining` 同增；累计购入直接读 `amount`，`QbAiCreditMovement` 的 `BUY` 之和与它相等（核对）。其余用途照旧。
 
 **F-M12a（#687）合并后的修订（2026-11-13）**：§3 末条原写"`operator-fees.sql` 加一处筛选"，该模板已由 #687 删除，分成基数改为按清单 `qb.operator.share.kinds`（缺省不含 `AI`）；本项改为给 AI 费填 `shareExcluded`（成本部分）并补 AI 种类的结算 IT（总控：合并条件）。下文 M2 一条中的"`operator-fees.sql` 一处筛选"以此为准。迁移号 V125，拆成 a-1、a-2、b 三个 PR（§0 开头）。
 

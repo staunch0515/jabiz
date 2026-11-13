@@ -162,6 +162,24 @@ public final class QbParams {
      * grant's source, who bears the credit used ({@code PLATFORM} or {@code OPERATOR}); whether the credit used on a
      * fee outside the base is taken back too. All controlled: they are money.
      */
+    /**
+     * F-M9 (docs/quizbuks/plans/impl/F-M9.md §6): the AI fee. Whether sponsors' AI requests are charged to their AI
+     * credit (off: they are free, as before); the markup on the provider's list price and the exchange rate, frozen on
+     * each job at its request; the least amount of a purchase of credit (not created by {@code QB_SETUP}: absent, no
+     * least). All money, so controlled (four eyes).
+     */
+    public static final String AI_FEE_ENABLED = "qb.ai.fee.enabled";
+    public static final String AI_FEE_MARKUP = "qb.ai.fee.markup";
+    public static final String AI_FEE_USD_JPY = "qb.ai.fee.usd-jpy";
+    public static final String AI_CREDIT_MIN_PURCHASE = "qb.ai.credit.min-purchase";
+    /**
+     * F-M9: the AI fee's controlled parameters that {@code QB_SETUP} creates (the last of {@link #CONTROLLED});
+     * {@link #AI_CREDIT_MIN_PURCHASE} is controlled too but optional ({@code SetupConfig}).
+     */
+    public static final List<String> AI_FEE_CONTROLLED = List.of(AI_FEE_ENABLED, AI_FEE_MARKUP, AI_FEE_USD_JPY);
+    /** The kind the controlled change that first sets {@link #AI_CREDIT_MIN_PURCHASE} gives (yen, whole). */
+    public static final Map<String, Object> AI_CREDIT_MIN_PURCHASE_KIND = Map.of("type", "monetary", "currency", "JPY",
+        "scale", 0);
     public static final String OPERATOR_SHARE_KINDS = "qb.operator.share.kinds";
     public static final String OPERATOR_SHARE_AI_COST_IN_BASE = "qb.operator.share.ai-cost-in-base";
     public static final String OPERATOR_CREDIT_RECOVERY_RATE = "qb.operator.credit-recovery.rate";
@@ -638,7 +656,7 @@ public final class QbParams {
         List.of(ENTRY_FEE_ENABLED), List.of(USAGE_FREE_BYTES), List.of(VIDEO_MAINLAND_SITES), HELP_CONTROLLED, FEE_CREDIT_PARAMS,
         SITE_PROFILE_CONTROLLED, DISTRIBUTION_CONTROLLED, EXPOSURE_CONTROLLED, REWARD_KUDOS, RECON_THRESHOLDS,
         HELP_USER_LIMITS,
-        OPERATOR_SHARE)
+        OPERATOR_SHARE, AI_FEE_CONTROLLED)
         .flatMap(List::stream).toList();
 
     /** A parameter: its key, kind (as the platform writes kinds) and first value. */
@@ -1106,7 +1124,14 @@ public final class QbParams {
             "Who bears granted credit (a lit node) used on fees: OPERATOR or PLATFORM"),
         new Param(OPERATOR_GIFT_RECOVER_OUTSIDE_BASE, BOOL, false,
             "Whether granted credit used on a fee outside the share base (an AI fee) is taken back too, for the part "
-                + "that is not cost"));
+                + "that is not cost"),
+        // F-M9: the AI fee (qb.ai.credit.min-purchase is not created here: absent, a purchase has no least amount).
+        new Param(AI_FEE_ENABLED, BOOL, false,
+            "Whether sponsors' AI requests are charged to their AI credit (off: free); the first launch turns it on"),
+        new Param(AI_FEE_MARKUP, Map.of("type", "numeric", "precision", 4, "scale", 2), "1.5",
+            "The AI fee as a multiple of the provider's list price, from 1 to 10 (frozen on each job at its request)"),
+        new Param(AI_FEE_USD_JPY, Map.of("type", "numeric", "precision", 5, "scale", 2), "150",
+            "The yen of a US dollar for the AI fee, from 50 to 500 (frozen on each job at its request)"));
 
     /** The declared value of a parameter: what {@code QB_SETUP} writes. */
     public static String defaultOf(String key) {

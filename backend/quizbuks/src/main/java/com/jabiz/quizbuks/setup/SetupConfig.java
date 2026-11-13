@@ -23,7 +23,8 @@ class SetupConfig {
         return ControlledParams.of(java.util.stream.Stream.of(QbParams.CONTROLLED.stream(),
             java.util.stream.Stream.of(QbParams.SHOPIFY_DAILY_CODES), QbParams.SHOPIFY_PLAN_LIMITS.stream(),
             QbParams.TREE_GATES.stream(), QbParams.SPONSOR_TREE_GATES.stream(),
-            java.util.stream.Stream.of(QbParams.FEE_CREDIT_MANUAL_MAX, QbParams.TREE_GRANT_MAX_PER_NODE))
+            java.util.stream.Stream.of(QbParams.FEE_CREDIT_MANUAL_MAX, QbParams.TREE_GRANT_MAX_PER_NODE,
+                QbParams.AI_CREDIT_MIN_PURCHASE))
             .flatMap(java.util.function.Function.identity()).toArray(String[]::new));
     }
 }

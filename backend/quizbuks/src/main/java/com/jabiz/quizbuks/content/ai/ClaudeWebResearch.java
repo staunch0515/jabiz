@@ -148,7 +148,8 @@ public final class ClaudeWebResearch {
                 root = send(request, messages, timeout);
             } catch (ExternalCallException e) {
                 if (ClaudeApi.mayHaveBeenBilled(e)) {
-                    record(ctx, request.model(), unanswered(request), 0);
+                    // F-M9 (H1): an estimate, under its own metrics.
+                    ClaudeCalls.recordEstimate(ctx, request.model(), unanswered(request));
                 }
                 throw e;
             }

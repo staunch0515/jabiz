@@ -585,6 +585,10 @@ class SetupIT extends QbItSupport {
         expected.put(QbParams.operatorGiftTreatment("MANUAL"), "PLATFORM");
         expected.put(QbParams.operatorGiftTreatment("LIGHT"), "PLATFORM");
         expected.put(QbParams.OPERATOR_GIFT_RECOVER_OUTSIDE_BASE, "false");
+        // F-M9: the AI fee (its least purchase is not created here).
+        expected.put(QbParams.AI_FEE_ENABLED, "false");
+        expected.put(QbParams.AI_FEE_MARKUP, "1.50");
+        expected.put(QbParams.AI_FEE_USD_JPY, "150.00");
         // F-M3: how long the company verification's link is good (not controlled).
         expected.put(QbParams.VERIFICATION_LINK_HOURS, "48");
         // F-M5: when an ended publication's open prepayment is a difference (controlled since F-M14).
