@@ -536,6 +536,12 @@ quizbuks:
   distribution:
     monthly-cron: ${QB_DISTRIBUTION_MONTHLY_CRON:0 37 0 2 * *}
     final-cron: ${QB_DISTRIBUTION_FINAL_CRON:0 7 3 * * *}
+  # F-M7: the daily job deciding the audience fees of ended publications (the unused days given back), a six-field
+  # cron in jabiz.fiscal-year-zone after the final settlements (03:07) and the prepayments' release (03:23); and how
+  # many fees one run decides (the rest: the next run).
+  audience-refund:
+    cron: ${QB_AUDIENCE_REFUND_CRON:0 37 3 * * *}
+    max-items: ${QB_AUDIENCE_REFUND_MAX_ITEMS:10000}
   # The end-to-end tests' switch (Q9e2 review M1): only their deployment sets it; refused next to live mode.
   e2e:
     enabled: ${QB_E2E_ENABLED:false}

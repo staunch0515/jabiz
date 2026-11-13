@@ -55,6 +55,7 @@ public final class QbPrepayments {
     public static final String PURPOSE = "purpose";
 
     public static final int DETAIL_LENGTH = 4000;
+    public static final String REFUND_OUTCOME_DICTIONARY = "urn:jabiz:dict:quizbuks:audience-refund-outcome";
 
     private QbPrepayments() {}
 
@@ -89,6 +90,11 @@ public final class QbPrepayments {
         eb.field("chargedAt", f -> f.physicalColumn("charged_at").processOnly().asTemporal(TemporalRole.EVENT_TIME));
         eb.field("releasedAt", f -> f.physicalColumn("released_at").processOnly().asTemporal(TemporalRole.EVENT_TIME));
         eb.field("releaseReason", f -> f.physicalColumn("release_reason").processOnly().asText(20));
+        // F-M7: the audience fee's refund of unused days, decided once (the refund job takes those not decided).
+        eb.field("refundDecidedAt", f -> f.physicalColumn("refund_decided_at").processOnly()
+            .asTemporal(TemporalRole.EVENT_TIME));
+        eb.field("refundOutcome", f -> f.physicalColumn("refund_outcome").processOnly()
+            .asCode(REFUND_OUTCOME_DICTIONARY, AudienceRefunds.OUTCOMES.toArray(String[]::new)));
         eb.field("version", f -> f.physicalColumn("version").asVersion());
         eb.listView("default", lv -> lv
             .columns("sponsorId", "publicationId", "purpose", "mode", "amount", "remaining", "status", "frozenAt")

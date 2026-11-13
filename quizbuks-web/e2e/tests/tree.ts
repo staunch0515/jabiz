@@ -27,6 +27,8 @@ export interface BoundOptions {
     | { method: 'OFFLINE_REDEEM'; description: string }
   /** How long it runs from now (seven days by default). */
   endInMs?: number
+  /** F-M7: the audience rules it uses (none by default), saved before it is submitted. */
+  audience?: { key: string; options: string[] }[]
   /** The cap on the winners (5 with a prize, 1,000 without, by default). */
   maxWinners?: number
 }
@@ -67,6 +69,9 @@ export async function boundPublicationOf(request: APIRequestContext, token: stri
       : [{ fromScore: 0, toScore: count - 1, reward: 0 }, { fromScore: count, toScore: count, reward }] })
   expect(saved.problems).toEqual([])
   const publicationId = saved.publicationId as string
+  if (options.audience) {
+    await run(request, token, 'QB_PUBLICATION_AUDIENCE_SAVE', { publicationId, criteria: options.audience })
+  }
   await run(request, token, 'QB_PUBLICATION_SUBMIT', { publicationId })
   await decideReview(request, token, publicationId, 'APPROVE')
   await expect.poll(async () => (await publicationOf(request, token, publicationId)).status,

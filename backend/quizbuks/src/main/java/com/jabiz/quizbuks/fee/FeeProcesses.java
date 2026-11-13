@@ -167,7 +167,14 @@ public final class FeeProcesses {
         @NotNull @DecimalMin("0") @DecimalMax(MAX_AMOUNT) @Digits(integer = 13, fraction = 0) BigDecimal amount,
         @NotNull @DecimalMin("0") @DecimalMax(MAX_AMOUNT) @Digits(integer = 13, fraction = 0) BigDecimal tax,
         @NotNull @DecimalMin("1") @DecimalMax(MAX_AMOUNT) @Digits(integer = 13, fraction = 0) BigDecimal total,
-        @Size(max = 36) String operatorId, @NotNull @DecimalMin("0") @DecimalMax("3650") BigDecimal dueDays) {}
+        @Size(max = 36) String operatorId, @NotNull @DecimalMin("0") @DecimalMax("3650") BigDecimal dueDays,
+        List<CreditNotes.@NotNull Take> credits) {
+
+        /** F-M7: what the credit notes' credit pays of it (taken by the caller, the earliest note first). */
+        public BigDecimal credit() {
+            return credits == null ? BigDecimal.ZERO : CreditNotes.takenTotal(credits);
+        }
+    }
 
     /** @param cashBalance the cash after this fee's payment */
     public record SettleOutput(String invoiceId, String invoiceNo, BigDecimal cashBalance) {}
@@ -177,10 +184,11 @@ public final class FeeProcesses {
      * @param paidAmount  what has been paid of the total (F-M1)
      * @param paidNow     what this payment paid (none: not a payment)
      * @param creditPaid  of it, from the fee credit; {@code cashPaid} from the cash
+     * @param creditApplied what credit notes paid of it (F-M7); owed = total − creditApplied − paidAmount
      */
     public record InvoiceOutput(String invoiceId, String invoiceNo, String status, BigDecimal total,
         BigDecimal cashBalance, String documentRunId, String documentNo, BigDecimal paidAmount, BigDecimal paidNow,
-        BigDecimal creditPaid, BigDecimal cashPaid) {}
+        BigDecimal creditPaid, BigDecimal cashPaid, BigDecimal creditApplied) {}
 
     /** @param outcome what the item did: {@code CHARGED}, {@code ISSUED}, {@code REMINDED} or {@code NONE} */
     public record ItemOutput(String sponsorId, String outcome, String id) {}
@@ -234,6 +242,9 @@ public final class FeeProcesses {
     static final String ISSUER = "issuer";
     static final String ISSUED = "issued";
     static final String REMINDER = "reminder";
+    static final String CREDIT_NOTES = "creditNotes";
+    static final String CREDIT_TAKES = "creditTakes";
+    static final String CREDIT_LEFT = "creditLeft";
 
     private FeeProcesses() {}
 
@@ -265,29 +276,27 @@ public final class FeeProcesses {
                         new QueryPredicate.Eq("sponsorId", chargeInput(ctx).sponsorId()),
                         new QueryPredicate.Eq("period", chargeInput(ctx).period()),
                         new QueryPredicate.IsNull("chargeId")))).limit(1).build(), MONTH_INVOICE)))
+            // F-M7 (§10.3-4): a prepaid fee's invoice takes the credit notes' credit left first. Read (H1 of the
+            // review: summed in SQL) before anything is written, and only when the prepayment cannot pay it all.
+            .step("Read the credit left", RunTemplate.<ProcessContext>when(FeeProcesses::creditMayPay,
+                CreditNotes.LEFT_TEMPLATE, ctx -> CreditNotes.leftParams(chargeInput(ctx).sponsorId()), CREDIT_NOTES))
             .compute("Check and record the charge", (metadata, ctx) -> insertCharge(ctx, zone))
             // Written first: the posting names it as its source.
             .step("Save the charge", SaveChanges.now())
             .step("Post the fee", CallProcess.<ProcessContext>of(LedgerProcesses.POST, 1,
                 ctx -> chargePosting(ctx), CHARGE_POSTING))
-            // D-Q87-5, F-M1: a prepaid sponsor pays as fees arise, from the fee credit and then the cash, as far as
-            // they go (the rest stays owed on the charge's invoice).
-            .step("Pay the fee", CallProcess.<ProcessContext>when(ctx -> FeeRules.PREPAID.equals(ctx.get(BILLING_MODE))
-                    && chargeInput(ctx).prepaymentId() == null,
-                FeeSettlement.SETTLE, 1, ctx -> new FeeSettlement.SettleInput(chargeInput(ctx).sponsorId(),
-                    QbFees.CHARGE, (String) ctx.get(CHARGE_ID), ctx.get(TOTAL, BigDecimal.class),
-                    chargeReference(ctx)), SETTLEMENT))
             // F-M5: a publication's fee is paid from what its submission set aside (a postpaid sponsor's prepayment
             // only stops counting against the credit limit; the fee is owed as their other fees).
             .step("Pay the fee from its prepayment", CallProcess.<ProcessContext>when(
                 ctx -> chargeInput(ctx).prepaymentId() != null, Prepayments.USE, 1,
                 ctx -> new Prepayments.UseInput(chargeInput(ctx).prepaymentId(), (String) ctx.get(CHARGE_ID),
                     ctx.get(TOTAL, BigDecimal.class), chargeReference(ctx)), SETTLEMENT))
-            // M1 of the F-M5 review: what the prepayment does not cover (the tax rate changed while it waited) is
-            // paid from the account in its order, as any prepaid fee; the rest stays owed on the same invoice.
+            .compute("Take the credit left", (metadata, ctx) -> takeCredit(ctx))
+            // D-Q87-5, F-M1: a prepaid sponsor pays as fees arise, from the fee credit and then the cash, as far as
+            // they go (the rest stays owed on the charge's invoice). M1 of the F-M5 review: what the prepayment does
+            // not cover (the tax rate changed while it waited) is paid so too, on the same invoice.
             .step("Pay the rest from the account", CallProcess.<ProcessContext>when(
-                ctx -> FeeRules.PREPAID.equals(ctx.get(BILLING_MODE)) && chargeInput(ctx).prepaymentId() != null
-                    && unpaid(ctx).signum() > 0,
+                ctx -> FeeRules.PREPAID.equals(ctx.get(BILLING_MODE)) && unpaid(ctx).signum() > 0,
                 FeeSettlement.SETTLE, 1, ctx -> new FeeSettlement.SettleInput(chargeInput(ctx).sponsorId(),
                     QbFees.CHARGE, (String) ctx.get(CHARGE_ID), unpaid(ctx), chargeReference(ctx)),
                 SETTLEMENT_REST))
@@ -300,6 +309,7 @@ public final class FeeProcesses {
                 QbFees.INVOICE_ISSUED_EVENT, FeeProcesses::invoicePayload)));
     }
 
+    // The billing mode and the total decided here are foreseen by creditMayPay (before anything is written): keep both.
     static void insertCharge(ProcessContext ctx, ZoneId zone) {
         ChargeInput input = chargeInput(ctx);
         ParamValues params = ctx.get(PARAMS, ParamValues.class);
@@ -411,29 +421,98 @@ public final class FeeProcesses {
         ChargeInput input = chargeInput(ctx);
         BigDecimal total = ctx.get(TOTAL, BigDecimal.class);
         FeeSettlement.SettleOutput settled = chargePaid(ctx);
+        List<CreditNotes.Take> takes = takes(ctx);
+        BigDecimal credit = CreditNotes.takenTotal(takes);
         Map<String, Object> values = chargeInvoice(ctx, input.sponsorId(), operatorOf(ctx), FeeRules.PREPAID,
-            input.period(), (String) ctx.get(CHARGE_ID), input.amount(), total, settled,
+            input.period(), (String) ctx.get(CHARGE_ID), input.amount(), total, settled, credit,
             ctx.get(PARAMS, ParamValues.class).get(QbParams.FEE_DUE_DAYS, BigDecimal.class), zone);
-        ctx.put(INVOICE_ID, String.valueOf(ctx.changes().insert(QbFees.INVOICE, values)));
-        ctx.put(PAID_NOW, settled.paid().compareTo(total) >= 0);
+        String invoiceId = String.valueOf(ctx.changes().insert(QbFees.INVOICE, values));
+        ctx.put(INVOICE_ID, invoiceId);
+        CreditNotes.recordUses(ctx, input.sponsorId(), invoiceId, takes);
+        ctx.put(PAID_NOW, settled.paid().add(credit).compareTo(total) >= 0);
     }
 
-    /** What the prepayment's payment left unpaid of the charge. */
-    static BigDecimal unpaid(ProcessContext ctx) {
+    /**
+     * F-M7 (§10.3-4): what a prepaid fee takes of the credit notes' credit left, after what its prepayment paid (the
+     * money set aside for it) and before the account.
+     */
+    static void takeCredit(ProcessContext ctx) {
+        if (!mayTakeCredit(ctx)) {
+            return;
+        }
+        if (!ctx.contains(CREDIT_NOTES)) {
+            // creditMayPay foresees what insertCharge and the prepayment do; never skip the credit if it was wrong.
+            throw new IllegalStateException("The credit left was not read for a fee that still owes "
+                + owedAfterPrepayment(ctx));
+        }
+        ctx.put(CREDIT_TAKES, CreditNotes.take(CreditNotes.left(CreditNotes.rows(ctx, CREDIT_NOTES)),
+            owedAfterPrepayment(ctx)));
+    }
+
+    /**
+     * Before the charge is written: whether it will be prepaid and owe something after its prepayment pays (what
+     * {@link #insertCharge} and {@code QB_PREPAYMENT_USE} will do: the prepayment's mode, else the sponsor's billing;
+     * the amount and its tax; the prepayment pays at most what it holds).
+     */
+    static boolean creditMayPay(ProcessContext ctx) {
+        ChargeInput input = chargeInput(ctx);
+        ParamValues params = ctx.get(PARAMS, ParamValues.class);
+        EntityInstance prepayment = first(ctx, PREPAYMENT);
+        EntityInstance sponsor = first(ctx, SPONSOR);
+        if (prepayment == null && sponsor == null) {
+            return false;
+        }
+        String billingMode = prepayment != null ? String.valueOf((Object) prepayment.get("mode"))
+            : FeeRules.billingModeOf(sponsor.get("billingMode"), params.get(QbParams.FEE_DEFAULT_BILLING_MODE,
+                String.class));
+        BigDecimal tax = FeeRules.tax(input.amount(), params.get(QbParams.FEE_TAX_RATE, BigDecimal.class));
+        if (!FeeRules.PREPAID.equals(billingMode) || tax == null) {
+            return false;
+        }
+        BigDecimal total = input.amount().add(tax);
+        BigDecimal fromPrepayment = prepayment == null ? BigDecimal.ZERO
+            : total.min(money(prepayment.get("remaining")).max(BigDecimal.ZERO));
+        return total.subtract(fromPrepayment).signum() > 0;
+    }
+
+    /** Whether a prepaid fee still owes something after its prepayment paid (only then is the credit taken). */
+    static boolean mayTakeCredit(ProcessContext ctx) {
+        return FeeRules.PREPAID.equals(ctx.get(BILLING_MODE)) && ctx.contains(TOTAL)
+            && owedAfterPrepayment(ctx).signum() > 0;
+    }
+
+    static BigDecimal owedAfterPrepayment(ProcessContext ctx) {
         FeeSettlement.SettleOutput used = ctx.get(SETTLEMENT, FeeSettlement.SettleOutput.class);
         return ctx.get(TOTAL, BigDecimal.class).subtract(used == null ? BigDecimal.ZERO : used.paid());
     }
 
+    @SuppressWarnings("unchecked")
+    static List<CreditNotes.Take> takes(ProcessContext ctx) {
+        return ctx.contains(CREDIT_TAKES) ? (List<CreditNotes.Take>) ctx.get(CREDIT_TAKES) : List.of();
+    }
+
+    /** What the prepayment's payment and the credit notes' credit left unpaid of the charge. */
+    static BigDecimal unpaid(ProcessContext ctx) {
+        FeeSettlement.SettleOutput used = ctx.get(SETTLEMENT, FeeSettlement.SettleOutput.class);
+        return ctx.get(TOTAL, BigDecimal.class).subtract(used == null ? BigDecimal.ZERO : used.paid())
+            .subtract(CreditNotes.takenTotal(takes(ctx)));
+    }
+
     /**
-     * What paid the charge now: one payment, or (M1 of the F-M5 review) its prepayment's and the account's together,
-     * the later posting named.
+     * What paid the charge now: its prepayment's payment, the account's, or (M1 of the F-M5 review) both together,
+     * the later posting named; nothing when neither paid (the credit notes' credit paid it all, or none was due).
      */
     static FeeSettlement.SettleOutput chargePaid(ProcessContext ctx) {
         FeeSettlement.SettleOutput first = ctx.get(SETTLEMENT, FeeSettlement.SettleOutput.class);
-        if (!ctx.contains(SETTLEMENT_REST)) {
-            return first;
+        FeeSettlement.SettleOutput rest = ctx.contains(SETTLEMENT_REST)
+            ? ctx.get(SETTLEMENT_REST, FeeSettlement.SettleOutput.class) : null;
+        if (rest == null) {
+            return first != null ? first : new FeeSettlement.SettleOutput(BigDecimal.ZERO, BigDecimal.ZERO,
+                BigDecimal.ZERO, null, null, null);
         }
-        FeeSettlement.SettleOutput rest = ctx.get(SETTLEMENT_REST, FeeSettlement.SettleOutput.class);
+        if (first == null) {
+            return rest;
+        }
         return new FeeSettlement.SettleOutput(first.paid().add(rest.paid()), first.credit().add(rest.credit()),
             first.cash().add(rest.cash()), rest.transactionId() != null ? rest.transactionId() : first.transactionId(),
             rest.cashBalance(), rest.creditBalance());
@@ -446,9 +525,11 @@ public final class FeeProcesses {
      */
     static Map<String, Object> chargeInvoice(ProcessContext ctx, String sponsorId, String operatorId,
         String billingMode, String period, String chargeId, BigDecimal amount, BigDecimal total,
-        FeeSettlement.SettleOutput settled, BigDecimal dueDays, ZoneId zone) {
+        FeeSettlement.SettleOutput settled, BigDecimal creditApplied, BigDecimal dueDays, ZoneId zone) {
         BigDecimal paidAmount = settled.paid();
-        boolean paid = paidAmount.compareTo(total) >= 0;
+        // F-M7: what the credit notes' credit paid of it counts as paid, though nothing was received.
+        BigDecimal covered = paidAmount.add(creditApplied);
+        boolean paid = covered.compareTo(total) >= 0;
         Map<String, Object> values = new LinkedHashMap<>();
         values.put("invoiceNo", ctx.get(INVOICE_NO));
         values.put("sponsorId", sponsorId);
@@ -459,8 +540,9 @@ public final class FeeProcesses {
         values.put("amount", amount);
         values.put("tax", total.subtract(amount));
         values.put("total", total);
-        values.put("status", paid ? QbFees.PAID : paidAmount.signum() > 0 ? QbFees.PARTIAL : QbFees.OPEN);
+        values.put("status", paid ? QbFees.PAID : covered.signum() > 0 ? QbFees.PARTIAL : QbFees.OPEN);
         values.put("paidAmount", paidAmount);
+        values.put("creditApplied", creditApplied);
         values.put("issuedAt", ctx.opTime());
         values.put("dueOn", FeeRules.dueOn(ctx.opTime(), dueDays, zone));
         values.put("paidAt", paid ? ctx.opTime() : null);
@@ -537,6 +619,11 @@ public final class FeeProcesses {
                     QueryEntities.query(QbOperators.defaultDataset(QbOperators.ASSIGNMENT),
                         ctx -> bySponsor("userId", invoiceInput(ctx).sponsorId()), ASSIGNMENT)))
                 .compute("Decide", (metadata, ctx) -> decideMonthInvoice(ctx))
+                // F-M7 (§10.3-4): the credit notes' credit left, which the month's invoice takes first (H1 of the
+                // review: summed in SQL; read only when the invoice is issued).
+                .step("Read the credit left", RunTemplate.<ProcessContext>when(ctx -> "ISSUED".equals(ctx.get(OUTCOME)),
+                    CreditNotes.LEFT_TEMPLATE, ctx -> CreditNotes.leftParams(invoiceInput(ctx).sponsorId()),
+                    CREDIT_NOTES))
                 .step("Number the invoice", AssignNumber.<ProcessContext>when(ctx -> "ISSUED".equals(ctx.get(OUTCOME)),
                     QbFees.INVOICE_SEQUENCE, ctx -> yearOf(invoiceInput(ctx).period()), INVOICE_NO))
                 .compute("Record the invoice", (metadata, ctx) -> insertPeriodInvoice(ctx, zone))
@@ -590,14 +677,23 @@ public final class FeeProcesses {
         values.put("chargeId", null);
         values.put("amount", amount);
         values.put("tax", tax);
-        values.put("total", amount.add(tax));
-        values.put("status", QbFees.OPEN);
+        BigDecimal total = amount.add(tax);
+        values.put("total", total);
+        // F-M7 (§10.3-4): the credit notes' credit left pays it first (a postpaid fee's note left it, C2).
+        List<CreditNotes.Take> takes = CreditNotes.take(CreditNotes.left(CreditNotes.rows(ctx, CREDIT_NOTES)), total);
+        BigDecimal credit = CreditNotes.takenTotal(takes);
+        boolean paid = credit.compareTo(total) >= 0;
+        values.put("status", paid ? QbFees.PAID : credit.signum() > 0 ? QbFees.PARTIAL : QbFees.OPEN);
         values.put("paidAmount", BigDecimal.ZERO);
+        values.put("creditApplied", credit);
+        values.put("paidAt", paid ? ctx.opTime() : null);
         values.put("issuedAt", ctx.opTime());
         values.put("dueOn", FeeRules.dueOn(ctx.opTime(),
             ctx.get(PARAMS, ParamValues.class).get(QbParams.FEE_DUE_DAYS, BigDecimal.class), zone));
         values.put("remindersSent", BigDecimal.ZERO);
-        ctx.put(INVOICE_ID, String.valueOf(ctx.changes().insert(QbFees.INVOICE, values)));
+        String invoiceId = String.valueOf(ctx.changes().insert(QbFees.INVOICE, values));
+        ctx.put(INVOICE_ID, invoiceId);
+        CreditNotes.recordUses(ctx, input.sponsorId(), invoiceId, takes);
     }
 
     // ---- paying -----------------------------------------------------------------------------------------------------
@@ -636,9 +732,9 @@ public final class FeeProcesses {
                 ctx -> paidNow(ctx) ? QbFees.overdueTaskSource(invoice(ctx).id()) : QbFees.overdueTaskSource("none"))));
     }
 
-    /** What is still owed of an invoice: its total less what has been paid of it. */
+    /** What is still owed of an invoice ({@link QbFees#owed}). */
     static BigDecimal owed(EntityInstance invoice) {
-        return money(invoice.get("total")).subtract(money(invoice.get("paidAmount"))).max(BigDecimal.ZERO);
+        return QbFees.owed(invoice);
     }
 
     private static boolean paidNow(ProcessContext ctx) {
@@ -666,7 +762,7 @@ public final class FeeProcesses {
         EntityInstance invoice = invoice(ctx);
         FeeSettlement.SettleOutput settled = ctx.get(SETTLEMENT, FeeSettlement.SettleOutput.class);
         BigDecimal paidAmount = money(invoice.get("paidAmount")).add(settled.paid());
-        boolean paid = paidAmount.compareTo(money(invoice.get("total"))) >= 0;
+        boolean paid = paidAmount.add(money(invoice.get("creditApplied"))).compareTo(money(invoice.get("total"))) >= 0;
         ctx.put(CASH_AFTER, settled.cashBalance());
         Map<String, Object> values = new LinkedHashMap<>();
         values.put("paidAmount", paidAmount);
@@ -717,6 +813,9 @@ public final class FeeProcesses {
                     ctx -> FeeSettlement.credits(ctx.request().actorId(), ctx.opTime()), CREDITS),
                 QueryEntities.query(QbWallets.defaultDataset(QbWallets.WALLET),
                     ctx -> QbWallets.query(QbWallets.CASH, ctx.request().actorId()), CASH_WALLET)))
+            // F-M7 (C2): the credit notes' credit left pays first (H1 of the review: summed in SQL).
+            .step("Read the credit left", RunTemplate.<ProcessContext>of(CreditNotes.LEFT_TEMPLATE,
+                ctx -> CreditNotes.leftParams(ctx.request().actorId()), CREDIT_NOTES))
             .compute("Check the payment", (metadata, ctx) -> checkEarlyPayment(ctx))
             // Each fee its own payment (QB_FEE_SETTLE), in the order the fees were charged.
             .step("Settle each fee", CallProcess.forEach(SETTLE_ITEM, 1, FeeProcesses::settleInputs, SETTLED))
@@ -743,8 +842,12 @@ public final class FeeProcesses {
         for (Map<String, Object> row : rows) {
             total = total.add(money(row.get("total")));
         }
-        // The whole of what is chosen, or nothing: paying early is a choice, not a debt yet.
-        BigDecimal available = FeeSettlement.spendable(list(ctx, CREDITS), first(ctx, CASH_WALLET), ctx.opTime());
+        // The whole of what is chosen, or nothing: paying early is a choice, not a debt yet. F-M7 (C2): the credit
+        // notes' credit left pays first, then the account.
+        List<CreditNotes.Unused> unused = CreditNotes.left(CreditNotes.rows(ctx, CREDIT_NOTES));
+        ctx.put(CREDIT_LEFT, unused);
+        BigDecimal available = FeeSettlement.spendable(list(ctx, CREDITS), first(ctx, CASH_WALLET), ctx.opTime())
+            .add(CreditNotes.total(unused));
         if (available.compareTo(total) < 0) {
             throw new BusinessRuleViolationException(new Violation(null, FeeCodes.FEE_CASH_SHORT, "The account has "
                 + available + " available; the fees are " + total, Map.of("available", available.toPlainString(),
@@ -755,14 +858,20 @@ public final class FeeProcesses {
 
     static List<SettleInput> settleInputs(ProcessContext ctx) {
         BigDecimal dueDays = ctx.get(PARAMS, ParamValues.class).get(QbParams.FEE_DUE_DAYS, BigDecimal.class);
+        @SuppressWarnings("unchecked")
+        List<CreditNotes.Unused> unused = ctx.contains(CREDIT_LEFT)
+            ? (List<CreditNotes.Unused>) ctx.get(CREDIT_LEFT) : List.of();
         List<SettleInput> inputs = new ArrayList<>();
         for (Map<String, Object> row : rows(ctx, EARLY)) {
+            // F-M7: each fee, the oldest first, takes what is left of the notes' credit before the account.
+            List<CreditNotes.Take> takes = CreditNotes.take(unused, money(row.get("total")));
+            unused = CreditNotes.after(unused, takes);
             // The invoice keeps the operator the fee was charged under, as the charge does.
             inputs.add(new SettleInput(ctx.request().actorId(), String.valueOf(row.get("chargeId")),
                 String.valueOf(row.get("period")), String.valueOf(row.get("kind")), money(row.get("amount")),
                 money(row.get("tax")), money(row.get("total")),
                 row.get("operatorId") == null ? null : String.valueOf(row.get("operatorId")),
-                dueDays == null || dueDays.signum() < 0 ? BigDecimal.ZERO : dueDays));
+                dueDays == null || dueDays.signum() < 0 ? BigDecimal.ZERO : dueDays, takes));
         }
         return inputs;
     }
@@ -792,11 +901,11 @@ public final class FeeProcesses {
                     ctx.get(SETTLEMENT, FeeSettlement.SettleOutput.class).cashBalance()))
                 .step("Pay the fee", CallProcess.<ProcessContext>of(FeeSettlement.SETTLE, 1,
                     ctx -> new FeeSettlement.SettleInput(settleInput(ctx).sponsorId(), QbFees.CHARGE,
-                        settleInput(ctx).chargeId(), settleInput(ctx).total(),
+                        settleInput(ctx).chargeId(), settleInput(ctx).total().subtract(settleInput(ctx).credit()),
                         reference(settleInput(ctx).kind(), settleInput(ctx).period())), SETTLEMENT))
                 .compute("Check it was paid", (metadata, ctx) -> {
-                    // The caller checked the account covers every fee chosen, under the same lock.
-                    if (ctx.get(SETTLEMENT, FeeSettlement.SettleOutput.class).paid()
+                    // The caller checked the notes' credit and the account cover every fee chosen, under the same lock.
+                    if (ctx.get(SETTLEMENT, FeeSettlement.SettleOutput.class).paid().add(settleInput(ctx).credit())
                         .compareTo(settleInput(ctx).total()) < 0) {
                         throw new IllegalStateException("A fee paid early was not paid in full: "
                             + settleInput(ctx).chargeId());
@@ -811,8 +920,11 @@ public final class FeeProcesses {
         SettleInput input = settleInput(ctx);
         Map<String, Object> values = chargeInvoice(ctx, input.sponsorId(), input.operatorId(), FeeRules.POSTPAID,
             input.period(), input.chargeId(), input.amount(), input.total(),
-            ctx.get(SETTLEMENT, FeeSettlement.SettleOutput.class), input.dueDays(), zone);
-        ctx.put(INVOICE_ID, String.valueOf(ctx.changes().insert(QbFees.INVOICE, values)));
+            ctx.get(SETTLEMENT, FeeSettlement.SettleOutput.class), input.credit(), input.dueDays(), zone);
+        String invoiceId = String.valueOf(ctx.changes().insert(QbFees.INVOICE, values));
+        ctx.put(INVOICE_ID, invoiceId);
+        CreditNotes.recordUses(ctx, input.sponsorId(), invoiceId, input.credits() == null ? List.of()
+            : input.credits());
     }
 
     // ---- the document -----------------------------------------------------------------------------------------------
@@ -927,7 +1039,8 @@ public final class FeeProcesses {
     static TaskSpec overdueTask(EntityInstance invoice, String permission) {
         Map<String, String> params = new LinkedHashMap<>();
         params.put("invoiceNo", String.valueOf((Object) invoice.get("invoiceNo")));
-        params.put("total", money(invoice.get("total")).toPlainString());
+        // F-M7: what it still owes (QbFees.owed, the one definition).
+        params.put("total", QbFees.owed(invoice).toPlainString());
         return TaskSpec.forPermission(QbFees.OVERDUE_TASK, QbFees.OVERDUE_TASK_TITLE, params, permission)
             .about(QbFees.INVOICE, String.valueOf(invoice.id())).source(QbFees.overdueTaskSource(invoice.id()));
     }
@@ -1015,7 +1128,7 @@ public final class FeeProcesses {
             ctx.contains(PAID_AMOUNT) ? ctx.get(PAID_AMOUNT, BigDecimal.class)
                 : invoice == null ? null : money(invoice.get("paidAmount")),
             settled == null ? null : settled.paid(), settled == null ? null : settled.credit(),
-            settled == null ? null : settled.cash());
+            settled == null ? null : settled.cash(), invoice == null ? null : money(invoice.get("creditApplied")));
     }
 
     static String yearOf(String period) {

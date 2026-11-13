@@ -251,7 +251,7 @@ public final class FeeSettlement {
                 paid[credit ? 0 : 1] = paid[credit ? 0 : 1].add(amount);
             }
         }
-        ctx.put(PREPAYMENT_BACK, prepaymentBack(ctx, input.sponsorId(), byPrepayment));
+        ctx.put(PREPAYMENT_BACK, prepaymentBack(ctx, input.sponsorId(), byPrepayment, PREPAYMENT_GIVEN_BACK));
         BigDecimal credit = creditBack(ctx, input.sponsorId(), byId(FeeGate.list(ctx, PAID_GRANTS)), creditBack);
         BigDecimal cash = backTo(ctx, QbFeeAccount.CASH_LOT, byId(FeeGate.list(ctx, PAID_LOTS)), cashBack);
         // Paid before F-M1 (no parts): from the cash only, given back as cash.
@@ -277,8 +277,8 @@ public final class FeeSettlement {
      * prepayment its source (the monthly report's {@code PREPAYMENT_RELEASED}). A lot of fee credit expired meanwhile
      * is voided again as any other ({@link #creditBack}).
      */
-    private static List<LedgerProcesses.PostInput> prepaymentBack(ProcessContext ctx, String sponsorId,
-        Map<String, BigDecimal[]> byPrepayment) {
+    static List<LedgerProcesses.PostInput> prepaymentBack(ProcessContext ctx, String sponsorId,
+        Map<String, BigDecimal[]> byPrepayment, String description) {
         Map<String, EntityInstance> prepayments = byId(FeeGate.list(ctx, PAID_PREPAYMENTS));
         Map<String, String> party = Map.of(QbLedger.PARTY, sponsorId);
         List<LedgerProcesses.PostInput> posts = new ArrayList<>();
@@ -298,7 +298,7 @@ public final class FeeSettlement {
             if (cash.signum() > 0) {
                 lines.add(new LedgerProcesses.Line(QbLedger.SPONSOR_CASH, Direction.CREDIT, cash, null, party));
             }
-            posts.add(new LedgerProcesses.PostInput(ctx.opTime(), PREPAYMENT_GIVEN_BACK,
+            posts.add(new LedgerProcesses.PostInput(ctx.opTime(), description,
                 Prepayments.reference(String.valueOf((Object) prepayment.get("purpose"))), lines,
                 QbPrepayments.PREPAYMENT, entry.getKey()));
         }
@@ -306,7 +306,7 @@ public final class FeeSettlement {
     }
 
     /** {@link #backTo} for the lots of fee credit: what goes back to a voided lot is voided again (not counted). */
-    private static BigDecimal creditBack(ProcessContext ctx, String sponsorId, Map<String, EntityInstance> lots,
+    static BigDecimal creditBack(ProcessContext ctx, String sponsorId, Map<String, EntityInstance> lots,
         Map<String, BigDecimal> back) {
         Map<String, BigDecimal> open = new LinkedHashMap<>();
         List<LedgerProcesses.PostInput> posts = new ArrayList<>();
@@ -328,7 +328,7 @@ public final class FeeSettlement {
         return backTo(ctx, QbFeeAccount.GRANT, lots, open);
     }
 
-    private static BigDecimal backTo(ProcessContext ctx, String entity, Map<String, EntityInstance> lots,
+    static BigDecimal backTo(ProcessContext ctx, String entity, Map<String, EntityInstance> lots,
         Map<String, BigDecimal> back) {
         BigDecimal total = BigDecimal.ZERO;
         for (Map.Entry<String, BigDecimal> entry : back.entrySet()) {
