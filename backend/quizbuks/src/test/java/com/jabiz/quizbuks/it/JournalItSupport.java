@@ -40,6 +40,8 @@ abstract class JournalItSupport extends PayoutItSupport {
     /** Runs the daily reconciliation at {@code at}, after delivering what events are pending; its status. */
     String reconcile(Instant at) {
         deliverEvents();
+        // The operators' months are settled by a job these tests switch off (F-M12 c's waiting check would differ).
+        settlementsAreNotWaitedFor();
         Reconciliation.ReconcileOutput output = (Reconciliation.ReconcileOutput) systemRun("QB_RECONCILE_RUN",
             body("scheduledTime", at.toString()));
         return output.status();
