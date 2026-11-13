@@ -231,6 +231,11 @@
 ## 12 审查（Fable）与总控的决定（2026-11-12）
 
 **实施时的修订（a-1，2026-11-13）**：§2 "`amount` 保持不变"不成立——`qb_prepayment` 有 `CHECK (remaining <= amount)`，再次购买只加 `remaining` 会被拒；而 F-M8 已为曝光的追加解除了 `amount` 的 `immutable`（`QB_PREPAYMENT_TOP_UP`）。所以 AI 额度的购买首次用 `QB_PREPAYMENT_FREEZE`（无发布）、之后用 `QB_PREPAYMENT_TOP_UP`（用途放宽到 `AI`，按发起方找那一笔），`amount` = 累计购入、`remaining` 同增；累计购入直接读 `amount`，`QbAiCreditMovement` 的 `BUY` 之和与它相等（核对）。其余用途照旧。
+其余 a-1 的实施说明：
+- 作业结束时可扣的上限 = 除本作业外的可用额（本作业的预留本来就在额度剩余之内，再加一次会重复计算；`AiCreditIT` 先失败后修复）。
+- `QB_AI_CREDIT_SHORT` 的 `needed`、`available`、`minPurchase` 只用于填消息（平台的 422 不另返回这些字段）；页面的数字取自 `QB_AI_FEE_QUOTE`（b）。
+- 推到 a-2 的：可用额中"已过期未作废的赠送"一项（随到期任务）、`qb.ai.fee.enabled` 改 `ACTIVE`、"收费关而官网生成开"时拒绝并在启动检查警告（问题 6）、审核人对照检查与帮助 AI 不动额度的断言、锁序测试（AI 锁内不取钱包锁，a-2 才有 AI → 钱包的路径）。a-1 的开关仍是 `WAITING` 且列入 `KEY_BEFORE_MEANING`，首次上线时必须为关（`FirstLaunchSwitchesCheck`）。
+
 
 **F-M12a（#687）合并后的修订（2026-11-13）**：§3 末条原写"`operator-fees.sql` 加一处筛选"，该模板已由 #687 删除，分成基数改为按清单 `qb.operator.share.kinds`（缺省不含 `AI`）；本项改为给 AI 费填 `shareExcluded`（成本部分）并补 AI 种类的结算 IT（总控：合并条件）。下文 M2 一条中的"`operator-fees.sql` 一处筛选"以此为准。迁移号 V125，拆成 a-1、a-2、b 三个 PR（§0 开头）。
 
