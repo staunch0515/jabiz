@@ -1,6 +1,6 @@
 /*---
 id: qb.admin.operator-settlement-doc
-description: One operator's settlement as its statement shows it (Q48b, the document qb.operator_settlement)
+description: One operator's settlement as its statement shows it (Q48b, F-M12, the document qb.operator_settlement)
 entities: [QbOperatorSettlement, QbOperator]
 datasets:
   QbOperatorSettlement: urn:jabiz:dataset:default:QbOperatorSettlement
@@ -12,12 +12,19 @@ results:
   operatorName:    { from: QbOperator.name }
   contactName:     { from: QbOperator.contactName }
   month:           { from: QbOperatorSettlement.month }
-  revenue:         { from: QbOperatorSettlement.revenue }
-  platformFees: { from: QbOperatorSettlement.platformFees }
+  platformFees:    { from: QbOperatorSettlement.platformFees }
+  costExcluded:    { from: QbOperatorSettlement.costExcluded }
+  giftPaid:        { from: QbOperatorSettlement.giftPaid }
   platformShare:   { kind: { type: text, maxLength: 10 } }
   operatorShare:   { from: QbOperatorSettlement.operatorShare }
   prospectingCost: { from: QbOperatorSettlement.prospectingCost }
   creditNoteDeduction: { from: QbOperatorSettlement.creditNoteDeduction }
+  giftShareDeduction:  { from: QbOperatorSettlement.giftShareDeduction }
+  voidDeduction:   { from: QbOperatorSettlement.voidDeduction }
+  giftDue:         { from: QbOperatorSettlement.giftDue }
+  giftRecovered:   { from: QbOperatorSettlement.giftRecovered }
+  giftCarriedIn:   { from: QbOperatorSettlement.giftCarriedIn }
+  giftCarriedOut:  { from: QbOperatorSettlement.giftCarriedOut }
   plan: { from: QbOperatorSettlement.plan }
   fixedFee: { from: QbOperatorSettlement.fixedFee }
   carriedIn:       { from: QbOperatorSettlement.carriedIn }
@@ -31,12 +38,19 @@ SELECT
     o.{{QbOperator.name}} AS operatorName,
     o.{{QbOperator.contactName}} AS contactName,
     s.{{QbOperatorSettlement.month}} AS month,
-    s.{{QbOperatorSettlement.revenue}} AS revenue,
     s.{{QbOperatorSettlement.platformFees}} AS platformFees,
+    s.{{QbOperatorSettlement.costExcluded}} AS costExcluded,
+    s.{{QbOperatorSettlement.giftPaid}} AS giftPaid,
     CAST(trim(to_char(s.{{QbOperatorSettlement.platformShare}} * 100, 'FM990.99')) || '%' AS varchar(10)) AS platformShare,
     s.{{QbOperatorSettlement.operatorShare}} AS operatorShare,
     s.{{QbOperatorSettlement.prospectingCost}} AS prospectingCost,
     s.{{QbOperatorSettlement.creditNoteDeduction}} AS creditNoteDeduction,
+    s.{{QbOperatorSettlement.giftShareDeduction}} AS giftShareDeduction,
+    s.{{QbOperatorSettlement.voidDeduction}} AS voidDeduction,
+    s.{{QbOperatorSettlement.giftDue}} AS giftDue,
+    s.{{QbOperatorSettlement.giftRecovered}} AS giftRecovered,
+    s.{{QbOperatorSettlement.giftCarriedIn}} AS giftCarriedIn,
+    s.{{QbOperatorSettlement.giftCarriedOut}} AS giftCarriedOut,
     s.{{QbOperatorSettlement.plan}} AS plan,
     s.{{QbOperatorSettlement.fixedFee}} AS fixedFee,
     s.{{QbOperatorSettlement.carriedIn}} AS carriedIn,

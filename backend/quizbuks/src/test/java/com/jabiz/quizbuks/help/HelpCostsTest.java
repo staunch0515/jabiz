@@ -100,8 +100,10 @@ class HelpCostsTest {
     void theDailyQuestionsAreControlledAndTheAlertIsNot() {
         assertThat(QbParams.CONTROLLED).contains(QbParams.HELP_USER_DAILY).doesNotContain(
             QbParams.HELP_GLOBAL_MONTHLY_USD_ALERT);
-        // The last of the controlled parameters: the proposals before it keep their places.
-        assertThat(QbParams.CONTROLLED.getLast()).isEqualTo(QbParams.HELP_USER_DAILY);
+        // Added after the reconciliation thresholds, so the proposals before it keep their places (F-M12's operator
+        // share settings, added later, follow it).
+        assertThat(QbParams.CONTROLLED.indexOf(QbParams.HELP_USER_DAILY))
+            .isEqualTo(QbParams.CONTROLLED.indexOf(QbParams.AUDIENCE_REFUND_MISSING_AFTER_HOURS) + 1);
         assertThat(QbParams.HELP).contains(QbParams.HELP_GLOBAL_MONTHLY_USD_ALERT);
     }
 }

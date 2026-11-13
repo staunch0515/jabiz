@@ -156,6 +156,26 @@ public final class QbParams {
     public static final String OPERATOR_WITHDRAWAL_COOLDOWN_HOURS = "qb.operator.withdrawal.cooldown-hours";
     public static final List<String> OPERATOR_WITHDRAWAL = List.of(OPERATOR_WITHDRAWAL_MIN,
         OPERATOR_WITHDRAWAL_COOLDOWN_HOURS);
+    /**
+     * F-M12 (docs/quizbuks/plans/impl/F-M12.md §5): the operators' share of the platform fees. The kinds of fee that
+     * enter the base; whether an AI fee's cost part enters too; the fraction of the credit used taken back; by the
+     * grant's source, who bears the credit used ({@code PLATFORM} or {@code OPERATOR}); whether the credit used on a
+     * fee outside the base is taken back too. All controlled: they are money.
+     */
+    public static final String OPERATOR_SHARE_KINDS = "qb.operator.share.kinds";
+    public static final String OPERATOR_SHARE_AI_COST_IN_BASE = "qb.operator.share.ai-cost-in-base";
+    public static final String OPERATOR_CREDIT_RECOVERY_RATE = "qb.operator.credit-recovery.rate";
+    public static final String OPERATOR_GIFT_RECOVER_OUTSIDE_BASE = "qb.operator.gift.recover-outside-base";
+
+    /** The treatment parameter of a grant source (its grant-source code, lower case, {@code _} to {@code -}). */
+    public static String operatorGiftTreatment(String source) {
+        return "qb.operator.gift.treatment." + source.toLowerCase(java.util.Locale.ROOT).replace('_', '-');
+    }
+
+    public static final List<String> OPERATOR_SHARE = List.of(OPERATOR_SHARE_KINDS, OPERATOR_SHARE_AI_COST_IN_BASE,
+        OPERATOR_CREDIT_RECOVERY_RATE,
+        operatorGiftTreatment("ONBOARDING"), operatorGiftTreatment("CERTIFIED_TOP_UP"),
+        operatorGiftTreatment("MANUAL"), operatorGiftTreatment("LIGHT"), OPERATOR_GIFT_RECOVER_OUTSIDE_BASE);
     /** The controlled AI parameters, in the order the administrators' page shows them. */
     public static final List<String> AI_CONTROLLED = List.of(AI_ENABLED, AI_MODEL, AI_EFFORT, AI_SPONSOR_DAILY_JOBS,
         AI_SPONSOR_MONTHLY_TOKENS, AI_GLOBAL_MONTHLY_TOKENS);
@@ -617,7 +637,8 @@ public final class QbParams {
         CASH_ACCOUNT_PARAMS, FEE_PARAMS,
         List.of(ENTRY_FEE_ENABLED), List.of(USAGE_FREE_BYTES), List.of(VIDEO_MAINLAND_SITES), HELP_CONTROLLED, FEE_CREDIT_PARAMS,
         SITE_PROFILE_CONTROLLED, DISTRIBUTION_CONTROLLED, EXPOSURE_CONTROLLED, REWARD_KUDOS, RECON_THRESHOLDS,
-        HELP_USER_LIMITS)
+        HELP_USER_LIMITS,
+        OPERATOR_SHARE)
         .flatMap(List::stream).toList();
 
     /** A parameter: its key, kind (as the platform writes kinds) and first value. */
@@ -1062,7 +1083,30 @@ public final class QbParams {
                 + "reported by the daily check (the daily job decides at 03:37)"),
         // F-M10: the AI help's daily questions (controlled; the last of CONTROLLED).
         new Param(HELP_USER_DAILY, Map.of("type", "numeric", "precision", 4, "scale", 0), "20",
-            "The questions to the AI help one person asks a day (0: none)"));
+            "The questions to the AI help one person asks a day (0: none)"),
+        // F-M12: the operators' share of the platform fees (controlled, proposed last so earlier proposals' order is
+        // unchanged; the admin page's order is OPERATOR_SHARE).
+        new Param(OPERATOR_SHARE_KINDS, Map.of("type", "text", "maxLength", 200),
+            "MONTHLY,MANUAL,AUDIENCE,DISTRIBUTION,EXPOSURE",
+            "The kinds of platform fee that enter an operator's share base, comma-separated (no AI fee at the first "
+                + "launch); a kind outside the list still has a line but does not count"),
+        new Param(OPERATOR_SHARE_AI_COST_IN_BASE, BOOL, false,
+            "Whether the cost part of an AI fee enters the share base too (only when AI is in the kinds list)"),
+        new Param(OPERATOR_CREDIT_RECOVERY_RATE, Map.of("type", "numeric", "precision", 5, "scale", 4), "1",
+            "The fraction of the granted credit used on fees that is taken back from the operator's share (0: none), "
+                + "as a fraction from 0 to 1"),
+        new Param(operatorGiftTreatment("ONBOARDING"), Map.of("type", "text", "maxLength", 10), "OPERATOR",
+            "Who bears granted credit (onboarding) used on fees: OPERATOR (shared and taken back) or PLATFORM "
+                + "(not shared, not taken back)"),
+        new Param(operatorGiftTreatment("CERTIFIED_TOP_UP"), Map.of("type", "text", "maxLength", 10), "OPERATOR",
+            "Who bears granted credit (a verified company's top-up) used on fees: OPERATOR or PLATFORM"),
+        new Param(operatorGiftTreatment("MANUAL"), Map.of("type", "text", "maxLength", 10), "PLATFORM",
+            "Who bears granted credit (granted by hand) used on fees: OPERATOR or PLATFORM"),
+        new Param(operatorGiftTreatment("LIGHT"), Map.of("type", "text", "maxLength", 10), "PLATFORM",
+            "Who bears granted credit (a lit node) used on fees: OPERATOR or PLATFORM"),
+        new Param(OPERATOR_GIFT_RECOVER_OUTSIDE_BASE, BOOL, false,
+            "Whether granted credit used on a fee outside the share base (an AI fee) is taken back too, for the part "
+                + "that is not cost"));
 
     /** The declared value of a parameter: what {@code QB_SETUP} writes. */
     public static String defaultOf(String key) {

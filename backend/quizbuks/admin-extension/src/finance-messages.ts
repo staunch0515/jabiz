@@ -57,6 +57,7 @@ export const financeMessages = {
       DISTRIBUTION_DEPOSIT: 'Distribution fee deposits set aside',
       DISTRIBUTION_RELEASED: 'Distribution fee deposits given back',
       FEE_CREDIT_NOTE: 'Credit notes',
+      FEE_CREDIT_RECOVERED: 'Granted credit taken back from operators',
       OTHER: 'Other postings',
     },
     overview: {
@@ -434,6 +435,7 @@ export const financeMessages = {
       DISTRIBUTION_DEPOSIT: '配送费预付冻结',
       DISTRIBUTION_RELEASED: '配送费预付退回',
       FEE_CREDIT_NOTE: '贷项凭证',
+      FEE_CREDIT_RECOVERED: '从运营商扣回的赠送额度',
       OTHER: '其他分录',
     },
     overview: {
@@ -811,6 +813,7 @@ export const financeMessages = {
       DISTRIBUTION_DEPOSIT: '配信料の前払いの確保',
       DISTRIBUTION_RELEASED: '配信料の前払いの返却',
       FEE_CREDIT_NOTE: '返還インボイス',
+      FEE_CREDIT_RECOVERED: '運営パートナーから回収した付与クレジット',
       OTHER: 'その他の仕訳',
     },
     overview: {

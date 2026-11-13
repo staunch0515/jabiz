@@ -68,6 +68,10 @@ public final class OperatorCodes {
     public static final String NO_SHARE = "QB_OPERATOR_NO_SHARE";
     /** Q48d: the month has prospecting costs and the yen of a dollar (qb.prospect.usd-jpy) is not published. */
     public static final String NO_RATE = "QB_OPERATOR_NO_RATE";
+    /** F-M12: a setting of the operators' share is not published (param {@code param}); none is assumed. */
+    public static final String NO_SHARE_SETTING = "QB_OPERATOR_NO_SHARE_SETTING";
+    /** F-M12: a setting of the operators' share is not valid (params {@code param}, {@code value}). */
+    public static final String SHARE_SETTING_INVALID = "QB_OPERATOR_SHARE_SETTING_INVALID";
     /** Q48b: only an issued settlement is paid (one being approved, or paid, is not again). */
     public static final String SETTLEMENT_STATE = "QB_OPERATOR_SETTLEMENT_STATE";
     /** Q48b: the settlement has nothing payable. */
@@ -113,7 +117,7 @@ public final class OperatorCodes {
         DEFAULT_INACTIVE,
         NOT_AN_OPERATOR_DECISION, SPOT_CHECK_NOTE, SAME_OPERATOR, MONTH_OPEN, NO_SHARE, SETTLEMENT_STATE,
         SETTLEMENT_NOTHING, SETTLEMENT_NO_REVIEW, NO_RATE, PLAN_MONTH, PLAN_PENDING, PLAN_NO_REVIEW, NO_PLAN,
-        BANK_ACCOUNT, WITHDRAWAL_NO_ACCOUNT, WITHDRAWAL_COOLDOWN, WITHDRAWAL_AMOUNT, WITHDRAWAL_OPEN, WITHDRAWAL_STATE,
+        NO_SHARE_SETTING, SHARE_SETTING_INVALID, BANK_ACCOUNT, WITHDRAWAL_NO_ACCOUNT, WITHDRAWAL_COOLDOWN, WITHDRAWAL_AMOUNT, WITHDRAWAL_OPEN, WITHDRAWAL_STATE,
         TRANSFER_AMOUNT, TRANSFER_NO_DIRECT, TRANSFER_DIRECT_BANNED, TRANSFER_REPEATED,
         WITHDRAWAL_NO_REVIEW);
 

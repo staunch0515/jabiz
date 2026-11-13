@@ -125,6 +125,10 @@ public final class QbFees {
         eb.field("chargedAt", f -> f.physicalColumn("charged_at").immutable(true).required(true)
             .asTemporal(TemporalRole.EVENT_TIME));
         eb.field("chargedBy", f -> f.physicalColumn("charged_by").immutable(true).asText(128));
+        // F-M12: the part of the amount (before tax) that stays out of the operator's share, as the caller states it
+        // (an AI fee's cost to the platform); 0 for the others.
+        eb.field("shareExcluded", f -> f.physicalColumn("share_excluded").immutable(true).required(true)
+            .asMonetary("JPY", 0));
         eb.temporal(t -> t.allowScheduled(false).writeOnce());
         eb.listView("default", lv -> lv
             .columns("sponsorId", "operatorId", "billingMode", "kind", "period", "amount", "tax", "total", "chargedAt")
