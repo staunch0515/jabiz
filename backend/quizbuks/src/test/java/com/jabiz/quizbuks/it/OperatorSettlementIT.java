@@ -85,22 +85,11 @@ class OperatorSettlementIT extends PlayItSupport {
         String sponsor = newSponsor(unique("q48b-s"));
         run(OperatorProcesses.ASSIGN, hq(), body("userId", sponsor, "operatorId", operatorId, "reason",
             "Signed by the operator"));
-        String direct = newSponsor(unique("q48b-direct"));
-        credit(sponsor, 10_000);
-        credit(direct, 10_000);
-        feeRate("0.2");
 
-        // The publication keeps its sponsor's operator from when it went on; the direct sponsor's names none.
-        String publication = livePublication(sponsor, "Operator's");
-        String directPublication = livePublication(direct, "Direct");
-        assertThat(card(publication)).containsEntry("operator_id", operatorId);
-        // F-S1: a sponsor who signed up by themselves is the platform operator's.
-        assertThat(card(directPublication)).containsEntry("operator_id", platformOperator());
-
-        // Commission: 20 of the full marks' 100 and 2 of the 10; the direct sponsor's 20 is headquarters'.
-        play(newTaker(unique("q48b-t1"), "JP"), publication, true, true);
-        play(newTaker(unique("q48b-t2"), "JP"), publication, false, true);
-        play(newTaker(unique("q48b-t3"), "JP"), directPublication, true, true);
+        // F-M12: the base is the platform fees of the operator's sponsors, no longer the commission. A fee of 22
+        // (before tax) under plan 1 (the platform keeps 50%) gives the operator 11.
+        param(QbParams.FEE_TAX_RATE, "0.1");
+        manualFee(sponsor, 22);
 
         // A month is settled once it has ended (in Japan).
         assertThatThrownBy(() -> systemRun(OperatorSettlements.RUN, body("operatorId", operatorId, "month",
@@ -116,9 +105,10 @@ class OperatorSettlementIT extends PlayItSupport {
         JobRunner.JobRun settling = runSettlements();
         assertThat(settling.items().succeeded()).as(settling.toString()).isGreaterThanOrEqualTo(1);
         Map<String, Object> settled = settlement(operatorId);
-        // Q48e-2: plan 1 (no plan chosen): the platform keeps 50%. 22 less it: 11; less the prospecting cost, 3 is
-        // payable, credited to the operator's account.
-        assertThat((BigDecimal) settled.get("revenue")).isEqualByComparingTo("22");
+        // F-M12: no commission (revenue is 0). The base is the 22 of fees; less the platform's half, 11; less the
+        // prospecting cost, 3 is payable, credited to the operator's account.
+        assertThat((BigDecimal) settled.get("revenue")).isEqualByComparingTo("0");
+        assertThat((BigDecimal) settled.get("platform_fees")).isEqualByComparingTo("22");
         assertThat(settled).containsEntry("plan", "1");
         assertThat((BigDecimal) settled.get("platform_share")).isEqualByComparingTo("0.5");
         assertThat((BigDecimal) settled.get("operator_share")).isEqualByComparingTo("11");
@@ -126,8 +116,15 @@ class OperatorSettlementIT extends PlayItSupport {
         assertThat((BigDecimal) settled.get("prospecting_cost")).isEqualByComparingTo("8");
         assertThat((BigDecimal) settled.get("payable")).isEqualByComparingTo("3");
         assertThat((BigDecimal) settled.get("carried_out")).isEqualByComparingTo("0");
+        assertThat(settled.get("covered_from")).isNotNull();
         assertThat(settled).containsEntry("status", OperatorSettlements.CREDITED);
         String settlementId = String.valueOf(settled.get("settlement_id"));
+        // The fee has a CHARGE line counted once; the whole fee is in the base.
+        assertThat(query("SELECT line_kind, amount, excluded FROM qb_operator_settlement_line_version WHERE "
+            + "settlement_id = ?", settlementId)).singleElement()
+            .satisfies(line -> assertThat(line).containsEntry("line_kind", "CHARGE")
+                .hasEntrySatisfying("amount", a -> assertThat((BigDecimal) a).isEqualByComparingTo("22"))
+                .hasEntrySatisfying("excluded", e -> assertThat((BigDecimal) e).isEqualByComparingTo("0")));
         // The cost the share recovers is headquarters' revenue.
         assertThat(postings(settlementId)).containsExactly("5130 DEBIT 11", "2140 CREDIT 3", "4110 CREDIT 8");
         // Finance issues the statement, kept as issued; asking again gives the same.
@@ -301,6 +298,17 @@ class OperatorSettlementIT extends PlayItSupport {
             + "added_by, version) VALUES (gen_random_uuid()::text, ?, ?::uuid, ?, true, now(), 'it', 0)",
             operatorId, userId, lead);
         return userId;
+    }
+
+    /** A platform fee by hand on the sponsor (four eyes), charged in the current month; returns its charge id. */
+    private String manualFee(String sponsor, long amount) {
+        Map<String, Object> request = run(com.jabiz.quizbuks.fee.FeeRequests.RECORD, finance(), body("kind",
+            com.jabiz.quizbuks.fee.QbFees.REQUEST_MANUAL, "sponsorId", sponsor, "amount", amount, "reason",
+            "Custom report"));
+        run("APPROVAL_DECIDE", content(), body("requestId", request.get("approvalRequestId"), "decision", "APPROVE"));
+        deliverEvents();
+        return String.valueOf(query("SELECT charge_id FROM qb_fee_request WHERE request_id = ?",
+            request.get("requestId")).getFirst().get("charge_id"));
     }
 
     private static Map<String, Object> bankAccount() {

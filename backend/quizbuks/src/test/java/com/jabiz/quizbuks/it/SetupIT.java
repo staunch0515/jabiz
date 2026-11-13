@@ -534,6 +534,15 @@ class SetupIT extends QbItSupport {
             QbParams.operatorPlanFee("5"), "100000", QbParams.operatorPlanShare("5"), "0.1000"));
         expected.putAll(Map.of(QbParams.OPERATOR_WITHDRAWAL_MIN, "10000",
             QbParams.OPERATOR_WITHDRAWAL_COOLDOWN_HOURS, "24"));
+        // F-M12: the operators' share of the platform fees (controlled).
+        expected.put(QbParams.OPERATOR_SHARE_KINDS, "MONTHLY,MANUAL,AUDIENCE,DISTRIBUTION,EXPOSURE");
+        expected.put(QbParams.OPERATOR_SHARE_AI_COST_IN_BASE, "false");
+        expected.put(QbParams.OPERATOR_CREDIT_RECOVERY_RATE, "1.0000");
+        expected.put(QbParams.operatorGiftTreatment("ONBOARDING"), "OPERATOR");
+        expected.put(QbParams.operatorGiftTreatment("CERTIFIED_TOP_UP"), "OPERATOR");
+        expected.put(QbParams.operatorGiftTreatment("MANUAL"), "PLATFORM");
+        expected.put(QbParams.operatorGiftTreatment("LIGHT"), "PLATFORM");
+        expected.put(QbParams.OPERATOR_GIFT_RECOVER_OUTSIDE_BASE, "false");
         // F-M3: how long the company verification's link is good (not controlled).
         expected.put(QbParams.VERIFICATION_LINK_HOURS, "48");
         // F-M5: when an ended publication's open prepayment is a difference (not controlled).

@@ -17,6 +17,7 @@
       "sourceKey" : "monthly:2026-10",
       "chargedAt" : "2026-10-01T01:00:00Z",
       "chargedBy" : null,
+      "shareExcluded" : "0",
       "versionNo" : 1,
       "effectStartTime" : "2026-10-01T01:00:00Z",
       "createdTime" : "2026-10-01T01:00:00Z",
