@@ -1,6 +1,11 @@
 package com.jabiz.quizbuks.fee;
 
 import com.jabiz.entity.Violation;
+import net.jqwik.api.ForAll;
+import net.jqwik.api.Property;
+import net.jqwik.api.constraints.IntRange;
+import net.jqwik.api.constraints.LongRange;
+import net.jqwik.api.constraints.Size;
 import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;
@@ -128,25 +133,30 @@ class ExposureFeeRulesTest {
         assertThat(one.total().add(fin.total())).isEqualByComparingTo(deposit);
     }
 
-    @Test
-    void theCumulativeTaxCoversTheDepositForAnySplitOfTheMonths() {
-        for (String unit : new String[] {"1", "0.4", "2.3333", "7.77", "13"}) {
-            for (long bought : new long[] {1, 9, 100, 105, 999}) {
-                BigDecimal deposit = ExposureFeeRules.deposit(bought, d(unit), TEN_PERCENT);
-                BigDecimal amount = BigDecimal.ZERO;
-                BigDecimal tax = BigDecimal.ZERO;
-                BigDecimal total = BigDecimal.ZERO;
-                for (long to : new long[] {bought / 3, bought / 2, bought}) {
-                    ExposureFeeRules.Settlement s = ExposureFeeRules.settle(to, d(unit), amount, tax, TEN_PERCENT);
-                    amount = amount.add(s.amount());
-                    tax = tax.add(s.tax());
-                    total = total.add(s.total());
-                }
-                // Charged in all what the deposit is, except a tax of an empty row that waits (never more than it).
-                assertThat(total).as(unit + " x " + bought).isLessThanOrEqualTo(deposit);
-                assertThat(deposit.subtract(total)).as(unit + " x " + bought).isLessThanOrEqualTo(BigDecimal.ONE);
-            }
+    /**
+     * With the rate unchanged, what the settlements charge in all is exactly the deposit of what was bought, whatever the
+     * unit, the number bought and however it is split into months (a row with nothing to charge leaves its tax for the
+     * next, so the sum of the rows is the deposit once the last row is the whole).
+     */
+    @Property(tries = 2000)
+    void theSettlementsChargeExactlyTheDepositForAnySplitOfTheMonths(@ForAll @IntRange(min = 1, max = 1_000_000) int unitTenThousandths,
+        @ForAll @LongRange(min = 1, max = 100_000) long bought, @ForAll @IntRange(min = 0, max = 10) int rateTenths,
+        @ForAll @Size(max = 6) List<@LongRange(min = 0, max = 100_000) Long> cuts) {
+        BigDecimal unit = BigDecimal.valueOf(unitTenThousandths, 4);
+        BigDecimal rate = BigDecimal.valueOf(rateTenths, 2);
+        BigDecimal deposit = ExposureFeeRules.deposit(bought, unit, rate);
+        List<Long> to = new java.util.ArrayList<>(cuts.stream().map(c -> Math.min(c, bought)).sorted().toList());
+        to.add(bought);
+        BigDecimal amount = BigDecimal.ZERO;
+        BigDecimal tax = BigDecimal.ZERO;
+        BigDecimal total = BigDecimal.ZERO;
+        for (long count : to) {
+            ExposureFeeRules.Settlement s = ExposureFeeRules.settle(count, unit, amount, tax, rate);
+            amount = amount.add(s.amount());
+            tax = tax.add(s.tax());
+            total = total.add(s.total());
         }
+        assertThat(total).isEqualByComparingTo(deposit);
     }
 
     @Test

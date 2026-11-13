@@ -21,7 +21,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 /**
  * F-M8 (docs/quizbuks/plans/impl/F-M8.md §3.2): the operators' exposure prices. The lead of an operator, or the
  * headquarters, saves a price more than 0 within the headquarters' range, with a reason; a member who is not the lead,
- * and an operator for another, cannot; no range, no price; the price is saved over in turns (one row an operator).
+ * and an operator for another, cannot; the price is saved over in turns (one row an operator). A range that is not
+ * published refuses every price ({@link ExposurePriceRangeMissingIT}).
  */
 class ExposurePricesIT extends PrepaymentItSupport {
 
@@ -131,7 +132,7 @@ class ExposurePricesIT extends PrepaymentItSupport {
     }
 
     @Test
-    void thePriceTableIsWrittenByTheProcessesOnlyAndTheSettlementTableIsAppendOnly() {
+    void theSettlementTableIsGuardedAgainstUpdatesAndHasItsIndexes() {
         // The settlement table carries the platform's guard against updates and deletes (written once; F-M8c writes it).
         assertThat(query("SELECT tgname FROM pg_trigger WHERE tgrelid = 'qb_exposure_settlement_version'::regclass "
             + "AND NOT tgisinternal")).isNotEmpty();
