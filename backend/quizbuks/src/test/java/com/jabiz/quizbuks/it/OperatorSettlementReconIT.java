@@ -37,11 +37,18 @@ class OperatorSettlementReconIT extends CapItSupport {
 
     /** The template's rows as the daily run asks for them, at the clock's time (the hours: null is "not published"). */
     private List<Map<String, Object>> found(Object waitingHours) {
+        return found(waitingHours, 5);
+    }
+
+    /** As {@link #found(Object)}, with the readiness wait's days given (none: not published, counted as 0). */
+    private List<Map<String, Object>> found(Object waitingHours, Object readinessDays) {
         Map<String, Object> params = new HashMap<>();
         params.put("at", clock.instant().toString());
         params.put("zone", TOKYO.getId());
         // The settlement waits 5 days for its steps (qb.operator.settlement.readiness-max-days, as published).
-        params.put("readinessDays", 5);
+        if (readinessDays != null) {
+            params.put("readinessDays", readinessDays);
+        }
         if (waitingHours != null) {
             params.put("waitingHours", waitingHours);
         }
@@ -50,8 +57,12 @@ class OperatorSettlementReconIT extends CapItSupport {
 
     /** What the check finds about one operator (or sponsor), by check code (none: all), with the hours at 48. */
     private List<Map<String, Object>> of(String party, String... codes) {
+        return of(found(48), party, codes);
+    }
+
+    private static List<Map<String, Object>> of(List<Map<String, Object>> rows, String party, String... codes) {
         List<String> wanted = List.of(codes);
-        return found(48).stream().filter(row -> party.equals(row.get("sponsorId"))
+        return rows.stream().filter(row -> party.equals(row.get("sponsorId"))
             && (wanted.isEmpty() || wanted.contains(String.valueOf(row.get("checkCode"))))).toList();
     }
 
@@ -144,13 +155,13 @@ class OperatorSettlementReconIT extends CapItSupport {
         assertThat(monthly(sponsor)).isEqualTo("CHARGED");
 
         // January ended at Tokyo's midnight (Jan 31, 15:00 UTC). The month waits for its invoice, which the settlement
-        // may wait for 5 days (to Feb 5, 15:00 UTC): inside that wait, and 48 hours after it, nothing is reported (a).
+        // may wait for 5 days (to Feb 5, 15:00 UTC): inside that wait nothing is reported (a), and not before 48 hours after
+        // it either (Feb 7, 15:00 UTC); an hour after that it is, with the step it waits for (b).
         clock.set(Instant.parse("2027-02-04T00:00:00Z"));
         assertThat(of(operatorId)).isEmpty();
-        clock.set(Instant.parse("2027-02-07T00:00:00Z"));
+        clock.set(Instant.parse("2027-02-07T14:00:00Z"));
         assertThat(of(operatorId)).isEmpty();
-        // 57 hours after the deadline: it is reported, with the step it waits for (b).
-        clock.set(Instant.parse("2027-02-08T00:00:00Z"));
+        clock.set(Instant.parse("2027-02-07T16:00:00Z"));
         assertThat(of(operatorId)).singleElement().satisfies(row -> assertRow(row,
             ReconChecks.OPERATOR_SETTLEMENT_WAITING, "2027-01:INVOICE", "0", "1"));
         // Not checked without the hours (the parameter not published).
@@ -191,6 +202,78 @@ class OperatorSettlementReconIT extends CapItSupport {
         clock.set(Instant.parse("2036-02-03T22:00:00Z"));
         assertThat(of(operatorId)).singleElement().satisfies(row -> assertRow(row,
             ReconChecks.OPERATOR_SETTLEMENT_WAITING, "2036-01", "0", "1"));
+    }
+
+    @Test
+    @Order(10)
+    void aMonthWithNothingToWaitForIsReportedTheHoursAfterItsEnd() {
+        clock.set(Instant.parse("2037-01-10T01:00:00Z"));
+        String operatorId = newOperator(hq(), unique("Nothing to wait for"));
+        // January ended Jan 31, 15:00 UTC; no publication, no postpaid fee: ready at the month's end, reported 48 h later.
+        clock.set(Instant.parse("2037-02-02T14:00:00Z"));
+        assertThat(of(operatorId)).isEmpty();
+        clock.set(Instant.parse("2037-02-02T16:00:00Z"));
+        assertThat(of(operatorId)).singleElement().satisfies(row -> assertRow(row,
+            ReconChecks.OPERATOR_SETTLEMENT_WAITING, "2037-01", "0", "1"));
+    }
+
+    @Test
+    @Order(11)
+    void aMonthReadyAfterTheDeadlineIsReportedFromTheDeadline() {
+        clock.set(Instant.parse("2040-01-10T01:00:00Z"));
+        String operatorId = newOperator(hq(), unique("Ready late"));
+        String sponsor = newSponsor(unique("fm12c-late"));
+        assign(sponsor, operatorId);
+        billing(sponsor, "POSTPAID", 20_000);
+        assertThat(monthly(sponsor)).isEqualTo("CHARGED");
+        // The invoice comes on Feb 8, after the deadline (Feb 5, 15:00 UTC): start is the deadline, not the invoice's time.
+        clock.set(Instant.parse("2040-02-08T00:00:00Z"));
+        invoice(sponsor, "2040-01");
+        clock.set(Instant.parse("2040-02-07T14:00:00Z"));
+        assertThat(of(operatorId)).isEmpty();
+        clock.set(Instant.parse("2040-02-07T16:00:00Z"));
+        assertThat(of(operatorId)).singleElement().satisfies(row -> assertRow(row,
+            ReconChecks.OPERATOR_SETTLEMENT_WAITING, "2040-01", "0", "1"));
+    }
+
+    @Test
+    @Order(12)
+    void withoutTheReadinessDaysPublishedTheWaitCountsFromTheMonthsEnd() {
+        clock.set(Instant.parse("2041-01-10T01:00:00Z"));
+        String operatorId = newOperator(hq(), unique("No days"));
+        String sponsor = newSponsor(unique("fm12c-nodays"));
+        assign(sponsor, operatorId);
+        billing(sponsor, "POSTPAID", 20_000);
+        assertThat(monthly(sponsor)).isEqualTo("CHARGED");
+        // Still blocked by its invoice, but with no days given the deadline is the month's end: 48 h after it (Feb 2, 15:00).
+        clock.set(Instant.parse("2041-02-02T14:00:00Z"));
+        assertThat(of(found(48, null), operatorId)).isEmpty();
+        clock.set(Instant.parse("2041-02-02T16:00:00Z"));
+        assertThat(of(found(48, null), operatorId)).singleElement().satisfies(row -> assertRow(row,
+            ReconChecks.OPERATOR_SETTLEMENT_WAITING, "2041-01:INVOICE", "0", "1"));
+        // With the 5 days it is not yet.
+        assertThat(of(operatorId)).isEmpty();
+    }
+
+    @Test
+    @Order(13)
+    void theCreditCarriedInIsWhatTheMonthBeforeCarriedOut() {
+        String[] who = start(2042);
+        grant(who[1], 1_100, Instant.parse("2046-01-01T00:00:00Z"));
+        manualFee(who[1], 1_000);
+        Map<String, Object> february = settle(who[0], "2042-02", "2042-03-02T00:00:00Z");
+        // (The recovery rate is a half by now: part of the credit is carried.)
+        BigDecimal carried = n(february, "gift_carried_out");
+        assertThat(carried).isPositive();
+        Map<String, Object> march = settle(who[0], "2042-03", "2042-04-02T00:00:00Z");
+        assertThat(n(march, "gift_carried_in")).isEqualByComparingTo(carried);
+        assertThat(of(who[0])).isEmpty();
+        tamper("gift_carried_in", carried.subtract(BigDecimal.ONE).toPlainString(), who[0], "2042-03");
+        assertThat(of(who[0], ReconChecks.GIFT_RECOVERY)).anySatisfy(row -> assertRow(row,
+            ReconChecks.GIFT_RECOVERY, "2042-03:carried", carried.toPlainString(), carried.subtract(BigDecimal.ONE)
+                .toPlainString()));
+        tamper("gift_carried_in", carried.toPlainString(), who[0], "2042-03");
+        assertThat(of(who[0])).isEmpty();
     }
 
     // ---- OPERATOR_SETTLEMENT_COVERAGE: the columns, GIFT_RECOVERY ---------------------------------------------------
@@ -325,15 +408,24 @@ class OperatorSettlementReconIT extends CapItSupport {
 
     @Test
     @Order(6)
-    void aFeeWithoutAnOperatorIsReportedByItsSponsor() {
+    void aFeeWithoutAnOperatorIsReportedByItsSponsorFromTheEarliestSwitchPointOn() {
         String[] who = start(2032);
         clock.set(Instant.parse("2032-02-10T01:00:00Z"));
-        String fee = String.valueOf(manualFee(who[1], 100));
-        // A fee with no operator (as the fees of before F-M11 are): no settlement would count it. It is reported by its
-        // sponsor and period, with its amount.
-        looseFee(fee, UUID.randomUUID().toString());
+        String old = String.valueOf(manualFee(who[1], 100));
+        // A fee with no operator (as the fees of before F-M11 are): no settlement would count it.
+        looseFee(old, UUID.randomUUID().toString());
+        // The operator's last settlement of the old kind ends the day February does (Tokyo): that is its switch point.
+        execute("INSERT INTO qb_operator_settlement (settlement_id, operator_id, month, period_start, period_end, "
+            + "revenue, platform_share, operator_share, prospecting_cost, carried_in, payable, carried_out, status, "
+            + "issued_at, revision, version) VALUES (gen_random_uuid()::text, ?, '2032-02', '2032-01-31T15:00:00Z', "
+            + "'2032-02-29T15:00:00Z', 0, 0.5, 0, 0, 0, 0, 0, 'CREDITED', now(), 1, 0)", who[0]);
+        clock.set(Instant.parse("2032-03-10T01:00:00Z"));
+        String fresh = String.valueOf(manualFee(who[1], 100));
+        looseFee(fresh, UUID.randomUUID().toString());
+        settle(who[0], "2032-03", "2032-04-02T00:00:00Z");
+        // From the switch point on only: the fee of February is the old rule's, the one of March is reported.
         assertThat(of(who[1])).singleElement().satisfies(row -> assertRow(row,
-            ReconChecks.OPERATOR_CHARGE_NO_OPERATOR, "2032-02", "0", "100"));
+            ReconChecks.OPERATOR_CHARGE_NO_OPERATOR, "2032-03", "0", "100"));
         // A sponsor whose fees all have their operator's is not reported.
         String other = newSponsor(unique("fm12c-other"));
         assign(other, who[0]);

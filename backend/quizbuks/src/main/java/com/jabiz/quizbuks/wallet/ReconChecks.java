@@ -103,10 +103,12 @@ public final class ReconChecks {
      */
     public static final String HELP_USAGE_TOTAL = "HELP_USAGE_TOTAL";
     /**
-     * F-M12 c (plan §3.1): an operator without its settlement for a month more than
-     * {@code qb.operator.settlement.waiting-after-hours} after the month's end; {@code reference} names the earliest
-     * such month and the steps it waits for ({@code 2027-03:DISTRIBUTION,INVOICE}, or the month alone when none is
-     * pending); actual: how many months it is behind. {@code partyId} holds the operator.
+     * F-M12 c (plan §3.1, §6, the controller's rule of 2026-11-13): an operator's earliest month without a settlement,
+     * reported {@code qb.operator.settlement.waiting-after-hours} after its start (the month's end, or when the month
+     * became ready if later, but at most the readiness wait's end); {@code reference} names the month and the steps it
+     * still waits for ({@code 2027-03:DISTRIBUTION,INVOICE,EXPOSURE}, or the month alone when none is pending);
+     * actual: how many months it is behind. {@code partyId} holds the operator. A difference on purpose, not for
+     * attention: a month unsettled this long past its deadline must hold the journal export back.
      */
     public static final String OPERATOR_SETTLEMENT_WAITING = "OPERATOR_SETTLEMENT_WAITING";
     /**

@@ -184,8 +184,12 @@ public final class QbParams {
      */
     public static final String OPERATOR_SETTLEMENT_READINESS_MAX_DAYS = "qb.operator.settlement.readiness-max-days";
     /**
-     * F-M12 c (plan §3.1, §5): how many hours after a month's end an operator without a settlement for it is reported
-     * by the daily check ({@code OPERATOR_SETTLEMENT_WAITING}); controlled, last of {@link #CONTROLLED}.
+     * F-M12 c (plan §3.1, §5, §6): the hours after its start that an operator's earliest month without a settlement is
+     * reported by the daily check ({@code OPERATOR_SETTLEMENT_WAITING}, a difference on purpose: it holds the journal
+     * export back); start = min(max(the month's end, when the month became ready), the month's end +
+     * {@link #OPERATOR_SETTLEMENT_READINESS_MAX_DAYS} days). Controlled, last of {@link #CONTROLLED}. The check takes it
+     * from 30 (the job does not run on the 1st: less would differ every month) to 9999 (the platform has no range for a
+     * parameter: the check clamps it), and does not run until the proposal is published.
      */
     public static final String OPERATOR_SETTLEMENT_WAITING_AFTER_HOURS = "qb.operator.settlement.waiting-after-hours";
     public static final List<String> OPERATOR_SETTLEMENT = List.of(OPERATOR_SETTLEMENT_READINESS_MAX_DAYS);
@@ -1129,8 +1133,9 @@ public final class QbParams {
                 + "exposure fees and monthly invoices before it settles anyway (0 to 31; 0: it does not wait)"),
         // F-M12 c: when the daily check reports a month an operator has no settlement for (controlled; the last).
         new Param(OPERATOR_SETTLEMENT_WAITING_AFTER_HOURS, Map.of("type", "numeric", "precision", 4, "scale", 0), "48",
-            "How many hours after a month's end an operator still without its settlement for the month is reported "
-                + "by the daily check, with the step it waits for (0 to 9999)"));
+            "How many hours after its start an operator still without its settlement of a month is reported by the daily "
+                + "check, with the step it waits for; start is the month's end, or the time it became ready if later, but "
+                + "at most the readiness wait's end (30 to 9999; the check does not run until this is published)"));
 
     /** The declared value of a parameter: what {@code QB_SETUP} writes. */
     public static String defaultOf(String key) {

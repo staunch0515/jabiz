@@ -45,12 +45,11 @@ class OperatorSettlementReconExposureIT extends ExposureFeeItSupport {
         String publicationId = draft(sponsor, "exposure waiting", video, 200L, clock.instant());
         submit(sponsorToken(sponsor), publicationId);
 
-        // February ended at Mar 1 in Tokyo (Feb 28, 15:00 UTC); the deadline is Mar 5, 15:00 UTC, and 48 hours later Mar 7, 15:00.
-        clock.set(Instant.parse("2038-03-05T00:00:00Z"));
+        // February ended at Mar 1 in Tokyo (Feb 28, 15:00 UTC); the settlement may wait for the exposure fee until Mar 5, 15:00
+        // UTC, and the check reports 48 hours after that: not at Mar 7, 14:00, but at 16:00.
+        clock.set(Instant.parse("2038-03-07T14:00:00Z"));
         assertThat(found(operatorId)).isEmpty();
-        clock.set(Instant.parse("2038-03-07T00:00:00Z"));
-        assertThat(found(operatorId)).isEmpty();
-        clock.set(Instant.parse("2038-03-08T00:00:00Z"));
+        clock.set(Instant.parse("2038-03-07T16:00:00Z"));
         assertThat(found(operatorId)).singleElement().satisfies(row -> {
             assertThat(row).containsEntry("checkCode", ReconChecks.OPERATOR_SETTLEMENT_WAITING)
                 .containsEntry("reference", "2038-02:EXPOSURE");

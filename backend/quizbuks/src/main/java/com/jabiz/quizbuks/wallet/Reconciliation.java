@@ -138,6 +138,16 @@ public final class Reconciliation {
     static final String EXPOSURE = "exposure";
     static final String HELP_USAGE = "helpUsage";
     static final String OPERATOR_SETTLEMENT = "operatorSettlement";
+    static final String LAST_OK = "lastOk";
+    /**
+     * F-M12 c: the operators' settlement checks read the history from this many months before the last clean run: what
+     * they find stays in the run (it is not clean) until it is put right, so the window never lets one age out; the work
+     * follows the months since the last clean run, not all of them. A bound of the work, not a business number.
+     */
+    static final int SETTLEMENT_CHECK_CUSHION_MONTHS = 3;
+    /** The least and the most hours the waiting check takes (the job does not run on the 1st: below this it would differ every month). */
+    static final int WAITING_HOURS_MIN = 30;
+    static final int WAITING_HOURS_MAX = 9999;
     static final String DISTRIBUTION_PARAMS = "distributionParams";
     static final String PREVIOUS = "previous";
     static final String PREVIOUS_TAKERS = "previousTakers";
@@ -202,8 +212,13 @@ public final class Reconciliation {
                     ctx -> exposureParams(ctx, zone), EXPOSURE))
                 .step("Compare the credit notes", RunTemplate.<ProcessContext>of(CREDIT_NOTES_TEMPLATE,
                     ctx -> feeAccountParams(ctx, zone, "at", "refundHours"), CREDIT_NOTES))
+                .step("Find the last clean run", QueryEntities.<ProcessContext>of(defaultDataset(RUN_ENTITY_NAME),
+                    ctx -> EntityQuery.builder().where(new QueryPredicate.And(List.of(
+                        new QueryPredicate.Eq("status", ReconChecks.OK),
+                        new QueryPredicate.Lt("scheduledTime", ctx.get(INPUT, ReconcileInput.class).scheduledTime()))))
+                        .orderBy("scheduledTime", false).limit(1).build(), LAST_OK))
                 .step("Compare the operators' settlements", RunTemplate.<ProcessContext>of(OPERATOR_SETTLEMENT_TEMPLATE,
-                    ctx -> feeAccountParams(ctx, zone, "at", "zone", "waitingHours", "readinessDays"), OPERATOR_SETTLEMENT))
+                    ctx -> feeAccountParams(ctx, zone, "at", "zone", "waitingHours", "readinessDays", "since"), OPERATOR_SETTLEMENT))
                 .step("Compare the AI help's usage", RunTemplate.<ProcessContext>of(HELP_USAGE_TEMPLATE,
                     ctx -> Map.of(), HELP_USAGE))
                 // The takers' cache follows by events: one found behind counts only when the previous run found them.
@@ -352,8 +367,13 @@ public final class Reconciliation {
         // F-M12 b: how long a settlement waits for its steps; not published counts as 0 in the template (from the month's end).
         values.put("readinessDays", params.find(QbParams.OPERATOR_SETTLEMENT_READINESS_MAX_DAYS,
             java.math.BigDecimal.class).orElse(null));
+        // The least and the most (the platform has no range for a parameter; an unpublished one is not checked).
         values.put("waitingHours", params.find(QbParams.OPERATOR_SETTLEMENT_WAITING_AFTER_HOURS,
-            java.math.BigDecimal.class).orElse(null));
+            java.math.BigDecimal.class).map(hours -> hours.max(java.math.BigDecimal.valueOf(WAITING_HOURS_MIN))
+            .min(java.math.BigDecimal.valueOf(WAITING_HOURS_MAX))).orElse(null));
+        // The window of the settlement checks: the last clean run's time less the cushion (none: all of the history).
+        var lastOk = TopUpCrediting.first(ctx, LAST_OK);
+        values.put("since", lastOk == null ? null : OperatorSettlementsWindow.since(lastOk.get("scheduledTime"), zone));
         values.keySet().retainAll(java.util.Set.of(names));
         return values;
     }
