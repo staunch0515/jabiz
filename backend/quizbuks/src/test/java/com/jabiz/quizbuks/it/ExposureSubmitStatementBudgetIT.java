@@ -61,6 +61,77 @@ class ExposureSubmitStatementBudgetIT extends ExposureFeeItSupport {
         assertThat(topUp).as("top-up:\\n" + listing(topUp)).hasSize(TOP_UP);
     }
 
+    /**
+     * A month's settlement of a publication with 5 successes, paid from its deposit [20, measured]: the operation
+     * record, the parameters, the wallet lock, the four reads and the count, the charge (a sub-process), the deposit's
+     * use and the settlement row.
+     */
+    static final int SETTLE_MONTH = 20;
+    /**
+     * The final settlement of an ended publication [26, measured]: the month's as above, and the release that gives
+     * the rest of the deposit back (its reads, the prepayment's closing and the posting's parts).
+     */
+    static final int SETTLE_FINAL = 26;
+
+    @Test
+    void theStatementsOfAMonthsAndOfTheFinalSettlement() {
+        autoApprove(true);
+        String provider = reviewedSponsor("fm8-settle-budget-provider");
+        String sharedVideoId = approvedVideo(provider);
+        String sponsor = reviewedSponsor("fm8-settle-budget");
+        grant(sponsor, 100_000, clock.instant().plus(Duration.ofDays(90)));
+        java.time.ZoneId zone = java.time.ZoneId.of("Asia/Tokyo");
+        List<String> month = null;
+        List<String> last = null;
+        for (int i = 0; i < 2; i++) {
+            String publicationId = draft(sponsor, "settle " + i, sharedVideoId, 105L, clock.instant());
+            submit(sponsorToken(sponsor), publicationId);
+            successes(publicationId, sponsor, provider, 5);
+            java.time.YearMonth first = java.time.YearMonth.parse(com.jabiz.quizbuks.fee.FeeRules.period(clock.instant(),
+                zone));
+            // The month is over: its settlement is run in the next one (as the job does, 00:47 of the 2nd).
+            clock.set(first.plusMonths(1).atDay(2).atTime(0, 47).atZone(zone).toInstant());
+            month = settled(sponsor, publicationId, first.toString(), false);
+            successes(publicationId, sponsor, provider, 5);
+            run("QB_PUBLICATION_ADMIN_END", contentAdmin(), body("publicationId", publicationId, "reason", "budget"));
+            // Past the grace after the end (qb.exposure.final-end-grace-sec, an hour), as the final job at 03:12.
+            clock.set(clock.instant().plus(Duration.ofHours(2)));
+            last = settled(sponsor, publicationId, first.plusMonths(1).toString(), true);
+        }
+        System.out.println("[statement-budget] settlement of a month: " + month.size() + "\n" + listing(month));
+        System.out.println("[statement-budget] final settlement: " + last.size() + "\n" + listing(last));
+        assertThat(month).as("month:\n" + listing(month)).hasSize(SETTLE_MONTH);
+        assertThat(last).as("final:\n" + listing(last)).hasSize(SETTLE_FINAL);
+    }
+
+    @Override
+    String contentAdmin() {
+        return com.jabiz.runtime.test.TestTokens.bearer(tokens, "fm8-content-admin-budget",
+            com.jabiz.quizbuks.QbPermissions.ADMIN_CONTENT_WRITE);
+    }
+
+    private void successes(String publicationId, String sponsor, String provider, int n) {
+        for (int i = 0; i < n; i++) {
+            execute("INSERT INTO qb_exposure (exposure_id, publication_id, user_id, publisher_id, provider_id, "
+                + "counted_at, surface, counted_sec, timer, capped_days, created_at, version) VALUES (?, ?, ?, ?, ?, "
+                + "?, 'START', 10, 'SCREEN', 0, ?, 1)", java.util.UUID.randomUUID().toString(), publicationId,
+                "fm8-" + java.util.UUID.randomUUID(), sponsor, provider,
+                java.sql.Timestamp.from(clock.instant()), java.sql.Timestamp.from(clock.instant()));
+        }
+    }
+
+    /** The statements of the transaction that wrote the settlement. */
+    private List<String> settled(String sponsor, String publicationId, String period, boolean last) {
+        SqlStatementLog.clear();
+        systemRun(com.jabiz.quizbuks.fee.ExposureSettlements.SETTLE, body("publicationId", publicationId, "sponsorId",
+            sponsor, "period", period, "last", last));
+        List<List<String>> own = SqlStatementLog.transactions().stream()
+            .filter(t -> t.stream().anyMatch(sql -> sql.contains("INSERT INTO qb_exposure_settlement_version"))).toList();
+        assertThat(own).as("one transaction; all:\n" + SqlStatementLog.transactions().stream().map(
+            ExposureSubmitStatementBudgetIT::listing).collect(Collectors.joining("\n----\n"))).hasSize(1);
+        return own.getFirst();
+    }
+
     List<String> counted(String sponsor, String publicationId) {
         SqlStatementLog.clear();
         submit(sponsorToken(sponsor), publicationId);

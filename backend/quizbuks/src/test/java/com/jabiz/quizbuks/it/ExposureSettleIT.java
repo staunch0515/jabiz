@@ -258,4 +258,43 @@ class ExposureSettleIT extends ExposureFeeItSupport {
         finalRun(clock.instant().plus(Duration.ofHours(1)));
         assertThat(differences(sponsor)).isEmpty();
     }
+
+    /** Appends a version of the publication as it is now, with some columns overridden (the table only takes inserts). */
+    private void publicationVersion(String publicationId, Map<String, String> overrides) {
+        List<String> columns = query("SELECT column_name FROM information_schema.columns WHERE table_schema = "
+            + "current_schema() AND table_name = 'qb_publication_version' AND is_identity = 'NO' "
+            + "AND (column_default IS NULL OR column_default NOT LIKE 'nextval%') ORDER BY ordinal_position").stream()
+            .map(row -> String.valueOf(row.get("column_name"))).toList();
+        String select = String.join(", ", columns.stream().map(c -> switch (c) {
+            case "version_no" -> "v.version_no + 1";
+            case "effect_start_time", "created_time" -> "?";
+            default -> overrides.containsKey(c) ? overrides.get(c) : "v." + c;
+        }).toList());
+        java.sql.Timestamp at = java.sql.Timestamp.from(clock.instant());
+        execute("INSERT INTO qb_publication_version (" + String.join(", ", columns) + ") SELECT " + select
+            + " FROM qb_publication_version v WHERE v.publication_id = ?::uuid ORDER BY v.version_no DESC LIMIT 1",
+            at, at, publicationId);
+    }
+
+    @Test
+    void theDailyChecksFindMoreCountedThanBoughtAndAPriceWithoutAPurchase() {
+        String[] p = boughtPublication("fm8-recon2", 100);
+        String sponsor = p[0];
+        String month = period(clock.instant());
+        successes(p[1], sponsor, p[2], 5, clock.instant());
+        monthlyIn(YearMonth.parse(month).plusMonths(1));
+        assertThat(differences(sponsor)).isEmpty();
+        // The record says fewer were bought than the settlements counted: expected what was bought, found what was counted.
+        publicationVersion(p[1], Map.of("exposure_purchased", "3"));
+        assertThat(differences(sponsor)).filteredOn(r -> "EXPOSURE_SETTLED_OVER".equals(r.get("checkCode")))
+            .singleElement().satisfies(row -> {
+                assertThat(dec(row.get("expected"))).isEqualByComparingTo("3");
+                assertThat(dec(row.get("actual"))).isEqualByComparingTo("5");
+                assertThat(row.get("reference")).isEqualTo(p[1]);
+            });
+        // A purchase without its price (they are written together): the sponsor is named.
+        publicationVersion(p[1], Map.of("exposure_purchased", "100", "exposure_unit", "NULL"));
+        assertThat(differences(sponsor)).extracting(r -> r.get("checkCode")).contains("EXPOSURE_UNIT_MISMATCH")
+            .doesNotContain("EXPOSURE_SETTLED_OVER");
+    }
 }
