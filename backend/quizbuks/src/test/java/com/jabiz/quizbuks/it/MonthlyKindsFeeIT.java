@@ -7,7 +7,9 @@ import com.jabiz.quizbuks.fee.DistributionPrices;
 import com.jabiz.quizbuks.fee.DistributionSettlements;
 import com.jabiz.quizbuks.fee.FeeCredits;
 import com.jabiz.quizbuks.fee.FeeProcesses;
+import com.jabiz.quizbuks.fee.FeeRequests;
 import com.jabiz.quizbuks.fee.FeeRules;
+import com.jabiz.quizbuks.fee.QbFees;
 import com.jabiz.quizbuks.operator.OperatorProcesses;
 import com.jabiz.quizbuks.operator.OperatorSettlements;
 import com.jabiz.quizbuks.operator.OperatorTransfers;
@@ -44,11 +46,12 @@ import static org.assertj.core.api.Assertions.assertThat;
  * after the end), FEE_CREDIT_GRANTED and FEE_CREDIT_VOIDED (a lot granted and expired unused), ENTRY_FEE and
  * ENTRY_FEE_SETTLED (a taker pays a quiz's entry fee, the daily job settles it into the sponsor's cash),
  * DISTRIBUTION_DEPOSIT, DISTRIBUTION_CHARGED and DISTRIBUTION_RELEASED (a publication's distribution fee), REWARD
- * (the commission being the settlement's revenue), OPERATOR_SHARE (an operator's month settled), OPERATOR_TRANSFER_TO_DIRECT
+ * (a commission), OPERATOR_SHARE (an operator's month settled on its sponsor's platform fee), OPERATOR_TRANSFER_TO_DIRECT
  * (its lead moves part of it to their cash) and OPERATOR_PAID (a withdrawal paid).
  *
- * <p>Not driven (too costly for a guard; REFERRAL_REWARD has its own row-by-row tests in {@code ReferralIT} and needs a
- * tree prerequisite, a claim and a pass): REFERRAL_REWARD. Its source is in the table and its row is in the report.
+ * <p>Not driven (too costly for a guard; each has its own row-by-row tests): REFERRAL_REWARD ({@code ReferralIT}: needs
+ * a tree prerequisite, a claim and a pass) and FEE_CREDIT_RECOVERED ({@code OperatorSettlementGiftIT}: granted credit
+ * used, then taken back from the operator's settlement). Their sources are in the table and their rows in the report.
  */
 class MonthlyKindsFeeIT extends CreditNoteItSupport {
 
@@ -189,10 +192,11 @@ class MonthlyKindsFeeIT extends CreditNoteItSupport {
         String operatorSponsor = newSponsor(unique("s-mkf-op"));
         run(OperatorProcesses.ASSIGN, hq(), body("userId", operatorSponsor, "operatorId", operatorId, "reason",
             "F-M14 test"));
-        credit(operatorSponsor, 10_000);
-        String operated = livePublication(operatorSponsor, "MKF operated");
-        play(newTaker(unique("t-mkf-op-1"), "JP"), operated, true, true);
-        play(newTaker(unique("t-mkf-op-2"), "JP"), operated, false, true);
+        // F-M12: the share's base is the platform fees of the operator's sponsors: one by hand (four eyes).
+        Map<String, Object> request = run(FeeRequests.RECORD, finance(), body("kind", QbFees.REQUEST_MANUAL,
+            "sponsorId", operatorSponsor, "amount", 200, "reason", "F-M14 test"));
+        run("APPROVAL_DECIDE", content(), body("requestId", request.get("approvalRequestId"), "decision", "APPROVE"));
+        deliverEvents();
         String month = FeeRules.period(clock.instant(), TOKYO);
         clock.set(YearMonth.parse(month).plusMonths(1).atDay(2).atStartOfDay(TOKYO).toInstant());
         systemRun(OperatorSettlements.RUN, body("operatorId", operatorId, "month", month));

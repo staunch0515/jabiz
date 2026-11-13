@@ -28,7 +28,8 @@ final class MonthlyKinds {
         source("QbTransfer", "TRANSFER_SENT", "TRANSFER_SETTLED", "WITHDRAWAL_PAID", "TRANSFER_FAILED",
             "TRANSFER_REVERSED");
         source("QbStripePayout", "PAYOUT", "PAYOUT_FAILED");
-        source("QbOperatorSettlement", "OPERATOR_SHARE", "OPERATOR_PAID");
+        // F-M12: the take-back of granted credit (and its giving back) is posted with the settlement.
+        source("QbOperatorSettlement", "OPERATOR_SHARE", "OPERATOR_PAID", "FEE_CREDIT_RECOVERED");
         source("QbOperatorWithdrawal", "OPERATOR_PAID");
         source("QbOperatorTransfer", "OPERATOR_TRANSFER_TO_DIRECT");
         source("QbKudosExchange", "KUDOS_BOUGHT", "KUDOS_SOLD");
