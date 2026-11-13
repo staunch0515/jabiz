@@ -22,6 +22,7 @@ F-F5（`docs/quizbuks/first-launch-spec.md`）固定的用词。界面、邮件�
 | 付平台费的账户 | 平台费账户 | プラットフォーム利用料アカウント | Platform fee account | |
 | 赠送的平台费额度 | 赠送额度 | 付与クレジット | Granted credit | |
 | AI 的额度 | AI 额度 | AI クレジット | AI credit | |
+| AI 计算用量的单位 | Token（第一次出现时解释为"AI 计算用量的单位"；不译、不写"令牌"） | トークン | token | 令牌（指 AI 用量时；登录、邮件链接等处的令牌是另一个意思，不受影响） |
 
 ## 各部分的名字（F-F5b，需求方 2026-11-07）
 
