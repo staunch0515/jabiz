@@ -135,7 +135,7 @@
 | `MANAGEMENT_OPENTELEMETRY_LOGGING_EXPORT_OTLP_ENDPOINT` | 日志 |
 | `COMPOSE_PROFILES=observability` | 启动本环境的 LGTM（`deploy/quizbuks/server/compose.yaml` 的 `lgtm`）；上面三项即 `http://lgtm:4318/v1/traces`、`…/v1/metrics`、`…/v1/logs` |
 | `JABIZ_ALERT_EMAIL`、`GF_SMTP_ENABLED=true`、`GF_SMTP_HOST`、`GF_SMTP_USER`、`GF_SMTP_PASSWORD`、`GF_SMTP_FROM_ADDRESS` | 告警的收件人（值班的人，几个以 `;` 分隔）与 Grafana 发信用的 SMTP（§5） |
-| `JABIZ_ALERT_*` 的阈值 | 缺省见 compose（平台 13 §7）；QuizBuks 的 `JABIZ_ALERT_QB_AI_HELD_MAX`（§5"AI 作业暂停"）、`JABIZ_ALERT_QB_HELP_USAGE_PERCENT`（§5"AI 问题解答的用量"，缺省 80） |
+| `JABIZ_ALERT_*` 的阈值 | 缺省见 compose（平台 13 §7）；QuizBuks 的 `JABIZ_ALERT_QB_AI_HELD_MAX`（§5"AI 作业暂停"）、`JABIZ_ALERT_QB_HELP_COST_PERCENT`（§5“AI 费用接近美元阈值”）、`JABIZ_ALERT_QB_HELP_USAGE_PERCENT`（§5"AI 问题解答的用量"，缺省 80） |
 | `QB_GRAFANA_PORT` | Grafana 在服务器 `127.0.0.1` 上的端口（缺省 3000；staging 与 production 在同一台服务器上时各用一个），经 SSH 隧道访问 |
 
 遥测缺省不外发、只经 OTLP 推送；**不开放**匿名的指标端点（应用端口上的 `/actuator/metrics` 不要暴露，平台 13）。
@@ -359,6 +359,7 @@ FROM pg_stat_statements ORDER BY total_exec_time DESC LIMIT 20;
 | 分录导出被拒（§7.3） | QuizBuks `qb-journal-export-rejected` | 看错误码 |
 | AI 作业暂停（§7.8） | QuizBuks `qb-ai-paused`（仪表 `jabiz.external.job.held{job_type=~"qb.ai.*"}`，不含 AI 问题解答的 `qb.ai.help`） | 缺省 `JABIZ_ALERT_QB_AI_HELD_MAX=1`：AI 有意关闭时不告警；开启 `qb.ai.enabled` 后在 `.env` 设为 `0` 并重启 LGTM，此后暂停超过 5 分钟即告警 |
 | AI 问题解答的用量（§7.34） | QuizBuks `qb-help-usage-high`（仪表 `qb.help.usage.percent`：本月已用 `qb.help.global-monthly-tokens` 的百分比，作业结局与每日任务 `qb.help-usage` 更新） | 缺省 `JABIZ_ALERT_QB_HELP_USAGE_PERCENT=80`；到 100 % 时新的提问被拒（可直接转人工），到月底或经受控变更调高上限 |
+| AI 费用接近美元阈值（§7.52） | QuizBuks `qb-help-cost-high`（仪表 `qb.help.cost.percent`：本月帮助与审核人翻译核对的估算美元占 `qb.help.global-monthly-usd-alert` 的百分比，作业结局与每日任务 `qb.help-usage` 更新；仪表带月份，换月后读 0） | 缺省 `JABIZ_ALERT_QB_HELP_COST_PERCENT=100`；只提醒，不停。每日任务同时给财务和超级管理员建待办 `qb.help.cost-high`（每月至多一个，上个月的也检查，不自动关闭） |
 | 任务 | 平台 `jabiz-job-failed`（`FAILED` / `PARTIAL`）、`jabiz-job-locked` | 包括 `qb.analytics`、`qb.usage-snapshot`、`qb.fee-*`、`qb.broadcast-*` 等每个任务 |
 | 站内信、平台费、邮件补发 | 平台 `jabiz-job-item-failed`、`jabiz-outbox-failed` | 平台费的核对项 `FEES_RECEIVABLE` 属于 `qb-reconcile-diff`；`sys_mail_message` 中 `FAILED` 增多看发件服务商；徽标模板 `qb.app.inbox-unread` 的耗时（目标 < 5 ms，`perf/Q7c-inbox.md`）在仪表盘上看 |
 | 发起方分析（§7.7）、资源占用的计量（§7.22） | 平台 `jabiz-job-failed` | 30 分钟内没有成功的分析、当天缺少计量快照（`SELECT max(snapshot_day) FROM qb_usage_day` 早于今天）：仪表盘与只读查询 |
@@ -1027,7 +1028,7 @@ Quiz 与发布有主题词（平台词表中的词与自定义词），学者可
   |---|---|---|---|
   | `qb.help.enabled` | `false` | 是 | 总开关 |
   | `qb.help.model` | `claude-haiku-5-5` | 否 | 只能是平台允许的三个模型 |
-  | `qb.help.user-daily` | `20` | 否 | 每人每天的提问次数 |
+  | `qb.help.user-daily` | `20` | 是（F-M10 起） | 每人每天的提问次数。改它要另一位管理员发布；**切换时若现值不是 20**，受控变更要带着现值，否则回到 20 |
   | `qb.help.global-monthly-tokens` | `20000000` | 是 | 全平台每月的 Token 数（Token：AI 计算用量的单位） |
   | `qb.help.history-turns` | `6` | 否 | 一起发送的最近轮数（至多 20） |
   | `qb.help.retention-days` | `180` | 否 | 对话在最后一次活动后保留的天数。**改它必须同时改**隐私政策第8条（三语，`legal/privacy-policy.*.md`，重新发布）与商店的数据申报（`store/play-data-safety.md` 的"其他用户生成的内容"、`store/appstore-privacy.md` 的"客户支持"，并在 Play Console 与 App Store Connect 中更新），三处都写着 180 日 |
@@ -1038,6 +1039,7 @@ Quiz 与发布有主题词（平台词表中的词与自定义词），学者可
   | `qb.help.question-max-length` | `2000` | 否 | 提问（及转给客服的内容）的最长字数（100–4000） |
   | `qb.help.answer-max-length` | `8000` | 否 | 保存的 AI 回答的最长字数（500–8000，超过截断） |
   | `qb.help.max-links` | `5` | 否 | 一个回答最多保留的本站链接（0–10） |
+  | `qb.help.global-monthly-usd-alert` | `8` | 否 | 帮助与审核人的翻译核对合计，一个月的估算美元达到多少时发出告警和待办（0–1 000 000；0 为不告警）。它只决定何时提醒，不改变能花多少，**也不会自动停**（停只靠 Token 上限）。算法与改动时的重算见 §7.52 |
   | `qb.help.cache-read-weight` | `0.10` | 是 | 从提示缓存读取的输入Token计入 `qb.help.global-monthly-tokens` 的权重（0–1，向上取整；提供方按约十分之一的价格计费）。其他输入与输出Token照常全额计入；`qb.admin.help-usage` 的已用百分比与告警仪表同样按它计（F-C10b） |
 
   部署配置（改后重启；超出范围即启动失败）：`quizbuks.help.max-concurrency`（缺省 4）、`quizbuks.help.attempts`（每个提问的尝试次数，缺省 2，1–5）、`quizbuks.help.attempt-timeout`（每次尝试的时限，缺省 `PT3M`，30 秒–10 分钟）。
@@ -1050,8 +1052,8 @@ Quiz 与发布有主题词（平台词表中的词与自定义词），学者可
   - **功能变化后的手册**：开发者在功能的 PR 中改仓库的初稿（`backend/quizbuks/src/main/resources/quizbuks/help/manual-*.md`）。部署后启动检查 `QB_HELP_MANUAL_SOURCE` 警告"仓库的使用手册不是草稿最近载入的"：内容管理员在手册的行上运行 `QB_HELP_MANUAL_LOAD`。草稿在管理系统中没改过就直接换成新文本；改过则拒绝（`QB_HELP_MANUAL_EDITED`），这时对照 PR 的改动手工合进草稿，再以"保留草稿"（`keepDraft`）记为已合并，或以"覆盖"（`replace`）放弃管理系统中的修改。然后检查并发布。
   - **大小超过上限**（启动检查 `QB_HELP_MATERIALS` 报错，或发布被拒 `QB_HELP_MATERIALS_TOO_LARGE`）：错误中写着入口、语言与字节数。缩短手册或删减 FAQ（多半是 FAQ 增多），或调高 `qb.help.manual-max-bytes`（每次提问的费用随之增加；预留的Token按快照大小每 3 字节一个计）。超过上限的新快照不会保存，在用的旧快照照旧，所以服务不中断；改好后发布或等每小时的任务，检查在下次启动时通过。
   - **快照一直"保存中"**：看平台的作业 `qb.help.materials`（`sys_external_job`）；失败或 30 分钟没完成时下一次生成会重试。
-  - **缓存的用量**：`qb.admin.help-usage` 显示缓存写入与读取的Token（已包含在输入Token中）；读取多说明缓存在起作用。全平台月上限中，缓存读取按 `qb.help.cache-read-weight`（缺省 0.1）计。美元估算按标价计（偏高）并加上缓存写入多出的部分。
-- **事故处理**：回答明显有误或被诱导（例如帮人答题）：先关 `qb.help.enabled`（受控，另一位管理员发布），再查 `qb_help_message`（`kind = 'ANSWER'`）与平台的作业记录（`sys_external_job` 的 `qb.ai.help`），补资料或手册后再开。提供方故障：作业按平台规则重试后失败，用户看到失败说明并可转人工。用量突增：看 `qb.admin.help-usage` 与 `qb-help-usage-high`，必要时调低 `qb.help.user-daily`。
+  - **缓存的用量**：`qb.admin.help-usage` 显示缓存写入与读取的Token（已包含在输入Token中）；读取多说明缓存在起作用。全平台月上限中，缓存读取按 `qb.help.cache-read-weight`（缺省 0.1）计。美元估算按标价计，缓存读取按标价的十分之一计（F-M10，只影响以后的行：部署当月的合计是新旧口径的混合，旧行偏高，对照提供方的账单从第一个整月开始），并加上缓存写入多出的部分；通常略高于账单，不会低于账单（§7.52）。
+- **事故处理**：回答明显有误或被诱导（例如帮人答题）：先关 `qb.help.enabled`（受控，另一位管理员发布），再查 `qb_help_message`（`kind = 'ANSWER'`）与平台的作业记录（`sys_external_job` 的 `qb.ai.help`），补资料或手册后再开。提供方故障：作业按平台规则重试后失败，用户看到失败说明并可转人工。用量突增：看 `qb.admin.help-usage` 与 `qb-help-usage-high`、`qb-help-cost-high`（§7.52），必要时调低 `qb.help.user-daily`（受控，另一位管理员发布）。
 - **改派运营商**：发起方改派时，其转人工、由原运营商回答的对话与待办（含等待的提醒）随之移到新运营商（平台的 `APPROVAL_SCOPE_MOVE`，与待审的审批同一上限，超过即 422 `QB_SPONSOR_HELP_PENDING`：先关闭一些对话）；总部回答的不动。
 - **删除账号**：三张表中本人的行由抹除流程删除（`help.HelpConfig` 的 `PersonalDataEraser`），作业的输入与结果由平台按请求人清除；全平台的用量行保留（不含个人）。
 
@@ -1361,6 +1363,37 @@ Quiz 与发布有主题词（平台词表中的词与自定义词），学者可
 - **赠送**：被封禁的发起方不再得到新的赠送（入驻、点亮、认证补发、追加）。追加赠送在提出时即拒绝（422 `QB_FEE_CREDIT_BANNED`；手工记费照常可以提出）；审核期间被封禁的，批准时申请以"驳回"（`REJECTED`）结束，什么也不发，解封后由财务重新提出。同一来源键已经发过的仍返回原笔（重放不报错）。
 - **到期提醒**：封禁期间不寄"赠送即将到期"的邮件，也不记已提醒；解封后仍在提醒期内的照常提醒。赠送照常到期。
 - **注销时钱表的文字**：账单、费用、申请、充值、转入直营的记录都保留；只抹去其中的自由文字（手工费用与申请的理由、账单的作废理由、手工入账的理由与汇款人名、负责人在转入时写的备注；可空的列写空，必填的写 `***`）。转入的备注随写的负责人或收款的直营发起方任一方的注销而抹去。手工入账的理由因此可以为空（迁移 V120 放宽了检查），流程仍要求填写。
+
+### 7.52 平台承担的 AI 成本与提供方的支出上限（F-M10）
+
+**谁付什么**：学者与发起方问使用方法的 AI 帮助，和审核人用 AI 对照翻译（`TRANSLATION_CHECK`），是**平台出的钱**，不向发起方收；两者的估算美元合计后与同一个阈值比较（同一条告警、同一个待办），总部 AI 页分开列出。AI 获客（Q48d）由运营商承担，但付给提供方的是平台同一把密钥，向运营商收回由 F-M9 或财务处理；发起方自己用 AI 的费用见 F-M9 的那一节。**不记账**：账本里没有“AI 成本”科目，记的又是估算，月底与发票对不上；每月由财务拿提供方的账单对照。
+
+- **估算怎么算**：每个输入 Token 按模型标价，缓存读取按标价的十分之一（提供方的价格，常量 `AiCost.CACHE_READ_FRACTION`，**不是**参数 `qb.help.cache-read-weight`，后者只管月上限怎么计 Token），缓存写入多收四分之一；没有回答的尝试按预留的输入加最大输出估算。作业回退到更贵的模型、长提示等情形折扣仍按普通价，所以估算偏高、不会偏低（前提：模型是认识的，帮助与核对都限于平台允许的三个模型）。
+- **对照账单**：提供方管理页面的账单是同一把密钥的全部用途之和，要与总部 AI 页各项估算美元之和（发起方的 AI、帮助、审核人的翻译核对、AI 获客）对照。正常：**估算不低于账单，且不高于账单的 1.15 倍**。低于账单：立即查（价目表变了、用了不认识的模型使费用为空、有别的程序共用这把密钥）。高出 15 % 以上：查没有回答的尝试（按预留估算，偏高）与回退到更贵模型的次数。部署当月含旧口径的行，不按此对照。
+- **阈值怎么定**：`qb.help.global-monthly-usd-alert` 缺省 8 美元 = 缺省模型（Haiku 5.5）下“Token 上限全是输出”的最坏值（10 美元）的 8 成；缓存正常时用满上限约 2.5 美元，所以缺省设置下几乎不会响，它的作用是**换了更贵的模型或调高了 Token 上限之后**的第二道提醒。**阈值 = `qb.help.global-monthly-tokens` × 当前模型的输出价 × 0.8 ÷ 100 万**。各模型 2 000 万 Token 上限折成美元（每百万 Token 的输入 / 输出价：Haiku 5.5 为 0.10 / 0.50，Sonnet 5.5 为 2 / 10，Opus 5.5 为 4 / 20，回退模型为 5 / 25；价目表变了要重算）：
+
+  | 模型 | 全是新输入或全是读缓存 | 全是缓存写入 | 全是输出 | 回退到 5 / 25 的模型时（下限 / 写入 / 上限） |
+  |---|---|---|---|---|
+  | Haiku 5.5（缺省） | 2 | 2.5 | 10 | 没有回退模型 |
+  | Sonnet 5.5 | 40 | 50 | 200 | 100 / 125 / 500 |
+  | Opus 5.5 | 80 | 100 | 400 | 100 / 125 / 500 |
+
+  （单位：美元；每次尝试至多 4 000 个输出 Token，所以接近上限的情形在现实中不会出现。把 `qb.help.manual-max-bytes` 调到约 30 万字节以上才会进入 Haiku 的长提示价，那时估算最多可到账单的约 8 倍，对照范围不再适用。）**改模型（`qb.help.model`）或改 Token 上限的人，在同一次操作里重算并改阈值**；财务每月对照时复核。
+- **告警与待办**：仪表 `qb.help.cost.percent` 与 Grafana 规则 `qb-help-cost-high`（§5）是实时的；每日任务 `qb.help-usage`（UTC 23:53）同时检查**本月和上个月**，估算美元合计达到阈值（且阈值大于 0）就给**财务和超级管理员**（权限 `qb.reconcile`，总部）建待办 `qb.help.cost-high`（来源键 `qb.help-cost:<月>`，每月至多一个，手工关闭后同月不再建）。**上个月的待办不会自动关闭**：处理的人看过总部 AI 页的用量（帮助块含审核人的翻译核对一列）、必要时调整之后手工关闭（财务有 `task.resolve`）。作业结局流程不建待办，所以待办最迟隔一天出现。**改阈值以后**：总部 AI 页立即按新值显示；仪表在下一次作业结局或当天的每日任务时重算，待办也在每日任务里判断，最迟隔一天。
+- **提供方的支出上限清单**（整个应用只用一把密钥 `ANTHROPIC_API_KEY`，提供方的上限一到，发起方的 AI 与帮助一起停）：
+
+  | 项 | 怎么算 | 谁来做 | 缺省设置下的数 |
+  |---|---|---|---|
+  | 各项上限折成美元的最坏值 | 帮助 = `qb.help.global-monthly-tokens` × 当前模型输出价；发起方的 AI（含审核人的翻译核对，它走同一套限额）= `qb.ai.global.monthly-tokens` × `qb.ai.model` 的输出价；AI 获客 = 各运营商的 `monthlyCostCap` 之和 | 财务算，超级管理员复核 | 帮助 10；发起方的 AI 5 000 万 × 20 美元 = 1 000（缺省 `qb.ai.model` 是 Opus 5.5）；AI 获客按已设的上限之和 |
+  | 提供方管理页面里的月支出上限 | 上面几项之和 × 1.2（我方的上限先到，提供方的上限只作最后一道防线，否则它先停会连带停掉发起方的 AI） | 在提供方的管理页面设：超级管理员（持有提供方账号的人）；数由财务定 | 约 1 200 美元加 AI 获客的上限之和的 1.2 倍 |
+  | 提供方的提醒 | 设在上限的 80 %，通知邮件发给财务和超级管理员 | 超级管理员 | 上限的 80 % |
+  | 改模型或改 Token 上限后 | 重算上面三行，并改美元阈值 | 改的人（超级管理员），财务复核 | |
+  | 每月对照 | 提供方的账单对总部 AI 页各项估算美元之和，差额范围见上（估算不低于账单、不高于 1.15 倍） | 财务，月初，月报之前 | |
+  | 到了提供方的上限之后 | 调用被提供方拒绝，发起方的 AI 与帮助的作业按失败结束（帮助的页面提示转人工）；失败的作业不会自动重做，用户重新提交 | | |
+  | 恢复步骤 | ①在总部 AI 页看是谁用得多（按月、不看个人）；②确认不是被刷（必要时调低每人每天次数、关开关（受控），或在提供方管理页面吊销密钥，§7.8 的紧急停止）；③财务批准后，超级管理员在提供方管理页面调高上限或等到下月；④通知用户可以重新提交 | 财务批准，超级管理员执行 | |
+
+- **每日核对**：钱包核对（§7.2）多一项 `HELP_USAGE_TOTAL`：每个月全平台一行（`qb_help_usage` 的 `*`）的提问数、输入 Token、输出 Token、估算美元**不小于**各人的行之和。是“不小于”而不是“相等”：删除账号时本人的行被抹除、全平台行保留，对话已被保留期删掉时只加全平台行。差异出现在该日的核对结果里（引用写月份和量，如 `2026-10:costUsd`），本版随钱包核对的待办发给财务；F-M14 的三级核对落地后改由内容管理员负责的权限接收。
+- **总部 AI 页的限制**：翻译核对一列按 `jabiz.fiscal-year-zone` 的月份归（页面的模板缺省取 Asia/Tokyo，与部署缺省一致；改了时区要同时改模板的 `zone` 参数的缺省）；某个月只有翻译核对、没有任何 AI 帮助的提问时，该月不出现在表里（告警与待办仍算它）。审核人账号被抹除时其核对作业的行随之删除，之后本月合计少算，接受。
 
 ## 8. 升级到线 1.3（S0 的迁移 V29、V30）
 

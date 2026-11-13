@@ -507,13 +507,23 @@ public final class QbParams {
      * changes what the help may spend.
      */
     public static final String HELP_CACHE_READ_WEIGHT = "qb.help.cache-read-weight";
-    /** The help's controlled parameters (last, in this order). */
-    public static final List<String> HELP_CONTROLLED = List.of(HELP_ENABLED, HELP_GLOBAL_MONTHLY_TOKENS,
-        HELP_CACHE_READ_WEIGHT);
+    /**
+     * F-M10: the estimated dollars a month (the AI help and the reviewers' translation checks together) from which the
+     * alert and the task say the AI costs have reached a level (0: no alert). Ordinary: it decides when to be reminded,
+     * not what may be spent. Rule of thumb: the monthly tokens times the model's output price times 0.8 per million.
+     */
+    public static final String HELP_GLOBAL_MONTHLY_USD_ALERT = "qb.help.global-monthly-usd-alert";
+    /**
+     * The help's controlled parameters (last, in this order). F-M10: {@code qb.help.user-daily} is one of them, as the
+     * specification asks (the limit parameters are controlled): changing how many questions a person asks a day takes a
+     * second administrator.
+     */
+    public static final List<String> HELP_CONTROLLED = List.of(HELP_ENABLED, HELP_USER_DAILY,
+        HELP_GLOBAL_MONTHLY_TOKENS, HELP_CACHE_READ_WEIGHT);
     public static final List<String> HELP = List.of(HELP_ENABLED, HELP_MODEL, HELP_USER_DAILY,
         HELP_GLOBAL_MONTHLY_TOKENS, HELP_HISTORY_TURNS, HELP_RETENTION_DAYS, HELP_MANUAL_MAX_BYTES, HELP_POLL_SECONDS,
         HELP_POLL_MAX_MINUTES, HELP_ESCALATION_REMIND_DAYS, HELP_AUTO_CLOSE_DAYS, HELP_QUESTION_MAX_LENGTH,
-        HELP_ANSWER_MAX_LENGTH, HELP_MAX_LINKS, HELP_CACHE_READ_WEIGHT);
+        HELP_ANSWER_MAX_LENGTH, HELP_MAX_LINKS, HELP_CACHE_READ_WEIGHT, HELP_GLOBAL_MONTHLY_USD_ALERT);
     /**
      * F-F3: the areas of the Sponsor app's bottom menu on a phone, comma-separated area keys (home, quizzes,
      * publications, prizes, messages, benefits, money, assets, hub; "More" follows them); not controlled. The Sponsor app
@@ -876,8 +886,6 @@ public final class QbParams {
         new Param(HELP_MODEL, Map.of("type", "code", "dictUrn", "urn:jabiz:dict:quizbuks:ai-model", "allowedValues",
             List.of("claude-opus-5-5", "claude-sonnet-5-5", "claude-haiku-5-5")), "claude-haiku-5-5",
             "The model the AI help asks (a smaller, faster one)"),
-        new Param(HELP_USER_DAILY, Map.of("type", "numeric", "precision", 4, "scale", 0), "20",
-            "The questions to the AI help one person asks a day (0: none)"),
         new Param(HELP_HISTORY_TURNS, Map.of("type", "numeric", "precision", 2, "scale", 0), "6",
             "The latest turns of a conversation sent to the AI with a question (0 to 20)"),
         new Param(HELP_RETENTION_DAYS, DAYS, "180", "Days after its last activity an AI help conversation is deleted"),
@@ -898,7 +906,12 @@ public final class QbParams {
             "The longest AI help answer kept, in characters (500 to 8000); a longer one is cut"),
         new Param(HELP_MAX_LINKS, Map.of("type", "numeric", "precision", 2, "scale", 0), "5",
             "The most links of the site one AI help answer keeps (0 to 10)"),
+        new Param(HELP_GLOBAL_MONTHLY_USD_ALERT, Map.of("type", "numeric", "precision", 9, "scale", 2), "8",
+            "The estimated dollars a month, the AI help and the reviewers' translation checks together, from which the "
+                + "alert and the task say so (0 to 1,000,000; 0: no alert)"),
         new Param(HELP_ENABLED, BOOL, false, "Whether Takers and Sponsors may ask the AI help (Claude)"),
+        new Param(HELP_USER_DAILY, Map.of("type", "numeric", "precision", 4, "scale", 0), "20",
+            "The questions to the AI help one person asks a day (0: none)"),
         new Param(HELP_GLOBAL_MONTHLY_TOKENS, TOKENS, "20000000",
             "The tokens the AI help may use a month, everybody together"),
         new Param(HELP_CACHE_READ_WEIGHT, Map.of("type", "numeric", "precision", 3, "scale", 2), "0.10",

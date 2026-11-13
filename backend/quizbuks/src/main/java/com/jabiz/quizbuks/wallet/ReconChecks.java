@@ -94,6 +94,12 @@ public final class ReconChecks {
     public static final String CREDIT_NOTE_USE_VOID = "CREDIT_NOTE_USE_VOID";
     /** F-M7 (N4): credit left while an invoice is unpaid. */
     public static final String CREDIT_UNUSED_WITH_DUE = "CREDIT_UNUSED_WITH_DUE";
+    /**
+     * F-M10: a month of the AI help's usage in which everybody's row is below the sum of the people's (questions, input
+     * or output tokens, estimated dollars); {@code reference} names the month and the measure. Not "unequal": a deleted
+     * account's row is erased and a deleted conversation adds only to everybody's.
+     */
+    public static final String HELP_USAGE_TOTAL = "HELP_USAGE_TOTAL";
     /** Account 2110 in all against all sponsors' cached balances. */
     public static final String TOTAL_2110 = "TOTAL_2110";
     /** Every posted line's debit less credit: 0. */
@@ -130,7 +136,7 @@ public final class ReconChecks {
         PREPAYMENT_PARTS, PREPAYMENT_UNCHARGED, DISTRIBUTION_DEPOSITS, DISTRIBUTION_UNSETTLED,
         DISTRIBUTION_FINAL_MISSING, DISTRIBUTION_PRICE_RANGE, DISTRIBUTION_AT_FLOOR, AUDIENCE_REFUND_MISSING,
         AUDIENCE_REFUND_NO_PERIOD, AUDIENCE_FEE_NOT_LIVE, CREDIT_NOTE_USES, CREDIT_NOTE_LIMITS, CREDIT_NOTE_USE_VOID,
-        CREDIT_UNUSED_WITH_DUE);
+        CREDIT_UNUSED_WITH_DUE, HELP_USAGE_TOTAL);
 
     /** Codes no longer reported that runs written before may still name: readable, never written. */
     public static final List<String> RETIRED = List.of(DISTRIBUTION_PRICE_OUT_OF_RANGE);

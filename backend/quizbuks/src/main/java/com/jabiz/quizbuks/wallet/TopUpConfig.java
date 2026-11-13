@@ -276,6 +276,8 @@ class TopUpConfig {
                 + "by", "zh", "没有计费期间、无法计算未用天数的受众规则费", "ja", "未使用日数を数える期間がない対象者ルール料")
             .item(ReconChecks.AUDIENCE_FEE_NOT_LIVE, "en", "Audience fees of publications that never went on",
                 "zh", "从未上架的发布的受众规则费", "ja", "公開されなかった公開の対象者ルール料")
+            .item(ReconChecks.HELP_USAGE_TOTAL, "en", "AI help usage of a month: everybody's row below the people's",
+                "zh", "AI 帮助某月用量：全平台行小于各人之和", "ja", "AIヘルプの月間利用量：全体の行が個人の合計を下回る")
             .item(ReconChecks.CREDIT_NOTE_USES, "en", "Credit notes against what they gave back and paid",
                 "zh", "贷项凭证与其退回和抵用", "ja", "返還インボイスと返金・充当")
             .item(ReconChecks.CREDIT_NOTE_LIMITS, "en", "Fees whose credit notes come to more than them",

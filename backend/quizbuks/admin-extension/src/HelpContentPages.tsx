@@ -147,6 +147,10 @@ export function HelpUsageSection({ month }: { month: string | null }) {
               <TableHead className="text-right">{t('help.usage.columns.output')}</TableHead>
               <TableHead className="text-right">{t('help.usage.columns.estimate')}</TableHead>
               <TableHead className="text-right">{t('help.usage.columns.used')}</TableHead>
+              <TableHead className="text-right">{t('help.usage.columns.checks')}</TableHead>
+              <TableHead className="text-right">{t('help.usage.columns.total')}</TableHead>
+              <TableHead className="text-right">{t('help.usage.columns.alert')}</TableHead>
+              <TableHead className="text-right">{t('help.usage.columns.ofAlert')}</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -170,6 +174,18 @@ export function HelpUsageSection({ month }: { month: string | null }) {
                       maximumFractionDigits: 1 }),
                     tokens: n(row.monthlyTokens) })}
                 </TableCell>
+                <TableCell className="text-right tabular-nums" data-testid="help-usage-checks">
+                  {row.checkJobs === 0 ? '' : t('help.usage.checksValue', { count: row.checkJobs, usd: row.checksUsd ?? '' })}
+                </TableCell>
+                <TableCell className="text-right tabular-nums" data-testid="help-usage-total">{row.totalUsd ?? ''}</TableCell>
+                <TableCell className="text-right tabular-nums" data-testid="help-usage-alert">
+                  {row.alertUsd == null || Number(row.alertUsd) === 0 ? t('help.usage.noAlert') : row.alertUsd}</TableCell>
+                {/* No alert: no share (empty, not 0) */}
+                <TableCell className="text-right tabular-nums" data-testid="help-usage-of-alert">
+                  {row.percentOfAlert == null ? '' : t('help.usage.ofAlertValue', {
+                    percent: row.percentOfAlert.toLocaleString(i18n.language, { minimumFractionDigits: 1,
+                      maximumFractionDigits: 1 }) })}
+                </TableCell>
               </TableRow>
             ))}
           </TableBody>
@@ -177,9 +193,15 @@ export function HelpUsageSection({ month }: { month: string | null }) {
       </div>
     )
   }
+  const reached = usage.data?.filter((row) => row.percentOfAlert != null && row.percentOfAlert >= 100) ?? []
   return (
     <Section title={t('help.usage.title')} testId="help-usage-section">
       <p className="text-muted-foreground text-sm">{t('help.usage.description')}</p>
+      {reached.length > 0 && (
+        <Alert variant="destructive" data-testid="help-usage-reached">
+          <AlertDescription>{t('help.usage.reached', { months: reached.map((row) => row.month).join(', ') })}</AlertDescription>
+        </Alert>
+      )}
       {body}
     </Section>
   )
