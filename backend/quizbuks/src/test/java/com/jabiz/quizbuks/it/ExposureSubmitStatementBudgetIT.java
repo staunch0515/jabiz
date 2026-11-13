@@ -47,6 +47,13 @@ class ExposureSubmitStatementBudgetIT extends ExposureFeeItSupport {
         List<List<String>> own = SqlStatementLog.transactions().stream()
             .filter(t -> t.stream().anyMatch(sql -> sql.startsWith("INSERT INTO op_process ("))).toList();
         List<String> topUp = own.getFirst();
+        // The top-up's locks: the publication, then the sponsor's wallet, then the publication again (the purchase's
+        // sub-process; held already, no wait).
+        List<String> topUpLocks = SqlStatementLog.locks();
+        assertThat(topUpLocks).hasSize(3);
+        assertThat(topUpLocks.get(0)).startsWith("qb.pub:");
+        assertThat(topUpLocks.get(1)).isEqualTo("qb.wallet:SPONSOR:" + sponsor);
+        assertThat(topUpLocks.get(2)).isEqualTo(topUpLocks.get(0));
         System.out.println("[statement-budget] submit with exposures: " + buying.size() + "\\n" + listing(buying));
         System.out.println("[statement-budget] top-up: " + topUp.size() + "\\n" + listing(topUp));
         System.out.println("[statement-budget] locks: " + locks);

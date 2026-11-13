@@ -205,9 +205,10 @@ public final class PublicationExposureTopUp {
         // The parts of the prepayment so far plus the most this top-up adds (a part for each lot it may take from).
         int mostNew = FeeGate.list(ctx, PublicationPrepayments.CREDITS).size() + FeeGate.list(ctx,
             PublicationPrepayments.LOTS).size();
-        if (FeeGate.list(ctx, PARTS).size() + mostNew > Prepayments.MAX_PARTS) {
-            ctx.reject(new Violation("additional", FeeCodes.EXPOSURE_PARTS_LIMIT, "This publication's exposures were "
-                + "topped up so often that no more can be added; buy the rest in another publication",
+        // Only money set aside has parts (a postpaid one counts against the credit limit and has none to give back).
+        if (QbPrepayments.PREPAID.equals(ctx.get(MODE)) && FeeGate.list(ctx, PARTS).size() + mostNew > Prepayments.MAX_PARTS) {
+            ctx.reject(new Violation("additional", FeeCodes.EXPOSURE_PARTS_LIMIT, "The parts of this prepayment have "
+                + "reached their limit; no more can be added to it",
                 Map.of("max", String.valueOf(Prepayments.MAX_PARTS))));
             return;
         }
