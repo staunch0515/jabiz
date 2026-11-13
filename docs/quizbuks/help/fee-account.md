@@ -94,3 +94,5 @@ A credit note lowers what you owe in platform fees; the fee and its invoice stay
 ### English · Why does Kudos show 0 on "Me", with "Coming soon"?
 
 Kudos are a kind of points for rewards. **At the first launch, Kudos are shown but cannot be used yet**, so the "Kudos" at the top of "Me" is 0 and says "Coming soon". The rewards Sponsors give now are prizes you collect in store, digital prizes and the like, not Kudos, so you are not missing anything. Watch the announcements in the app for when Kudos open for use; the prizes and certificates you already have are not affected. We cannot promise a date yet.
+
+<!-- CI trial: a help page changes -->
