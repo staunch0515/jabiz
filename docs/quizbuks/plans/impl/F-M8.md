@@ -61,7 +61,7 @@
 - **决定 A 放宽**（审查 M2，总控 2026-11-12）：`exposurePurchased` 只经 `PublicationExposure` 的**一个写入辅助方法**写入；`QB_EXPOSURE_PURCHASED_SET` 与回到草稿（`DRAFT` 分支）时的清空都调用它，别处不写。新核对项 `EXPOSURE_UNIT_MISMATCH`：有已购却没有冻结单价，或有单价却没有已购，都算差异。
 
 ### 3.4 追加购买 `QB_EXPOSURE_TOP_UP`（新，发起方）
-- 输入 `{publicationId, expectedPurchased, additional}`（审查 M3）：`expectedPurchased` 是页面看到的旧已购，与当前不符即 409（`QB_EXPOSURE_PURCHASED_CHANGED`，新码），所以重发同一个请求只买一次；`additional` ≥ 1，总数 ≤ `PublicationExposure.MAX_PURCHASED`，单次追加 ≤ `qb.exposure.top-up.max`（新参数，见第 5 节；保证分摊段数不超过 `MAX_PARTS`，审查 M5）。权限 `qb.publication.write`（同发布编辑），`requiresVerifiedEmail()`，先 `CallerChecks::refuseBanned`，并做 `ConsentChecks.sponsor()`（审查 L）；只能操作自己的发布（`actsOn`）；只在发起方的入口，学者的 App 拿不到（`ProcessAccessIT` 断言）。
+- 输入 `{publicationId, expectedPurchased, additional}`（审查 M3）：`expectedPurchased` 是页面看到的旧已购，与当前不符即拒绝（422 `QB_EXPOSURE_PURCHASED_CHANGED`，新码；实施时改为 422：平台的 409 `ConcurrentUpdateException` 不带规则码，与 `QB_PUBLICATION_CHANGED` 一致），所以重发同一个请求只买一次；`additional` ≥ 1，总数 ≤ `PublicationExposure.MAX_PURCHASED`，单次追加 ≤ `qb.exposure.top-up.max`（新参数，见第 5 节；保证分摊段数不超过 `MAX_PARTS`，审查 M5）。权限 `qb.publication.write`（同发布编辑），`requiresVerifiedEmail()`，先 `CallerChecks::refuseBanned`，并做 `ConsentChecks.sponsor()`（审查 L）；只能操作自己的发布（`actsOn`）；只在发起方的入口，学者的 App 拿不到（`ProcessAccessIT` 断言）。
 - 条件：发布已购（`exposurePurchased` 不为空且有冻结的 `exposureUnit`）；状态在 `SCHEDULED / LIVE / PAUSED / FUNDS_SHORT`（审核中请先撤回；已结束 422，用完前才能买）；`additional` × 冻结单价的预付含税不超过上限。
 - **按冻结的单价**（问题 5）；**不审核**（问题 4：共享视频已审核过，只是数字变大）。
 - 锁序：发布锁 `qb.pub:<发布>` → 钱包锁 `qb.wallet:SPONSOR:<发起方>`（钱包锁之后不再取锁）。不取开始锁（不改状态）。
@@ -183,7 +183,7 @@
   - H2 累计税：用完时恰好扣光；两次结算之间改税率（升、降各一例）；
   - H3 漏一个月 → 下月有成功 → 补跑漏掉的那个月：补跑的月写 0 次、不记费，总数不重复；
   - M2 各种不买的提交都使已购为空（"残留已购"）；核对项 `EXPOSURE_UNIT_MISMATCH` 正反各一例（核对项的码存在 `varchar(30)` 列中，原名 31 个字符会被截断而丢掉，所以改短；新码都 ≤ 30 个字符，由 S1 加的守护测试检查，总控 2026-11-13）；
-  - M3 追加重发只买一次（第二次 409）；
+  - M3 追加重发只买一次（第二次 422 `QB_EXPOSURE_PURCHASED_CHANGED`）；
   - M4 起点 greatest(startAt, approvedAt) 的两种先后；注销后仍能 `final` 并退回；
   - M5 原冻结用现金、追加用赠送的退回去向；单次追加上限；
   - M6 价目单价为 0 被拒；预付款不是 `OPEN` 时追加 422；

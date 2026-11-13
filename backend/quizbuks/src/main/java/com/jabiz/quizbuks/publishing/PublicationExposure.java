@@ -95,6 +95,15 @@ public final class PublicationExposure {
         }
     }
 
+    /**
+     * The one place besides {@link #setPurchased} that writes the exposures bought (decision A relaxed, 2026-11-12): a
+     * publication back to its draft has bought none and froze no price.
+     */
+    static void clear(Map<String, Object> values) {
+        values.put("exposurePurchased", null);
+        values.put("exposureUnit", null);
+    }
+
     // ---- the end -----------------------------------------------------------------------------------------------------
 
     public static ProcessDefinition<EndInput, PublicationOutput, ProcessContext> end() {

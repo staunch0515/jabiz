@@ -135,6 +135,11 @@ public class FeeConfig {
     }
 
     @Bean
+    ProcessDefinition<Prepayments.TopUpInput, Prepayments.FreezeOutput, ProcessContext> qbPrepaymentTopUp() {
+        return Prepayments.topUp();
+    }
+
+    @Bean
     ProcessDefinition<Prepayments.UseInput, FeeSettlement.SettleOutput, ProcessContext> qbPrepaymentUse() {
         return Prepayments.use();
     }
