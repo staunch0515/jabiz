@@ -205,18 +205,18 @@ public final class ExposureSettlements {
             && found.getFirst() instanceof Map<?, ?> row ? row : Map.of();
         long byEnd = counts.get("byEnd") == null ? 0 : FeeGate.money(counts.get("byEnd")).longValue();
         long total = counts.get("total") == null ? 0 : FeeGate.money(counts.get("total")).longValue();
-        // A final row (and a monthly row of a publication already ended past the grace) counts all of them.
+        // A final row counts all of them.
         long successful = ended ? total : byEnd;
         long highest = rows.stream().mapToLong(row -> FeeGate.money(row.get("toCount")).longValue()).max().orElse(0);
         String thisPeriod = period;
         boolean later = rows.stream().anyMatch(row -> String.valueOf((Object) row.get("period")).compareTo(thisPeriod) > 0);
-        // F-M8c review H1: an ended publication's missed month, run after a later month was settled, must not write the
-        // final row (it would carry nothing: "later" holds the count back) and give the whole deposit back: the final
-        // job settles the rest, all of it, in the month the publication ended in.
-        if (ended && later && !Boolean.TRUE.equals(ref.last())) {
+        // F-M8c review H1 and L3: an ended publication (past the grace) is settled by the final job alone: a month's
+        // run written as its final row would carry nothing when a later month holds the count back (H1), and would put
+        // the final row in an earlier month than the one it ended in (L3). The final job writes it, all of it, in the
+        // month the publication ended in.
+        if (ended && !Boolean.TRUE.equals(ref.last())) {
             return;
         }
-        // A final row counts all of them, whatever a later month's row says.
         long toCount = ExposureFeeRules.toCount(highest, later && !ended, successful, purchased);
         BigDecimal chargedAmount = rows.stream().map(row -> FeeGate.money(row.get("amount")))
             .reduce(BigDecimal.ZERO, BigDecimal::add);

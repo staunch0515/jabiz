@@ -126,7 +126,10 @@ public final class NotificationMails {
         .category(MailCategory.NOTIFICATION).entries("sponsor").param("name", "left", "purchased")
             .sample("name", "Spring quiz")
             .sample("left", "9,000")
-            .sample("purchased", "100,000"));
+            .sample("purchased", "100,000")
+            // It asks the recipient to pay more (to buy more exposures): a notice that makes a recipient pay is a
+            // text another administrator publishes (F-M8c review L5).
+            .protectedText());
 
     public static final List<MailTemplate> ALL = List.of(TRANSFER_SENT, TRANSFER_FAILED, PAYOUT_ACTION_NEEDED,
         TOPUP_PAID, TOPUP_PAID_CASH, TOPUP_GRANTED, FEE_INVOICE_ISSUED, FEE_INVOICE_OVERDUE, FEE_CREDIT_EXPIRING, PUBLICATION_APPROVED, PUBLICATION_REJECTED, PUBLICATION_TAKEN_DOWN, PUBLICATION_FUNDS_SHORT,

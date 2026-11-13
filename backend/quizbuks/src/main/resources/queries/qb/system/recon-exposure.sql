@@ -41,9 +41,10 @@ permissions: [qb.wallet.system]
 --   bought and no price frozen (the purchase and the price are written together).
 -- EXPOSURE_SETTLED_SHORT (F-M8c review M2): by sponsor and publication, a final settlement that counted fewer than were
 --   counted by its own time (expected min(counted before it, bought), actual its count): what the month and final runs
---   leave behind when a row is written wrongly. Reports that arrive after the grace show up here too: they are
---   undercharged. Scale: one count through the exposures' (publication, user) index for each final row; the rows of
---   ended publications only grow, which a count of every one of them tolerates at the daily check.
+--   leave behind when a row is written wrongly (it checks the settlement rows only). Scale: one count through the
+--   exposures' (publication, user) index for each final row, and the rows of ended publications only grow; when the
+--   daily check becomes slow, bound it by the final row's settled_at (the last N days, a controlled parameter), as
+--   operations.md 7.54 says.
 -- EXPOSURE_AMOUNT_MISMATCH (F-M8c review M2): by sponsor and publication, the amounts of all its settlements against
 --   the cumulative amount of its highest count (ceil(count x price)): expected the cumulative amount, actual the sum.
 -- EXPOSURE_UNPURCHASED (F-M8, a note): by sponsor, running publications of another sponsor's video that bought nothing

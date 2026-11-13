@@ -336,6 +336,38 @@ class ExposureSettleIT extends ExposureFeeItSupport {
         assertThat(settlements(publicationId).stream().map(row -> dec(row.get("amount")))
             .reduce(BigDecimal.ZERO, BigDecimal::add)).isEqualByComparingTo("28");
         assertThat(exposurePrepayment(publicationId)).containsEntry("status", "RELEASED");
+        // The missed month run once more after the final row: nothing is written, and the daily check agrees.
+        systemRun(ExposureSettlements.SETTLE, ref(publicationId, sponsor, m0.toString(), false));
+        assertThat(settlements(publicationId)).hasSize(2);
+        assertThat(exposureChecks(sponsor)).isEmpty();
+    }
+
+    /**
+     * F-M8c review L3: a publication that ended, past the grace, with a month of its not settled and no later row: the
+     * monthly run of that month writes nothing; the daily job writes the final row, in the month it ended in.
+     */
+    @Test
+    void anEndedPublicationsMissedMonthRunLateLeavesTheFinalRowToTheFinalJobInTheMonthItEndedIn() {
+        String[] p = boughtPublication("fm8-l3", 100);
+        String sponsor = p[0];
+        String publicationId = p[1];
+        YearMonth m0 = YearMonth.parse(period(clock.instant()));
+        YearMonth m1 = m0.plusMonths(1);
+        successes(publicationId, sponsor, p[2], 10, clock.instant());
+        clock.set(m1.atDay(10).atTime(9, 0).atZone(ZONE).toInstant());
+        successes(publicationId, sponsor, p[2], 5, clock.instant());
+        run("QB_PUBLICATION_ADMIN_END", contentAdmin(), body("publicationId", publicationId, "reason", "F-M8 test"));
+        clock.set(m1.plusMonths(1).atDay(2).atTime(0, 47).atZone(ZONE).toInstant());
+        systemRun(ExposureSettlements.SETTLE, ref(publicationId, sponsor, m0.toString(), false));
+        assertThat(settlements(publicationId)).as("nothing written by the month's run").isEmpty();
+        assertThat(exposurePrepayment(publicationId)).containsEntry("status", "OPEN");
+        finalRun(clock.instant().plus(Duration.ofHours(3)));
+        assertThat(settlements(publicationId)).singleElement().satisfies(row -> {
+            assertThat(row).containsEntry("final", true).containsEntry("period", m1.toString());
+            assertThat(dec(row.get("to_count"))).isEqualByComparingTo("15");
+        });
+        assertThat(exposurePrepayment(publicationId)).containsEntry("status", "RELEASED");
+        assertThat(exposureChecks(sponsor)).isEmpty();
     }
 
     /** Copies the settlement row of the publication as a row of its own (another period, another amount). */
@@ -372,7 +404,7 @@ class ExposureSettleIT extends ExposureFeeItSupport {
         run("QB_PUBLICATION_ADMIN_END", contentAdmin(), body("publicationId", publicationId, "reason", "F-M8 test"));
         finalRun(clock.instant().plus(Duration.ofHours(3)));
         assertThat(exposureChecks(sponsor)).isEmpty();
-        // Reports that were counted before the settlement but arrived after it: undercharged.
+        // A final row that counted fewer than were counted by its time (as a wrongly written row would): found.
         successes(publicationId, sponsor, p[2], 5, early.plusSeconds(60));
         assertThat(exposureChecks(sponsor)).filteredOn(r -> "EXPOSURE_SETTLED_SHORT".equals(r.get("checkCode")))
             .singleElement().satisfies(row -> {

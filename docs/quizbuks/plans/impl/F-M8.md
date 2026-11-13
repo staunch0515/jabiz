@@ -71,7 +71,7 @@
 
 ### 3.5 结算 `QB_EXPOSURE_SETTLE`（新，`internal()`；与配送费"同一结算流程"= 同一套步骤与规则，另立流程与表，理由见第 7 节风险 1）
 - 两个任务（`JobDefinition.forEach`，每项一个事务，可经 `JOB_RUN_REQUEST` 补跑，cron 写进 `FeeConfig`，`CRON_TZ=Asia/Tokyo`，部署设置 `QB_EXPOSURE_MONTHLY_CRON` / `QB_EXPOSURE_FINAL_CRON`）：
-  - 月度 `qb.exposure-fee`：每月 2 日 00:47（在配送费 00:37 之后，账单任务 01:17 之前）；取项模板 `qb.system.exposure-due`：有 `exposureUnit`、`publisherKind` = `SPONSOR`、上过架、月初之前没有结束、没有 `final` 行、还没有上月行的发布；已结束过宽限的直接写成 `final`（同 F-M6 的 N1，两个任务谁先谁写，另一个看到 `final` 即跳过）。
+  - 月度 `qb.exposure-fee`：每月 2 日 00:47（在配送费 00:37 之后，账单任务 01:17 之前）；取项模板 `qb.system.exposure-due`：有 `exposureUnit`、`publisherKind` = `SPONSOR`、上过架、月初之前没有结束、没有 `final` 行、还没有上月行的发布；已结束过宽限的发布月度项不写，留给结束任务（审查 H1、L3：期间是结束所在的月；与配送费不同，配送费的月度项会把它写成 `final`）。
   - 结束 `qb.exposure-final`：每天 03:12（在配送费 03:07 之后、03:23 释放之前）；取 `endedAt ≤ 运行时刻 − qb.exposure.final.end-grace-sec`、没有 `final` 行的发布，期间 = 结束所在月（该月已有行则取其后第一个没有行的月）。
 - **起点**（审查 M4，同 F-M6）：开始计费的时刻 = greatest(`startAt`, `approvedAt`)；取项模板、结算流程、核对项三处用同一个表达式，并加条件测试（审核晚于开始、早于开始各一例）。期间逐月列出（不跳月）；发起方注销之后仍能做 `final` 并退回。
 - 每项只取 `qb.wallet:SPONSOR:<发布方>`，**不取发布锁、开始锁**；锁内一条 `QueryEntities.all` 读：该发布各结算行、成功次数（月度：`counted_at` < 下月 1 日 0 时的行数；`final`：全部）、已购（卡片）、`EXPOSURE` 的 `OPEN` 预付款。读到较旧的值只会少算本次，下次按累计补上；`final` 由宽限保证读到最终值。
@@ -143,7 +143,7 @@
 - **运营商管理系统**（`admin-extension`，仿 `DistributionPages.tsx`）：曝光费价目页（负责人可改、成员只读，理由必填）、本运营商发起方的结算列表（`qb.operator.exposure-settlements`，运营商范围，登记 `OperatorScopes`）。
 - **平台管理系统**：各运营商价目与总部范围（范围链到受控变更）、全部结算列表（`qb.admin.exposure-settlements`，`qb.admin.finance.read`，可导出）、上线开关页（`fund-switch-messages.ts`）的曝光行。
 - **"待我处理"加"曝光即将用完"**（审查 L）：剩余 ≤ 比例的进行中发布出现在发起方的"待我处理"。
-- **提醒**：新任务 `qb.exposure-low`（`JobDefinition.forEach`，逐项流程 `QB_EXPOSURE_LOW_NOTICE_ITEM`，`internal()`，取项模板 `qb.system.exposure-low-due`）：进行中、有已购、剩余 ≤ 已购 × `qb.exposure.low-ratio`、`QbExposureNotice.notifiedFor` ≠ 当前已购的发布，给发起方发站内信与邮件（沿用 `PublicationNotices` 的发送方式；新三语文字：三语 `mail.<名>.name`、每个参数的 `.sample(…)`、`.entries("sponsor")`；邮件不含令牌与登录链接，所以**不用** `t.protectedText()`、也不进 `MailTemplatesCoverageTest.PROTECTED`（审查 L8：一位管理员即可改字，与其他通知一致）；邮件文字可在线修改的规则照 `MailText` 的做法登记），并写 `QbExposureNotice`。追加购买后已购变了，再次可提醒。
+- **提醒**：新任务 `qb.exposure-low`（`JobDefinition.forEach`，逐项流程 `QB_EXPOSURE_LOW_NOTICE_ITEM`，`internal()`，取项模板 `qb.system.exposure-low-due`）：进行中、有已购、剩余 ≤ 已购 × `qb.exposure.low-ratio`、`QbExposureNotice.notifiedFor` ≠ 当前已购的发布，给发起方发站内信与邮件（沿用 `PublicationNotices` 的发送方式；新三语文字：三语 `mail.<名>.name`、每个参数的 `.sample(…)`、`.entries("sponsor")`、`t.protectedText()`（它是请收件人追加付款的通知，算"让收件人付款的通知"，总控替需求方定，审查 L5），并加进 `MailTemplatesCoverageTest.PROTECTED`；邮件文字可在线修改的规则照 `MailText` 的做法登记），并写 `QbExposureNotice`。追加购买后已购变了，再次可提醒。
 - **每日核对**（随 `quizbuks.reconcile.run-cron` 的日常对账，`ReconChecks` 加项，时长都是受控参数）：
   - `EXPOSURE_DEPOSITS`：2180 用途 `EXPOSURE` 按发布 = `OPEN` 预付款剩余；
   - `EXPOSURE_SETTLED_OVER`：某发布各结算行的次数之和 > 已购次数（结算次数 ≤ 已购，规格）；
