@@ -214,15 +214,46 @@ class CreditNoteMoreIT extends CreditNoteItSupport {
         assertThat(differences(sponsor)).isEmpty();
     }
 
-    /** N5: a prepayment whose period cannot be read gives NONE_NO_PERIOD, and the daily check lists it for finance. */
+    /**
+     * N5: a prepayment whose period cannot be read gives NONE_NO_PERIOD, and the daily check lists it for finance until
+     * finance decides: closed with no note (NONE_FINANCE), once.
+     */
     @Test
-    void aPeriodThatCannotBeReadIsDecidedAsSuchAndChecked() {
+    void aPeriodThatCannotBeReadIsCheckedUntilFinanceClosesIt() {
+        String sponsor = pricedSponsor("fm7-noperiod");
+        String prepaymentId = noPeriod(sponsor, "FM7 no period");
+        assertThat(differences(sponsor)).singleElement().satisfies(row -> assertThat(row)
+            .containsEntry("checkCode", "AUDIENCE_REFUND_NO_PERIOD").containsEntry("reference", prepaymentId));
+
+        assertThat(run(AudienceRefundJob.CLOSE, finance(), body("prepaymentId", prepaymentId, "reason",
+            "Ended the day it went on: nothing to give back"))).containsEntry("refundOutcome", "NONE_FINANCE");
+        assertThat(query("SELECT refund_outcome FROM qb_prepayment WHERE prepayment_id = ?", prepaymentId).getFirst())
+            .containsEntry("refund_outcome", "NONE_FINANCE");
+        assertThat(differences(sponsor)).isEmpty();
+        assertThat(codes(refused(AudienceRefundJob.CLOSE, finance(), body("prepaymentId", prepaymentId, "reason",
+            "Again"), 422))).containsExactly(FeeCodes.AUDIENCE_REFUND_NOT_OPEN);
+        assertThat(notes(sponsor)).isEmpty();
+    }
+
+    /** A note by hand on the fee clears it too (finance decided to give something back). */
+    @Test
+    void aNoteByHandOnAFeeWithNoPeriodClearsTheCheck() {
+        String sponsor = pricedSponsor("fm7-noperiod-note");
+        noPeriod(sponsor, "FM7 no period note");
+        assertThat(differences(sponsor)).extracting(row -> row.get("checkCode"))
+            .containsExactly("AUDIENCE_REFUND_NO_PERIOD");
+        creditNote(chargeOf(sponsor).get("charge_id"), 300);
+        assertThat(notes(sponsor)).hasSize(1);
+        assertThat(differences(sponsor)).isEmpty();
+    }
+
+    /** An audience fee ended early whose prepayment has no period of its own nor one at its freezing: decided. */
+    String noPeriod(String sponsor, String name) {
         autoApprove(true);
         param(QbParams.AUDIENCE_REFUND_UNUSED_DAYS, "true");
-        String sponsor = pricedSponsor("fm7-noperiod");
         cash(sponsor, 1_000);
         credit(sponsor, 10_000);
-        String publicationId = oneWinnerAudienceDraft(sponsor, "FM7 no period");
+        String publicationId = oneWinnerAudienceDraft(sponsor, name);
         submit(sponsorToken(sponsor), publicationId);
         goLive(publicationId);
         // Frozen before F-M7 (no period of its own) and, as far as the versions go, before the publication was saved.
@@ -230,17 +261,15 @@ class CreditNoteMoreIT extends CreditNoteItSupport {
             + "frozen_at = ? WHERE publication_id = ?", Timestamp.from(Instant.parse("2000-01-01T00:00:00Z")),
             publicationId);
         clock.set(clock.instant().plus(Duration.ofDays(2)));
-        play(womanTaker("t-fm7-noperiod"), publicationId, true, true);
+        play(womanTaker("t-" + name.replace(' ', '-').toLowerCase()), publicationId, true, true);
         assertThat(status(publicationId)).isEqualTo("ENDED");
-        Map<String, Object> ref = body("prepaymentId", String.valueOf(prepayments(publicationId).getFirst()
-            .get("prepayment_id")), "publicationId", publicationId, "sponsorId", sponsor, "endedAt",
-            clock.instant().toString());
-
+        String prepaymentId = String.valueOf(prepayments(publicationId).getFirst().get("prepayment_id"));
+        Map<String, Object> ref = body("prepaymentId", prepaymentId, "publicationId", publicationId, "sponsorId",
+            sponsor, "endedAt", clock.instant().toString());
         assertThat(((FeeProcesses.ItemOutput) systemRun(AudienceRefundJob.ITEM, ref)).outcome())
             .isEqualTo("NONE_NO_PERIOD");
         assertThat(notes(sponsor)).isEmpty();
-        assertThat(differences(sponsor)).extracting(row -> row.get("checkCode"))
-            .containsExactly("AUDIENCE_REFUND_NO_PERIOD");
+        return prepaymentId;
     }
 
     /**

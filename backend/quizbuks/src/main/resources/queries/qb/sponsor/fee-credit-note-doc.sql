@@ -18,6 +18,7 @@ results:
   explanation:    { from: QbFeeCreditNote.note }
   taxRate:        { from: QbFeeCreditNote.taxRate }
   issuedAt:       { from: QbFeeCreditNote.issuedAt }
+  issuedOn:       { from: QbFeeCreditNote.issuedOn }
   refundedCash:   { from: QbFeeCreditNote.refundedCash }
   refundedCredit: { from: QbFeeCreditNote.refundedCredit }
   voidedCredit:   { from: QbFeeCreditNote.voidedCredit }
@@ -39,6 +40,7 @@ SELECT
     n.{{QbFeeCreditNote.note}}           AS explanation,
     n.{{QbFeeCreditNote.taxRate}}        AS taxRate,
     n.{{QbFeeCreditNote.issuedAt}}       AS issuedAt,
+    n.{{QbFeeCreditNote.issuedOn}}       AS issuedOn,
     n.{{QbFeeCreditNote.refundedCash}}   AS refundedCash,
     n.{{QbFeeCreditNote.refundedCredit}} AS refundedCredit,
     n.{{QbFeeCreditNote.voidedCredit}}   AS voidedCredit,

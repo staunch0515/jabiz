@@ -81,6 +81,8 @@ public final class QbCreditNotes {
             .asText(QbFees.SOURCE_LENGTH));
         eb.field("issuedAt", f -> f.physicalColumn("issued_at").immutable(true).required(true)
             .asTemporal(TemporalRole.EVENT_TIME));
+        // The day it was issued in the fiscal year's zone (Japan's), as the invoices' issue date (F-M13).
+        eb.field("issuedOn", f -> f.physicalColumn("issued_on").immutable(true).required(true).asDate());
         eb.field("issuedBy", f -> f.physicalColumn("issued_by").immutable(true).asText(128));
         eb.temporal(t -> t.allowScheduled(false).writeOnce());
         eb.unique("uk_qb_fee_credit_note_no", "creditNoteNo");

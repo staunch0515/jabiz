@@ -435,7 +435,7 @@
   - `priceProblems`：各值 ≥ 0、下限 ≤ 上限、都在总部范围内。
 - `QB_OPERATOR_DISTRIBUTION_PRICE_SET`（运营商负责人，`OperatorChecks.member` 且是负责人，锁 `qb.operator:<运营商>`）与 `QB_DISTRIBUTION_PRICE_SET`（总部的财务 `qb.fee.manage`，为某个运营商设；不用 `qb.fee.billing`：运营商持有它，用于本运营商发起方的计费方式）。理由必填；只影响此后提交的发布（单价在提交时冻结）。
 - 总部范围是受控参数（四眼）：`qb.distribution.rate.min|max`、`unit-floor.min|max`、`unit-ceiling.max`、`minimum-deposit.max`。
-  - 保存价目时按当时的范围检查。范围改窄后已有价目不自动改，每日核对报 `DISTRIBUTION_PRICE_OUT_OF_RANGE`，给 `qb.admin.finance.read` 待办。
+  - 保存价目时按当时的范围检查。范围改窄后已有价目不自动改，每日核对报 `DISTRIBUTION_PRICE_OUT_OF_RANGE`；差异待办按 F-M14 的负责权限规则，不另建（F-M14 的决定）。
 - 规格补写定价规则（随本项提交）：单价按档位金额的最大值算，为 0 或没有档位即按下限。
 - **档位金额的单位（总控决定 1 的补充，2026-11-12）**：所有奖励方式的档位金额都是 **Kudos 数**（`RewardMethod`：非平台付奖的是奖品价值的 Kudos 数）。单价 = clamp(`rate` × 档位最大的 Kudos 数, 下限, 上限)，所有方式同一算法，不折算日元。`rate` 的单位是**日元 / Kudos**（每 1 Kudos 奖励收多少日元），不是百分比：规格 F-M6 的规则行、运营商价目页、总部范围 `qb.distribution.rate.min|max` 的参数说明与帮助三语都这样写。
 - **下限防自报偏低**：非平台付奖的档位金额是发起方自报的，报低即落到下限。所以 `qb.distribution.unit-floor.min` 的缺省值 > 0：先取占位值（`1.0000` 日元 / 人），参数说明写"打开 `qb.distribution.billing.enabled` 之前由需求方确认"，并登记到 F-F10 的上线开关清单（`FirstLaunchSwitches` 中 F-M6 那一行的前提）。结算行记 `atFloor`（单价 = 下限），结算列表 `qb.admin.distribution-settlements` 与运营商的结算页标出"按下限计费"，核对项 `DISTRIBUTION_AT_FLOOR`（只列出，不算差异）供运营商与总部查看。
@@ -816,7 +816,7 @@
 - `FEES_RECEIVABLE`：改为含未用贷项（第 5 条）。
 - `AUDIENCE_REFUND_MISSING`：可退、结束超过 `qb.audience.refund.missing-after-hours` 小时（N9：普通参数，缺省 30）、`refund_decided_at` 仍为空。
 - `AUDIENCE_REFUND_NO_PERIOD`：判定为 `NONE_NO_PERIOD` 的（第 6 条）。
-- `AUDIENCE_CHARGE_STATE`：有 `AUDIENCE` 费而发布从未上架。
+- `AUDIENCE_FEE_NOT_LIVE`：有 `AUDIENCE` 费而发布从未上架。
 - `CREDIT_NOTE_USES`：每张凭证的 抵欠款 + 退回 + Σ 抵用 ≤ 合计。
 - `CREDIT_NOTE_LIMITS`：每笔费用 Σ 凭证金额 ≤ `amount`、Σ 税 ≤ `tax`（第 2 条）。
 - `CREDIT_NOTE_USE_VOID`：抵用指向 `VOID` 账单（第 3 条）。
@@ -999,3 +999,7 @@ Fable 对第二稿（@5c9d3f8d）的审查，"修后再审"（自动凭证可以
 9. **分成扣减可能差 1 日元**（审查 L2，保留）：扣减按当月凭证的合计取一次整（C3：⌊Σ 凭证 × （1 − 平台比例）⌋），与原费用当初逐笔分成的取整可能差 1 日元。
 10. **审查 M2 补的测试**：`CreditNoteMoreIT`、`CreditNoteEndsIT`、`CreditNoteMonthlyIT` 与场景 `scenarios/qb/credit-note.yml`（后付抵减）。`PUBLISHER` 是渠道（Shopify 店面）的发布方结束，只能经店面的基类走真实路径，可退与否由 `CreditNoteRulesTest` 按原因断言；`ADMIN`、`TREE`、`SHARED_VIDEO` 走真实路径。补测试时发现凭证 PDF 首次签发即失败（500，读 `LoadEntity` 的结果方式不对），已修。
 11. **退到已到期赠送的作废额**（审查 L1）：`voidedCredit` 列在发起方的凭证列表、发布页与凭证 PDF 上。
+12. **凭证的开具日期**（总控 2026-11-13）：`issued_on`（date，按 `jabiz.fiscal-year-zone`，与 F-M13 给账单加的开具日期一致），并入 V119；凭证 PDF 印开具日期，不再印 UTC 的开具时刻。
+13. **`AUDIENCE_REFUND_NO_PERIOD` 的消除**（F-M14 审查 H1，总控 2026-11-13）：按预付款列出（参照为预付款编号）；该受众规则费已有凭证（手工开的），或财务以 `QB_AUDIENCE_REFUND_CLOSE`（`qb.fee.manage`，原因必填，记入操作记录；不退钱所以不设四眼）把结果改为终态 `NONE_FINANCE`，即不再列出。按核对项发的待办（来源键"码 + 对象"、不带日期）随 F-M14 的分级一起做；这一项更适合归"关注"一级，由 F-M14 归类。
+14. **核对码改名**（F-M14 审查 H2(c)）：`AUDIENCE_CHARGE_STATE` → `AUDIENCE_FEE_NOT_LIVE`（与已合并的 `PREPAYMENT_UNCHARGED` 方向相反，原名难分）。本项新加的核对码都不超过 30 个字符（最长 25）。
+15. **没有结束时间的受众规则发布**（S3 原问 5）：首次上线时不存在：提交必须有结束时间（`PublicationReadiness` 的 `endAt` 必填），上架的卡片 `qb_publication_card.end_at` 为 NOT NULL；没有结束时间的草稿不能提交。

@@ -93,8 +93,9 @@ permissions: [qb.wallet.system]
 --   what fees took of them) do not add up to what they hold: expected what they hold, actual what the parts say.
 -- AUDIENCE_REFUND_MISSING (F-M7, N9): by sponsor, the audience fees charged whose publication ended more than
 --   qb.audience.refund.missing-after-hours (handed in) before :at and whose unused days are not decided: expected 0,
---   actual how many. AUDIENCE_REFUND_NO_PERIOD: those decided NONE_NO_PERIOD (no period to count the days by, for
---   finance to decide on a note by hand): expected 0, actual how many. AUDIENCE_CHARGE_STATE: an audience fee whose
+--   actual how many. AUDIENCE_REFUND_NO_PERIOD: by prepayment (the reference), one decided NONE_NO_PERIOD (no period to
+--   count the days by) that finance has not decided on yet: expected 0, actual 1. Cleared by a note by hand on its fee,
+--   or by finance closing it with no note (QB_AUDIENCE_REFUND_CLOSE: NONE_FINANCE). AUDIENCE_FEE_NOT_LIVE: an audience fee whose
 --   publication never went on (no card): expected 0, actual the fees.
 -- CREDIT_NOTE_USES (F-M7): by sponsor and note (the reference), what a note gave back and what its credit paid against
 --   its total: expected the total, actual those (a difference only above it). CREDIT_NOTE_LIMITS: by sponsor and fee,
@@ -504,12 +505,16 @@ WHERE ap.{{QbPrepayment.purpose}} = 'AUDIENCE'
 GROUP BY ap.{{QbPrepayment.sponsorId}}
 UNION ALL
 SELECT CAST('AUDIENCE_REFUND_NO_PERIOD' AS varchar(30)), CAST(ap.{{QbPrepayment.sponsorId}} AS varchar(128)),
-       CAST(NULL AS varchar(128)), CAST(0 AS numeric), CAST(count(*) AS numeric)
+       CAST(ap.{{QbPrepayment.prepaymentId}} AS varchar(128)), CAST(0 AS numeric), CAST(1 AS numeric)
 FROM {{QbPrepayment}} ap
 WHERE ap.{{QbPrepayment.refundOutcome}} = 'NONE_NO_PERIOD'
-GROUP BY ap.{{QbPrepayment.sponsorId}}
+  AND NOT EXISTS (SELECT 1 FROM {{QbFeeCharge}} nc
+                  JOIN {{QbFeeCreditNote}} nn ON nn.{{QbFeeCreditNote.chargeId}} = CAST(nc.{{QbFeeCharge.chargeId}} AS text)
+                  WHERE nc.{{QbFeeCharge.sponsorId}} = ap.{{QbPrepayment.sponsorId}}
+                    AND nc.{{QbFeeCharge.kind}} = 'AUDIENCE'
+                    AND nc.{{QbFeeCharge.sourceKey}} = 'publication:' || CAST(ap.{{QbPrepayment.publicationId}} AS text))
 UNION ALL
-SELECT CAST('AUDIENCE_CHARGE_STATE' AS varchar(30)), CAST(ch.{{QbFeeCharge.sponsorId}} AS varchar(128)),
+SELECT CAST('AUDIENCE_FEE_NOT_LIVE' AS varchar(30)), CAST(ch.{{QbFeeCharge.sponsorId}} AS varchar(128)),
        CAST(NULL AS varchar(128)), CAST(0 AS numeric), sum(ch.{{QbFeeCharge.amount}})
 FROM {{QbFeeCharge}} ch
 WHERE ch.{{QbFeeCharge.kind}} = 'AUDIENCE'

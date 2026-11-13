@@ -182,6 +182,12 @@ public class FeeConfig {
         return AudienceRefundJob.item();
     }
 
+    @Bean
+    ProcessDefinition<AudienceRefundJob.CloseInput, AudienceRefundJob.CloseOutput, ProcessContext>
+        qbAudienceRefundClose() {
+        return AudienceRefundJob.close();
+    }
+
     /**
      * F-M7 (§10.3-6): every day ({@code quizbuks.audience-refund.cron}, {@code QB_AUDIENCE_REFUND_CRON}; 03:37 in the
      * fiscal year's zone, after the distribution fee's final settlements at 03:07 and the prepayments' release at
@@ -468,7 +474,9 @@ public class FeeConfig {
             .item(AudienceRefunds.NONE_ZERO, "en", "None: no unused days", "zh", "不退：没有未用天数", "ja",
                 "返金なし：未使用日数なし")
             .item(AudienceRefunds.NONE_NO_PERIOD, "en", "None: no period", "zh", "不退：没有计费期间", "ja",
-                "返金なし：期間なし"));
+                "返金なし：期間なし")
+            .item(AudienceRefunds.NONE_FINANCE, "en", "None: decided by finance", "zh", "不退：财务决定不开凭证", "ja",
+                "返金なし：経理が判断"));
     }
 
     @Bean

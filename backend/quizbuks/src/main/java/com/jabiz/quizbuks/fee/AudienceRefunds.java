@@ -93,8 +93,10 @@ public final class AudienceRefunds {
     public static final String NONE_REASON = "NONE_REASON";
     public static final String NONE_ZERO = "NONE_ZERO";
     public static final String NONE_NO_PERIOD = "NONE_NO_PERIOD";
+    /** NONE_NO_PERIOD closed by finance: no note to be issued (QB_AUDIENCE_REFUND_CLOSE, with its reason). */
+    public static final String NONE_FINANCE = "NONE_FINANCE";
     public static final List<String> OUTCOMES = List.of(REFUNDED, CREDITED, NONE_SWITCH_OFF, NONE_REASON, NONE_ZERO,
-        NONE_NO_PERIOD);
+        NONE_NO_PERIOD, NONE_FINANCE);
 
     /**
      * The quote frozen at the submission, as the prepayment's detail holds it.

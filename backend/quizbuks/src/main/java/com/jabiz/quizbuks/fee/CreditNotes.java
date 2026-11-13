@@ -202,7 +202,7 @@ public final class CreditNotes {
             .compute("Decide the note", (metadata, ctx) -> decide(ctx))
             .step("Number the note", AssignNumber.<ProcessContext>when(ctx -> ctx.contains(DECIDED),
                 QbCreditNotes.SEQUENCE, ctx -> FeeRules.period(ctx.opTime(), zone).substring(0, 4), NOTE_NO))
-            .compute("Write the note and where it goes", (metadata, ctx) -> record(ctx))
+            .compute("Write the note and where it goes", (metadata, ctx) -> record(ctx, zone))
             // Written first: the postings name it as their source.
             .step("Save the note", SaveChanges.now())
             .step("Post the note and what it gives back", CallProcess.<ProcessContext>forEach(LedgerProcesses.POST, 1,
@@ -439,7 +439,7 @@ public final class CreditNotes {
 
     // ---- writing it --------------------------------------------------------------------------------------------------
 
-    static void record(ProcessContext ctx) {
+    static void record(ProcessContext ctx, ZoneId zone) {
         if (!ctx.contains(DECIDED)) {
             return;
         }
@@ -500,6 +500,7 @@ public final class CreditNotes {
         values.put("voidedCredit", voided);
         values.put("sourceKey", input.sourceKey());
         values.put("issuedAt", ctx.opTime());
+        values.put("issuedOn", java.time.LocalDate.ofInstant(ctx.opTime(), zone));
         values.put("issuedBy", input.issuedBy());
         String noteId = String.valueOf(ctx.changes().insert(QbCreditNotes.CREDIT_NOTE, values));
         // Its credit pays the fee's own invoice, then the sponsor's other unpaid ones, each a use.

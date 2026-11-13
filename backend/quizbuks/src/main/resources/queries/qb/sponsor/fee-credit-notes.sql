@@ -23,6 +23,7 @@ results:
   used:           { kind: { type: monetary, currency: JPY, scale: 0 } }
   creditLeft:     { kind: { type: monetary, currency: JPY, scale: 0 } }
   issuedAt:       { from: QbFeeCreditNote.issuedAt }
+  issuedOn:       { from: QbFeeCreditNote.issuedOn }
   documentNo:     { from: QbFeeCreditNoteDocument.documentNo }
 list:
   filters: [publicationId, reason, issuedAt]
@@ -51,6 +52,7 @@ SELECT
     n.{{QbFeeCreditNote.total}} - n.{{QbFeeCreditNote.refundedCash}} - n.{{QbFeeCreditNote.refundedCredit}}
         - coalesce(u.r_used, 0)          AS creditLeft,
     n.{{QbFeeCreditNote.issuedAt}}       AS issuedAt,
+    n.{{QbFeeCreditNote.issuedOn}}       AS issuedOn,
     d.{{QbFeeCreditNoteDocument.documentNo}} AS documentNo
 FROM {{QbFeeCreditNote}} n
 LEFT JOIN (SELECT x.{{QbFeeCreditNoteUse.creditNoteId}} AS r_note, sum(x.{{QbFeeCreditNoteUse.amount}}) AS r_used

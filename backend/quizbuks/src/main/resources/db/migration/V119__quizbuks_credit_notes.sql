@@ -48,6 +48,7 @@ SELECT quizbuks_create_temporal_table('qb_fee_credit_note_version', 'credit_note
     voided_credit   numeric(19, 0) NOT NULL CHECK (voided_credit >= 0),
     source_key      varchar(100)   NOT NULL,
     issued_at       timestamptz    NOT NULL,
+    issued_on       date           NOT NULL,
     issued_by       varchar(128),
     CONSTRAINT qb_fee_credit_note_parts CHECK (applied_own + refunded_cash + refunded_credit <= total
         AND voided_credit <= refunded_credit)');
@@ -103,7 +104,8 @@ ALTER TABLE qb_fee_payment_version ADD CONSTRAINT qb_fee_payment_version_target_
 -- The audience fee's refund decided once (§10.3-6): when and how. The refund job only takes those not decided.
 ALTER TABLE qb_prepayment ADD COLUMN refund_decided_at timestamptz;
 ALTER TABLE qb_prepayment ADD COLUMN refund_outcome varchar(20)
-    CHECK (refund_outcome IN ('REFUNDED', 'CREDITED', 'NONE_SWITCH_OFF', 'NONE_REASON', 'NONE_ZERO', 'NONE_NO_PERIOD'));
+    CHECK (refund_outcome IN ('REFUNDED', 'CREDITED', 'NONE_SWITCH_OFF', 'NONE_REASON', 'NONE_ZERO', 'NONE_NO_PERIOD',
+        'NONE_FINANCE'));
 ALTER TABLE qb_prepayment ADD CONSTRAINT qb_prepayment_refund_decided
     CHECK ((refund_decided_at IS NULL) = (refund_outcome IS NULL));
 CREATE INDEX qb_prepayment_refund_due_idx ON qb_prepayment (purpose, charged_at)

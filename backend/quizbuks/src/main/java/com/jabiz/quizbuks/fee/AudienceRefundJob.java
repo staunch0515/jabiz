@@ -109,6 +109,55 @@ public final class AudienceRefundJob {
                 .compute("Record the decision", (metadata, ctx) -> record(ctx)));
     }
 
+    public static final String CLOSE = "QB_AUDIENCE_REFUND_CLOSE";
+
+    /** Finance closes a fee decided NONE_NO_PERIOD without a note: why (kept in the operation's record). */
+    public record CloseInput(@NotBlank @Size(max = 36) String prepaymentId, @NotBlank @Size(max = 500) String reason) {}
+
+    public record CloseOutput(String prepaymentId, String refundOutcome) {}
+
+    /**
+     * {@value #CLOSE} (finance, {@code qb.fee.manage}): an audience fee whose period could not be read
+     * ({@code NONE_NO_PERIOD}) is closed with no note, its outcome {@code NONE_FINANCE}; the daily check
+     * {@code AUDIENCE_REFUND_NO_PERIOD} no longer lists it (a note by hand on the fee clears it too). It gives nothing
+     * back, so it takes no second person; a note does (QB_FEE_REQUEST).
+     */
+    public static ProcessDefinition<CloseInput, CloseOutput, ProcessContext> close() {
+        return ProcessDefinition.define(CLOSE, 1, CloseInput.class, CloseOutput.class, ProcessContext.class, pb -> pb
+            .description("Closes an audience fee whose period could not be read, deciding that no credit note is "
+                + "issued on it.")
+            .permissions(QbPermissions.FEE_MANAGE)
+            .actsOn(QbPrepayments.PREPAYMENT, "prepaymentId", a -> a.whenField("refundOutcome",
+                AudienceRefunds.NONE_NO_PERIOD))
+            .contextFactory((start, input) -> {
+                ProcessContext ctx = new ProcessContext(start);
+                ctx.put(INPUT, input);
+                return ctx;
+            })
+            .outputMapper(ctx -> new CloseOutput(ctx.get(INPUT, CloseInput.class).prepaymentId(),
+                AudienceRefunds.NONE_FINANCE))
+            .step("Read the prepayment", QueryEntities.<ProcessContext>of(
+                QbFeeAccount.defaultDataset(QbPrepayments.PREPAYMENT), ctx -> EntityQuery.builder()
+                    .where(new QueryPredicate.In("prepaymentId",
+                        FeeGate.ids(ctx.get(INPUT, CloseInput.class).prepaymentId()))).limit(1).build(), PREPAYMENT))
+            .compute("Close it", (metadata, ctx) -> {
+                EntityInstance prepayment = FeeGate.first(ctx, PREPAYMENT);
+                if (prepayment == null) {
+                    throw new com.jabiz.runtime.EntityNotFoundException("Prepayment "
+                        + ctx.get(INPUT, CloseInput.class).prepaymentId() + " not found");
+                }
+                if (!AudienceRefunds.NONE_NO_PERIOD.equals(prepayment.get("refundOutcome"))) {
+                    throw new com.jabiz.runtime.BusinessRuleViolationException(new com.jabiz.entity.Violation(
+                        "prepaymentId", FeeCodes.AUDIENCE_REFUND_NOT_OPEN, "Not decided as having no period",
+                        Map.of("outcome", String.valueOf((Object) prepayment.get("refundOutcome")))));
+                }
+                Map<String, Object> values = new LinkedHashMap<>();
+                values.put("refundDecidedAt", ctx.opTime());
+                values.put("refundOutcome", AudienceRefunds.NONE_FINANCE);
+                ctx.changes().update(QbPrepayments.PREPAYMENT, prepayment.id(), prepayment.version(), values);
+            }));
+    }
+
     static boolean needsPeriod(ProcessContext ctx) {
         EntityInstance prepayment = FeeGate.first(ctx, PREPAYMENT);
         return prepayment != null && prepayment.get("frozenAt") != null
@@ -133,7 +182,7 @@ public final class AudienceRefundJob {
         }
         EntityInstance charge = charges.isEmpty() ? null : charges.getFirst();
         if (charge == null) {
-            // Charged from the prepayment, but no fee: nothing to give back (the check AUDIENCE_CHARGE_STATE sees it).
+            // Charged from the prepayment, but no fee: nothing to give back (the check AUDIENCE_FEE_NOT_LIVE sees it).
             ctx.put(OUTCOME, AudienceRefunds.NONE_ZERO);
             return;
         }

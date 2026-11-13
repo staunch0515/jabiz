@@ -79,7 +79,7 @@ public final class ReconChecks {
     /** F-M7 (N5): audience fees decided without a period to count the days by (finance decides on a note by hand). */
     public static final String AUDIENCE_REFUND_NO_PERIOD = "AUDIENCE_REFUND_NO_PERIOD";
     /** F-M7: audience fees whose publication never went on. */
-    public static final String AUDIENCE_CHARGE_STATE = "AUDIENCE_CHARGE_STATE";
+    public static final String AUDIENCE_FEE_NOT_LIVE = "AUDIENCE_FEE_NOT_LIVE";
     /** F-M7: a credit note that gave back and paid more than its total (by note). */
     public static final String CREDIT_NOTE_USES = "CREDIT_NOTE_USES";
     /** F-M7 (N7): a fee whose notes come to more than its amount or tax (by fee). */
@@ -123,7 +123,7 @@ public final class ReconChecks {
         LIGHT_GRANTS, LIGHT_VOIDS, CERTIFIED_GRANTS, OPERATOR_ACCOUNT, PREPAYMENTS, PREPAYMENT_STALE,
         PREPAYMENT_PARTS, PREPAYMENT_UNCHARGED, DISTRIBUTION_DEPOSITS, DISTRIBUTION_UNSETTLED,
         DISTRIBUTION_FINAL_MISSING, DISTRIBUTION_PRICE_OUT_OF_RANGE, DISTRIBUTION_AT_FLOOR, AUDIENCE_REFUND_MISSING,
-        AUDIENCE_REFUND_NO_PERIOD, AUDIENCE_CHARGE_STATE, CREDIT_NOTE_USES, CREDIT_NOTE_LIMITS, CREDIT_NOTE_USE_VOID,
+        AUDIENCE_REFUND_NO_PERIOD, AUDIENCE_FEE_NOT_LIVE, CREDIT_NOTE_USES, CREDIT_NOTE_LIMITS, CREDIT_NOTE_USE_VOID,
         CREDIT_UNUSED_WITH_DUE);
 
     /** The checks that only note something: a run with notes alone is {@code OK}. */

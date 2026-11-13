@@ -432,10 +432,10 @@ class CreditNoteIT extends CreditNoteItSupport {
             + "SELECT id, 'QbFeeCreditNote', ? FROM notes RETURNING entity_id) "
             + "INSERT INTO qb_fee_credit_note_version (credit_note_id, version_no, effect_start_time, created_time, "
             + "process_seq_id, credit_note_no, sponsor_id, charge_id, billing_mode, reason, note, amount, tax_rate, "
-            + "tax, total, applied_own, refunded_cash, refunded_credit, voided_credit, source_key, issued_at) "
+            + "tax, total, applied_own, refunded_cash, refunded_credit, voided_credit, source_key, issued_at, issued_on) "
             + "SELECT id, 1, ?, ?, ?, 'M' || n || '-' || left(md5(?), 12), ?, gen_random_uuid()::text, 'PREPAID', 'MANUAL', "
-            + "'Many', 500, 0, 0, 500, 0, CASE WHEN n <= 1001 THEN 500 ELSE 0 END, 0, 0, 'many:' || n, ? FROM notes",
-            seq, at, at, seq, sponsor, sponsor, at);
+            + "'Many', 500, 0, 0, 500, 0, CASE WHEN n <= 1001 THEN 500 ELSE 0 END, 0, 0, 'many:' || n, ?, ? FROM notes",
+            seq, at, at, seq, sponsor, sponsor, at, java.sql.Date.valueOf(at.toLocalDateTime().toLocalDate()));
 
         assertThat(monthly(sponsor)).isEqualTo("CHARGED");
         Object chargeId = monthlyCharge(sponsor).get("charge_id");
