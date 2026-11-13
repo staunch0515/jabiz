@@ -210,7 +210,14 @@ public final class ExposureSettlements {
         long highest = rows.stream().mapToLong(row -> FeeGate.money(row.get("toCount")).longValue()).max().orElse(0);
         String thisPeriod = period;
         boolean later = rows.stream().anyMatch(row -> String.valueOf((Object) row.get("period")).compareTo(thisPeriod) > 0);
-        long toCount = ExposureFeeRules.toCount(highest, later, successful, purchased);
+        // F-M8c review H1: an ended publication's missed month, run after a later month was settled, must not write the
+        // final row (it would carry nothing: "later" holds the count back) and give the whole deposit back: the final
+        // job settles the rest, all of it, in the month the publication ended in.
+        if (ended && later && !Boolean.TRUE.equals(ref.last())) {
+            return;
+        }
+        // A final row counts all of them, whatever a later month's row says.
+        long toCount = ExposureFeeRules.toCount(highest, later && !ended, successful, purchased);
         BigDecimal chargedAmount = rows.stream().map(row -> FeeGate.money(row.get("amount")))
             .reduce(BigDecimal.ZERO, BigDecimal::add);
         BigDecimal chargedTax = rows.stream().map(row -> FeeGate.money(row.get("tax")))

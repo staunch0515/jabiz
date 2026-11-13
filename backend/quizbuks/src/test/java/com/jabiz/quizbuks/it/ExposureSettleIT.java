@@ -297,4 +297,43 @@ class ExposureSettleIT extends ExposureFeeItSupport {
         assertThat(differences(sponsor)).extracting(r -> r.get("checkCode")).contains("EXPOSURE_UNIT_MISMATCH")
             .doesNotContain("EXPOSURE_SETTLED_OVER");
     }
+
+    /**
+     * F-M8c review H1: a missed month run late, after a later month was settled and the publication has ended, must not
+     * write the final row with nothing counted (and give the whole deposit back): the final job settles the rest.
+     */
+    @Test
+    void aMissedMonthRunLateAfterALaterOneAndTheEndLeavesTheFinalSettlementToTheFinalJob() {
+        String[] p = boughtPublication("fm8-h1", 100);
+        String sponsor = p[0];
+        String publicationId = p[1];
+        YearMonth m0 = YearMonth.parse(period(clock.instant()));
+        YearMonth m1 = m0.plusMonths(1);
+        YearMonth m2 = m0.plusMonths(2);
+        successes(publicationId, sponsor, p[2], 5, clock.instant());
+        successes(publicationId, sponsor, p[2], 3, m1.atDay(10).atTime(12, 0).atZone(ZONE).toInstant());
+        successes(publicationId, sponsor, p[2], 20, m2.atDay(10).atTime(12, 0).atZone(ZONE).toInstant());
+        // The first month's item was missed; the second month's is run (cumulative: 5 + 3).
+        clock.set(m2.atDay(2).atTime(0, 47).atZone(ZONE).toInstant());
+        systemRun(ExposureSettlements.SETTLE, ref(publicationId, sponsor, m1.toString(), false));
+        assertThat(settlements(publicationId)).singleElement().satisfies(row ->
+            assertThat(dec(row.get("to_count"))).isEqualByComparingTo("8"));
+        // The publication ends in the third month, and its grace passes; then the missed month is run late.
+        clock.set(m2.atDay(20).atTime(9, 0).atZone(ZONE).toInstant());
+        run("QB_PUBLICATION_ADMIN_END", contentAdmin(), body("publicationId", publicationId, "reason", "F-M8 test"));
+        clock.set(clock.instant().plus(Duration.ofHours(3)));
+        systemRun(ExposureSettlements.SETTLE, ref(publicationId, sponsor, m0.toString(), false));
+        assertThat(settlements(publicationId)).as("nothing written: the final job settles the rest").hasSize(1);
+        assertThat(exposurePrepayment(publicationId)).containsEntry("status", "OPEN");
+        // The final job settles all of them: 28 in all.
+        finalRun(clock.instant().plus(Duration.ofHours(1)));
+        assertThat(settlements(publicationId)).hasSize(2).last().satisfies(row -> {
+            assertThat(row).containsEntry("final", true);
+            assertThat(dec(row.get("to_count"))).isEqualByComparingTo("28");
+            assertThat(dec(row.get("counted"))).isEqualByComparingTo("20");
+        });
+        assertThat(settlements(publicationId).stream().map(row -> dec(row.get("amount")))
+            .reduce(BigDecimal.ZERO, BigDecimal::add)).isEqualByComparingTo("28");
+        assertThat(exposurePrepayment(publicationId)).containsEntry("status", "RELEASED");
+    }
 }
