@@ -205,6 +205,10 @@ test('the home does not count; the vertical mode and the start page do; used up 
     await expect.poll(async () => (await publicationOf(request, sponsor.token, limited)).status,
       { message: 'the used-up publication ends', timeout: 150_000, intervals: [5_000] }).toBe('ENDED')
     expect((await publicationOf(request, sponsor.token, limited)).endReason).toBe('EXPOSURE')
+    // F-M8d: the publication's fee figures (what the page shows) agree: one bought, the one counted, none settled yet.
+    const fee = (await query(request, sponsor.token, 'qb.sponsor.publication-exposure', { publicationId: limited }))[0]
+    expect(Number(fee?.purchased)).toBe(1)
+    expect(Number(fee?.counted)).toBe(1)
 
     // 4. Opened once, never pushed again: the vertical mode shows the own short alone now.
     await page.keyboard.press('Escape')
