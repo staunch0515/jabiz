@@ -284,6 +284,9 @@ class AdminFinanceIT extends PayoutItSupport {
             row("DISTRIBUTION_DEPOSIT", 0, 0),
             row("DISTRIBUTION_RELEASED", 0, 0),
             row("FEE_CREDIT_NOTE", 0, 0),
+            row("EXPOSURE_CHARGED", 0, 0),
+            row("EXPOSURE_DEPOSIT", 0, 0),
+            row("EXPOSURE_RELEASED", 0, 0),
             row("OTHER", 4, 3_870, "1110", 3_730, "1120", 70, "2110", -300, "2120", -3_500));
         // As recorded at the month's end: the late posting is not in it.
         List<Map<String, Object>> monthly = report(MONTHLY, from, to, to);
