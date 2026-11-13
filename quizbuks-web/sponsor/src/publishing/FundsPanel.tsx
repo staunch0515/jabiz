@@ -161,6 +161,8 @@ export function CreditNotesSection({ publicationId }: { publicationId: string })
             <span className="text-muted-foreground" data-testid="publication-credit-note-given-back">
               {t('publishing.creditNotes.givenBack', { cash: formatKudos(row.refundedCash),
                 credit: formatKudos(row.refundedCredit) })}
+              {row.voidedCredit > 0
+                && ` · ${t('publishing.creditNotes.voided', { voided: formatKudos(row.voidedCredit) })}`}
             </span>
             <span className="text-muted-foreground">{formatDateTime(row.issuedAt)}</span>
           </li>

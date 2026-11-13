@@ -596,6 +596,8 @@ export interface CreditNoteRow {
   /** What was given back as cash, and as credit; the credit used so far and left. */
   refundedCash: number
   refundedCredit: number
+  /** Of the credit given back, what was voided at once (its lot past its date). */
+  voidedCredit: number
   used: number
   creditLeft: number
   issuedAt: string
@@ -627,6 +629,7 @@ export async function searchCreditNotes({ sorts, offset, limit, publicationId }:
       total: num(row.total),
       refundedCash: num(row.refundedCash),
       refundedCredit: num(row.refundedCredit),
+      voidedCredit: num(row.voidedCredit),
       used: num(row.used),
       creditLeft: num(row.creditLeft),
       issuedAt: String(row.issuedAt ?? ''),

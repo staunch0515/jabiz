@@ -36,8 +36,8 @@ const WALLET = { balance: '2000', held: '0', pendingCount: 0, pendingAmount: '0'
   overdueCount: 0, billingMode: 'PREPAID', creditLimit: '0' }
 const CREDIT_NOTE = { creditNoteId: 'cn1', creditNoteNo: 'QBC-2026-00001', invoiceNo: 'QBF-2026-00001',
   publicationId: 'p1', reason: 'AUDIENCE_UNUSED', endReason: 'WITHDRAWN', usedDays: 3, amount: '400', tax: '40', total: '440',
-  refundedCash: '100', refundedCredit: '340', used: '0', creditLeft: '340', issuedAt: '2026-11-05T00:00:00Z',
-  documentNo: null }
+  refundedCash: '100', refundedCredit: '340', voidedCredit: '40', used: '0', creditLeft: '340',
+  issuedAt: '2026-11-05T00:00:00Z', documentNo: null }
 const INVOICE = { invoiceId: 'i1', invoiceNo: 'QBF-2026-00001', period: '2026-01', billingMode: 'PREPAID',
   amount: '1000', tax: '100', total: '1100', paidAmount: '0', creditApplied: '0', status: 'OPEN', issuedAt: '2026-01-02T00:00:00Z', dueOn: '2026-02-01',
   paidAt: null, documentRunId: null }
@@ -260,7 +260,8 @@ describe('credit notes (F-M7)', () => {
     expect(row).toHaveAttribute('data-reason', 'AUDIENCE_UNUSED')
     expect(within(row).getByTestId('credit-note-number')).toHaveTextContent('QBC-2026-00001')
     expect(within(row).getByTestId('credit-note-total')).toHaveTextContent('440 Kudos')
-    expect(within(row).getByTestId('credit-note-given-back')).toHaveTextContent('Cash 100 Kudos, credit 340 Kudos')
+    expect(within(row).getByTestId('credit-note-given-back')).toHaveTextContent(
+      'Cash 100 Kudos, credit 340 Kudos · of which 40 Kudos voided, past its date')
     expect(within(row).getByTestId('credit-note-left')).toHaveTextContent('340 Kudos')
     expect(row).toHaveTextContent('Audience fee of unused days')
     expect(section.textContent).not.toMatch(/JPY|yen|円/)

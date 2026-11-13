@@ -59,6 +59,8 @@ export function CreditNotes() {
         <span data-testid="credit-note-given-back">
           {t('wallet.creditNotes.givenBackValue', { cash: formatKudos(row.original.refundedCash),
             credit: formatKudos(row.original.refundedCredit) })}
+          {row.original.voidedCredit > 0
+            && ` · ${t('wallet.creditNotes.voided', { voided: formatKudos(row.original.voidedCredit) })}`}
         </span>
       ) },
     { id: 'creditLeft', header: t('wallet.creditNotes.creditLeft'), enableSorting: false, meta: { className: 'text-right' },

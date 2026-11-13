@@ -34,7 +34,7 @@ public final class FeeDocuments {
         .party("issuer", FeeProcesses.ISSUER_TEMPLATE, "name", "address", "registrationNo")
         .party("sponsor", CreditNotes.DOCUMENT_TEMPLATE, "company", "contactName")
         .facts(CreditNotes.DOCUMENT_TEMPLATE, "invoiceNo", "reason", "endReason", "usedDays", "explanation", "taxRate",
-            "issuedAt", "refundedCash", "refundedCredit")
+            "issuedAt", "refundedCash", "refundedCredit", "voidedCredit")
         .table(CreditNotes.LINES_TEMPLATE, "invoiceNo", "usedAt", "amount")
         .totals(CreditNotes.DOCUMENT_TEMPLATE, "amount", "tax", "total")
         .note("note"));

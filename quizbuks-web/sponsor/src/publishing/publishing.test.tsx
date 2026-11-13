@@ -1497,8 +1497,8 @@ describe('the tabs of a submitted publication (F-F3c)', () => {
     const { posted } = server({ publication: LIVE, creditNotes: [
       { creditNoteId: 'cn1', creditNoteNo: 'QBC-2026-00001', invoiceNo: 'QBF-2026-00001', publicationId: 'p1',
         reason: 'AUDIENCE_UNUSED', endReason: 'WITHDRAWN', usedDays: 3, amount: '400', tax: '40', total: '440',
-        refundedCash: '100', refundedCredit: '340', used: '0', creditLeft: '340', issuedAt: '2026-11-05T00:00:00Z',
-        documentNo: null }] })
+        refundedCash: '100', refundedCredit: '340', voidedCredit: '40', used: '0', creditLeft: '340',
+        issuedAt: '2026-11-05T00:00:00Z', documentNo: null }] })
     window.history.replaceState(null, '', '/publications/p1/fees')
     render(<App />)
     const section = await screen.findByTestId('publication-credit-notes')
@@ -1507,7 +1507,7 @@ describe('the tabs of a submitted publication (F-F3c)', () => {
     expect(row).toHaveTextContent('Days used: 3')
     expect(row).toHaveTextContent('Credit note 440 Kudos (400 Kudos and tax 40 Kudos)')
     expect(within(row).getByTestId('publication-credit-note-given-back'))
-      .toHaveTextContent('Given back: cash 100 Kudos, credit 340 Kudos')
+      .toHaveTextContent('Given back: cash 100 Kudos, credit 340 Kudos · of which 40 Kudos voided, past its date')
     const asked = posted.find((p) => p.path === '/api/queries/qb.sponsor.fee-credit-notes')
     expect(asked?.body).toMatchObject({ filters: [{ field: 'publicationId', op: 'eq', value: 'p1' }] })
     await expectAccessible()

@@ -19,6 +19,7 @@ results:
   total:          { from: QbFeeCreditNote.total }
   refundedCash:   { from: QbFeeCreditNote.refundedCash }
   refundedCredit: { from: QbFeeCreditNote.refundedCredit }
+  voidedCredit:   { from: QbFeeCreditNote.voidedCredit }
   used:           { kind: { type: monetary, currency: JPY, scale: 0 } }
   creditLeft:     { kind: { type: monetary, currency: JPY, scale: 0 } }
   issuedAt:       { from: QbFeeCreditNote.issuedAt }
@@ -45,6 +46,7 @@ SELECT
     n.{{QbFeeCreditNote.total}}          AS total,
     n.{{QbFeeCreditNote.refundedCash}}   AS refundedCash,
     n.{{QbFeeCreditNote.refundedCredit}} AS refundedCredit,
+    n.{{QbFeeCreditNote.voidedCredit}}   AS voidedCredit,
     coalesce(u.r_used, 0)                AS used,
     n.{{QbFeeCreditNote.total}} - n.{{QbFeeCreditNote.refundedCash}} - n.{{QbFeeCreditNote.refundedCredit}}
         - coalesce(u.r_used, 0)          AS creditLeft,

@@ -997,3 +997,5 @@ Fable 对第二稿（@5c9d3f8d）的审查，"修后再审"（自动凭证可以
    记费在写入之前、且只在预付款付不完时读未用贷项（与 `insertCharge`、`QB_PREPAYMENT_USE` 同样推算；推算错了即失败，不跳过贷项）。语句数各多一条：预付月费 19、手工费用 26、退回项 25、手工凭证 29（申请与开具各一条）；上架时的受众规则费仍为 25。
 8. **退回开关以 `LoadParams.optional` 读**（审查 M1，总控决定；偏离 §10.3-1 的 `LoadParams.of`）：`qb.audience.fee.refund-unused-days` 是受控参数，发布结束时可能还没有发布过的值；那时按"关"判定为 `NONE_SWITCH_OFF`（与首次上线登记的"缺省关"一致），不让退回项每天失败。
 9. **分成扣减可能差 1 日元**（审查 L2，保留）：扣减按当月凭证的合计取一次整（C3：⌊Σ 凭证 × （1 − 平台比例）⌋），与原费用当初逐笔分成的取整可能差 1 日元。
+10. **审查 M2 补的测试**：`CreditNoteMoreIT`、`CreditNoteEndsIT`、`CreditNoteMonthlyIT` 与场景 `scenarios/qb/credit-note.yml`（后付抵减）。`PUBLISHER` 是渠道（Shopify 店面）的发布方结束，只能经店面的基类走真实路径，可退与否由 `CreditNoteRulesTest` 按原因断言；`ADMIN`、`TREE`、`SHARED_VIDEO` 走真实路径。补测试时发现凭证 PDF 首次签发即失败（500，读 `LoadEntity` 的结果方式不对），已修。
+11. **退到已到期赠送的作废额**（审查 L1）：`voidedCredit` 列在发起方的凭证列表、发布页与凭证 PDF 上。

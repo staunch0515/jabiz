@@ -20,6 +20,7 @@ results:
   issuedAt:       { from: QbFeeCreditNote.issuedAt }
   refundedCash:   { from: QbFeeCreditNote.refundedCash }
   refundedCredit: { from: QbFeeCreditNote.refundedCredit }
+  voidedCredit:   { from: QbFeeCreditNote.voidedCredit }
   amount:         { from: QbFeeCreditNote.amount }
   tax:            { from: QbFeeCreditNote.tax }
   total:          { from: QbFeeCreditNote.total }
@@ -40,6 +41,7 @@ SELECT
     n.{{QbFeeCreditNote.issuedAt}}       AS issuedAt,
     n.{{QbFeeCreditNote.refundedCash}}   AS refundedCash,
     n.{{QbFeeCreditNote.refundedCredit}} AS refundedCredit,
+    n.{{QbFeeCreditNote.voidedCredit}}   AS voidedCredit,
     n.{{QbFeeCreditNote.amount}}         AS amount,
     n.{{QbFeeCreditNote.tax}}            AS tax,
     n.{{QbFeeCreditNote.total}}          AS total

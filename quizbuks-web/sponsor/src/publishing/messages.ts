@@ -170,6 +170,7 @@ export const publishingEn = {
       usedDays: 'Days used: {{days}}',
       total: 'Credit note {{total}} ({{amount}} and tax {{tax}})',
       givenBack: 'Given back: cash {{cash}}, credit {{credit}}',
+      voided: 'of which {{voided}} voided, past its date',
       help: 'A credit note gives back what the platform charged for days the publication did not run. Its document is in your platform fee account area, under invoices.',
     },
     languages: {
@@ -832,6 +833,7 @@ export const publishingZh: typeof publishingEn = {
       usedDays: '已使用天数：{{days}}',
       total: '贷项凭证 {{total}}（{{amount}}，税 {{tax}}）',
       givenBack: '退回：现金 {{cash}}，额度 {{credit}}',
+      voided: '其中 {{voided}} 已过期作废',
       help: '贷项凭证退回平台为发布未实施的天数所收的费用。其文件在平台费账户区域的账单中下载。',
     },
     languages: {
@@ -1494,6 +1496,7 @@ export const publishingJa: typeof publishingEn = {
       usedDays: '利用日数：{{days}}',
       total: '返還インボイス {{total}}（{{amount}}、税 {{tax}}）',
       givenBack: '返還：現金 {{cash}}、クレジット {{credit}}',
+      voided: 'うち {{voided}} は期限切れで失効',
       help: '返還インボイスは、公開が実施されなかった日数についてプラットフォームが請求した分を返すものです。書類は利用料アカウントの請求書の欄からダウンロードできます。',
     },
     languages: {
