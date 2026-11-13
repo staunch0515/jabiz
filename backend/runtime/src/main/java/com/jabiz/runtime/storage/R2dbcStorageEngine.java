@@ -438,7 +438,10 @@ public final class R2dbcStorageEngine implements StorageEngine {
         });
     }
 
-    /** A total as the driver gives it: numeric as BigDecimal, an integer sum (bigint) as Long. */
+    /**
+     * A total as the driver gives it: numeric as BigDecimal, an integer sum (bigint) as Long, a floating-point column's
+     * as Double (a total of NaN or an infinity has no decimal value and is refused).
+     */
     private static BigDecimal decimal(Object total) {
         return switch (total) {
             case BigDecimal decimal -> decimal;
@@ -446,6 +449,8 @@ public final class R2dbcStorageEngine implements StorageEngine {
             case Integer i -> BigDecimal.valueOf(i);
             case Short sh -> BigDecimal.valueOf(sh);
             case java.math.BigInteger big -> new BigDecimal(big);
+            case Double d when Double.isFinite(d) -> BigDecimal.valueOf(d);
+            case Float f when Float.isFinite(f) -> new BigDecimal(Float.toString(f));
             default -> throw new IllegalStateException("Unexpected total of type " + total.getClass().getName());
         };
     }

@@ -5,6 +5,10 @@ import com.jabiz.app.it.fixture.ItErasureFixtures;
 import com.jabiz.app.it.fixture.SqlStatementLog;
 import com.jabiz.context.RequestContext;
 import com.jabiz.i18n.MessageCatalog;
+import com.jabiz.query.QueryCompiler;
+import com.jabiz.runtime.EntityAction;
+import com.jabiz.runtime.EntityChange;
+import com.jabiz.runtime.EntityInstance;
 import com.jabiz.runtime.DatasetEntityManager;
 import com.jabiz.runtime.context.RequestContexts;
 import com.jabiz.runtime.dataset.DatasetRegistry;
@@ -143,9 +147,10 @@ class ErasureLoadTotalsIT extends SecurityItSupport {
         assertThat(subject.sum(VOID_AMOUNT)).isEqualByComparingTo(BigDecimal.ZERO);
         assertThat(subject.data()).isEmpty();
         // One statement a load, whatever the number of rows: three counts and two totals.
-        assertThat(statements).filteredOn(sql -> sql.contains("it_erasure_point")).hasSize(5);
-        assertThat(statements).filteredOn(sql -> sql.contains("count(*)")).hasSize(3);
-        assertThat(statements).filteredOn(sql -> sql.contains("sum(f_amount)")).hasSize(2);
+        List<String> points = statements.stream().filter(sql -> sql.contains("it_erasure_point")).toList();
+        assertThat(points).hasSize(5);
+        assertThat(points).filteredOn(sql -> sql.contains("count(*)")).hasSize(3);
+        assertThat(points).filteredOn(sql -> sql.contains("sum(f_amount)")).hasSize(2);
         // A misspelt name is an error, not 0.
         assertThatThrownBy(() -> subject.count("opne")).isInstanceOf(IllegalArgumentException.class);
         assertThatThrownBy(() -> subject.sum(ALL)).isInstanceOf(IllegalArgumentException.class);
@@ -176,6 +181,38 @@ class ErasureLoadTotalsIT extends SecurityItSupport {
         assertThat(seen.get().count(CUSTOMERS)).isZero();
     }
 
+    /** A temporal entity: two versions of one entry count once and add up as the version in effect; a tombstone not. */
+    @Test
+    void aTemporalEntityCountsAndAddsUpItsVersionsInEffect() {
+        String user = UUID.randomUUID().toString();
+        String kept = UUID.randomUUID().toString();
+        String gone = UUID.randomUUID().toString();
+        String others = UUID.randomUUID().toString();
+        commit(List.of(entry(EntityAction.INSERT, kept, 0, Map.of("entryId", kept, "userId", user, "amount", 100)),
+            entry(EntityAction.INSERT, gone, 0, Map.of("entryId", gone, "userId", user, "amount", 40)),
+            entry(EntityAction.INSERT, others, 0, Map.of("entryId", others, "userId", "someone", "amount", 7))));
+        commit(List.of(entry(EntityAction.UPDATE, kept, 1, Map.of("amount", 250)),
+            entry(EntityAction.DELETE, gone, 1, Map.of())));
+        assertThat(query("SELECT count(*) AS n FROM it_erasure_entry WHERE user_ref = ?", user)).singleElement()
+            .satisfies(row -> assertThat(((Number) row.get("n")).intValue()).isEqualTo(4));
+        AtomicReference<ErasureSubject> seen = new AtomicReference<>();
+        notices(erasers(eraser(List.of(ErasureLoad.count(ALL, ItErasureFixtures.ENTRY_DATASET, "userId"),
+            ErasureLoad.sum(OPEN_AMOUNT, ItErasureFixtures.ENTRY_DATASET, "userId", "amount")), seen)), user);
+        assertThat(seen.get().count(ALL)).isEqualTo(1);
+        assertThat(seen.get().sum(OPEN_AMOUNT)).isEqualByComparingTo("250");
+    }
+
+    private static EntityChange entry(EntityAction action, String id, long version, Map<String, Object> values) {
+        return new EntityChange(action, new EntityInstance(id, ItErasureFixtures.ENTRY, version, null, values), null);
+    }
+
+    private void commit(List<EntityChange> changes) {
+        RequestContext writer = new RequestContext("it-erasure-writer", null, Locale.ENGLISH, "it-erasure-writer",
+            Set.of(), Set.of("*"));
+        entities.commitBatch(datasets.findById(ItErasureFixtures.ENTRY_DATASET).orElseThrow(), changes)
+            .contextWrite(view -> RequestContexts.put(Context.empty(), writer)).block();
+    }
+
     @Test
     void theStartupCheckRefusesWhatWouldTellAHiddenValueOrNeverRead() {
         PersonalDataEraser broken = eraser(List.of(
@@ -191,6 +228,10 @@ class ErasureLoadTotalsIT extends SecurityItSupport {
             // IN on a flag: its kind allows only an equality.
             ErasureLoad.count("j", ItErasureFixtures.DATASET, "userId").where("flag", true, false),
             ErasureLoad.count("k", ItErasureFixtures.DATASET, "userId").where("flag", true),
+            // A user field without an equality, and a reference compared with what is no UUID.
+            ErasureLoad.count("n", ItErasureFixtures.DATASET, "title"),
+            ErasureLoad.count("o", ItErasureFixtures.DATASET, "userId").where("entryRef", "not-a-uuid"),
+            ErasureLoad.count("p", ItErasureFixtures.DATASET, "userId").where("entryRef", UUID.randomUUID().toString()),
             ErasureLoad.sum("ok", ItErasureFixtures.DATASET, "userId", "amount").where("status", "OPEN", "USED")),
             new AtomicReference<>());
         // The same name with another condition elsewhere; the same conditions in another order, and 10L for 10, are
@@ -228,8 +269,23 @@ class ErasureLoadTotalsIT extends SecurityItSupport {
                 "ERROR " + location + ": load h: entity ItErasurePoint adds up card, a sensitive or masked field",
                 "ERROR " + location + ": load j: entity ItErasurePoint: the condition on flag needs IN, which the"
                     + " field does not allow",
+                "ERROR " + location + ": load n: entity ItErasurePoint: its user field title cannot be compared for"
+                    + " equality",
+                "ERROR " + location + ": load o: entity ItErasurePoint: the condition on entryRef gives a value it"
+                    + " cannot hold: " + referenceRefusal(),
                 "ERROR " + otherLocation + ": load i is declared with another dataset, field, kind or conditions"
                     + " elsewhere");
+    }
+
+    /** What the query compiler says of a reference that is no UUID. */
+    private String referenceRefusal() {
+        try {
+            new QueryCompiler(definitions::find).fieldValue(ItErasureFixtures.ENTITY,
+                ItErasureFixtures.ENTITY.findField("entryRef").orElseThrow(), "not-a-uuid");
+            throw new AssertionError("not-a-uuid was accepted");
+        } catch (RuntimeException e) {
+            return e.getMessage();
+        }
     }
 
     /** What the coercer says of a code not in the field's list. */

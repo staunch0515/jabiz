@@ -72,6 +72,9 @@ class ErasureLoadTest {
         assertThatThrownBy(() -> subject.count("opne")).hasMessageContaining("No count load named opne");
         assertThatThrownBy(() -> subject.count("balance")).isInstanceOf(IllegalArgumentException.class);
         assertThatThrownBy(() -> subject.sum("open")).hasMessageContaining("No sum load named open");
+        // A rows() left over after a load became a count or a sum is an error, not an empty list.
+        assertThatThrownBy(() -> subject.rows("open")).hasMessageContaining("reads a count or a sum, not rows");
+        assertThatThrownBy(() -> subject.rows("balance")).hasMessageContaining("reads a count or a sum, not rows");
         // The rows-only constructor of before 17zz22.
         ErasureSubject before = new ErasureSubject("u1", Map.of());
         assertThat(before.counts()).isEmpty();

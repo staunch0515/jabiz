@@ -6,6 +6,7 @@ import com.jabiz.entity.FieldDefinition;
 import com.jabiz.entity.FieldValueCoercer;
 import com.jabiz.entity.SemanticKind;
 import com.jabiz.entity.SemanticKinds;
+import com.jabiz.query.QueryCompiler;
 import com.jabiz.query.QueryOperator;
 import com.jabiz.runtime.check.CheckProblem;
 import com.jabiz.runtime.check.PlatformCheck;
@@ -62,6 +63,7 @@ public class AccountDeletionChecks implements PlatformCheck {
     @Override
     public List<CheckProblem> check() {
         List<CheckProblem> problems = new ArrayList<>();
+        QueryCompiler compiler = new QueryCompiler(definitions::find);
         String url = environment.getProperty("jabiz.erasure.datasource.url", "");
         boolean development = environment.acceptsProfiles(Profiles.of("dev"));
         for (SignInEntries.Entry entry : entries.all()) {
@@ -103,7 +105,7 @@ public class AccountDeletionChecks implements PlatformCheck {
                     continue;
                 }
                 definitions.find(dataset.get().targetEntityType())
-                    .ifPresent(def -> problems.addAll(fields(location, load, def)));
+                    .ifPresent(def -> problems.addAll(fields(location, load, def, compiler)));
             }
         }
         return List.copyOf(problems);
@@ -115,7 +117,7 @@ public class AccountDeletionChecks implements PlatformCheck {
      * condition's value the field cannot hold (a code not in its dictionary, text for a number) and a total of
      * anything but a number or an amount.
      */
-    static List<CheckProblem> fields(String location, ErasureLoad load, EntityDefinition def) {
+    static List<CheckProblem> fields(String location, ErasureLoad load, EntityDefinition def, QueryCompiler compiler) {
         List<CheckProblem> problems = new ArrayList<>();
         String at = "load " + load.name() + ": entity " + def.name;
         Optional<FieldDefinition> user = def.findField(load.userField());
@@ -146,7 +148,10 @@ public class AccountDeletionChecks implements PlatformCheck {
             }
             for (Object value : condition.values()) {
                 try {
+                    // The dictionary's codes, then the conversion the query compiler makes when the load is read (a
+                    // reference or a primary key must be a UUID).
                     FieldValueCoercer.coerce(field.get(), value, true);
+                    compiler.fieldValue(def, field.get(), value);
                 } catch (RuntimeException e) {
                     problems.add(CheckProblem.error(ErasureChecks.CATEGORY, location, at + ": the condition on "
                         + condition.field() + " gives a value it cannot hold: " + e.getMessage()));
@@ -176,10 +181,17 @@ public class AccountDeletionChecks implements PlatformCheck {
      */
     static String meaning(ErasureLoad load) {
         List<String> conditions = load.conditions().stream()
-            .map(c -> c.field() + "=" + c.values().stream().map(String::valueOf).sorted().toList())
+            .map(c -> lengthed(c.field()) + c.values().size() + "#" + c.values().stream().map(String::valueOf)
+                .sorted().map(AccountDeletionChecks::lengthed).reduce("", String::concat))
             .sorted().toList();
-        return String.join("|", load.dataset(), load.userField(), load.kind().name(), String.valueOf(load.field()),
-            conditions.toString());
+        // Every part with its length: no value or name can run into the next.
+        return lengthed(load.dataset()) + lengthed(load.userField()) + lengthed(load.kind().name())
+            + lengthed(String.valueOf(load.field())) + conditions.size() + "#"
+            + conditions.stream().map(AccountDeletionChecks::lengthed).reduce("", String::concat);
+    }
+
+    private static String lengthed(String text) {
+        return text.length() + ":" + text;
     }
 
     private static boolean hidden(FieldDefinition field) {

@@ -32,8 +32,16 @@ public record ErasureSubject(String userId, Map<String, List<Map<String, Object>
         this(userId, data, Map.of(), Map.of());
     }
 
-    /** The rows of a load; none when the load is unknown or found nothing. */
+    /**
+     * The rows of a load; none when the load is unknown or found nothing.
+     *
+     * @throws IllegalArgumentException when the name is a count or a sum load's: a {@code rows} left over after a load
+     *     was changed to {@link ErasureLoad#count count} would otherwise read nothing and its notice would vanish
+     */
     public List<Map<String, Object>> rows(String load) {
+        if (counts.containsKey(load) || sums.containsKey(load)) {
+            throw new IllegalArgumentException("Load " + load + " reads a count or a sum, not rows");
+        }
         return data.getOrDefault(load, List.of());
     }
 
