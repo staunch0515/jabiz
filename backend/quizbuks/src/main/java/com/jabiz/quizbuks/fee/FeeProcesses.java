@@ -118,18 +118,27 @@ public final class FeeProcesses {
      *                  frozen at its submission); none: the sponsor's operator now
      * @param prepaymentId F-M5: the prepayment it is paid from (a prepaid sponsor's; a postpaid one's only stops
      *                  counting against the credit limit); none: paid from the account as fees arise
+     * @param tax       F-M8: the tax given by the caller, whose rule is not the fee's own on this amount (the exposure fee's
+     *                  is cumulative: the tax on all settled so far less what was charged); none: the fee's own rule
      */
     public record ChargeInput(@NotBlank @Size(max = 128) String sponsorId,
         @NotBlank @Pattern(regexp = "MONTHLY|MANUAL|AUDIENCE|DISTRIBUTION|EXPOSURE") String kind,
         @NotBlank @Pattern(regexp = "\\d{4}-\\d{2}") String period,
         @NotNull @DecimalMin("1") @DecimalMax(MAX_AMOUNT) @Digits(integer = 13, fraction = 0) BigDecimal amount,
         @Size(max = QbFees.REASON_LENGTH) String reason, @Size(max = QbFees.SOURCE_LENGTH) String sourceKey,
-        @Size(max = 128) String chargedBy, @Size(max = 36) String operatorId, @Size(max = 36) String prepaymentId) {
+        @Size(max = 128) String chargedBy, @Size(max = 36) String operatorId, @Size(max = 36) String prepaymentId,
+        @DecimalMin("0") @DecimalMax(MAX_AMOUNT) @Digits(integer = 13, fraction = 0) BigDecimal tax) {
+
+        /** As before F-M8: the tax is the fee's own rule on this amount. */
+        public ChargeInput(String sponsorId, String kind, String period, BigDecimal amount, String reason,
+            String sourceKey, String chargedBy, String operatorId, String prepaymentId) {
+            this(sponsorId, kind, period, amount, reason, sourceKey, chargedBy, operatorId, prepaymentId, null);
+        }
 
         /** A fee of the sponsor's current operator, paid from the account (the monthly fee, a fee by hand). */
         public ChargeInput(String sponsorId, String kind, String period, BigDecimal amount, String reason,
             String sourceKey, String chargedBy) {
-            this(sponsorId, kind, period, amount, reason, sourceKey, chargedBy, null, null);
+            this(sponsorId, kind, period, amount, reason, sourceKey, chargedBy, null, null, null);
         }
     }
 
@@ -333,7 +342,7 @@ public final class FeeProcesses {
             problems.add(new Violation("period", FeeCodes.FEE_PERIOD, "Not a month", Map.of("period", input.period())));
         }
         BigDecimal rate = params.get(QbParams.FEE_TAX_RATE, BigDecimal.class);
-        BigDecimal tax = FeeRules.tax(input.amount(), rate);
+        BigDecimal tax = input.tax() != null && rate != null ? input.tax() : FeeRules.tax(input.amount(), rate);
         if (tax == null) {
             problems.add(new Violation(null, FeeCodes.FEE_PARAMS, "The tax rate cannot be used",
                 Map.of("rate", String.valueOf(rate))));
@@ -465,7 +474,8 @@ public final class FeeProcesses {
         String billingMode = prepayment != null ? String.valueOf((Object) prepayment.get("mode"))
             : FeeRules.billingModeOf(sponsor.get("billingMode"), params.get(QbParams.FEE_DEFAULT_BILLING_MODE,
                 String.class));
-        BigDecimal tax = FeeRules.tax(input.amount(), params.get(QbParams.FEE_TAX_RATE, BigDecimal.class));
+        BigDecimal rate = params.get(QbParams.FEE_TAX_RATE, BigDecimal.class);
+        BigDecimal tax = input.tax() != null && rate != null ? input.tax() : FeeRules.tax(input.amount(), rate);
         if (!FeeRules.PREPAID.equals(billingMode) || tax == null) {
             return false;
         }
