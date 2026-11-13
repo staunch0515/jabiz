@@ -67,7 +67,7 @@
 | F-M12 | 运营商结算：不分成与扣回 | S2 | 未开始 | | |
 | F-M13 | 账单、收据与贷项凭证 | S2 | 未开始 | | |
 | F-M14 | 月报分类、每日核对与告警 | S2 | 未开始 | | |
-| F-M15 | 封禁、注销与抹除 | S2 | 开发中（a0） | | 计划 `plans/F-M15.md`（#668，a0 已批准）。a0（分支 `1.3/quizbuks-FM15a0-ban-gaps`）：七个运营商一侧流程补 `refuseBanned`、赠送与追加赠送的申请 / 批准挡封禁的对象（`QB_FEE_CREDIT_BANNED`，同一来源键照旧返回原笔，审核中被封禁即驳回）、到期提醒不寄给封禁者、`BanCoverageTest`、钱表自由文字的抹除登记（`FeeErasure`）；a、b、c 待平台请求 1 与需求方问题 2 |
+| F-M15 | 封禁、注销与抹除 | S2 | 开发中（a0） | | 计划 `plans/impl/F-M15.md`（#668，a0 已批准）。a0（分支 `1.3/quizbuks-FM15a0-ban-gaps`）：七个运营商一侧流程补 `refuseBanned`、赠送与追加赠送的申请 / 批准挡封禁的对象（`QB_FEE_CREDIT_BANNED`，同一来源键照旧返回原笔，审核中被封禁即驳回）、到期提醒不寄给封禁者、`BanCoverageTest`、钱表自由文字的抹除登记（`FeeErasure`）；a、b、c 待平台请求 1 与需求方问题 2 |
 
 S1 备注（平台的偏离与发现，2026-11-07，自原 S1 会话交接）：
 - P1 偏离：补发的记录是 `sec_refresh_token_regrant` 的行（刷新不写登录记录）；指标名 `jabiz.auth.refresh.reuse`。F-F6 的验收（`entry-fee.spec.ts` 连跑 20 次）待核对：本会话的容器没有 Docker，改在 CI 上跑。

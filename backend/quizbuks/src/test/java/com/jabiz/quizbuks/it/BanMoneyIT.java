@@ -29,7 +29,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
- * F-M15 a0 (docs/quizbuks/plans/F-M15.md §5.4, §10): what a ban stops on the money's side. The operators' acts that
+ * F-M15 a0 (docs/quizbuks/plans/impl/F-M15.md §5.4, §10): what a ban stops on the money's side. The operators' acts that
  * had no ban check refuse a banned caller whose session is still valid, write nothing, and work once unbanned; the ones
  * already checked stay so. No platform fee Kudos are granted to a banned Sponsor (a lot their key already has is still
  * given back), a grant by hand is not asked for them and one in review when they are banned ends rejected, and they

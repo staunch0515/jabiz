@@ -1,4 +1,4 @@
--- F-M15 a0 (docs/quizbuks/plans/F-M15.md §4.2): a manual top-up's reason is free text finance wrote, and the purge of
+-- F-M15 a0 (docs/quizbuks/plans/impl/F-M15.md §4.2): a manual top-up's reason is free text finance wrote, and the purge of
 -- an erased Sponsor overwrites it with NULL (the column may be empty). The check of V23 required it for every manual
 -- top-up, so the purge failed (and with it every other value it overwrites). The process still records a reason for each
 -- manual top-up (its input requires one); only the check no longer does. The rest of the check is V23's.

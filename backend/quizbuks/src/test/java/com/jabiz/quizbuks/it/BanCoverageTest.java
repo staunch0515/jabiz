@@ -13,7 +13,7 @@ import java.util.TreeSet;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * F-M15 a0 (docs/quizbuks/plans/F-M15.md §5.4-6): every process of the {@code operator}, {@code fee} and
+ * F-M15 a0 (docs/quizbuks/plans/impl/F-M15.md §5.4-6): every process of the {@code operator}, {@code fee} and
  * {@code verification} packages that a person starts reads the caller's ban first ({@code CallerChecks.refuseBanned},
  * its step "Load the caller's ban"), or is exempt here with its reason. A process a person starts is one neither
  * {@code internal()} nor {@code subProcessOnly()}. A new one that forgets the ban fails this test.
@@ -51,21 +51,36 @@ class BanCoverageTest extends PlayItSupport {
         "QB_OPERATOR_BANK_ACCOUNT_SAVE", "QB_OPERATOR_WITHDRAWAL_REQUEST", "QB_OPERATOR_WITHDRAWAL_CANCEL",
         "QB_OPERATOR_MEMBER_DROP", "QB_SPONSOR_VERIFICATION_REVOKE");
 
+    /** How many processes the inventory found when it was written (F-M15 a0); a new one only raises it. */
+    static final int MIN_INVENTORY = 29;
+
     @Test
     void everyProcessAPersonStartsReadsTheCallersBanOrIsExempt() {
         Map<String, ProcessDefinition<?, ?, ?>> started = new TreeMap<>();
+        Set<String> nowhere = new TreeSet<>();
         for (ProcessDefinition<?, ?, ?> definition : processes.all()) {
+            if (packageOf(definition).isEmpty()) {
+                nowhere.add(definition.name());
+            }
             if (PACKAGES.contains(packageOf(definition)) && definition.access() != ProcessAccess.INTERNAL
                 && definition.access() != ProcessAccess.SUB_PROCESS_ONLY) {
                 started.put(definition.name(), definition);
             }
         }
+        // No definition slips out of the inventory unseen: each has a package, and the inventory does not shrink.
+        assertThat(nowhere).as("definitions whose package is not known").isEmpty();
+        assertThat(started).as("the inventory").hasSizeGreaterThanOrEqualTo(MIN_INVENTORY);
         assertThat(started.keySet()).as("the inventory").containsAll(CLOSED);
 
         Set<String> missing = new TreeSet<>();
         Set<String> checkedAndExempt = new TreeSet<>();
+        Set<String> notFirst = new TreeSet<>();
         started.forEach((name, definition) -> {
             boolean checked = readsTheBan(definition);
+            // Before anything else is read or written (CallerChecks).
+            if (checked && !BAN_STEP.equals(definition.steps().getFirst().stepName())) {
+                notFirst.add(name);
+            }
             if (!checked && !EXEMPT.containsKey(name)) {
                 missing.add(name);
             }
@@ -74,6 +89,7 @@ class BanCoverageTest extends PlayItSupport {
             }
         });
         assertThat(missing).as("started by a person without the caller's ban").isEmpty();
+        assertThat(notFirst).as("the caller's ban read after another step").isEmpty();
         // An exemption that no longer applies is removed from the table.
         assertThat(checkedAndExempt).as("exempt but checked").isEmpty();
         assertThat(started.keySet()).as("the exemptions name processes of these packages").containsAll(EXEMPT.keySet());

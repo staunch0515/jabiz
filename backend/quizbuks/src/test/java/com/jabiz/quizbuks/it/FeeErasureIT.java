@@ -19,7 +19,7 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * F-M15 a0 (docs/quizbuks/plans/F-M15.md §4.2, L1): erasing a Sponsor keeps their money's records and overwrites only
+ * F-M15 a0 (docs/quizbuks/plans/impl/F-M15.md §4.2, L1): erasing a Sponsor keeps their money's records and overwrites only
  * the free text in them, column by column as the platform writes it (NULL where the column may be empty, {@code ***}
  * where it is required): a fee by hand's reason, an invoice's void reason, the requests' reasons, a manual top-up's
  * reason, and a transfer's note, erased with the lead who wrote it or with the direct Sponsor it went to. Another

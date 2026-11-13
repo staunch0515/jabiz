@@ -9,7 +9,7 @@ import org.springframework.context.annotation.Configuration;
 import java.util.List;
 
 /**
- * F-M15 a0 (docs/quizbuks/plans/F-M15.md §4.2): the money's records that keep free text someone wrote. The records stay
+ * F-M15 a0 (docs/quizbuks/plans/impl/F-M15.md §4.2): the money's records that keep free text someone wrote. The records stay
  * (they are kept for years, as the ledger is); the purge overwrites only the text (a column that may be empty becomes
  * empty, a required one {@code ***}). Tables of ids, amounts and times only are not declared. A top-up's texts and a
  * credit note's are declared with the Sponsor's other records ({@code SponsorErasure}: one declaration per entity and
