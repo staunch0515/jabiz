@@ -366,8 +366,9 @@ class HelpMaterialsIT extends HelpItSupport {
         assertThat(number(mine.get("input_tokens"))).isEqualTo(32_100);
         assertThat(number(mine.get("cache_write_tokens"))).isEqualTo(2_000);
         assertThat(number(mine.get("cache_read_tokens"))).isEqualTo(30_000);
-        // Haiku: every input token at $0.10 a million and the output at $0.50, and a quarter more for the writes.
-        assertThat(new BigDecimal(mine.get("cost_usd").toString())).isEqualByComparingTo("0.003285");
+        // Haiku: every input token at $0.10 a million and the output at $0.50, a quarter more for the writes (F-C10b),
+        // and the reads at a tenth of the input price, the 30,000 of them 0.0027 less (F-M10): 0.003285 - 0.0027.
+        assertThat(new BigDecimal(mine.get("cost_usd").toString())).isEqualByComparingTo("0.000585");
         Map<String, Object> everybody = helpUsage(QbHelp.EVERYBODY);
         assertThat(number(everybody.get("cache_read_tokens")) - number(before.get("cache_read_tokens")))
             .isEqualTo(30_000);

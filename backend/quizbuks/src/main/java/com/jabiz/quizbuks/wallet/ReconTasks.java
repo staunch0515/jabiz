@@ -108,7 +108,7 @@ public final class ReconTasks {
         // leads to the reconciliation page.
         return TaskSpec.forPermission(ATTENTION_TASK, ATTENTION_TITLE + "." + input.check(), params,
                 ReconChecks.owner(input.check()))
-            .link(RECONCILIATION_PAGE).source(input.sourceKey());
+            .link(ReconChecks.link(input.check())).source(input.sourceKey());
     }
 
     public static ProcessDefinition<CloseInput, ItemOutput, ProcessContext> closeItem() {

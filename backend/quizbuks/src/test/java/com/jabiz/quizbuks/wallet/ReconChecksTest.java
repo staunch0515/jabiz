@@ -1,5 +1,6 @@
 package com.jabiz.quizbuks.wallet;
 
+import com.jabiz.quizbuks.QbPermissions;
 import org.junit.jupiter.api.Test;
 
 import java.io.IOException;
@@ -219,11 +220,15 @@ class ReconChecksTest {
             .doesNotContainAnyElementsOf(ReconChecks.NOTES);
         assertThat(ReconChecks.OWNERS.keySet()).allSatisfy(code -> assertThat(ReconChecks.ALL).contains(code));
         assertThat(ReconChecks.ALL).allSatisfy(code -> assertThat(ReconChecks.owner(code)).as(code).isNotBlank());
-        // The merged checks: three need attention, two are notes, the rest are differences.
+        // Four need attention (F-M10: the AI help's usage total, owned by the content administrators and leading to the
+        // AI page they can open), two are notes, the rest are differences.
         assertThat(ReconChecks.ATTENTION).containsExactlyInAnyOrder(ReconChecks.DISTRIBUTION_PRICE_RANGE,
-            ReconChecks.AUDIENCE_REFUND_NO_PERIOD, ReconChecks.CREDIT_UNUSED_WITH_DUE);
+            ReconChecks.AUDIENCE_REFUND_NO_PERIOD, ReconChecks.CREDIT_UNUSED_WITH_DUE, ReconChecks.HELP_USAGE_TOTAL);
+        assertThat(ReconChecks.owner(ReconChecks.HELP_USAGE_TOTAL)).isEqualTo(QbPermissions.ADMIN_HELP_GAPS);
+        assertThat(ReconChecks.link(ReconChecks.HELP_USAGE_TOTAL)).isEqualTo("/qb/ai");
+        assertThat(ReconChecks.link(ReconChecks.DISTRIBUTION_PRICE_RANGE)).isEqualTo(ReconTasks.RECONCILIATION_PAGE);
         assertThat(ReconChecks.ALL.stream().filter(c -> ReconChecks.level(c) == ReconChecks.Level.DIFFERENCE))
-            .hasSize(ReconChecks.ALL.size() - 5);
+            .hasSize(ReconChecks.ALL.size() - 6);
     }
 
     @Test
@@ -345,5 +350,25 @@ class ReconChecksTest {
         var url = ReconChecksTest.class.getClassLoader().getResource(name);
         assertThat(url).as(name).isNotNull();
         return Path.of(url.toURI());
+    }
+
+    /** F-M10: the help's usage check names the month and what was counted; it needs attention (not a difference). */
+    @Test
+    void theHelpUsageTotalCheckIsReadFromItsTemplateAsADifference() {
+        assertThat(ReconChecks.ALL).contains(ReconChecks.HELP_USAGE_TOTAL);
+        assertThat(ReconChecks.level(ReconChecks.HELP_USAGE_TOTAL)).isEqualTo(ReconChecks.Level.ATTENTION);
+        List<ReconChecks.Item> items = ReconChecks.coded(List.of(Map.of("checkCode", "HELP_USAGE_TOTAL",
+            "reference", "2026-10:costMicros", "expected", new BigDecimal("1500000"), "actual", new BigDecimal("1250000"))));
+        assertThat(items).singleElement().satisfies(item -> {
+            assertThat(item.check()).isEqualTo("HELP_USAGE_TOTAL");
+            assertThat(item.reference()).isEqualTo("2026-10:costMicros");
+            assertThat(item.difference()).isEqualByComparingTo("-250000");
+        });
+        // For attention, not a difference: the run stays OK (no alert, the journal export is not stopped); its owner is
+        // asked once for the month and the measure.
+        ReconChecks.Result result = ReconChecks.result(items, 10);
+        assertThat(result.status()).isEqualTo(ReconChecks.OK);
+        assertThat(result.differences()).isZero();
+        assertThat(result.items()).hasSize(1);
     }
 }

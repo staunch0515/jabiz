@@ -96,6 +96,12 @@ public final class ReconChecks {
     public static final String CREDIT_NOTE_USE_VOID = "CREDIT_NOTE_USE_VOID";
     /** F-M7 (N4): credit left while an invoice is unpaid. */
     public static final String CREDIT_UNUSED_WITH_DUE = "CREDIT_UNUSED_WITH_DUE";
+    /**
+     * F-M10: a month of the AI help's usage in which everybody's row is below the sum of the people's (questions, input
+     * or output tokens, estimated dollars); {@code reference} names the month and the measure. Not "unequal": a deleted
+     * account's row is erased and a deleted conversation adds only to everybody's.
+     */
+    public static final String HELP_USAGE_TOTAL = "HELP_USAGE_TOTAL";
     /** Account 2110 in all against all sponsors' cached balances. */
     public static final String TOTAL_2110 = "TOTAL_2110";
     /** Every posted line's debit less credit: 0. */
@@ -132,7 +138,7 @@ public final class ReconChecks {
         PREPAYMENT_PARTS, PREPAYMENT_UNCHARGED, DISTRIBUTION_DEPOSITS, DISTRIBUTION_UNSETTLED,
         DISTRIBUTION_FINAL_MISSING, DISTRIBUTION_PRICE_RANGE, DISTRIBUTION_AT_FLOOR, AUDIENCE_REFUND_MISSING,
         AUDIENCE_REFUND_NO_PERIOD, AUDIENCE_FEE_NOT_LIVE, CREDIT_NOTE_USES, CREDIT_NOTE_LIMITS, CREDIT_NOTE_USE_VOID,
-        CREDIT_UNUSED_WITH_DUE);
+        CREDIT_UNUSED_WITH_DUE, HELP_USAGE_TOTAL);
 
     /** Codes no longer reported that runs written before may still name: readable, never written. */
     public static final List<String> RETIRED = List.of(DISTRIBUTION_PRICE_OUT_OF_RANGE);
@@ -147,7 +153,7 @@ public final class ReconChecks {
      * ({@link ReconTasks}).
      */
     public static final Set<String> ATTENTION = Set.of(DISTRIBUTION_PRICE_RANGE, AUDIENCE_REFUND_NO_PERIOD,
-        CREDIT_UNUSED_WITH_DUE);
+        CREDIT_UNUSED_WITH_DUE, HELP_USAGE_TOTAL);
 
     /** F-M14: the dictionary of each check's level (made from these sets). */
     public static final String LEVEL_DICTIONARY = "urn:jabiz:dict:quizbuks:recon-level";
@@ -171,7 +177,18 @@ public final class ReconChecks {
      * The permission whose holders are asked about a check (F-M14 §3.1b, G4): finance's {@code qb.reconcile} unless
      * named here. A task goes to one permission, so each owner gets their own.
      */
-    static final Map<String, String> OWNERS = Map.of();
+    static final Map<String, String> OWNERS = Map.of(HELP_USAGE_TOTAL, QbPermissions.ADMIN_HELP_GAPS);
+
+    /**
+     * Where a check's task leads when its owner cannot open finance's reconciliation page: the AI help's usage is on
+     * headquarters' AI page, which the content administrators (owners of {@link #HELP_USAGE_TOTAL}) can open.
+     */
+    static final Map<String, String> LINKS = Map.of(HELP_USAGE_TOTAL, "/qb/ai");
+
+    /** The page a check's task leads to: its own, else the reconciliation page. */
+    public static String link(String check) {
+        return LINKS.getOrDefault(check, ReconTasks.RECONCILIATION_PAGE);
+    }
 
     /** Who is asked about a check: its owner's permission. */
     public static String owner(String check) {

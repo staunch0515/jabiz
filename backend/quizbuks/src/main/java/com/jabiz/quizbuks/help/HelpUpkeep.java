@@ -155,7 +155,8 @@ public final class HelpUpkeep {
     public static ProcessDefinition<UsageCheckInput, UsageCheckOutput, ProcessContext> usageCheck(ZoneId zone) {
         return ProcessDefinition.define(USAGE_CHECK, 1, UsageCheckInput.class, UsageCheckOutput.class,
             ProcessContext.class, pb -> pb
-                .description("Shows the AI help's share of its monthly tokens on the gauge.")
+                .description("Shows the AI help's share of its monthly tokens and dollars on the gauges, and asks "
+                    + "finance to look when a month's estimated AI dollars have reached the alert.")
                 .permissions(QbPermissions.HELP_SYSTEM)
                 .internal()
                 .contextFactory((start, input) -> {
@@ -165,19 +166,71 @@ public final class HelpUpkeep {
                 })
                 .outputMapper(ctx -> new UsageCheckOutput(ctx.contains(HelpUsageGauge.PERCENT)
                     ? ((Number) ctx.get(HelpUsageGauge.PERCENT)).longValue() : 0))
+                // One check at a time (F-M10 review L2): two of them (a replay on another instance, a manual run beside
+                // the scheduled one) would each see no task of the month and make two.
+                .step("Take the check's turn", HoldLock.<ProcessContext>exclusive(ctx -> HelpCosts.LOCK))
                 .step("Load the monthly tokens", LoadParams.<ProcessContext>optional(ProcessContext::opTime, PARAMS,
                     QbParams.HELP_GLOBAL_MONTHLY_TOKENS, QbParams.HELP_CACHE_READ_WEIGHT))
                 .step("Load everybody's usage", QueryEntities.<ProcessContext>of(QbHelp.defaultDataset(QbHelp.USAGE),
                     ctx -> HelpProcesses.usageOf(QbHelp.EVERYBODY, AiLimits.month(ctx.opTime(), zone)), EVERYBODY))
-                .compute("Work out the share", (metadata, ctx) -> {
+                // F-M10: this month's dollars (the gauge) and last month's (a month that crossed the alert after the
+                // month's last check still gets its task on the first check of the next one).
+                .step("Read this month's dollars", RunTemplate.<ProcessContext>of(HelpCosts.TEMPLATE,
+                    ctx -> HelpCosts.params(AiLimits.month(ctx.opTime(), zone), zone), COST_NOW))
+                .step("Read last month's dollars", RunTemplate.<ProcessContext>of(HelpCosts.TEMPLATE,
+                    ctx -> HelpCosts.params(HelpCosts.before(AiLimits.month(ctx.opTime(), zone)), zone), COST_BEFORE))
+                .compute("Work out the shares", (metadata, ctx) -> {
                     EntityInstance row = HelpProcesses.first(ctx, EVERYBODY);
                     HelpSettings settings = HelpSettings.of(ctx.contains(PARAMS) ? ctx.get(PARAMS, ParamValues.class)
                         : null);
                     long used = row == null ? 0 : settings.counted(HelpProcesses.number(row.get("inputTokens")),
                         HelpProcesses.number(row.get("outputTokens")), HelpProcesses.number(row.get("cacheReadTokens")));
                     ctx.put(HelpUsageGauge.PERCENT, HelpOutcomes.percent(used, settings.globalMonthlyTokens()));
+                    ctx.put(HelpUsageGauge.COST_PERCENT, costNow(ctx).percent());
+                    ctx.put(HelpUsageGauge.MONTH, AiLimits.month(ctx.opTime(), zone));
                 })
+                .step("Ask finance about this month", CreateTask.<ProcessContext>when(
+                    ctx -> due(costNow(ctx)), ctx -> costTask(AiLimits.month(ctx.opTime(), zone), costNow(ctx))))
+                .step("Ask finance about last month", CreateTask.<ProcessContext>when(
+                    ctx -> due(costBefore(ctx)),
+                    ctx -> costTask(HelpCosts.before(AiLimits.month(ctx.opTime(), zone)), costBefore(ctx))))
                 .afterCommit("Show the usage on the gauge", HelpUsageGauge.class, NoMetadata.INSTANCE));
+    }
+
+    static final String COST_NOW = "costNow";
+    static final String COST_BEFORE = "costBefore";
+
+    private static HelpCosts.Month costNow(ProcessContext ctx) {
+        return HelpCosts.Month.of(first(ctx, COST_NOW));
+    }
+
+    private static HelpCosts.Month costBefore(ProcessContext ctx) {
+        return HelpCosts.Month.of(first(ctx, COST_BEFORE));
+    }
+
+    /** Whether a month's task is due: the alert reached and no task of the month yet (open or closed by a person). */
+    private static boolean due(HelpCosts.Month month) {
+        return month.reached() && !month.taskExists();
+    }
+
+    /**
+     * The task of a month whose estimated AI dollars reached the alert (F-M10): for finance ({@code qb.reconcile};
+     * the super administrator holds it too), once a month, and closed only by a person who has looked at the usage.
+     */
+    private static TaskSpec costTask(String month, HelpCosts.Month cost) {
+        Map<String, String> params = Map.of("month", month,
+            "usd", cost.total().setScale(2, java.math.RoundingMode.HALF_UP).toPlainString(),
+            "alert", cost.alert().toPlainString());
+        return TaskSpec.forPermission(HelpCosts.TASK, "task." + HelpCosts.TASK, params, QbPermissions.RECONCILE)
+            .link("/qb/ai")
+            .source(HelpCosts.source(month));
+    }
+
+    @SuppressWarnings("unchecked")
+    private static Map<String, Object> first(ProcessContext ctx, String key) {
+        Object rows = ctx.contains(key) ? ctx.get(key) : null;
+        List<Map<String, Object>> list = rows == null ? List.of() : (List<Map<String, Object>>) rows;
+        return list.isEmpty() ? null : list.getFirst();
     }
 
     // ---- shared ----------------------------------------------------------------------------------------------------

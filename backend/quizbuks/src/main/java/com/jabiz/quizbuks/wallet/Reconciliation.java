@@ -64,6 +64,8 @@ public final class Reconciliation {
     static final String PREPAYMENTS_TEMPLATE = "qb.system.recon-prepayments";
     /** F-M7: the audience fees' refunds and the credit notes. */
     static final String CREDIT_NOTES_TEMPLATE = "qb.system.recon-credit-notes";
+    /** F-M10: everybody's row of the AI help's usage against the people's rows. */
+    static final String HELP_USAGE_TEMPLATE = "qb.system.recon-help-usage";
 
     public record ReconcileInput(@NotNull Instant scheduledTime) {}
 
@@ -129,6 +131,7 @@ public final class Reconciliation {
     static final String OPERATOR_ACCOUNT = "operatorAccount";
     static final String PREPAYMENTS = "prepayments";
     static final String CREDIT_NOTES = "creditNotes";
+    static final String HELP_USAGE = "helpUsage";
     static final String DISTRIBUTION_PARAMS = "distributionParams";
     static final String PREVIOUS = "previous";
     static final String PREVIOUS_TAKERS = "previousTakers";
@@ -188,6 +191,8 @@ public final class Reconciliation {
                     ctx -> feeAccountParams(ctx, zone, "at", "zone", "unsettledHours", "missingHours"), PREPAYMENTS))
                 .step("Compare the credit notes", RunTemplate.<ProcessContext>of(CREDIT_NOTES_TEMPLATE,
                     ctx -> feeAccountParams(ctx, zone, "at", "refundHours"), CREDIT_NOTES))
+                .step("Compare the AI help's usage", RunTemplate.<ProcessContext>of(HELP_USAGE_TEMPLATE,
+                    ctx -> Map.of(), HELP_USAGE))
                 // The takers' cache follows by events: one found behind counts only when the previous run found them.
                 .step("Find the previous run", QueryEntities.<ProcessContext>of(defaultDataset(RUN_ENTITY_NAME),
                     ctx -> EntityQuery.builder().where(new QueryPredicate.Lt("scheduledTime",
@@ -239,6 +244,7 @@ public final class Reconciliation {
         found.addAll(ReconChecks.coded(rows(ctx, OPERATOR_ACCOUNT)));
         found.addAll(ReconChecks.coded(rows(ctx, PREPAYMENTS)));
         found.addAll(ReconChecks.coded(rows(ctx, CREDIT_NOTES)));
+        found.addAll(ReconChecks.coded(rows(ctx, HELP_USAGE)));
         java.util.Set<String> foundBefore = new java.util.HashSet<>();
         TopUpCrediting.list(ctx, PREVIOUS_TAKERS).forEach(item -> foundBefore.add(item.get("partyId")));
         ReconChecks.TakerItems takers = ReconChecks.takers(rows(ctx, TAKERS), foundBefore);
