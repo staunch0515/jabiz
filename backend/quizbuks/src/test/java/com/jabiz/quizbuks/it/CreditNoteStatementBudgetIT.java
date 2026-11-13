@@ -22,18 +22,19 @@ import static org.assertj.core.api.Assertions.assertThat;
 class CreditNoteStatementBudgetIT extends CreditNoteItSupport {
 
     /**
-     * The item of a prepaid audience fee that ended early, given back through its prepayment [24]: the lock, the switch
-     * at the end, one read of the prepayment, publication and fee; the note's three reads (fee, invoices, notes, uses
-     * and wallets; the payments; their lots), its number, its writes and postings (the note, what it gives back, out of
-     * the prepayment), the lots and wallets, and the decision on the prepayment.
+     * The item of a prepaid audience fee that ended early, given back through its prepayment [25]: the lock, the switch
+     * at the end, one read of the prepayment, publication and fee; the note's four reads (fee, invoices, the note of
+     * this source and wallets; the notes on the fee (H1 of the review: a template, however many); the payments; their
+     * lots), its number, its writes and postings (the note, what it gives back, out of the prepayment), the lots and
+     * wallets, and the decision on the prepayment.
      */
-    static final int REFUND_ITEM = 24;
+    static final int REFUND_ITEM = 25;
     /**
      * The approval of a credit note by hand on a prepaid fee paid from the account, given back to it [27]: the approval
-     * result's reads (the request, the sponsor, the approval, the fee, its invoice and notes in one), then the note as
-     * above, and the request's outcome.
+     * result's reads (the request, the sponsor, the approval, the fee and its invoice in one; the notes on the fee), then
+     * the note as above, and the request's outcome.
      */
-    static final int MANUAL_NOTE = 27;
+    static final int MANUAL_NOTE = 29;
 
     /** The statements of the one transaction {@code action} wrote a credit note in. */
     static List<String> issued(Runnable action) {

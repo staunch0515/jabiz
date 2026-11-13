@@ -173,13 +173,15 @@ public final class FeeRequests {
                     .where(new QueryPredicate.And(List.of(
                         new QueryPredicate.Eq("subject", QbFees.APPROVAL_SUBJECT),
                         new QueryPredicate.Eq("enabled", true)))).limit(1).build(), RULES),
-                // F-M7: a credit note's fee, its own invoice and its notes so far (no SQL for the other kinds).
+                // F-M7: a credit note's fee and its own invoice (no SQL for the other kinds).
                 QueryEntities.query(QbFees.defaultDataset(QbFees.CHARGE),
                     ctx -> FeeProcesses.byId("chargeId", input(ctx).chargeId()), CHARGE),
                 QueryEntities.query(QbFees.defaultDataset(QbFees.INVOICE),
-                    ctx -> FeeProcesses.byId("chargeId", input(ctx).chargeId()), CHARGE_INVOICE),
-                QueryEntities.query(QbFees.defaultDataset(QbCreditNotes.CREDIT_NOTE),
-                    ctx -> notesOf(input(ctx).chargeId()), CHARGE_NOTES)))
+                    ctx -> FeeProcesses.byId("chargeId", input(ctx).chargeId()), CHARGE_INVOICE)))
+            // F-M7 (H1 of the review): the fee's notes so far, however many (a credit note's request only).
+            .step("Read the notes on the fee", RunTemplate.<ProcessContext>when(
+                ctx -> QbFees.REQUEST_CREDIT_NOTE.equals(input(ctx).kind()) && input(ctx).chargeId() != null,
+                CreditNotes.CHARGE_NOTES_TEMPLATE, ctx -> Map.of("chargeId", input(ctx).chargeId()), CHARGE_NOTES))
             .step("Load the fee's month invoice", QueryEntities.<ProcessContext>of(QbFees.defaultDataset(QbFees.INVOICE),
                 FeeRequests::monthInvoice, MONTH_INVOICE))
             .step("Look for credit notes on the invoice", RunTemplate.<ProcessContext>when(
@@ -276,12 +278,6 @@ public final class FeeRequests {
             Map.of("invoiceNo", String.valueOf((Object) invoice.get("invoiceNo"))));
     }
 
-    /** F-M7: the notes so far on a fee (its limits). */
-    static EntityQuery notesOf(String chargeId) {
-        return EntityQuery.builder().where(new QueryPredicate.In("chargeId", FeeGate.ids(chargeId)))
-            .limit(CreditNotes.MAX_NOTES).build();
-    }
-
     /** F-M7: a postpaid fee not paid early is on its month's invoice (no SQL for anything else). */
     static EntityQuery monthInvoice(ProcessContext ctx) {
         EntityInstance charge = first(ctx, CHARGE);
@@ -307,7 +303,7 @@ public final class FeeRequests {
                 "The fee's invoice is voided: what it was paid went back with it",
                 Map.of("invoiceNo", String.valueOf((Object) invoice.get("invoiceNo"))));
         }
-        BigDecimal credited = list(ctx, CHARGE_NOTES).stream().map(n -> money(n.get("amount")))
+        BigDecimal credited = CreditNotes.rows(ctx, CHARGE_NOTES).stream().map(n -> money(n.get("amount")))
             .reduce(BigDecimal.ZERO, BigDecimal::add);
         BigDecimal creditable = CreditNoteRules.creditable(money(charge.get("amount")), credited);
         if (amount != null && amount.compareTo(creditable) > 0) {
@@ -428,13 +424,14 @@ public final class FeeRequests {
                     QueryEntities.query(ApprovalEntities.DECISION_DATASET, ctx -> EntityQuery.builder()
                         .where(new QueryPredicate.In("requestId", foundRequest(ctx))).limit(MAX_DECISIONS).build(),
                         DECISIONS),
-                    // F-M7: a credit note's fee, its own invoice and its notes, read again under the wallet lock.
+                    // F-M7: a credit note's fee and its own invoice, read again under the wallet lock.
                     QueryEntities.query(QbFees.defaultDataset(QbFees.CHARGE),
                         ctx -> FeeProcesses.byId("chargeId", creditedOf(ctx)), CHARGE),
                     QueryEntities.query(QbFees.defaultDataset(QbFees.INVOICE),
-                        ctx -> FeeProcesses.byId("chargeId", creditedOf(ctx)), CHARGE_INVOICE),
-                    QueryEntities.query(QbFees.defaultDataset(QbCreditNotes.CREDIT_NOTE),
-                        ctx -> notesOf(creditedOf(ctx)), CHARGE_NOTES)))
+                        ctx -> FeeProcesses.byId("chargeId", creditedOf(ctx)), CHARGE_INVOICE)))
+                // F-M7 (H1 of the review): the fee's notes so far, however many (a credit note's request only).
+                .step("Read the notes on the fee", RunTemplate.<ProcessContext>when(ctx -> creditedOf(ctx) != null,
+                    CreditNotes.CHARGE_NOTES_TEMPLATE, ctx -> Map.of("chargeId", creditedOf(ctx)), CHARGE_NOTES))
                 .step("Read the fee's month invoice", QueryEntities.<ProcessContext>of(
                     QbFees.defaultDataset(QbFees.INVOICE), FeeRequests::monthInvoice, MONTH_INVOICE))
                 .step("Look for credit notes on the invoice", RunTemplate.<ProcessContext>when(

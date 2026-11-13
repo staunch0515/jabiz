@@ -16,6 +16,7 @@ import com.jabiz.runtime.test.TestTokens;
 import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;
+import java.sql.Timestamp;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneId;
@@ -411,5 +412,36 @@ class CreditNoteIT extends CreditNoteItSupport {
                 .as(table).hasMessageContaining("append-only");
             assertThatThrownBy(() -> execute("DELETE FROM " + table)).as(table).hasMessageContaining("append-only");
         }
+    }
+
+    /**
+     * H1 of the review: a sponsor with more notes than any fixed number goes on being charged. The credit left is
+     * summed in SQL (only the notes with some left are read), a fee's limits are read by the fee, and the source key
+     * by itself: 1001 spent notes and one with 500 left, then a prepaid month's fee takes the 500 first, and a note on
+     * that fee is issued.
+     */
+    @Test
+    void aSponsorWithManyNotesIsChargedAsAnyOther() {
+        param(QbParams.FEE_MONTHLY, "1000");
+        String sponsor = newSponsor(unique("s-fm7-many"));
+        cash(sponsor, 2_000);
+        Object seq = query("SELECT max(process_seq_id) AS s FROM op_process").getFirst().get("s");
+        Timestamp at = Timestamp.from(clock.instant().minus(Duration.ofDays(1)));
+        execute("WITH notes AS (SELECT gen_random_uuid() AS id, n FROM generate_series(1, 1002) n), "
+            + "registered AS (INSERT INTO entity_registry (entity_id, entity_type, created_seq_id) "
+            + "SELECT id, 'QbFeeCreditNote', ? FROM notes RETURNING entity_id) "
+            + "INSERT INTO qb_fee_credit_note_version (credit_note_id, version_no, effect_start_time, created_time, "
+            + "process_seq_id, credit_note_no, sponsor_id, charge_id, billing_mode, reason, note, amount, tax_rate, "
+            + "tax, total, applied_own, refunded_cash, refunded_credit, voided_credit, source_key, issued_at) "
+            + "SELECT id, 1, ?, ?, ?, 'M' || n || '-' || left(md5(?), 12), ?, gen_random_uuid()::text, 'PREPAID', 'MANUAL', "
+            + "'Many', 500, 0, 0, 500, 0, CASE WHEN n <= 1001 THEN 500 ELSE 0 END, 0, 0, 'many:' || n, ? FROM notes",
+            seq, at, at, seq, sponsor, sponsor, at);
+
+        assertThat(monthly(sponsor)).isEqualTo("CHARGED");
+        Object chargeId = monthlyCharge(sponsor).get("charge_id");
+        assertThat((BigDecimal) invoiceOf(chargeId).get("credit_applied")).isEqualByComparingTo("500");
+        assertThat(balance(sponsor, QbWallets.CASH)).isEqualByComparingTo("1400");
+        assertThat(creditNote(chargeId, 100)).containsEntry("status", QbFees.DONE);
+        assertThat(notes(sponsor)).hasSize(1003);
     }
 }

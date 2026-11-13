@@ -168,7 +168,7 @@ public final class FeeProcesses {
         @NotNull @DecimalMin("0") @DecimalMax(MAX_AMOUNT) @Digits(integer = 13, fraction = 0) BigDecimal tax,
         @NotNull @DecimalMin("1") @DecimalMax(MAX_AMOUNT) @Digits(integer = 13, fraction = 0) BigDecimal total,
         @Size(max = 36) String operatorId, @NotNull @DecimalMin("0") @DecimalMax("3650") BigDecimal dueDays,
-        @Size(max = CreditNotes.MAX_NOTES) List<CreditNotes.@NotNull Take> credits) {
+        List<CreditNotes.@NotNull Take> credits) {
 
         /** F-M7: what the credit notes' credit pays of it (taken by the caller, the earliest note first). */
         public BigDecimal credit() {
@@ -243,7 +243,6 @@ public final class FeeProcesses {
     static final String ISSUED = "issued";
     static final String REMINDER = "reminder";
     static final String CREDIT_NOTES = "creditNotes";
-    static final String CREDIT_USES = "creditUses";
     static final String CREDIT_TAKES = "creditTakes";
     static final String CREDIT_LEFT = "creditLeft";
 
@@ -276,12 +275,11 @@ public final class FeeProcesses {
                     .where(new QueryPredicate.And(List.of(
                         new QueryPredicate.Eq("sponsorId", chargeInput(ctx).sponsorId()),
                         new QueryPredicate.Eq("period", chargeInput(ctx).period()),
-                        new QueryPredicate.IsNull("chargeId")))).limit(1).build(), MONTH_INVOICE),
-                // F-M7 (§10.3-4): the credit notes' credit left, which a prepaid fee's invoice takes first.
-                QueryEntities.query(QbFees.defaultDataset(QbCreditNotes.CREDIT_NOTE),
-                    ctx -> CreditNotes.notes(chargeInput(ctx).sponsorId()), CREDIT_NOTES),
-                QueryEntities.query(QbFees.defaultDataset(QbCreditNotes.USE),
-                    ctx -> CreditNotes.uses(chargeInput(ctx).sponsorId()), CREDIT_USES)))
+                        new QueryPredicate.IsNull("chargeId")))).limit(1).build(), MONTH_INVOICE)))
+            // F-M7 (§10.3-4): a prepaid fee's invoice takes the credit notes' credit left first. Read (H1 of the
+            // review: summed in SQL) before anything is written, and only when the prepayment cannot pay it all.
+            .step("Read the credit left", RunTemplate.<ProcessContext>when(FeeProcesses::creditMayPay,
+                CreditNotes.LEFT_TEMPLATE, ctx -> CreditNotes.leftParams(chargeInput(ctx).sponsorId()), CREDIT_NOTES))
             .compute("Check and record the charge", (metadata, ctx) -> insertCharge(ctx, zone))
             // Written first: the posting names it as its source.
             .step("Save the charge", SaveChanges.now())
@@ -293,7 +291,6 @@ public final class FeeProcesses {
                 ctx -> chargeInput(ctx).prepaymentId() != null, Prepayments.USE, 1,
                 ctx -> new Prepayments.UseInput(chargeInput(ctx).prepaymentId(), (String) ctx.get(CHARGE_ID),
                     ctx.get(TOTAL, BigDecimal.class), chargeReference(ctx)), SETTLEMENT))
-            // F-M7 (§10.3-4): a prepaid fee's invoice takes the credit notes' credit left first.
             .compute("Take the credit left", (metadata, ctx) -> takeCredit(ctx))
             // D-Q87-5, F-M1: a prepaid sponsor pays as fees arise, from the fee credit and then the cash, as far as
             // they go (the rest stays owed on the charge's invoice). M1 of the F-M5 review: what the prepayment does
@@ -439,18 +436,53 @@ public final class FeeProcesses {
      * money set aside for it) and before the account.
      */
     static void takeCredit(ProcessContext ctx) {
-        if (!FeeRules.PREPAID.equals(ctx.get(BILLING_MODE))) {
+        if (!mayTakeCredit(ctx)) {
             return;
         }
-        if (list(ctx, CREDIT_NOTES).size() > CreditNotes.MAX_NOTES
-            || list(ctx, CREDIT_USES).size() > CreditNotes.MAX_USES) {
-            throw new IllegalStateException("More credit notes or uses than are read for "
-                + chargeInput(ctx).sponsorId());
+        if (!ctx.contains(CREDIT_NOTES)) {
+            // creditMayPay foresees what insertCharge and the prepayment do; never skip the credit if it was wrong.
+            throw new IllegalStateException("The credit left was not read for a fee that still owes "
+                + owedAfterPrepayment(ctx));
         }
+        ctx.put(CREDIT_TAKES, CreditNotes.take(CreditNotes.left(CreditNotes.rows(ctx, CREDIT_NOTES)),
+            owedAfterPrepayment(ctx)));
+    }
+
+    /**
+     * Before the charge is written: whether it will be prepaid and owe something after its prepayment pays (what
+     * {@link #insertCharge} and {@code QB_PREPAYMENT_USE} will do: the prepayment's mode, else the sponsor's billing;
+     * the amount and its tax; the prepayment pays at most what it holds).
+     */
+    static boolean creditMayPay(ProcessContext ctx) {
+        ChargeInput input = chargeInput(ctx);
+        ParamValues params = ctx.get(PARAMS, ParamValues.class);
+        EntityInstance prepayment = first(ctx, PREPAYMENT);
+        EntityInstance sponsor = first(ctx, SPONSOR);
+        if (prepayment == null && sponsor == null) {
+            return false;
+        }
+        String billingMode = prepayment != null ? String.valueOf((Object) prepayment.get("mode"))
+            : FeeRules.billingModeOf(sponsor.get("billingMode"), params.get(QbParams.FEE_DEFAULT_BILLING_MODE,
+                String.class));
+        BigDecimal tax = FeeRules.tax(input.amount(), params.get(QbParams.FEE_TAX_RATE, BigDecimal.class));
+        if (!FeeRules.PREPAID.equals(billingMode) || tax == null) {
+            return false;
+        }
+        BigDecimal total = input.amount().add(tax);
+        BigDecimal fromPrepayment = prepayment == null ? BigDecimal.ZERO
+            : total.min(money(prepayment.get("remaining")).max(BigDecimal.ZERO));
+        return total.subtract(fromPrepayment).signum() > 0;
+    }
+
+    /** Whether a prepaid fee still owes something after its prepayment paid (only then is the credit taken). */
+    static boolean mayTakeCredit(ProcessContext ctx) {
+        return FeeRules.PREPAID.equals(ctx.get(BILLING_MODE)) && ctx.contains(TOTAL)
+            && owedAfterPrepayment(ctx).signum() > 0;
+    }
+
+    static BigDecimal owedAfterPrepayment(ProcessContext ctx) {
         FeeSettlement.SettleOutput used = ctx.get(SETTLEMENT, FeeSettlement.SettleOutput.class);
-        BigDecimal owed = ctx.get(TOTAL, BigDecimal.class).subtract(used == null ? BigDecimal.ZERO : used.paid());
-        ctx.put(CREDIT_TAKES, CreditNotes.take(CreditNotes.unused(list(ctx, CREDIT_NOTES), list(ctx, CREDIT_USES)),
-            owed));
+        return ctx.get(TOTAL, BigDecimal.class).subtract(used == null ? BigDecimal.ZERO : used.paid());
     }
 
     @SuppressWarnings("unchecked")
@@ -584,13 +616,13 @@ public final class FeeProcesses {
                             new QueryPredicate.Eq("period", invoiceInput(ctx).period())))).limit(MAX_CHARGES).build(),
                         INVOICES),
                     QueryEntities.query(QbOperators.defaultDataset(QbOperators.ASSIGNMENT),
-                        ctx -> bySponsor("userId", invoiceInput(ctx).sponsorId()), ASSIGNMENT),
-                    // F-M7 (§10.3-4): the credit notes' credit left, which the month's invoice takes first.
-                    QueryEntities.query(QbFees.defaultDataset(QbCreditNotes.CREDIT_NOTE),
-                        ctx -> CreditNotes.notes(invoiceInput(ctx).sponsorId()), CREDIT_NOTES),
-                    QueryEntities.query(QbFees.defaultDataset(QbCreditNotes.USE),
-                        ctx -> CreditNotes.uses(invoiceInput(ctx).sponsorId()), CREDIT_USES)))
+                        ctx -> bySponsor("userId", invoiceInput(ctx).sponsorId()), ASSIGNMENT)))
                 .compute("Decide", (metadata, ctx) -> decideMonthInvoice(ctx))
+                // F-M7 (§10.3-4): the credit notes' credit left, which the month's invoice takes first (H1 of the
+                // review: summed in SQL; read only when the invoice is issued).
+                .step("Read the credit left", RunTemplate.<ProcessContext>when(ctx -> "ISSUED".equals(ctx.get(OUTCOME)),
+                    CreditNotes.LEFT_TEMPLATE, ctx -> CreditNotes.leftParams(invoiceInput(ctx).sponsorId()),
+                    CREDIT_NOTES))
                 .step("Number the invoice", AssignNumber.<ProcessContext>when(ctx -> "ISSUED".equals(ctx.get(OUTCOME)),
                     QbFees.INVOICE_SEQUENCE, ctx -> yearOf(invoiceInput(ctx).period()), INVOICE_NO))
                 .compute("Record the invoice", (metadata, ctx) -> insertPeriodInvoice(ctx, zone))
@@ -647,12 +679,7 @@ public final class FeeProcesses {
         BigDecimal total = amount.add(tax);
         values.put("total", total);
         // F-M7 (§10.3-4): the credit notes' credit left pays it first (a postpaid fee's note left it, C2).
-        if (list(ctx, CREDIT_NOTES).size() > CreditNotes.MAX_NOTES
-            || list(ctx, CREDIT_USES).size() > CreditNotes.MAX_USES) {
-            throw new IllegalStateException("More credit notes or uses than are read for " + input.sponsorId());
-        }
-        List<CreditNotes.Take> takes = CreditNotes.take(CreditNotes.unused(list(ctx, CREDIT_NOTES),
-            list(ctx, CREDIT_USES)), total);
+        List<CreditNotes.Take> takes = CreditNotes.take(CreditNotes.left(CreditNotes.rows(ctx, CREDIT_NOTES)), total);
         BigDecimal credit = CreditNotes.takenTotal(takes);
         boolean paid = credit.compareTo(total) >= 0;
         values.put("status", paid ? QbFees.PAID : credit.signum() > 0 ? QbFees.PARTIAL : QbFees.OPEN);
@@ -784,12 +811,10 @@ public final class FeeProcesses {
                 QueryEntities.query(QbFeeAccount.defaultDataset(QbFeeAccount.GRANT),
                     ctx -> FeeSettlement.credits(ctx.request().actorId(), ctx.opTime()), CREDITS),
                 QueryEntities.query(QbWallets.defaultDataset(QbWallets.WALLET),
-                    ctx -> QbWallets.query(QbWallets.CASH, ctx.request().actorId()), CASH_WALLET),
-                // F-M7 (C2): the credit notes' credit left pays first.
-                QueryEntities.query(QbFees.defaultDataset(QbCreditNotes.CREDIT_NOTE),
-                    ctx -> CreditNotes.notes(ctx.request().actorId()), CREDIT_NOTES),
-                QueryEntities.query(QbFees.defaultDataset(QbCreditNotes.USE),
-                    ctx -> CreditNotes.uses(ctx.request().actorId()), CREDIT_USES)))
+                    ctx -> QbWallets.query(QbWallets.CASH, ctx.request().actorId()), CASH_WALLET)))
+            // F-M7 (C2): the credit notes' credit left pays first (H1 of the review: summed in SQL).
+            .step("Read the credit left", RunTemplate.<ProcessContext>of(CreditNotes.LEFT_TEMPLATE,
+                ctx -> CreditNotes.leftParams(ctx.request().actorId()), CREDIT_NOTES))
             .compute("Check the payment", (metadata, ctx) -> checkEarlyPayment(ctx))
             // Each fee its own payment (QB_FEE_SETTLE), in the order the fees were charged.
             .step("Settle each fee", CallProcess.forEach(SETTLE_ITEM, 1, FeeProcesses::settleInputs, SETTLED))
@@ -818,11 +843,7 @@ public final class FeeProcesses {
         }
         // The whole of what is chosen, or nothing: paying early is a choice, not a debt yet. F-M7 (C2): the credit
         // notes' credit left pays first, then the account.
-        if (list(ctx, CREDIT_NOTES).size() > CreditNotes.MAX_NOTES
-            || list(ctx, CREDIT_USES).size() > CreditNotes.MAX_USES) {
-            throw new IllegalStateException("More credit notes or uses than are read for " + ctx.request().actorId());
-        }
-        List<CreditNotes.Unused> unused = CreditNotes.unused(list(ctx, CREDIT_NOTES), list(ctx, CREDIT_USES));
+        List<CreditNotes.Unused> unused = CreditNotes.left(CreditNotes.rows(ctx, CREDIT_NOTES));
         ctx.put(CREDIT_LEFT, unused);
         BigDecimal available = FeeSettlement.spendable(list(ctx, CREDITS), first(ctx, CASH_WALLET), ctx.opTime())
             .add(CreditNotes.total(unused));

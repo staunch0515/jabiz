@@ -15,6 +15,7 @@ import com.jabiz.runtime.ledger.LedgerProcesses;
 import com.jabiz.runtime.numbering.AssignNumber;
 import com.jabiz.runtime.process.steps.CallProcess;
 import com.jabiz.runtime.process.steps.QueryEntities;
+import com.jabiz.runtime.process.steps.RunTemplate;
 import com.jabiz.runtime.process.steps.SaveChanges;
 import com.jabiz.runtime.task.CloseTasks;
 import jakarta.validation.constraints.DecimalMax;
@@ -62,9 +63,12 @@ public final class CreditNotes {
     public static final String DOCUMENT_TEMPLATE = "qb.sponsor.fee-credit-note-doc";
     public static final String LINES_TEMPLATE = "qb.sponsor.fee-credit-note-lines";
 
-    /** How many notes and uses of a sponsor's are read: more than any sponsor has. */
-    public static final int MAX_NOTES = 1000;
-    public static final int MAX_USES = 5000;
+    /**
+     * H1 of the review: a sponsor's notes with credit left, summed in SQL (never all their notes and uses), and the
+     * notes so far on one fee.
+     */
+    public static final String LEFT_TEMPLATE = "qb.system.credit-notes-left";
+    public static final String CHARGE_NOTES_TEMPLATE = "qb.system.fee-charge-notes";
 
     /** The postings' descriptions (the monthly report tells them apart by their accounts and source). */
     static final String ISSUED = "Platform fee credit note";
@@ -123,8 +127,8 @@ public final class CreditNotes {
     static final String OWN_INVOICE = "ownInvoice";
     static final String MONTH_INVOICE = "monthInvoice";
     static final String UNPAID = "unpaid";
-    static final String NOTES = "notes";
-    static final String USES = "uses";
+    static final String FEE_NOTES = "feeNotes";
+    static final String SOURCE_NOTE = "sourceNote";
     static final String DECIDED = "decided";
     static final String EXISTING = "existing";
     static final String NOTE_NO = "noteNo";
@@ -156,7 +160,7 @@ public final class CreditNotes {
                 return ctx;
             })
             .outputMapper(ctx -> ctx.contains(OUTPUT) ? ctx.get(OUTPUT, IssueOutput.class) : IssueOutput.none())
-            .step("Read the fee, its invoice, the sponsor's unpaid invoices, notes and wallets",
+            .step("Read the fee, its invoice, the sponsor's unpaid invoices, the note of this source and wallets",
                 QueryEntities.<ProcessContext>all(
                     QueryEntities.query(QbFees.defaultDataset(QbFees.CHARGE), ctx -> EntityQuery.builder()
                         .where(new QueryPredicate.In("chargeId", FeeGate.ids(input(ctx).chargeId()))).limit(1)
@@ -166,15 +170,20 @@ public final class CreditNotes {
                         .build(), OWN_INVOICE),
                     QueryEntities.query(QbFees.defaultDataset(QbFees.INVOICE), ctx -> unpaid(input(ctx).sponsorId()),
                         UNPAID),
-                    QueryEntities.query(QbFees.defaultDataset(QbCreditNotes.CREDIT_NOTE),
-                        ctx -> notes(input(ctx).sponsorId()), NOTES),
-                    QueryEntities.query(QbFees.defaultDataset(QbCreditNotes.USE), ctx -> uses(input(ctx).sponsorId()),
-                        USES),
+                    // A note is issued once for its source (the unique (sponsorId, sourceKey)).
+                    QueryEntities.query(QbFees.defaultDataset(QbCreditNotes.CREDIT_NOTE), ctx -> EntityQuery.builder()
+                        .where(new QueryPredicate.And(List.of(
+                            new QueryPredicate.In("sponsorId", FeeGate.ids(input(ctx).sponsorId())),
+                            new QueryPredicate.Eq("sourceKey", input(ctx).sourceKey())))).limit(1).build(),
+                        SOURCE_NOTE),
                     QueryEntities.query(QbWallets.defaultDataset(QbWallets.WALLET),
                         ctx -> QbWallets.query(QbWallets.CASH, input(ctx).sponsorId()), FeeSettlement.CASH_WALLET),
                     QueryEntities.query(QbWallets.defaultDataset(QbWallets.WALLET),
                         ctx -> QbWallets.query(QbWallets.FEE_CREDIT, input(ctx).sponsorId()),
                         FeeSettlement.CREDIT_WALLET)))
+            // The fee's limits, and the notes on it before whose parts given back are read with its own.
+            .step("Read the notes on the fee", RunTemplate.<ProcessContext>of(CHARGE_NOTES_TEMPLATE,
+                ctx -> Map.of("chargeId", input(ctx).chargeId()), FEE_NOTES))
             // A postpaid fee not paid early is on its month's invoice; a prepaid fee's parts are read to give back.
             .step("Read the month's invoice and what paid the fee", QueryEntities.<ProcessContext>all(
                 QueryEntities.query(QbFees.defaultDataset(QbFees.INVOICE), CreditNotes::monthInvoice, MONTH_INVOICE),
@@ -308,16 +317,11 @@ public final class CreditNotes {
             .orderBy("issuedAt", true).limit(FeeGate.MAX_UNPAID).build();
     }
 
-    /** A sponsor's credit notes (a fee's limits, and the credit they leave). */
-    public static EntityQuery notes(Object sponsorId) {
-        return EntityQuery.builder().where(new QueryPredicate.In("sponsorId", FeeGate.ids(sponsorId)))
-            .orderBy("issuedAt", true).limit(MAX_NOTES + 1).build();
-    }
-
-    /** What a sponsor's notes' credit paid. */
-    public static EntityQuery uses(Object sponsorId) {
-        return EntityQuery.builder().where(new QueryPredicate.In("sponsorId", FeeGate.ids(sponsorId)))
-            .limit(MAX_USES + 1).build();
+    /** The rows of {@value #CHARGE_NOTES_TEMPLATE} (or {@value #LEFT_TEMPLATE}) read under {@code key}. */
+    @SuppressWarnings("unchecked")
+    public static List<Map<String, Object>> rows(ProcessContext ctx, String key) {
+        List<Map<String, Object>> rows = (List<Map<String, Object>>) ctx.get(key);
+        return rows == null ? List.of() : rows;
     }
 
     static EntityQuery monthInvoice(ProcessContext ctx) {
@@ -344,10 +348,8 @@ public final class CreditNotes {
             if (own != null) {
                 targets.add(String.valueOf(own.id()));
             }
-            for (EntityInstance note : FeeGate.list(ctx, NOTES)) {
-                if (String.valueOf(charge.id()).equals(String.valueOf((Object) note.get("chargeId")))) {
-                    targets.add(String.valueOf(note.id()));
-                }
+            for (Map<String, Object> note : rows(ctx, FEE_NOTES)) {
+                targets.add(String.valueOf(note.get("creditNoteId")));
             }
         }
         return EntityQuery.builder().where(new QueryPredicate.And(List.of(
@@ -366,18 +368,14 @@ public final class CreditNotes {
             // The callers read the fee of the sponsor whose lock they hold.
             throw new IllegalStateException("Fee " + input.chargeId() + " is not " + input.sponsorId() + "'s");
         }
-        List<EntityInstance> notes = FeeGate.list(ctx, NOTES);
-        if (notes.size() > MAX_NOTES || FeeGate.list(ctx, USES).size() > MAX_USES
-            || FeeGate.list(ctx, FeeSettlement.PAYMENTS).size() > FeeSettlement.MAX_PARTS) {
-            throw new IllegalStateException("More credit notes, uses or payment parts than are read for "
-                + input.sponsorId());
+        if (FeeGate.list(ctx, FeeSettlement.PAYMENTS).size() > FeeSettlement.MAX_PARTS) {
+            throw new IllegalStateException("More payment parts than are read for fee " + input.chargeId());
         }
-        for (EntityInstance note : notes) {
-            if (input.sourceKey().equals(note.get("sourceKey"))) {
-                ctx.put(EXISTING, note);
-                ctx.put(OUTPUT, output(note, null, BigDecimal.ZERO));
-                return;
-            }
+        EntityInstance existing = FeeGate.first(ctx, SOURCE_NOTE);
+        if (existing != null) {
+            ctx.put(EXISTING, existing);
+            ctx.put(OUTPUT, output(existing, null, BigDecimal.ZERO));
+            return;
         }
         EntityInstance invoice = FeeGate.first(ctx, OWN_INVOICE) != null ? FeeGate.first(ctx, OWN_INVOICE)
             : FeeGate.first(ctx, MONTH_INVOICE);
@@ -389,11 +387,9 @@ public final class CreditNotes {
         BigDecimal feeAmount = FeeGate.money(charge.get("amount"));
         BigDecimal credited = BigDecimal.ZERO;
         BigDecimal creditedTax = BigDecimal.ZERO;
-        for (EntityInstance note : notes) {
-            if (String.valueOf(charge.id()).equals(String.valueOf((Object) note.get("chargeId")))) {
-                credited = credited.add(FeeGate.money(note.get("amount")));
-                creditedTax = creditedTax.add(FeeGate.money(note.get("tax")));
-            }
+        for (Map<String, Object> note : rows(ctx, FEE_NOTES)) {
+            credited = credited.add(FeeGate.money(note.get("amount")));
+            creditedTax = creditedTax.add(FeeGate.money(note.get("tax")));
         }
         BigDecimal creditable = CreditNoteRules.creditable(feeAmount, credited);
         BigDecimal amount = input.amount();
@@ -623,29 +619,25 @@ public final class CreditNotes {
     public record Take(String creditNoteId, BigDecimal amount) {}
 
     /**
-     * What is left of each note's credit, the earliest issued first: its total less what it gave back and what its
-     * credit paid (the fee's own invoice included). None below 0.
+     * What is left of each note's credit ({@value #LEFT_TEMPLATE}: its total less what it gave back and what its credit
+     * paid, its own invoice included; only the notes with some left), the earliest issued first.
      */
-    public static List<Unused> unused(List<EntityInstance> notes, List<EntityInstance> uses) {
-        Map<String, BigDecimal> used = new LinkedHashMap<>();
-        for (EntityInstance use : uses) {
-            used.merge(String.valueOf((Object) use.get("creditNoteId")), FeeGate.money(use.get("amount")),
-                BigDecimal::add);
-        }
+    public static List<Unused> left(List<Map<String, Object>> rows) {
         List<Unused> unused = new ArrayList<>();
-        for (EntityInstance note : notes) {
-            String id = String.valueOf(note.id());
-            BigDecimal left = FeeGate.money(note.get("total"))
-                .subtract(FeeGate.money(note.get("refundedCash")))
-                .subtract(FeeGate.money(note.get("refundedCredit")))
-                .subtract(used.getOrDefault(id, BigDecimal.ZERO));
+        for (Map<String, Object> row : rows) {
+            BigDecimal left = FeeGate.money(row.get("creditLeft"));
             if (left.signum() > 0) {
-                unused.add(new Unused(id, String.valueOf((Object) note.get("creditNoteNo")),
-                    (Instant) note.get("issuedAt"), left));
+                unused.add(new Unused(String.valueOf(row.get("creditNoteId")), String.valueOf(row.get("creditNoteNo")),
+                    AudienceRefundJob.instant(row.get("issuedAt")), left));
             }
         }
         unused.sort(Comparator.comparing(Unused::issuedAt).thenComparing(Unused::creditNoteNo));
         return List.copyOf(unused);
+    }
+
+    /** {@value #LEFT_TEMPLATE} for one sponsor. */
+    public static Map<String, Object> leftParams(String sponsorId) {
+        return Map.of("sponsorId", sponsorId);
     }
 
     public static BigDecimal total(List<Unused> unused) {
