@@ -298,7 +298,7 @@
   - 计费方式与信用额在商户入驻行上（`QbSponsor.billingMode` / `creditLimit`，`processOnly`），只经 `QB_OPERATOR_BILLING_SET`（`qb.fee.billing`，运营商以 `OperatorChecks.ownSponsor` 核对范围，理由必填）；缺省为受控参数 `qb.fee.default-billing-mode`。平台费记在记费时商户所属运营商名下（`QbFeeCharge.operatorId`），
     月结算的分成基数 = 抽成 + 平台费（`qb.system.operator-fees`，`QbOperatorSettlement.platformFees`）。新增一种过账时同步改月报 `qb.admin.monthly` 的分类（`FEE_CHARGED` / `FEE_PAID` / `FEE_VOIDED`）与 `AdminFinanceIT`。
 - **分录导出与收据**（`journal`、`wallet.TopUpReceipts`，`docs/quizbuks/plans/Q9d-journal-receipts.md`）：
-  - 平台账本本身是复式总账，导出只把平台科目映射到会计系统的科目代码（`QbParams.JOURNAL_ACCOUNTS`，每个 `QbLedger` 科目一个，启动检查 `JournalMappingCheck`）；新增科目时同时加映射参数。
+  - 平台账本本身是复式总账，导出只把平台科目映射到会计系统的科目代码（`QbParams.JOURNAL_ACCOUNTS`，每个 `QbLedger` 科目一个，启动检查 `JournalMappingCheck`）；新增科目时同时加映射参数。按发起方记的科目（第一维度为发起方：2110、2160、2190、1130、2180）在凭证上每个发起方一行：新增这样的科目时同时加入 `JournalLines.PER_SPONSOR` 与 `journal-summary` / `-detail` / `-parts` 中的列表（`JournalLinesTest` 检查两边一致，`JournalFeeAccountsIT` 检查明细合计等于凭证行）。
   - 一期 = 一个**日本日期**的月（`JournalPeriods`，D-1；Q9c 的月报仍按 UTC），按顺序导出（`QB_JOURNAL_EXPORT`，命名锁 `qb.journal`，`(periodFrom, granularity)` 唯一），
     第一期为最早过账的月份。每笔分录恰在一次导出中：本次取"过账于期末之前、记录于截止时刻之前、且不在以前的导出中"的（模板 `qb.system.journal-*`；上一期末取导出记录的 `periodEnd`；截止 = 导出时刻 − `JournalPeriods.SETTLE`，
     使导出时尚未提交的过账进入下一次；同一数据库另有事务已打开超过 `quizbuks.journal.max-open-transaction`（≤ `SETTLE` 的一半）即拒绝，`QB_JOURNAL_TRANSACTION_OPEN`）。迟到的分录进入下一次导出，已导出的凭证从不改变；冲正照常是新分录。
