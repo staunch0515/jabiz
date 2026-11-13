@@ -287,6 +287,51 @@ public class OperatorConfig {
         return OperatorSettlements.LAYOUT;
     }
 
+    // ---- F-M12: the settlement lines -----------------------------------------------------------------------------
+
+    @Bean
+    EntityDefinition qbOperatorSettlementLineEntity() {
+        return QbSettlementLines.LINE_ENTITY;
+    }
+
+    /** Finance reads every line (the operator its own through its own template); only the processes write them. */
+    @Bean
+    DatasetDefinition qbOperatorSettlementLineDataset() {
+        return DatasetDefinition.define(QbSettlementLines.defaultDataset(), d -> d
+            .targetEntityType(QbSettlementLines.LINE)
+            .asDefault()
+            .permissions(QbPermissions.ADMIN_FINANCE_READ, QbPermissions.SPONSOR_VIEW_WRITE)
+            // One settlement writes all its lines in one transaction: up to MAX_LINES, not the default batch of 100.
+            .policy(p -> p.processOnlyWrites().maxWriteBatchSize(OperatorSettlements.MAX_LINES))
+            .storage(s -> s.driver("r2dbc-postgresql").connectionPoolRef(poolRef)));
+    }
+
+    /** The operator reads only its own lines (D64): limited to the session's entry scope by the line's operator. */
+    @Bean
+    DatasetDefinition qbOperatorOwnSettlementLineDataset() {
+        return DatasetDefinition.define(QbSettlementLines.OPERATOR_DATASET, d -> d
+            .targetEntityType(QbSettlementLines.LINE)
+            .permissions(QbPermissions.OPERATOR_USE, QbPermissions.SPONSOR_VIEW_WRITE)
+            .policy(p -> p.readOnly(true).allowTimeTravel(false))
+            .scope(s -> s.withinEntryScope(QbOperators.SCOPE, "operatorId"))
+            .storage(s -> s.driver("r2dbc-postgresql").connectionPoolRef(poolRef)));
+    }
+
+    @Bean
+    StaticDictionary qbOperatorSettlementLineKindDictionary() {
+        return StaticDictionary.define(QbSettlementLines.KIND_DICTIONARY, d -> d
+            .item(QbSettlementLines.CHARGE, "en", "Fee", "zh", "费用", "ja", "料金")
+            .item(QbSettlementLines.VOID, "en", "Voided fee", "zh", "作废费用", "ja", "取消料金")
+            .item(QbSettlementLines.GIFT, "en", "Granted credit", "zh", "赠送额度", "ja", "付与クレジット"));
+    }
+
+    /** Accounting evidence: ten years from the end of its fiscal year (as the platform fees). */
+    @Bean
+    com.jabiz.retention.RetentionPolicy qbOperatorSettlementLineRetention() {
+        return com.jabiz.retention.RetentionPolicy.of(QbSettlementLines.LINE)
+            .keep(java.time.Period.ofYears(10)).from("occurredAt").afterFiscalYearEnd();
+    }
+
     @Bean
     ApprovalSubject qbOperatorSettlementApprovalSubject() {
         return ApprovalSubject.define(OperatorSettlements.APPROVAL_SUBJECT, s -> s.entity(OperatorSettlements.SETTLEMENT)
