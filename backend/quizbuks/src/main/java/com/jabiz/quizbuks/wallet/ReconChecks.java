@@ -102,6 +102,20 @@ public final class ReconChecks {
      * account's row is erased and a deleted conversation adds only to everybody's.
      */
     public static final String HELP_USAGE_TOTAL = "HELP_USAGE_TOTAL";
+    /** F-M8: a sponsor's exposure fee deposits (2180, purpose EXPOSURE) against what they hold. */
+    public static final String EXPOSURE_DEPOSITS = "EXPOSURE_DEPOSITS";
+    /** F-M8: a publication whose settlements counted more exposures than were bought (a difference: it was overcharged). */
+    public static final String EXPOSURE_SETTLED_OVER = "EXPOSURE_SETTLED_OVER";
+    /** F-M8: publications due for the month before and not settled for it, {@code qb.exposure.unsettled-after-hours} into the month. */
+    public static final String EXPOSURE_UNSETTLED = "EXPOSURE_UNSETTLED";
+    /** F-M8: publications ended {@code qb.exposure.final-missing-after-hours} ago without a final settlement. */
+    public static final String EXPOSURE_FINAL_MISSING = "EXPOSURE_FINAL_MISSING";
+    /** F-M8: operators' exposure prices outside the headquarters' range as it is now (for attention; sponsorId holds the operator). */
+    public static final String EXPOSURE_PRICE_RANGE = "EXPOSURE_PRICE_RANGE";
+    /** F-M8: a publication with a price frozen and nothing bought, or something bought and no price frozen. */
+    public static final String EXPOSURE_UNIT_MISMATCH = "EXPOSURE_UNIT_MISMATCH";
+    /** F-M8 (a note): running publications of another's video that bought nothing. */
+    public static final String EXPOSURE_UNPURCHASED = "EXPOSURE_UNPURCHASED";
     /** Account 2110 in all against all sponsors' cached balances. */
     public static final String TOTAL_2110 = "TOTAL_2110";
     /** Every posted line's debit less credit: 0. */
@@ -138,13 +152,14 @@ public final class ReconChecks {
         PREPAYMENT_PARTS, PREPAYMENT_UNCHARGED, DISTRIBUTION_DEPOSITS, DISTRIBUTION_UNSETTLED,
         DISTRIBUTION_FINAL_MISSING, DISTRIBUTION_PRICE_RANGE, DISTRIBUTION_AT_FLOOR, AUDIENCE_REFUND_MISSING,
         AUDIENCE_REFUND_NO_PERIOD, AUDIENCE_FEE_NOT_LIVE, CREDIT_NOTE_USES, CREDIT_NOTE_LIMITS, CREDIT_NOTE_USE_VOID,
-        CREDIT_UNUSED_WITH_DUE, HELP_USAGE_TOTAL);
+        CREDIT_UNUSED_WITH_DUE, HELP_USAGE_TOTAL, EXPOSURE_DEPOSITS, EXPOSURE_SETTLED_OVER, EXPOSURE_UNSETTLED,
+        EXPOSURE_FINAL_MISSING, EXPOSURE_PRICE_RANGE, EXPOSURE_UNIT_MISMATCH, EXPOSURE_UNPURCHASED);
 
     /** Codes no longer reported that runs written before may still name: readable, never written. */
     public static final List<String> RETIRED = List.of(DISTRIBUTION_PRICE_OUT_OF_RANGE);
 
     /** The checks that only note something: a run with notes alone is {@code OK}, and nobody is asked. */
-    public static final Set<String> NOTES = Set.of(TAKER_WALLET_LAG, DISTRIBUTION_AT_FLOOR);
+    public static final Set<String> NOTES = Set.of(TAKER_WALLET_LAG, DISTRIBUTION_AT_FLOOR, EXPOSURE_UNPURCHASED);
 
     /**
      * F-M14 (docs/quizbuks/plans/impl/F-M14.md §1.2): the checks that need someone to look or decide while the books
@@ -153,7 +168,7 @@ public final class ReconChecks {
      * ({@link ReconTasks}).
      */
     public static final Set<String> ATTENTION = Set.of(DISTRIBUTION_PRICE_RANGE, AUDIENCE_REFUND_NO_PERIOD,
-        CREDIT_UNUSED_WITH_DUE, HELP_USAGE_TOTAL);
+        CREDIT_UNUSED_WITH_DUE, HELP_USAGE_TOTAL, EXPOSURE_PRICE_RANGE);
 
     /** F-M14: the dictionary of each check's level (made from these sets). */
     public static final String LEVEL_DICTIONARY = "urn:jabiz:dict:quizbuks:recon-level";

@@ -144,11 +144,18 @@ abstract class PrepaymentItSupport extends TreeItSupport {
         Map<String, Object> params = new HashMap<>(Map.of("at", clock.instant().toString(), "zone", "Asia/Tokyo"));
         params.put("unsettledHours", paramValue(QbParams.DISTRIBUTION_UNSETTLED_AFTER_HOURS));
         params.put("missingHours", paramValue(QbParams.DISTRIBUTION_FINAL_MISSING_AFTER_HOURS));
-        return feeAccountItems(TestTokens.bearer(tokens, "fm5-recon", QbPermissions.WALLET_SYSTEM),
-            Map.of("params", params)).stream()
+        String token = TestTokens.bearer(tokens, "fm5-recon", QbPermissions.WALLET_SYSTEM);
+        // F-M8: the exposure fee's checks, with their own hours.
+        Map<String, Object> exposure = new HashMap<>(Map.of("at", clock.instant().toString(), "zone", "Asia/Tokyo"));
+        exposure.put("unsettledHours", paramValue(QbParams.EXPOSURE_UNSETTLED_AFTER_HOURS));
+        exposure.put("missingHours", paramValue(QbParams.EXPOSURE_FINAL_MISSING_AFTER_HOURS));
+        List<Map<String, Object>> rows = new java.util.ArrayList<>(feeAccountItems(token, Map.of("params", params)));
+        rows.addAll(items("qb.system.recon-exposure", token, Map.of("params", exposure)));
+        return rows.stream()
             .filter(row -> sponsor.equals(String.valueOf(row.get("sponsorId")))
                 && !"FEE_CREDIT_PROMOTION".equals(row.get("checkCode"))
-                && !"DISTRIBUTION_AT_FLOOR".equals(row.get("checkCode"))).toList();
+                && !"DISTRIBUTION_AT_FLOOR".equals(row.get("checkCode"))
+                && !"EXPOSURE_UNPURCHASED".equals(row.get("checkCode"))).toList();
     }
 
     /** A parameter's published value now (none: not published). */

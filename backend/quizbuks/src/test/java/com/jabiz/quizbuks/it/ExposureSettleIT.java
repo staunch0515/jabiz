@@ -238,4 +238,24 @@ class ExposureSettleIT extends ExposureFeeItSupport {
     long events(String publicationId) {
         return outboxEvents(com.jabiz.quizbuks.publishing.PublicationNotices.EVENT, "publicationId", publicationId);
     }
+
+    @Test
+    void theDailyChecksFindWhatIsWrongWithTheExposureFee() {
+        String[] p = boughtPublication("fm8-recon", 100);
+        String sponsor = p[0];
+        assertThat(differences(sponsor)).isEmpty();
+        // The deposit in the ledger and what the prepayment holds disagree.
+        execute("UPDATE qb_prepayment SET remaining = remaining - 1, version = version + 1 WHERE publication_id = ? "
+            + "AND purpose = 'EXPOSURE'", p[1]);
+        assertThat(differences(sponsor)).extracting(r -> r.get("checkCode")).contains("EXPOSURE_DEPOSITS");
+        execute("UPDATE qb_prepayment SET remaining = remaining + 1, version = version + 1 WHERE publication_id = ? "
+            + "AND purpose = 'EXPOSURE'", p[1]);
+        assertThat(differences(sponsor)).isEmpty();
+        // Ended and no final row for longer than qb.exposure.final-missing-after-hours (48): found; settled: gone.
+        run("QB_PUBLICATION_ADMIN_END", contentAdmin(), body("publicationId", p[1], "reason", "F-M8 test"));
+        clock.set(clock.instant().plus(Duration.ofHours(60)));
+        assertThat(differences(sponsor)).extracting(r -> r.get("checkCode")).contains("EXPOSURE_FINAL_MISSING");
+        finalRun(clock.instant().plus(Duration.ofHours(1)));
+        assertThat(differences(sponsor)).isEmpty();
+    }
 }
