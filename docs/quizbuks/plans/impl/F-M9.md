@@ -44,7 +44,7 @@
 - **`QbAiCreditMovement`**（新，时态 `t.writeOnce()`，迁移照时态实体的约定建索引、外键、`jabiz_protect_append_only` 与只含主键的唯一索引）：发起方、种类 `BUY` / `RETURN` / `CHARGE` / `EXPIRE`、金额（进为正、出为负）、其中赠送与现金、变动后的额度、运营商（`CHARGE`）、引用（费用编号 / 赠送编号 / 购买的幂等键）、时刻。它是页面"购买、退回、用量明细"、累计购入与核对的依据；封存列只增不改（`SealedColumnsHistory`）。**数据视图声明 `processOnlyWrites()`**（只能经流程写入）；运营商页新增的视图与模板声明 `withinEntryScope`（D64，§7）。
 - 费用种类 `AI`：`FeeRules.KINDS`、`FeeProcesses.ChargeInput.kind` 的正则（`SettleInput.kind` 不加：AI 费从不后付）、CHECK、字典、月报。
 - 参数（§6）加进 `QbParams.ALL` / `CONTROLLED`；`FirstLaunchSwitches`：`qb.ai.fee.enabled` 与 `qb.ai.site-profile.enabled` 两行由 `WAITING` 改 `ACTIVE`，后者从 `KEY_BEFORE_MEANING` 去掉。
-- `PersonalDataEraser`：`QbAiCreditMovement` **在本 PR 登记**（新表保存发起方编号，新增时同时登记），`ErasureIT` 的全表搜索覆盖它；关闭 AI 预付款的部分随 F-M15。
+- `PersonalDataEraser`：`QbAiCreditMovement` **不登记**：它只有发起方编号与金额，没有个人字段，`ErasedEntity` 不接受空的字段列表（`ErasedEntity.java:60-63`），也不需要（F-M15 审查，总控 2026-11-13）。关闭 AI 预付款的部分随 F-M15。
 - 无新科目：用 2180（用途 `AI`）、2190、2160、1130、4120、2150、5140；分录映射 `qb.journal.account.*` 已有，不加键。分录平衡；平台承担的部分不入账（不收就没有收入与应收）。
 
 ## 3 规则（纯 Java：新 `AiFeeRules` / `AiCreditRules`）
@@ -166,7 +166,7 @@
 - **H4**：超过 1000 行分摊的 AI 额度（多次购买、记费、退回、到期累积），请求、`QB_PREPAYMENT_USE`、月度记费仍正确且读取的行数按笔、不按分摊行数；`planRelease` 对其他用途的上限不变。
 - `AiCreditStatementBudgetIT`（新，`SqlStatementLog`）：开关开 / 关两种请求的语句数相同（读取并入同一条）；写入只多作业列；**`QB_AI_FEE_SETTLE` 的语句预算断言确切值：固定部分 + 每个作业一次回写，取 1 个与 200 个作业各一例**（上限 200）；购买、退回、到期各断言确切值。**AI 的现有预算测试不变**。
 - 只追加：`QbAiCreditMovement` 与 `qb_fee_charge_version` 没有 UPDATE / DELETE；`SealedColumnsHistory`；`QbAiCreditMovement` 的数据视图 `processOnlyWrites()`（经通用接口写被拒）。
-- 范围（D64）：运营商页新增的视图 / 模板声明 `withinEntryScope`，别的运营商看不到（测试）；`ErasureIT` 的全表搜索覆盖 `QbAiCreditMovement`。
+- 范围（D64）：运营商页新增的视图 / 模板声明 `withinEntryScope`，别的运营商看不到（测试）。
 - 核对与月报：`ReconChecksTest` 每个新项各一例；`AdminFinanceIT` 五类逐行；`FirstLaunchSwitchesCheckTest` / `FirstLaunchSetupIT` 两行 `ACTIVE`；`SetupParamsCheck`；`MessagesTest` 三语；`ProcessAccessIT` 新流程的权限与 `internal()`；ArchUnit；`operator-fees.sql` 不含种类 `AI`（分成基数测试）。
 - F-M7 合入后：对 AI 费开贷项凭证的测试保留（§8 依赖 4）。
 - 场景：`ai-credit.yml`（买 → 请求 → 完成 → 月度记费 → 退回，固定时钟，`completeExternalJob` / `runJob`）及快照。
