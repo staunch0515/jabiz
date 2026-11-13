@@ -68,7 +68,7 @@
   - 增量超过"此作业的预留 + 其余可用额"时，**由含税倒推税前**：取使含税增量不超过可扣额的最大税前金额 x'（`AiFeeRules` 里的纯函数，单元测试），`feeYen = x'`，`absorbedYen = x − x'`（税前）；打日志与指标（`quizbuks.ai.fee.absorbed`，**不带发起方标签**，D16）。`absorbedYen` 以这个含税增量算出的为准；
   - 释放预留、写 `feeYen` 与 `feePeriod`，全部在 `qb.ai:<发起方>` → `qb.ai:*` 锁内，**只改 `QbAiJob`，不取钱包锁**；`QbAiUsage` 与 Token 限额照旧。
 - **迟到的用量**（M6）：作业结算后才到的实例用量（D52 第 5 条：迟到实例的用量由平台照记）**不回写 `QbAiJob`、`QbAiUsage`，不向发起方收**——作业的 `feeYen` 在结算时就定了。它只留在平台自己的尝试记录里；它在每月与提供方账单对照时表现为"账单大于总部页合计"的差额（`operations.md` 写明）。
-- 审核人的 `TRANSLATION_CHECK`、旧的 `COVER`、帮助 AI、AI 获客（Q48d，运营商承担）：`feeMode` 恒为 `NONE`，在开关开着时也不动发起方的额度（测试）。
+- 审核人的 `TRANSLATION_CHECK`、旧的 `COVER`、帮助 AI、AI 获客（Q48d，运营商承担）：`feeMode` 恒为 `NONE`，在开关开着时也不动发起方的额度（测试）。**"帮助 AI 不动发起方额度"的断言由本项的实施 PR 加**（F-M10 审查 L7，总控 2026-11-13）；F-M10 只保留"不改发起方用量表"的回归测试。
 - **运营商分成基数**（M2，L5）：**AI 不进运营商的分成基数，直到 F-M12 决定怎么算**。`queries/qb/system/operator-fees.sql` 的条件加 `AND c.<kind> <> 'AI'`（一处筛选；AI 费的 150% 里 100% 是平台的成本，整笔分给运营商，分成超过费用的三分之一时平台就亏）。F-M12 把成本部分扣出基数后，再按它的设计放开这条筛选。**打开 `qb.ai.fee.enabled` 的前提**写进 `launch-checklist.md`（"AI"一节新增一项：F-M12 完成，或财务确认分成比例）。
 
 ## 4 流程
