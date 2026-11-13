@@ -75,7 +75,10 @@ public final class OperatorShareRules {
         return kinds;
     }
 
-    /** Whether a kinds list is usable: at least one kind, each of capital letters and underscores, comma-separated. */
+    /**
+     * Whether a kinds list is usable: at least one kind, each of letters and underscores, comma-separated; letters in
+     * either case (the list is read case-insensitively and turned to capitals, {@link #parseKinds}).
+     */
     public static boolean validKinds(String text) {
         if (text == null || text.isBlank()) {
             return false;
