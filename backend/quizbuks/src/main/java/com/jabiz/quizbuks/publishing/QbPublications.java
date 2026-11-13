@@ -169,6 +169,7 @@ public final class QbPublications {
         // F-M11: the operator the publication's fees belong to, frozen at its submission (cleared when it goes back
         // to its draft); F-M5: what its submission set aside for its fees (none: nothing).
         eb.field("billingOperatorId", f -> f.physicalColumn("billing_operator_id").processOnly().asText(36));
+        // As set aside at the submission (an exposure top-up, F-M8, raises the prepayment, not this).
         eb.field("prepaymentTotal", f -> f.physicalColumn("prepayment_total").processOnly().asMonetary("JPY", 0));
         // F-M6: the distribution fee's price per start, frozen at the submission (none: no distribution fee), and
         // whether it is the operator's floor.

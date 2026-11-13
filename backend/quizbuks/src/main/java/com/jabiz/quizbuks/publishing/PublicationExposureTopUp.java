@@ -11,8 +11,10 @@ import com.jabiz.quizbuks.fee.ExposureFeeRules;
 import com.jabiz.quizbuks.fee.FeeCodes;
 import com.jabiz.quizbuks.fee.FeeGate;
 import com.jabiz.quizbuks.fee.FeeProcesses;
+import com.jabiz.quizbuks.fee.FeeRules;
 import com.jabiz.quizbuks.fee.PrepaymentRules;
 import com.jabiz.quizbuks.fee.Prepayments;
+import com.jabiz.quizbuks.fee.QbFeeAccount;
 import com.jabiz.quizbuks.fee.QbFees;
 import com.jabiz.quizbuks.fee.QbPrepayments;
 import com.jabiz.quizbuks.identity.CallerChecks;
@@ -49,6 +51,8 @@ public final class PublicationExposureTopUp {
 
     private static final String TOP_UP_INPUT = "topUp.input";
     private static final String PREPAYMENT = "topUp.prepayment";
+    private static final String PARTS = "topUp.parts";
+    private static final String MODE = "topUp.mode";
     private static final String DEPOSIT = "topUp.deposit";
     private static final String TOPPED = "topUp.topped";
     private static final String BOUGHT = "topUp.bought";
@@ -84,15 +88,25 @@ public final class PublicationExposureTopUp {
                 .steps(PublicationEditing::lockAndLoad)
                 .step("Load the fee parameters", LoadParams.<ProcessContext>optional(ProcessContext::opTime,
                     PublicationLifecycle.FEE_PARAMS, QbParams.FEE_TAX_RATE, QbParams.FEE_DEFAULT_BILLING_MODE,
-                    QbParams.EXPOSURE_TOP_UP_MAX))
+                    QbParams.FEE_OVERDUE_BLOCK, QbParams.EXPOSURE_TOP_UP_MAX))
+                // Fees overdue beyond what the sponsor's billing allows stop a top-up as they stop a submission.
+                .steps(b -> FeeGate.load(b, ctx -> ctx.request().actorId()))
                 .step("Lock the sponsor's wallets", HoldLock.<ProcessContext>exclusive(ctx -> QbWallets.lockName(
                     QbWallets.SPONSOR, PublicationPrepayments.sponsorOf(PublicationEditing.publication(ctx)))))
                 .step("Read the account and the exposures' prepayment", QueryEntities.<ProcessContext>all(
                     reads()))
+                // Its parts so far: every top-up adds some, and a prepayment of more parts than MAX_PARTS cannot be given back.
+                .step("Count its parts", QueryEntities.<ProcessContext>of(QbFeeAccount.defaultDataset(QbFeeAccount.PAYMENT),
+                    ctx -> {
+                        EntityInstance prepayment = PublicationEditing.first(ctx, PREPAYMENT);
+                        return EntityQuery.builder().where(new QueryPredicate.In("targetId", prepayment == null
+                            ? List.of() : List.of(String.valueOf(prepayment.id())))).limit(Prepayments.MAX_PARTS + 1)
+                            .build();
+                    }, PARTS))
                 .compute("Work out the top-up", (metadata, ctx) -> work(ctx))
                 .step("Read what a postpaid sponsor owes", RunTemplate.<ProcessContext>when(
                     ctx -> !ctx.hasViolations() && ctx.contains(PublicationPrepayments.ITEMS)
-                        && PublicationPrepayments.postpaid(ctx) && PublicationPrepayments.total(ctx).signum() > 0,
+                        && FeeRules.POSTPAID.equals(ctx.get(MODE)) && PublicationPrepayments.total(ctx).signum() > 0,
                     "qb.system.fee-receivable", ctx -> Map.of("sponsorId",
                         PublicationPrepayments.sponsorOf(PublicationEditing.publication(ctx))), PublicationPrepayments.OWED))
                 .compute("Check the funds", (metadata, ctx) -> checkFunds(ctx))
@@ -154,6 +168,12 @@ public final class PublicationExposureTopUp {
                 Map.of("status", String.valueOf((Object) publication.get("status")))));
             return;
         }
+        Violation unpaidFees = FeeGate.refusal(ctx, params.find(QbParams.FEE_OVERDUE_BLOCK, Boolean.class).orElse(null),
+            params.find(QbParams.FEE_DEFAULT_BILLING_MODE, String.class).orElse(null));
+        if (unpaidFees != null) {
+            ctx.reject(unpaidFees);
+            return;
+        }
         long before = ((Number) purchased).longValue();
         if (before != input.expectedPurchased()) {
             ctx.reject(new Violation("expectedPurchased", FeeCodes.EXPOSURE_PURCHASED_CHANGED, "The exposures bought "
@@ -179,6 +199,18 @@ public final class PublicationExposureTopUp {
                 + "is settled or given back: no more can be added to it", Map.of()));
             return;
         }
+        // The funds are checked as the prepayment was set aside (prepaid money or postpaid credit), not as the sponsor's
+        // billing is now: else a changed billing would add without freezing or fail after the check.
+        ctx.put(MODE, String.valueOf((Object) prepayment.get("mode")));
+        // The parts of the prepayment so far plus the most this top-up adds (a part for each lot it may take from).
+        int mostNew = FeeGate.list(ctx, PublicationPrepayments.CREDITS).size() + FeeGate.list(ctx,
+            PublicationPrepayments.LOTS).size();
+        if (FeeGate.list(ctx, PARTS).size() + mostNew > Prepayments.MAX_PARTS) {
+            ctx.reject(new Violation("additional", FeeCodes.EXPOSURE_PARTS_LIMIT, "This publication's exposures were "
+                + "topped up so often that no more can be added; buy the rest in another publication",
+                Map.of("max", String.valueOf(Prepayments.MAX_PARTS))));
+            return;
+        }
         BigDecimal frozenUnit = FeeGate.money(unit);
         BigDecimal frozenBefore = FeeGate.money(prepayment.get("amount"));
         BigDecimal topUp = ExposureFeeRules.topUpDeposit(before, input.additional(), frozenUnit, rate, frozenBefore);
@@ -200,7 +232,7 @@ public final class PublicationExposureTopUp {
         if (ctx.hasViolations() || !ctx.contains(DEPOSIT) || deposit(ctx).signum() <= 0) {
             return;
         }
-        Violation refusal = PrepaymentRules.refusal(PublicationPrepayments.funds(ctx));
+        Violation refusal = PrepaymentRules.refusal(PublicationPrepayments.funds(ctx, ctx.get(MODE, String.class)));
         if (refusal != null) {
             ctx.reject(refusal);
         }

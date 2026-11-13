@@ -28,6 +28,12 @@ class BanCoverageTest extends PlayItSupport {
     static final Set<String> PACKAGES = Set.of("com.jabiz.quizbuks.operator", "com.jabiz.quizbuks.fee",
         "com.jabiz.quizbuks.verification");
 
+    /**
+     * Processes outside those packages that are started by a person and spend their money (F-M8: the exposures' top-up,
+     * written in {@code publishing}, whose other processes check the ban in their own way).
+     */
+    static final Set<String> ALSO = Set.of("QB_EXPOSURE_TOP_UP");
+
     /** Headquarters' holders are disabled, not banned (BanProcesses), and a banned person does not sign in. */
     static final String HQ = "总部专属";
     static final String READ_ONLY = "只读";
@@ -62,7 +68,8 @@ class BanCoverageTest extends PlayItSupport {
             if (packageOf(definition).isEmpty()) {
                 nowhere.add(definition.name());
             }
-            if (PACKAGES.contains(packageOf(definition)) && definition.access() != ProcessAccess.INTERNAL
+            if ((PACKAGES.contains(packageOf(definition)) || ALSO.contains(definition.name()))
+                && definition.access() != ProcessAccess.INTERNAL
                 && definition.access() != ProcessAccess.SUB_PROCESS_ONLY) {
                 started.put(definition.name(), definition);
             }
@@ -70,7 +77,7 @@ class BanCoverageTest extends PlayItSupport {
         // No definition slips out of the inventory unseen: each has a package, and the inventory does not shrink.
         assertThat(nowhere).as("definitions whose package is not known").isEmpty();
         assertThat(started).as("the inventory").hasSizeGreaterThanOrEqualTo(MIN_INVENTORY);
-        assertThat(started.keySet()).as("the inventory").containsAll(CLOSED);
+        assertThat(started.keySet()).as("the inventory").containsAll(CLOSED).containsAll(ALSO);
 
         Set<String> missing = new TreeSet<>();
         Set<String> checkedAndExempt = new TreeSet<>();

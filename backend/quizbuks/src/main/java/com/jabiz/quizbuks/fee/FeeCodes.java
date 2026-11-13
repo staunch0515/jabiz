@@ -69,6 +69,8 @@ public final class FeeCodes {
     public static final String EXPOSURE_PREPAYMENT_CLOSED = "QB_EXPOSURE_PREPAYMENT_CLOSED";
     /** F-M8: a top-up of a publication that bought no exposures, or that is not running. */
     public static final String EXPOSURE_NOT_BOUGHT = "QB_EXPOSURE_NOT_BOUGHT";
+    /** F-M8: a publication's exposures were topped up so often that its prepayment would have too many parts to give back. */
+    public static final String EXPOSURE_PARTS_LIMIT = "QB_EXPOSURE_PARTS_LIMIT";
     /** F-M8: a top-up that asks for more at once than {@code qb.exposure.top-up.max}, or beyond what a publication buys. */
     public static final String EXPOSURE_TOP_UP_RANGE = "QB_EXPOSURE_TOP_UP_RANGE";
 
@@ -88,7 +90,7 @@ public final class FeeCodes {
         DISTRIBUTION_RANGE_MISSING, CREDIT_NOTE_VOIDED, CREDIT_NOTE_EXCEEDS, INVOICE_HAS_CREDIT_NOTE,
         AUDIENCE_REFUND_NOT_OPEN, EXPOSURE_PRICE_REQUIRED, EXPOSURE_PRICE_RANGE, EXPOSURE_RANGE_MISSING,
         EXPOSURE_DEPOSIT_RANGE, EXPOSURE_PURCHASE_REQUIRED, EXPOSURE_PURCHASED_CHANGED, EXPOSURE_PREPAYMENT_CLOSED,
-        EXPOSURE_TOP_UP_RANGE, EXPOSURE_NOT_BOUGHT);
+        EXPOSURE_TOP_UP_RANGE, EXPOSURE_NOT_BOUGHT, EXPOSURE_PARTS_LIMIT);
 
     private FeeCodes() {}
 }
