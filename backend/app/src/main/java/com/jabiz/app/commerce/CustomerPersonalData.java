@@ -24,14 +24,18 @@ class CustomerPersonalData implements PersonalDataEraser {
         return List.of(ErasedEntity.keep(CommerceEntities.CUSTOMER, "userId", "customerName"));
     }
 
+    /**
+     * Whether the user is a customer: a count (ROADMAP 17zz22), not the rows, as the notice needs no more. A count or a
+     * total reads one row however many there are; rows are read only when the notice shows something of each.
+     */
     @Override
     public List<ErasureLoad> loads() {
-        return List.of(ErasureLoad.of(CUSTOMERS, CommerceEntities.CUSTOMER_DATASET, "userId"));
+        return List.of(ErasureLoad.count(CUSTOMERS, CommerceEntities.CUSTOMER_DATASET, "userId"));
     }
 
     /** A customer is told that its orders stay, without its name. */
     @Override
     public List<ErasureNotice> notices(ErasureSubject subject) {
-        return subject.rows(CUSTOMERS).isEmpty() ? List.of() : List.of(ErasureNotice.of("commerce.orders-kept"));
+        return subject.count(CUSTOMERS) == 0 ? List.of() : List.of(ErasureNotice.of("commerce.orders-kept"));
     }
 }
