@@ -72,8 +72,9 @@ public final class QbPrepayments {
             .asCode(PURPOSE_DICTIONARY, PURPOSES.toArray(String[]::new)));
         eb.field("mode", f -> f.physicalColumn("mode").immutable(true).required(true).processOnly()
             .asCode(MODE_DICTIONARY, MODES.toArray(String[]::new)));
-        // What was set aside (the fee and its tax), and what is left of it.
-        eb.field("amount", f -> f.physicalColumn("amount").immutable(true).required(true).processOnly()
+        // What was set aside (the fee and its tax), and what is left of it. F-M8: the exposure fee's deposit is raised
+        // by each top-up (QB_PREPAYMENT_TOP_UP, the only writer), so the amount is not immutable; the others never change.
+        eb.field("amount", f -> f.physicalColumn("amount").required(true).processOnly()
             .asMonetary("JPY", 0));
         eb.field("remaining", f -> f.physicalColumn("remaining").required(true).processOnly().asMonetary("JPY", 0));
         // The fee before tax it stands for, charged from it when the publication goes on (F-M7's audience fee).

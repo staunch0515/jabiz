@@ -61,6 +61,16 @@ public final class FeeCodes {
     public static final String EXPOSURE_RANGE_MISSING = "QB_EXPOSURE_RANGE_MISSING";
     /** F-M8: what the exposures bought come to, with tax, is more than any fee may be. */
     public static final String EXPOSURE_DEPOSIT_RANGE = "QB_EXPOSURE_DEPOSIT_RANGE";
+    /** F-M8: a submission using another's shared video asks for fewer exposures than the least (or none). */
+    public static final String EXPOSURE_PURCHASE_REQUIRED = "QB_EXPOSURE_PURCHASE_REQUIRED";
+    /** F-M8: a top-up was asked for against a total bought that is no longer the one the page showed. */
+    public static final String EXPOSURE_PURCHASED_CHANGED = "QB_EXPOSURE_PURCHASED_CHANGED";
+    /** F-M8: the exposures' prepayment is settled or given back: nothing can be added to it. */
+    public static final String EXPOSURE_PREPAYMENT_CLOSED = "QB_EXPOSURE_PREPAYMENT_CLOSED";
+    /** F-M8: a top-up of a publication that bought no exposures, or that is not running. */
+    public static final String EXPOSURE_NOT_BOUGHT = "QB_EXPOSURE_NOT_BOUGHT";
+    /** F-M8: a top-up that asks for more at once than {@code qb.exposure.top-up.max}, or beyond what a publication buys. */
+    public static final String EXPOSURE_TOP_UP_RANGE = "QB_EXPOSURE_TOP_UP_RANGE";
 
     /** F-M7: a credit note on a fee whose invoice is voided (what paid it went back with the void). */
     public static final String CREDIT_NOTE_VOIDED = "QB_FEE_CREDIT_NOTE_VOIDED";
@@ -77,7 +87,8 @@ public final class FeeCodes {
         DISTRIBUTION_PRICE_RANGE, DISTRIBUTION_FLOOR_ABOVE_CEILING, DISTRIBUTION_DEPOSIT_RANGE,
         DISTRIBUTION_RANGE_MISSING, CREDIT_NOTE_VOIDED, CREDIT_NOTE_EXCEEDS, INVOICE_HAS_CREDIT_NOTE,
         AUDIENCE_REFUND_NOT_OPEN, EXPOSURE_PRICE_REQUIRED, EXPOSURE_PRICE_RANGE, EXPOSURE_RANGE_MISSING,
-        EXPOSURE_DEPOSIT_RANGE);
+        EXPOSURE_DEPOSIT_RANGE, EXPOSURE_PURCHASE_REQUIRED, EXPOSURE_PURCHASED_CHANGED, EXPOSURE_PREPAYMENT_CLOSED,
+        EXPOSURE_TOP_UP_RANGE, EXPOSURE_NOT_BOUGHT);
 
     private FeeCodes() {}
 }

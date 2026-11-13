@@ -557,6 +557,8 @@ final class PublicationEditing {
             next.put("prepaymentTotal", null);
             next.put("distributionUnit", null);
             next.put("distributionAtFloor", null);
+            // F-M8: nor the exposures bought nor their price (the draft keeps what the sponsor asked for).
+            PublicationExposure.clear(next);
         }
         if (status != null) {
             PublicationPrepayments.note(ctx, publication, values, status.toString());

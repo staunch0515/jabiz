@@ -21,6 +21,8 @@ import com.jabiz.security.Sensitive;
 import com.jabiz.runtime.process.steps.LoadEntity;
 import com.jabiz.runtime.process.steps.QueryEntities;
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 
@@ -126,7 +128,24 @@ public final class PublicationProcesses {
         @Size(max = 36) String benefitPurchaseId, BigDecimal entryFee,
         @Size(max = 3) Map<@NotNull @Size(max = 2) String, UUID> covers, PublicationAssets assets,
         @Size(max = 36) String treeId, @Size(max = 36) String treeNodeId,
-        @Size(max = 3) Map<@NotNull @Size(max = 8) String, Integer> pickByDifficulty) {
+        @Size(max = 3) Map<@NotNull @Size(max = 8) String, Integer> pickByDifficulty,
+        @Min(1) @Max(PublicationExposure.MAX_PURCHASED) Long exposureRequested) {
+
+        /** As before F-M8: asks for no exposures. */
+        public SaveInput(UUID publicationId, UUID versionId, String name, List<String> regions, Instant startAt,
+            Instant endAt, Integer timeLimitSec, Integer passScore, BigDecimal budgetCap, Integer maxWinners,
+            List<TierInput> tiers, Long baseRevision, String rewardMethod, String redeemDescription, String audience,
+            String digitalDelivery, String digitalDescription, Integer digitalSendDays, String digitalContent,
+            UUID cover, ReferralInput referral, List<String> languages,
+            Map<String, Map<String, String>> translations, List<String> confirmed, Integer pickCount,
+            String benefitPurchaseId, BigDecimal entryFee, Map<String, UUID> covers, PublicationAssets assets,
+            String treeId, String treeNodeId, Map<String, Integer> pickByDifficulty) {
+            this(publicationId, versionId, name, regions, startAt, endAt, timeLimitSec, passScore, budgetCap,
+                maxWinners, tiers, baseRevision, rewardMethod, redeemDescription, audience, digitalDelivery,
+                digitalDescription, digitalSendDays, digitalContent, cover, referral, languages, translations,
+                confirmed, pickCount, benefitPurchaseId, entryFee, covers, assets, treeId, treeNodeId,
+                pickByDifficulty, null);
+        }
 
         /** As before F-S7: no draw by difficulty. */
         public SaveInput(UUID publicationId, UUID versionId, String name, List<String> regions, Instant startAt,
@@ -543,6 +562,9 @@ public final class PublicationProcesses {
         values.put("passScore", decimal(input.passScore()));
         values.put("budgetCap", input.budgetCap());
         values.put("maxWinners", decimal(input.maxWinners()));
+        // F-M8: the exposures asked for (read at the submission, which buys them when the video is another's).
+        values.put("exposureRequested", input.exposureRequested() == null ? null
+            : BigDecimal.valueOf(input.exposureRequested()));
         // Q81: before the version's part, whose full score depends on it. F-S7: a draw by difficulty draws their sum.
         String quotas = com.jabiz.quizbuks.content.QuestionDifficulty.formatQuotas(input.pickByDifficulty());
         values.put("pickByDifficulty", quotas);
@@ -881,6 +903,8 @@ public final class PublicationProcesses {
             "timeLimitSec", "passScore", "budgetCap",
             "maxWinners", "redeemDescription", "digitalDelivery", "digitalDescription", "digitalSendDays",
             "sealedDigitalContent", "referral", "languages", "translations", "pickCount", "pickByDifficulty",
+            // F-M8: the exposures asked for.
+            "exposureRequested",
             // F-S9: what it adds to and removes from its version's topics.
             "topicChanges",
             // F-S12: the shared video it picked (the copy's submission checks it is still in the catalog).

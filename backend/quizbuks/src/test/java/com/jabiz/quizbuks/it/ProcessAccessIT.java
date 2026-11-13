@@ -155,6 +155,7 @@ class ProcessAccessIT extends QbItSupport {
         // F-M1: paying a fee from the account, and giving a voided invoice's payment back.
         Map.entry("QB_FEE_SETTLE", ProcessAccess.SUB_PROCESS_ONLY),
         Map.entry("QB_PREPAYMENT_FREEZE", ProcessAccess.SUB_PROCESS_ONLY),
+        Map.entry("QB_PREPAYMENT_TOP_UP", ProcessAccess.SUB_PROCESS_ONLY),
         Map.entry("QB_PREPAYMENT_USE", ProcessAccess.SUB_PROCESS_ONLY),
         Map.entry("QB_PREPAYMENT_CHARGE", ProcessAccess.SUB_PROCESS_ONLY),
         Map.entry("QB_PREPAYMENT_RELEASE", ProcessAccess.SUB_PROCESS_ONLY),

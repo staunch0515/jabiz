@@ -174,6 +174,10 @@ public final class QbPublications {
         // whether it is the operator's floor.
         eb.field("distributionUnit", f -> f.physicalColumn("distribution_unit").processOnly().asNumeric(19, 4));
         eb.field("distributionAtFloor", f -> f.physicalColumn("distribution_at_floor").processOnly().asBool());
+        // F-M8: the exposures the sponsor asks to buy on the draft (saved with it; read at the submission), and the price
+        // per exposure frozen at the submission (none: nothing was bought; cleared with the draft).
+        eb.field("exposureRequested", f -> f.physicalColumn("exposure_requested").asNumeric(9, 0));
+        eb.field("exposureUnit", f -> f.physicalColumn("exposure_unit").processOnly().asNumeric(19, 4));
         eb.field("fullScore", f -> f.physicalColumn("full_score").processOnly().asNumeric(7, 0));
         eb.field("maxReward", f -> f.physicalColumn("max_reward").processOnly().asMonetary("JPY", 0));
         eb.field("maxSpend", f -> f.physicalColumn("max_spend").processOnly().asMonetary("JPY", 0));
