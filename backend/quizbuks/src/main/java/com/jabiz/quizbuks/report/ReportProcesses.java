@@ -243,6 +243,8 @@ public final class ReportProcesses {
                     })
                     .outputMapper(ctx -> ctx.get(OUTPUT, ResolveOutput.class));
                 if (operator) {
+                    // F-ban-coverage: a banned member's still valid token is refused before anything else.
+                    CallerChecks.refuseBanned(pb);
                     OperatorChecks.member(pb);
                 }
                 pb.step("Take the publication's turn", HoldLock.<ProcessContext>exclusive(

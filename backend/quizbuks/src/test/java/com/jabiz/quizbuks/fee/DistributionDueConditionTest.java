@@ -19,9 +19,12 @@ import static org.assertj.core.api.Assertions.assertThat;
 class DistributionDueConditionTest {
 
     static final Path SYSTEM = Path.of("src/main/resources/queries/qb/system");
-    /** The templates and how many fees' due conditions each holds (F-M8: the invoice's wait holds two). */
+    /**
+     * The templates and how many fees' due conditions each holds (F-M8: the invoice's wait holds two; the daily check's
+     * prepayments statement holds the distribution fee's, F-M8c adds the exposure fee's to it).
+     */
     static final java.util.Map<String, Integer> TEMPLATES = java.util.Map.of("distribution-due.sql", 1,
-        "exposure-due.sql", 1, "fee-invoices-due.sql", 2, "recon-fee-account.sql", 1);
+        "exposure-due.sql", 1, "fee-invoices-due.sql", 2, "recon-prepayments.sql", 1);
     static final Pattern WENT_ON = Pattern.compile(
         "greatest\\((\\w+)\\.\\{\\{QbPublicationCard\\.startAt}}, (\\w+)\\.\\{\\{QbPublication\\.approvedAt}}\\)");
 

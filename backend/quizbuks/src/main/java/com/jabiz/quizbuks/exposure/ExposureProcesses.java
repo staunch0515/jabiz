@@ -1,5 +1,6 @@
 package com.jabiz.quizbuks.exposure;
 
+import com.jabiz.quizbuks.identity.CallerChecks;
 import com.jabiz.entity.Violation;
 import com.jabiz.param.ParamValues;
 import com.jabiz.process.ProcessContext;
@@ -103,6 +104,9 @@ public final class ExposureProcesses {
                     return ctx;
                 })
                 .outputMapper(ctx -> ctx.get(OUTPUT, ReportOutput.class))
+                // F-ban-coverage: what a banned taker's App reports counts towards a Sponsor's fee and the
+                // monitoring, so it is refused before anything else.
+                .steps(CallerChecks::refuseBanned)
                 .step("Load the parameters", LoadParams.<ProcessContext>optional(ProcessContext::opTime, PARAMS,
                     QbParams.EXPOSURE_SECONDS, QbParams.EXPOSURE_DAILY_CAP, QbParams.EXPOSURE_REPORT_MAX_PER_CALL))
                 .compute("Refuse a batch too large", (metadata, ctx) -> {

@@ -195,8 +195,9 @@ public final class AssetProcesses {
                 .requiresVerifiedEmail()
                 .contextFactory((start, input) -> start(start, input))
                 .outputMapper(ctx -> ctx.get(OUTPUT, DeleteOutput.class));
-            pb.step("Lock the library", HoldLock.<ProcessContext>exclusive(ctx -> QbAssets.lockName(sponsor(ctx))));
+            // F-ban-coverage: the ban first, as in lockAndLoad.
             CallerChecks.refuseBanned(pb);
+            pb.step("Lock the library", HoldLock.<ProcessContext>exclusive(ctx -> QbAssets.lockName(sponsor(ctx))));
             pb.step("Load the asset and its uses", QueryEntities.<ProcessContext>all(
                 QueryEntities.query(QbAssets.DEFAULT_DATASET, ctx -> EntityQuery.builder()
                     .where(new QueryPredicate.And(List.of(
@@ -335,8 +336,10 @@ public final class AssetProcesses {
      */
     private static <I, O> void lockAndLoad(ProcessDefinitionBuilder<I, O, ProcessContext> pb,
         java.util.function.Function<ProcessContext, List<UUID>> files) {
-        pb.step("Lock the library", HoldLock.<ProcessContext>exclusive(ctx -> QbAssets.lockName(sponsor(ctx))));
+        // F-ban-coverage: the ban first; the library's lock is not one the ban takes, so holding it first orders
+        // nothing against a ban.
         CallerChecks.refuseBanned(pb);
+        pb.step("Lock the library", HoldLock.<ProcessContext>exclusive(ctx -> QbAssets.lockName(sponsor(ctx))));
         pb.step("Load the parameters", LoadParams.<ProcessContext>of(com.jabiz.process.ProcessContext::opTime, PARAMS,
             QbParams.ASSETS_MAX_COUNT, QbParams.ASSETS_MAX_TAGS, QbParams.ASSETS_TAG_LENGTH));
         pb.step("Load the assets and the files", QueryEntities.<ProcessContext>all(

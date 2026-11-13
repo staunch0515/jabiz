@@ -98,6 +98,8 @@ class ProcessAccessIT extends QbItSupport {
         Map.entry("QB_TOPUP_BANK_APPROVAL_RESULT", ProcessAccess.INTERNAL),
         Map.entry("QB_TOPUP_BANK_EXPIRE", ProcessAccess.INTERNAL),
         Map.entry("QB_RECONCILE_RUN", ProcessAccess.INTERNAL),
+        Map.entry("QB_RECON_ATTENTION_TASK", ProcessAccess.INTERNAL),
+        Map.entry("QB_RECON_TASK_CLOSE", ProcessAccess.INTERNAL),
         Map.entry("QB_PAYOUT_ONBOARD_READY", ProcessAccess.INTERNAL),
         Map.entry("QB_PAYOUT_ONBOARD_FAILED", ProcessAccess.INTERNAL),
         Map.entry("QB_PAYOUT_ACCOUNT_UPDATED", ProcessAccess.INTERNAL),

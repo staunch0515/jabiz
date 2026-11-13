@@ -316,6 +316,46 @@ class SetupIT extends QbItSupport {
             .bodyValue(Map.of("key", QbParams.APP_MIN_VERSION, "value", "1.0.1")).exchange().expectStatus().isOk();
     }
 
+    /**
+     * F-M10: {@code qb.help.user-daily} became a controlled parameter. On a system that has it already, {@code QB_SETUP}
+     * skips it (a parameter that exists is left as it is): the value stays, nothing is proposed for it, and from then on
+     * it changes only through a controlled change. (The parameter was created through a published proposal here: a
+     * controlled key cannot be created directly any more, which is what the old installation's row is, for this.)
+     */
+    @Test
+    @SuppressWarnings("unchecked")
+    void anExistingDailyLimitKeepsItsValueWhenSetupRunsAgainAndChangesOnlyWithFourEyes() {
+        publishProposals(setup());
+        Map<String, Object> change = (Map<String, Object>) client.post().uri("/api/processes/CONTROL_CHANGE_PROPOSE/latest")
+            .contentType(org.springframework.http.MediaType.APPLICATION_JSON)
+            .header("Authorization", TestTokens.bearer(tokens, "super-admin", "control.propose"))
+            .bodyValue(Map.of("targetEntity", "SysParam", "values", Map.of("paramKey", QbParams.HELP_USER_DAILY,
+                "value", "35"), "reason", "test")).exchange().expectStatus().isOk().expectBody(MAP).returnResult()
+            .getResponseBody().get("output");
+        client.post().uri("/api/processes/CONTROL_CHANGE_PUBLISH/latest")
+            .contentType(org.springframework.http.MediaType.APPLICATION_JSON)
+            .header("Authorization", TestTokens.bearer(tokens, "finance-admin", "control.publish"))
+            .bodyValue(Map.of("changeId", change.get("changeId"))).exchange().expectStatus().isOk();
+        assertThat(paramValue(QbParams.HELP_USER_DAILY)).isEqualTo("35");
+
+        Map<String, Object> again = setup();
+        assertThat((List<Object>) again.get("paramsProposed")).doesNotContain(QbParams.HELP_USER_DAILY);
+        assertThat((List<Object>) again.get("paramsCreated")).doesNotContain(QbParams.HELP_USER_DAILY);
+        // Not back to 20, and not changed by the run.
+        assertThat(paramValue(QbParams.HELP_USER_DAILY)).isEqualTo("35");
+        Map<String, Object> refused = client.post().uri("/api/processes/PARAM_SET/latest")
+            .contentType(org.springframework.http.MediaType.APPLICATION_JSON).header("Authorization", admin())
+            .bodyValue(Map.of("key", QbParams.HELP_USER_DAILY, "value", "40")).exchange()
+            .expectStatus().isEqualTo(422).expectBody(MAP).returnResult().getResponseBody();
+        assertThat(String.valueOf(refused)).contains("PARAM_CONTROLLED");
+        assertThat(paramValue(QbParams.HELP_USER_DAILY)).isEqualTo("35");
+    }
+
+    private static String paramValue(String key) {
+        return String.valueOf(query("SELECT param_value FROM (SELECT DISTINCT ON (param_key) * FROM sys_param_version ORDER BY "
+            + "param_key, version_no DESC) p WHERE param_key = ?", key).getFirst().get("param_value"));
+    }
+
     @Test
     void theRegionsColumnHoldsEveryRegion() {
         // Regions.MAX_LENGTH grows with the regions; the column must grow with it (a new migration).
@@ -455,6 +495,8 @@ class SetupIT extends QbItSupport {
         expected.put(QbParams.HELP_GLOBAL_MONTHLY_TOKENS, "20000000");
         // F-C10b: a cache read's weight towards the monthly tokens (controlled).
         expected.put(QbParams.HELP_CACHE_READ_WEIGHT, "0.10");
+        // F-M10: the dollar alert of the AI costs (ordinary); the help's daily questions are controlled now.
+        expected.put(QbParams.HELP_GLOBAL_MONTHLY_USD_ALERT, "8.00");
         expected.put(QbParams.HELP_HISTORY_TURNS, "6");
         expected.put(QbParams.HELP_RETENTION_DAYS, "180");
         expected.put(QbParams.HELP_MANUAL_MAX_BYTES, "204800");
@@ -536,11 +578,11 @@ class SetupIT extends QbItSupport {
             QbParams.OPERATOR_WITHDRAWAL_COOLDOWN_HOURS, "24"));
         // F-M3: how long the company verification's link is good (not controlled).
         expected.put(QbParams.VERIFICATION_LINK_HOURS, "48");
-        // F-M5: when an ended publication's open prepayment is a difference (not controlled).
+        // F-M5: when an ended publication's open prepayment is a difference (controlled since F-M14).
         expected.put(QbParams.PREPAYMENT_RELEASE_OVERDUE_DAYS, "2");
         // F-F11a: the bytes one import request carries (an ordinary parameter).
         expected.put(QbParams.CONTENT_IMPORT_BATCH_BYTES, "3145728");
-        // F-M7 (N9): the daily check of the audience fees not decided.
+        // F-M7 (N9): the daily check of the audience fees not decided (controlled since F-M14).
         expected.put(QbParams.AUDIENCE_REFUND_MISSING_AFTER_HOURS, "30");
         // F-C7: drafting from a website (the switch off; the limits of one request and of a month).
         expected.putAll(Map.of(QbParams.SITE_PROFILE_ENABLED, "false", QbParams.SITE_PROFILE_MONTHLY, "10",

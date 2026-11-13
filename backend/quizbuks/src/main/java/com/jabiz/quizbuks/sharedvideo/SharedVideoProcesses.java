@@ -142,14 +142,15 @@ public final class SharedVideoProcesses {
                     return ctx;
                 })
                 .outputMapper(ctx -> ctx.get(OUTPUT, VideoOutput.class));
-            // The word list and the limit change nothing of the share: read before the lock.
-            TopicSteps.loadParams(pb);
-            TopicSteps.loadWords(pb, ctx -> SharedVideoRules.topics(ctx.get(INPUT, ShareInput.class).topics()));
             pb.step("Lock the sponsor's sharing", HoldLock.<ProcessContext>exclusive(
                 ctx -> QbSharedVideos.providerLockName(ctx.request().actorId())));
             // F-C3: the ban read under the sharing's lock, which a ban takes before it withdraws the shares: a share
             // either sees the ban or is withdrawn by it.
             CallerChecks.refuseBanned(pb);
+            // The word list and the limit change nothing of the share. (F-ban-coverage: read after the ban, which
+            // follows the lock directly; the lock is the sponsor's own, so it is held two reads longer, no more.)
+            TopicSteps.loadParams(pb);
+            TopicSteps.loadWords(pb, ctx -> SharedVideoRules.topics(ctx.get(INPUT, ShareInput.class).topics()));
             pb.step("Load the asset, its standing share and the operator", QueryEntities.<ProcessContext>all(
                 QueryEntities.query(QbAssets.DEFAULT_DATASET, ctx -> EntityQuery.builder()
                     .where(new QueryPredicate.And(List.of(
@@ -472,6 +473,8 @@ public final class SharedVideoProcesses {
                         QbSharedVideos.APPROVED, QbSharedVideos.WITHDRAWN))
                     .contextFactory((start, input) -> start(start, input, input.sharedVideoId()))
                     .outputMapper(ctx -> ctx.get(OUTPUT, VideoOutput.class));
+                // F-ban-coverage: a banned member's still valid token is refused before anything else.
+                CallerChecks.refuseBanned(pb);
                 // An operator's member is checked within the act (Q48e-1); headquarters passes.
                 OperatorChecks.memberWhenScoped(pb);
                 lockAndLoad(pb);

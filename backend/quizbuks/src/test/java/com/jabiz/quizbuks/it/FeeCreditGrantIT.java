@@ -123,7 +123,7 @@ class FeeCreditGrantIT extends PlayItSupport {
 
     /** What the daily check of the fee account finds (none: it agrees). */
     List<Map<String, Object>> differences() {
-        return items("qb.system.recon-fee-account", TestTokens.bearer(tokens, "recon-test",
+        return feeAccountItems(TestTokens.bearer(tokens, "recon-test",
             QbPermissions.WALLET_SYSTEM), Map.of());
     }
 

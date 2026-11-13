@@ -19,6 +19,7 @@ import com.jabiz.runtime.EntityInstance;
 import com.jabiz.runtime.process.steps.HoldLock;
 import com.jabiz.runtime.process.steps.LoadParams;
 import com.jabiz.runtime.process.steps.QueryEntities;
+import com.jabiz.runtime.process.steps.RunTemplate;
 
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -61,6 +62,10 @@ public final class HelpOutcomes {
     static final String EVERYBODY_USAGE = "everybodyUsage";
     /** The share of everybody's monthly tokens used after the outcome, in percent (the gauge's value). */
     static final String PERCENT = HelpUsageGauge.PERCENT;
+    /** The dollars of the month as a share of the alert, in percent (the second gauge's value), and the month. */
+    static final String COST_PERCENT = HelpUsageGauge.COST_PERCENT;
+    static final String MONTH = HelpUsageGauge.MONTH;
+    static final String COSTS = "costs";
 
     /** What the three outcomes share. */
     record Outcome(String kind, String requestedBy, String reference, Map<String, Long> usage, int unrecordedAttempts,
@@ -147,6 +152,8 @@ public final class HelpOutcomes {
                     outcome(ctx).requestedBy(), AiLimits.month(outcome(ctx).finishedTime(), zone)), USER_USAGE),
                 QueryEntities.query(QbHelp.defaultDataset(QbHelp.USAGE), ctx -> HelpProcesses.usageOf(
                     QbHelp.EVERYBODY, AiLimits.month(outcome(ctx).finishedTime(), zone)), EVERYBODY_USAGE)))
+            .step("Read the month's dollars", RunTemplate.<ProcessContext>of(HelpCosts.TEMPLATE,
+                ctx -> HelpCosts.params(HelpCosts.monthOf(outcome(ctx).finishedTime(), zone), zone), COSTS))
             .compute("Record the outcome", (metadata, ctx) -> record(ctx, zone, messages, siteHosts))
             .afterCommit("Show the usage on the gauge", HelpUsageGauge.class, NoMetadata.INSTANCE));
     }
@@ -192,17 +199,37 @@ public final class HelpOutcomes {
             usage, cost);
         HelpSettings settings = HelpSettings.of(ctx.contains(PARAMS) ? ctx.get(PARAMS, ParamValues.class) : null);
         ctx.put(PERCENT, percent(settings.counted(total[0], total[1], total[2]), settings.globalMonthlyTokens()));
+        // F-M10: the dollars of the month as the template read them, with this outcome's cost on top (the template ran
+        // before the row changed; everybody's row is the one this outcome adds to).
+        HelpCosts.Month dollars = HelpCosts.Month.of(costRow(ctx));
+        BigDecimal withThis = dollars.usage().add(cost == null ? BigDecimal.ZERO : cost).add(dollars.checks());
+        ctx.put(COST_PERCENT, HelpCosts.percent(withThis, dollars.alert()));
+        ctx.put(MONTH, month);
+    }
+
+    @SuppressWarnings("unchecked")
+    private static Map<String, Object> costRow(ProcessContext ctx) {
+        Object rows = ctx.contains(COSTS) ? ctx.get(COSTS) : null;
+        List<Map<String, Object>> list = rows == null ? List.of() : (List<Map<String, Object>>) rows;
+        return list.isEmpty() ? null : list.getFirst();
     }
 
     /**
-     * The dollars of a job at the models' list prices ({@link AiCost#of}: every input token at the input price, cache
-     * reads included, so the estimate errs high), with the premium of the prompt-cache writes (F-C10b), so that it never
-     * errs low; null for an unknown model.
+     * The dollars of a job at the models' list prices ({@link AiCost#of}: every input token at the input price), less the
+     * discount of the tokens read from the prompt cache (a tenth of the price, F-M10: the monthly dollars were five to
+     * ten times the bill without it), plus the premium of the prompt-cache writes (F-C10b), so that it never errs low
+     * for a known model; null for an unknown model. The reads are at most the input tokens (as {@code counted} clamps).
      */
     static BigDecimal cost(String model, String servedModel, ClaudeApi.Usage usage) {
         BigDecimal cost = model == null ? null : AiCost.of(model, servedModel, usage, null);
-        BigDecimal premium = cost == null ? null : AiCost.cacheWritePremium(model, usage.cacheWriteInputTokens());
-        return cost == null ? null : premium == null ? cost : cost.add(premium);
+        if (cost == null) {
+            return null;
+        }
+        long reads = Math.clamp(usage.cacheReadInputTokens(), 0, Math.max(0, usage.inputTokens()));
+        BigDecimal premium = AiCost.cacheWritePremium(model, usage.cacheWriteInputTokens());
+        BigDecimal discount = AiCost.cacheReadDiscount(model, reads);
+        return cost.add(premium == null ? BigDecimal.ZERO : premium)
+            .subtract(discount == null ? BigDecimal.ZERO : discount).max(BigDecimal.ZERO);
     }
 
     private static String served(ProcessContext ctx) {

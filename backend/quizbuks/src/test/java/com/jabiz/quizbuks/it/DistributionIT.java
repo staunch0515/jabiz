@@ -406,13 +406,13 @@ class DistributionIT extends PrepaymentItSupport {
     void theDailyCheckReportsAPriceOutsideTheRangeItIsNow() {
         String operator = operatorOf(distributionSponsor("fm6-price-range"));
         String system = TestTokens.bearer(tokens, "fm6-price-recon", QbPermissions.WALLET_SYSTEM);
-        assertThat(ReconChecks.coded(items("qb.system.recon-fee-account", system, Map.of())).stream()
+        assertThat(ReconChecks.coded(feeAccountItems(system, Map.of())).stream()
             .filter(item -> operator.equals(item.partyId()))).isEmpty();
         // The range narrowed after the price was set (here: the price set in the table, beyond the rate at most 1):
         // the price stays and the daily check reports it, under its whole code, so ReconChecks keeps it.
         assertThat(offRangeBeforeDeploying()).doesNotContain(operator);
         execute("UPDATE qb_distribution_price SET rate = 2 WHERE operator_id = ?", operator);
-        assertThat(ReconChecks.coded(items("qb.system.recon-fee-account", system, Map.of())).stream()
+        assertThat(ReconChecks.coded(feeAccountItems(system, Map.of())).stream()
             .filter(item -> operator.equals(item.partyId())))
             .extracting(ReconChecks.Item::check).containsExactly(ReconChecks.DISTRIBUTION_PRICE_RANGE);
         // The query run before deploying (operations.md, launch-checklist.md) finds the same operator.

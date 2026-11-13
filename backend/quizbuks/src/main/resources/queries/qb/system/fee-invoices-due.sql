@@ -47,7 +47,7 @@ WITH owed AS (
         WHERE p.{{QbPublication.publisherId}} = o.sponsor_id
           AND p.{{QbPublication.distributionUnit}} IS NOT NULL
           AND p.{{QbPublication.publisherKind}} = 'SPONSOR'
-          -- When it went on (N1): greatest(its start, its approval); the same expression in qb.system.distribution-due, qb.system.fee-invoices-due and qb.system.recon-fee-account (DistributionDueConditionTest).
+          -- When it went on (N1): greatest(its start, its approval); the same expression in qb.system.distribution-due, qb.system.fee-invoices-due and qb.system.recon-prepayments (DistributionDueConditionTest).
           AND greatest(pc.{{QbPublicationCard.startAt}}, p.{{QbPublication.approvedAt}})
               < (CAST(o.period || '-01' AS date) + interval '1 month') AT TIME ZONE :zone
           AND (pc.{{QbPublicationCard.endedAt}} IS NULL
