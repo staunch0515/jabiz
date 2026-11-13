@@ -85,7 +85,15 @@ public final class FirstLaunchSwitches {
         active(QbParams.AUDIENCE_BILLING_ENABLED, "audience", true,
             "publications pay for the audience rules they use at the launch (declared off: the tests rely on it)"),
         keep(QbParams.AUDIENCE_REFUND_UNUSED_DAYS, "audience"),
-        waiting("qb.exposure.billing.enabled", "exposure", true, "F-M8"),
+        // F-M8: on at the launch once the requester has confirmed the placeholders (the range of the operators' prices
+        // qb.exposure.unit.min / .max and the fewest exposures qb.exposure.min-purchase); an operator without a price
+        // charges nothing, so each operator sets its own price before the first publication that uses another's video.
+        active(QbParams.EXPOSURE_BILLING_ENABLED, "exposure", true,
+            "publications that use another's shared video pay for their exposures at the launch (declared off: the "
+                + "tests rely on it); the requester confirms the range and the fewest exposures bought before the "
+                + "proposal is published"),
+        keep(QbParams.EXPOSURE_UNIT_MIN, "exposure"),
+        keep(QbParams.EXPOSURE_MIN_PURCHASE, "exposure"),
         waiting("qb.ai.fee.enabled", "aifee", true, "F-M9"),
         // F-C7a's key exists (declared off, controlled) but drafting from a website is only charged once F-M9 can
         // charge the AI credit: it stays off at the launch and its row turns ACTIVE with F-M9's pull request.

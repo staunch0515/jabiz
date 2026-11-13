@@ -53,6 +53,15 @@ public final class FeeCodes {
     /** F-M6 (review L2): a bound of the headquarters' range (qb.distribution.*) is not published. */
     public static final String DISTRIBUTION_RANGE_MISSING = "QB_DISTRIBUTION_RANGE_MISSING";
 
+    /** F-M8: the exposure price is missing. */
+    public static final String EXPOSURE_PRICE_REQUIRED = "QB_EXPOSURE_PRICE_REQUIRED";
+    /** F-M8: the exposure price is 0 or negative or outside the headquarters' range. */
+    public static final String EXPOSURE_PRICE_RANGE = "QB_EXPOSURE_PRICE_RANGE";
+    /** F-M8: a bound of the headquarters' range of the exposure prices (qb.exposure.unit.*) is not published. */
+    public static final String EXPOSURE_RANGE_MISSING = "QB_EXPOSURE_RANGE_MISSING";
+    /** F-M8: what the exposures bought come to, with tax, is more than any fee may be. */
+    public static final String EXPOSURE_DEPOSIT_RANGE = "QB_EXPOSURE_DEPOSIT_RANGE";
+
     /** F-M7: a credit note on a fee whose invoice is voided (what paid it went back with the void). */
     public static final String CREDIT_NOTE_VOIDED = "QB_FEE_CREDIT_NOTE_VOIDED";
     /** F-M7: only a prepayment decided NONE_NO_PERIOD is closed by finance. */
@@ -67,7 +76,8 @@ public final class FeeCodes {
         FEE_CREDIT_SPONSOR, FEE_CREDIT_GIVEN, FEE_CREDIT_MAX, FEE_CREDIT_LEAD, FEE_CREDIT_BANNED, DISTRIBUTION_PRICE_REQUIRED,
         DISTRIBUTION_PRICE_RANGE, DISTRIBUTION_FLOOR_ABOVE_CEILING, DISTRIBUTION_DEPOSIT_RANGE,
         DISTRIBUTION_RANGE_MISSING, CREDIT_NOTE_VOIDED, CREDIT_NOTE_EXCEEDS, INVOICE_HAS_CREDIT_NOTE,
-        AUDIENCE_REFUND_NOT_OPEN);
+        AUDIENCE_REFUND_NOT_OPEN, EXPOSURE_PRICE_REQUIRED, EXPOSURE_PRICE_RANGE, EXPOSURE_RANGE_MISSING,
+        EXPOSURE_DEPOSIT_RANGE);
 
     private FeeCodes() {}
 }

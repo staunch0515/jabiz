@@ -555,6 +555,13 @@ class SetupIT extends QbItSupport {
             QbParams.DISTRIBUTION_UNIT_CEILING_MAX, "1000.0000", QbParams.DISTRIBUTION_MINIMUM_DEPOSIT_MAX, "100000",
             QbParams.DISTRIBUTION_FINAL_END_GRACE_SEC, "3600", QbParams.DISTRIBUTION_UNSETTLED_AFTER_HOURS, "30",
             QbParams.DISTRIBUTION_FINAL_MISSING_AFTER_HOURS, "48"));
+        // F-M8: the exposure fee (off; the range of the operators' prices and the fewest exposures bought are
+        // placeholders; the grace and the daily check's hours; the biggest top-up; the reminder's share, ordinary).
+        expected.putAll(Map.of(QbParams.EXPOSURE_BILLING_ENABLED, "false",
+            QbParams.EXPOSURE_UNIT_MIN, "1.0000", QbParams.EXPOSURE_UNIT_MAX, "100.0000",
+            QbParams.EXPOSURE_MIN_PURCHASE, "100", QbParams.EXPOSURE_FINAL_END_GRACE_SEC, "3600",
+            QbParams.EXPOSURE_UNSETTLED_AFTER_HOURS, "30", QbParams.EXPOSURE_FINAL_MISSING_AFTER_HOURS, "48",
+            QbParams.EXPOSURE_TOP_UP_MAX, "1000000", QbParams.EXPOSURE_LOW_RATIO, "0.1000"));
         assertThat(values).containsExactlyInAnyOrderEntriesOf(expected);
     }
 

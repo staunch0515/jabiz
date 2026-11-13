@@ -51,7 +51,10 @@ WITH wanted (k, grp, expected, seq) AS (
         ('qb.distribution.unit-floor.min', 'distribution', CAST(NULL AS text), 22),
         ('qb.audience.billing.enabled', 'audience', 'true', 23),
         ('qb.audience.fee.refund-unused-days', 'audience', CAST(NULL AS text), 24),
-        ('qb.ai.site-profile.enabled', 'aifee', 'false', 25))
+        ('qb.exposure.billing.enabled', 'exposure', 'true', 25),
+        ('qb.exposure.unit.min', 'exposure', CAST(NULL AS text), 26),
+        ('qb.exposure.min-purchase', 'exposure', CAST(NULL AS text), 27),
+        ('qb.ai.site-profile.enabled', 'aifee', 'false', 28))
 SELECT
     CAST(w.k AS varchar(200))        AS paramKey,
     CAST(w.grp AS varchar(30))       AS grp,

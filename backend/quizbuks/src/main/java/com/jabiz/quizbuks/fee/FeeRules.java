@@ -31,7 +31,9 @@ public final class FeeRules {
     public static final String AUDIENCE = "AUDIENCE";
     /** F-M6: a publication's distribution fee, charged a month at a time for the people who started its quiz. */
     public static final String DISTRIBUTION = "DISTRIBUTION";
-    public static final List<String> KINDS = List.of(MONTHLY, MANUAL, AUDIENCE, DISTRIBUTION);
+    /** F-M8: a publication's exposure fee, charged a month at a time for the exposures of a shared video not its own. */
+    public static final String EXPOSURE = "EXPOSURE";
+    public static final List<String> KINDS = List.of(MONTHLY, MANUAL, AUDIENCE, DISTRIBUTION, EXPOSURE);
 
     private static final DateTimeFormatter MONTH = DateTimeFormatter.ofPattern("yyyy-MM", Locale.ROOT);
 

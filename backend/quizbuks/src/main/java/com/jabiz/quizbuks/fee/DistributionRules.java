@@ -68,7 +68,7 @@ public final class DistributionRules {
 
     /** What a number of starts at a price comes to, rounded up to the yen (before tax). */
     public static BigDecimal cumulative(long starts, BigDecimal unit) {
-        return unit.multiply(BigDecimal.valueOf(Math.max(0, starts))).setScale(0, RoundingMode.CEILING);
+        return UnitFeeRules.cumulative(starts, unit);
     }
 
     /**
@@ -79,7 +79,7 @@ public final class DistributionRules {
 
     public static Settlement settle(long toStarts, BigDecimal unit, BigDecimal charged, BigDecimal taxRate) {
         BigDecimal cumulative = cumulative(toStarts, unit);
-        BigDecimal amount = cumulative.subtract(charged == null ? BigDecimal.ZERO : charged).max(BigDecimal.ZERO);
+        BigDecimal amount = UnitFeeRules.amount(cumulative, charged);
         BigDecimal tax = amount.signum() == 0 ? BigDecimal.ZERO : FeeRules.tax(amount, taxRate);
         if (tax == null) {
             tax = BigDecimal.ZERO;
