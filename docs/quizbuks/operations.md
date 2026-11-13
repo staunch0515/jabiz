@@ -1028,7 +1028,7 @@ Quiz 与发布有主题词（平台词表中的词与自定义词），学者可
   | `qb.help.enabled` | `false` | 是 | 总开关 |
   | `qb.help.model` | `claude-haiku-5-5` | 否 | 只能是平台允许的三个模型 |
   | `qb.help.user-daily` | `20` | 否 | 每人每天的提问次数 |
-  | `qb.help.global-monthly-tokens` | `20000000` | 是 | 全平台每月的令牌数 |
+  | `qb.help.global-monthly-tokens` | `20000000` | 是 | 全平台每月的 Token 数（Token：AI 计算用量的单位） |
   | `qb.help.history-turns` | `6` | 否 | 一起发送的最近轮数（至多 20） |
   | `qb.help.retention-days` | `180` | 否 | 对话在最后一次活动后保留的天数。**改它必须同时改**隐私政策第8条（三语，`legal/privacy-policy.*.md`，重新发布）与商店的数据申报（`store/play-data-safety.md` 的"其他用户生成的内容"、`store/appstore-privacy.md` 的"客户支持"，并在 Play Console 与 App Store Connect 中更新），三处都写着 180 日 |
   | `qb.help.manual-max-bytes` | `204800` | 否 | 一个入口 × 语言的资料快照（手册 + FAQ + 条款）的上限，字节；发布超过的手册被拒，生成的快照超过即不保存并且启动检查报错（`QB_HELP_MATERIALS`）。无论参数多大，快照至多 800 KiB |
@@ -1038,7 +1038,7 @@ Quiz 与发布有主题词（平台词表中的词与自定义词），学者可
   | `qb.help.question-max-length` | `2000` | 否 | 提问（及转给客服的内容）的最长字数（100–4000） |
   | `qb.help.answer-max-length` | `8000` | 否 | 保存的 AI 回答的最长字数（500–8000，超过截断） |
   | `qb.help.max-links` | `5` | 否 | 一个回答最多保留的本站链接（0–10） |
-  | `qb.help.cache-read-weight` | `0.10` | 是 | 从提示缓存读取的输入令牌计入 `qb.help.global-monthly-tokens` 的权重（0–1，向上取整；提供方按约十分之一的价格计费）。其他输入与输出令牌照常全额计入；`qb.admin.help-usage` 的已用百分比与告警仪表同样按它计（F-C10b） |
+  | `qb.help.cache-read-weight` | `0.10` | 是 | 从提示缓存读取的输入Token计入 `qb.help.global-monthly-tokens` 的权重（0–1，向上取整；提供方按约十分之一的价格计费）。其他输入与输出Token照常全额计入；`qb.admin.help-usage` 的已用百分比与告警仪表同样按它计（F-C10b） |
 
   部署配置（改后重启；超出范围即启动失败）：`quizbuks.help.max-concurrency`（缺省 4）、`quizbuks.help.attempts`（每个提问的尝试次数，缺省 2，1–5）、`quizbuks.help.attempt-timeout`（每次尝试的时限，缺省 `PT3M`，30 秒–10 分钟）。
 
@@ -1048,9 +1048,9 @@ Quiz 与发布有主题词（平台词表中的词与自定义词），学者可
   - **编辑与发布手册**：平台管理系统 → "AI 问题解答使用手册"（`QbHelpManual`），编辑草稿（三语 Markdown，写本站路径如 `/taker/help`、`/sponsor/publications`，让回答能附链接；不要写外部网址，回答中的外部链接会被去掉）；行操作"发布"（`QB_HELP_PUBLISH`，内容管理员）。三语缺一、超过上限即 422，什么都不改。发布后几秒内生成新快照（事件），下一次提问就用新内容。快照的状态在"AI 问题解答资料"（`QbHelpMaterial`：在用的大小、生成时间，最近一次生成的大小，保存中）。
   - **改了 FAQ 或法律文本**：每小时的任务会把它们放进快照；要立刻生效，不选手册运行 `QB_HELP_PUBLISH`（只重新生成快照）。以后生效的法律文本在生效后的一小时内进入快照。
   - **功能变化后的手册**：开发者在功能的 PR 中改仓库的初稿（`backend/quizbuks/src/main/resources/quizbuks/help/manual-*.md`）。部署后启动检查 `QB_HELP_MANUAL_SOURCE` 警告"仓库的使用手册不是草稿最近载入的"：内容管理员在手册的行上运行 `QB_HELP_MANUAL_LOAD`。草稿在管理系统中没改过就直接换成新文本；改过则拒绝（`QB_HELP_MANUAL_EDITED`），这时对照 PR 的改动手工合进草稿，再以"保留草稿"（`keepDraft`）记为已合并，或以"覆盖"（`replace`）放弃管理系统中的修改。然后检查并发布。
-  - **大小超过上限**（启动检查 `QB_HELP_MATERIALS` 报错，或发布被拒 `QB_HELP_MATERIALS_TOO_LARGE`）：错误中写着入口、语言与字节数。缩短手册或删减 FAQ（多半是 FAQ 增多），或调高 `qb.help.manual-max-bytes`（每次提问的费用随之增加；预留的令牌按快照大小每 3 字节一个计）。超过上限的新快照不会保存，在用的旧快照照旧，所以服务不中断；改好后发布或等每小时的任务，检查在下次启动时通过。
+  - **大小超过上限**（启动检查 `QB_HELP_MATERIALS` 报错，或发布被拒 `QB_HELP_MATERIALS_TOO_LARGE`）：错误中写着入口、语言与字节数。缩短手册或删减 FAQ（多半是 FAQ 增多），或调高 `qb.help.manual-max-bytes`（每次提问的费用随之增加；预留的Token按快照大小每 3 字节一个计）。超过上限的新快照不会保存，在用的旧快照照旧，所以服务不中断；改好后发布或等每小时的任务，检查在下次启动时通过。
   - **快照一直"保存中"**：看平台的作业 `qb.help.materials`（`sys_external_job`）；失败或 30 分钟没完成时下一次生成会重试。
-  - **缓存的用量**：`qb.admin.help-usage` 显示缓存写入与读取的令牌（已包含在输入令牌中）；读取多说明缓存在起作用。全平台月上限中，缓存读取按 `qb.help.cache-read-weight`（缺省 0.1）计。美元估算按标价计（偏高）并加上缓存写入多出的部分。
+  - **缓存的用量**：`qb.admin.help-usage` 显示缓存写入与读取的Token（已包含在输入Token中）；读取多说明缓存在起作用。全平台月上限中，缓存读取按 `qb.help.cache-read-weight`（缺省 0.1）计。美元估算按标价计（偏高）并加上缓存写入多出的部分。
 - **事故处理**：回答明显有误或被诱导（例如帮人答题）：先关 `qb.help.enabled`（受控，另一位管理员发布），再查 `qb_help_message`（`kind = 'ANSWER'`）与平台的作业记录（`sys_external_job` 的 `qb.ai.help`），补资料或手册后再开。提供方故障：作业按平台规则重试后失败，用户看到失败说明并可转人工。用量突增：看 `qb.admin.help-usage` 与 `qb-help-usage-high`，必要时调低 `qb.help.user-daily`。
 - **改派运营商**：发起方改派时，其转人工、由原运营商回答的对话与待办（含等待的提醒）随之移到新运营商（平台的 `APPROVAL_SCOPE_MOVE`，与待审的审批同一上限，超过即 422 `QB_SPONSOR_HELP_PENDING`：先关闭一些对话）；总部回答的不动。
 - **删除账号**：三张表中本人的行由抹除流程删除（`help.HelpConfig` 的 `PersonalDataEraser`），作业的输入与结果由平台按请求人清除；全平台的用量行保留（不含个人）。
