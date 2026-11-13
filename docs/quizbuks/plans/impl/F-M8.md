@@ -56,7 +56,7 @@
   - 预付成功后（审查 M1）：**先**写提交的发布版本（`exposureUnit` 随之冻结），**再**在发布锁内以 `CallProcess.of(QB_EXPOSURE_PURCHASED_SET)` 把 `exposurePurchased` 设为购买次数；提交的输出取子流程输出的 `revision`（原因：子流程会再把 revision + 1、改 `editedAt`，若输出仍是提交写入时的 revision，就比库里少 1，向导拿它做下一次的 `baseRevision` 会撞 `QB_PUBLICATION_CHANGED`）。子流程再次取同一把发布锁 `HoldLock`：实施前先确认平台对同一事务内重入的处理（应为已持有即通过），写进锁序说明；语句预算按"待审"与"免审上架"两种分别断言。
 - **提交时不买的情况都把已购设为空**（审查 M2）：开关关、运营商没有价目、用自己的视频（或草稿换成了自己的，`exposureRequested` 被忽略并清空）、挑战与店面。
 - 驳回、撤回、审核过期：F-M5 的释放全额退回（含 `EXPOSURE` 预付款）；同时 `exposurePurchased` 回到空（草稿上不留已购）。
-- **决定 A 放宽**（审查 M2，总控 2026-11-12）：`exposurePurchased` 只经 `PublicationExposure` 的**一个写入辅助方法**写入；`QB_EXPOSURE_PURCHASED_SET` 与回到草稿（`DRAFT` 分支）时的清空都调用它，别处不写。新核对项 `EXPOSURE_PURCHASE_UNIT_MISMATCH`：有已购却没有冻结单价，或有单价却没有已购，都算差异。
+- **决定 A 放宽**（审查 M2，总控 2026-11-12）：`exposurePurchased` 只经 `PublicationExposure` 的**一个写入辅助方法**写入；`QB_EXPOSURE_PURCHASED_SET` 与回到草稿（`DRAFT` 分支）时的清空都调用它，别处不写。新核对项 `EXPOSURE_UNIT_MISMATCH`：有已购却没有冻结单价，或有单价却没有已购，都算差异。
 
 ### 3.4 追加购买 `QB_EXPOSURE_TOP_UP`（新，发起方）
 - 输入 `{publicationId, expectedPurchased, additional}`（审查 M3）：`expectedPurchased` 是页面看到的旧已购，与当前不符即 409（`QB_EXPOSURE_PURCHASED_CHANGED`，新码），所以重发同一个请求只买一次；`additional` ≥ 1，总数 ≤ `PublicationExposure.MAX_PURCHASED`，单次追加 ≤ `qb.exposure.top-up.max`（新参数，见第 5 节；保证分摊段数不超过 `MAX_PARTS`，审查 M5）。权限 `qb.publication.write`（同发布编辑），`requiresVerifiedEmail()`，先 `CallerChecks::refuseBanned`，并做 `ConsentChecks.sponsor()`（审查 L）；只能操作自己的发布（`actsOn`）；只在发起方的入口，学者的 App 拿不到（`ProcessAccessIT` 断言）。
@@ -180,7 +180,7 @@
   - H1 追加按累计："105 + 5"的例子，一次买 110 与先买 105 再追加 5 的总预付相同；页面显示的金额同函数；
   - H2 累计税：用完时恰好扣光；两次结算之间改税率（升、降各一例）；
   - H3 漏一个月 → 下月有成功 → 补跑漏掉的那个月：补跑的月写 0 次、不记费，总数不重复；
-  - M2 各种不买的提交都使已购为空（"残留已购"）；核对项 `EXPOSURE_PURCHASE_UNIT_MISMATCH` 正反各一例；
+  - M2 各种不买的提交都使已购为空（"残留已购"）；核对项 `EXPOSURE_UNIT_MISMATCH` 正反各一例（核对项的码存在 `varchar(30)` 列中，原名 31 个字符会被截断而丢掉，所以改短；新码都 ≤ 30 个字符，由 S1 加的守护测试检查，总控 2026-11-13）；
   - M3 追加重发只买一次（第二次 409）；
   - M4 起点 greatest(startAt, approvedAt) 的两种先后；注销后仍能 `final` 并退回；
   - M5 原冻结用现金、追加用赠送的退回去向；单次追加上限；
