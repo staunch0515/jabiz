@@ -38,6 +38,7 @@ jobs:
     timeout-minutes: 5
     outputs:
       full: ${{ steps.scope.outputs.full }}
+      docs_tests: ${{ steps.scope.outputs.docs_tests }}
     steps:
       - uses: actions/checkout@v5
         with:
@@ -47,19 +48,27 @@ jobs:
       - id: scope
         run: |
           if [ "${{ github.event_name }}" = pull_request ] && git rev-parse -q --verify HEAD^2 >/dev/null; then
-            full="$(git diff --name-only HEAD^1 HEAD | tools/quizbuks/ci/scope.sh)"
+            git diff --name-only HEAD^1 HEAD > changed.txt
+            full="$(tools/quizbuks/ci/scope.sh < changed.txt)"
+            docs_tests="$(tools/quizbuks/ci/scope.sh docs-tests < changed.txt)"
           else
             full=true
+            docs_tests=true
           fi
           echo "full=$full" >> "$GITHUB_OUTPUT"
-          echo "full check: $full"
+          echo "docs_tests=$docs_tests" >> "$GITHUB_OUTPUT"
+          echo "full check: $full; backend tests that read the changed documents: $docs_tests"
 
   # The checks that read documents (they also run when the pull request changes more than documents): the terms, the
   # numbered sections of operations.md, the store listing texts and the script that decides the scope. A few seconds, so
   # a pull request that changes only documents is checked in about a minute (the rest of the line's checks are skipped).
+  # When the pull request changes a document that a backend test reads (the help pages and the prompt documents: the
+  # five tests of backend/quizbuks that check them against the product), those tests run here too: the platform's
+  # ci.yml skips the backend's check for a pull request that changes only documents.
   docs:
+    needs: quizbuks-scope
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-node@v5
@@ -73,6 +82,23 @@ jobs:
         run: node --test tools/quizbuks/ops-sections/ops-sections.test.mjs
       - name: Which pull requests may skip the full check
         run: tools/quizbuks/test/ci-scope.test.sh
+      - if: ${{ needs.quizbuks-scope.outputs.docs_tests == 'true' }}
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: 21
+      - if: ${{ needs.quizbuks-scope.outputs.docs_tests == 'true' }}
+        uses: gradle/actions/setup-gradle@v5
+        with:
+          cache-read-only: ${{ github.event_name == 'pull_request' }}
+      # Plain unit tests (no database): the documents they read are listed in tools/quizbuks/ci/scope.sh.
+      - name: The backend tests that read documents
+        if: ${{ needs.quizbuks-scope.outputs.docs_tests == 'true' }}
+        working-directory: backend
+        run: >-
+          ./gradlew :quizbuks:test --console=plain
+          --tests '*ProfilePackageHelpTest' --tests '*SiteProfileHelpTest' --tests '*FeeAccountHelpTest'
+          --tests '*ProfilePackagePromptsTest' --tests '*QuizFilePromptsTest'
 
   # The QuizBuks front ends (docs/quizbuks/plans/QP-pages.md section 7): the app and the sponsor console use the
   # platform's versions (app:check), pass their own lint, types and tests, and keep the shared folder src/qb the same.
