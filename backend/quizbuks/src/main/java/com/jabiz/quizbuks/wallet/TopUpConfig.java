@@ -30,6 +30,7 @@ import org.springframework.context.annotation.Configuration;
 import java.time.Duration;
 import java.time.Period;
 import java.time.ZoneOffset;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -291,6 +292,71 @@ class TopUpConfig {
             .disabledItem(ReconChecks.DISTRIBUTION_PRICE_OUT_OF_RANGE, "en", "Distribution prices outside the "
                 + "headquarters' range (former name)", "zh", "超出总部范围的配送费价目（旧名）", "ja",
                 "本部の範囲外の配信料の価格（旧名）"));
+    }
+
+    /**
+     * F-M14 (docs/quizbuks/plans/impl/F-M14.md §2): each check's level, for the pages (the levels themselves live in
+     * {@link ReconChecks}, from which this is made).
+     */
+    @Bean
+    StaticDictionary qbReconLevelDictionary() {
+        return StaticDictionary.define(ReconChecks.LEVEL_DICTIONARY, d -> {
+            for (String check : ReconChecks.ALL) {
+                switch (ReconChecks.level(check)) {
+                    case DIFFERENCE -> d.item(check, "en", "Difference", "zh", "差异", "ja", "差異");
+                    case ATTENTION -> d.item(check, "en", "Needs attention", "zh", "需关注", "ja", "要確認");
+                    case NOTE -> d.item(check, "en", "Note", "zh", "提示", "ja", "注記");
+                }
+            }
+        });
+    }
+
+    /** F-M14: the item that asks a check's owner about one object for attention. */
+    @Bean
+    ProcessDefinition<ReconTasks.AttentionInput, ReconTasks.ItemOutput, ProcessContext> qbReconAttentionTask() {
+        return ReconTasks.attentionItem();
+    }
+
+    /** F-M14: the item that closes the reconciliation's tasks of one source. */
+    @Bean
+    ProcessDefinition<ReconTasks.CloseInput, ReconTasks.ItemOutput, ProcessContext> qbReconTaskClose() {
+        return ReconTasks.closeItem();
+    }
+
+    /** F-M14: every day at 18:52 UTC, after the reconciliation: one task per check and object for attention. */
+    @Bean
+    JobDefinition<ReconTasks.AttentionInput> qbReconAttentionJob(
+        ProcessDefinition<ReconTasks.AttentionInput, ReconTasks.ItemOutput, ProcessContext> qbReconAttentionTask) {
+        List<String> checks = List.copyOf(ReconChecks.ATTENTION);
+        return JobDefinition.forEach(ReconTasks.ATTENTION_JOB, ReconTasks.CRON, ZoneOffset.UTC,
+                JobItems.template(ReconTasks.ATTENTION_DUE_TEMPLATE, scheduledTime -> Map.of("at", scheduledTime,
+                    "checks", checks), "itemKey"),
+                qbReconAttentionTask,
+                (scheduledTime, row) -> new ReconTasks.AttentionInput(String.valueOf(row.get("sourceKey")),
+                    String.valueOf(row.get("checkCode")), text(row.get("partyId")), text(row.get("reference")),
+                    number(row.get("expected")), number(row.get("actual"))))
+            .maxItems(ReconTasks.MAX_ITEMS);
+    }
+
+    /** F-M14: every day at 18:52 UTC, after the reconciliation: the tasks its latest run settled. */
+    @Bean
+    JobDefinition<ReconTasks.CloseInput> qbReconTasksCloseJob(
+        ProcessDefinition<ReconTasks.CloseInput, ReconTasks.ItemOutput, ProcessContext> qbReconTaskClose) {
+        return JobDefinition.forEach(ReconTasks.CLOSE_JOB, ReconTasks.CRON, ZoneOffset.UTC,
+                JobItems.template(ReconTasks.CLOSE_DUE_TEMPLATE, scheduledTime -> Map.of("at", scheduledTime),
+                    "itemKey"),
+                qbReconTaskClose,
+                (scheduledTime, row) -> new ReconTasks.CloseInput(String.valueOf(row.get("sourceKey")),
+                    String.valueOf(row.get("outcome"))))
+            .maxItems(ReconTasks.MAX_ITEMS);
+    }
+
+    private static String text(Object value) {
+        return value == null ? null : value.toString();
+    }
+
+    private static java.math.BigDecimal number(Object value) {
+        return value == null ? null : new java.math.BigDecimal(value.toString());
     }
 
     /** Accounting evidence is kept ten years from the end of its fiscal year (Q10b, item 13; L-4). */

@@ -359,7 +359,7 @@ FROM pg_stat_statements ORDER BY total_exec_time DESC LIMIT 20;
 | 分录导出被拒（§7.3） | QuizBuks `qb-journal-export-rejected` | 看错误码 |
 | AI 作业暂停（§7.8） | QuizBuks `qb-ai-paused`（仪表 `jabiz.external.job.held{job_type=~"qb.ai.*"}`，不含 AI 问题解答的 `qb.ai.help`） | 缺省 `JABIZ_ALERT_QB_AI_HELD_MAX=1`：AI 有意关闭时不告警；开启 `qb.ai.enabled` 后在 `.env` 设为 `0` 并重启 LGTM，此后暂停超过 5 分钟即告警 |
 | AI 问题解答的用量（§7.34） | QuizBuks `qb-help-usage-high`（仪表 `qb.help.usage.percent`：本月已用 `qb.help.global-monthly-tokens` 的百分比，作业结局与每日任务 `qb.help-usage` 更新） | 缺省 `JABIZ_ALERT_QB_HELP_USAGE_PERCENT=80`；到 100 % 时新的提问被拒（可直接转人工），到月底或经受控变更调高上限 |
-| AI 费用接近美元阈值（§7.52） | QuizBuks `qb-help-cost-high`（仪表 `qb.help.cost.percent`：本月帮助与审核人翻译核对的估算美元占 `qb.help.global-monthly-usd-alert` 的百分比，作业结局与每日任务 `qb.help-usage` 更新；仪表带月份，换月后读 0） | 缺省 `JABIZ_ALERT_QB_HELP_COST_PERCENT=100`；只提醒，不停。每日任务同时给财务和超级管理员建待办 `qb.help.cost-high`（每月至多一个，上个月的也检查，不自动关闭） |
+| AI 费用接近美元阈值（§7.53） | QuizBuks `qb-help-cost-high`（仪表 `qb.help.cost.percent`：本月帮助与审核人翻译核对的估算美元占 `qb.help.global-monthly-usd-alert` 的百分比，作业结局与每日任务 `qb.help-usage` 更新；仪表带月份，换月后读 0） | 缺省 `JABIZ_ALERT_QB_HELP_COST_PERCENT=100`；只提醒，不停。每日任务同时给财务和超级管理员建待办 `qb.help.cost-high`（每月至多一个，上个月的也检查，不自动关闭） |
 | 任务 | 平台 `jabiz-job-failed`（`FAILED` / `PARTIAL`）、`jabiz-job-locked` | 包括 `qb.analytics`、`qb.usage-snapshot`、`qb.fee-*`、`qb.broadcast-*` 等每个任务 |
 | 站内信、平台费、邮件补发 | 平台 `jabiz-job-item-failed`、`jabiz-outbox-failed` | 平台费的核对项 `FEES_RECEIVABLE` 属于 `qb-reconcile-diff`；`sys_mail_message` 中 `FAILED` 增多看发件服务商；徽标模板 `qb.app.inbox-unread` 的耗时（目标 < 5 ms，`perf/Q7c-inbox.md`）在仪表盘上看 |
 | 发起方分析（§7.7）、资源占用的计量（§7.22） | 平台 `jabiz-job-failed` | 30 分钟内没有成功的分析、当天缺少计量快照（`SELECT max(snapshot_day) FROM qb_usage_day` 早于今天）：仪表盘与只读查询 |
@@ -602,6 +602,7 @@ FROM pg_stat_statements ORDER BY total_exec_time DESC LIMIT 20;
 - **方案**（Q48e-2）：五种方案（每月固定费、平台分成；受控参数 `qb.operator.plan.<1..5>.fee|share`，`QB_SETUP` 提出 0/50%、20,000/40%、40,000/30%、60,000/20%、100,000/10%）。新运营商为方案 1；总部在运营商页面提出从以后某月起的方案，另一位管理员（`qb.topup.bank.approve`）在待办中批准后生效。
 - **月结算**（Q48b、Q48e-2）：每月 2 日 01:13（日本时间）任务 `qb.operator-settlement` 为每个运营商结算上个月：其发起方发布的抽成 ×（1 − 当月方案的平台分成），减去当月方案的固定费（停用的运营商不收）与获客费用，记入运营商的账户（不够扣的结转到下月），并可签发结算单。前提：`qb.creator-fee-rate` 大于 0、分录导出的 `qb.journal.account.2140` / `5130` 已设。
 - **提现**（Q48e-2）：钱都在平台。运营商负责人在运营商管理系统「账户」设银行账户（改后 `qb.operator.withdrawal.cooldown-hours` 小时内不能提现）、申请提现（至少 `qb.operator.withdrawal.min`，至多余额，同时一笔）；财务在「运营商提现」银行付款后点"登记付款"，另一位管理员在待办中批准后才过账（2140 / 1120），驳回即回到"已申请"；财务也可驳回申请并写理由。手续费由平台承担。Q48e-2 之前签发的结算单照旧逐张付款。
+- **平台运营商不开放提现**（F-M12 a0，需求方 2026-11-13）：平台运营商（`defaultForNew` 为真的那一个，即自助注册的发起方所归的默认运营商）的账户不能提现：负责人申请即 422 `QB_OPERATOR_WITHDRAWAL_PLATFORM`，什么也不写；「账户」页不显示提现表单，改为一行说明。结算照常记入它的账户，转给直营发起方照常可用。默认运营商改为另一家后，以申请时的标志为准：新的默认运营商被拒，原来的可以申请。**部署本项前**查一次有没有平台运营商未结的提现申请：`SELECT w.withdrawal_id, w.amount, w.status FROM qb_operator_withdrawal w JOIN qb_operator o ON o.operator_id = w.operator_id WHERE o.default_for_new AND w.status IN ('REQUESTED', 'PAYING')`；有的照现有流程由财务处理（驳回或登记付款），本项不自动改它们。
 
 ### 7.14 AI 获客（Q48c）
 
@@ -1117,7 +1118,7 @@ Quiz 与发布有主题词（平台词表中的词与自定义词），学者可
   2. **另一位管理员发布** `qb.journal.account.2190` 的提案（受控变更，四眼）：值是会计系统中"平台费 Kudos（赠送额度）"的科目代码。没有发布之前分录导出会被拒（`JournalMappingCheck` 与导出的"所动科目未映射"），一旦 F-M2 开始赠送，2190 就会出现在分录里。
   3. 没有新的环境变量与任务；F-M1 本身不赠送（赠送是 F-M2），所以上线时所有发起方的赠送额度为 0，行为与之前相同，只是付款记分摊、账单可以部分付。
 - **页面**：发起方页面的钱包页"平台费账户"一块（合计、赠送额度、现金；剩余的各笔按使用顺序与到期；每笔付款的分摊）；平台管理系统的发起方页（财务，`qb.admin.finance.read`）与运营商管理系统的发起方页（只限自己的发起方）只读同样内容；财务总览"平台费账户（按子账户）"给出全平台的余额、各笔剩余与本月付款。
-- **每日核对**（`qb.reconcile`，模板 `qb.system.recon-fee-account`）：`FEE_CREDIT`（某发起方的 2190 = 其 `FEE_CREDIT` 钱包 = 各笔赠送剩余之和）、`CASH_LOTS`（2160 = 各笔现金剩余之和）、`FEE_PAYMENTS`（费用与账单的付款分录从 2160 / 2190 取走的 = 分摊之和；F-M1 之前的付款没有分摊，不核）。差异照旧给 `qb.reconcile` 待办。常见原因：有人绕过流程直接改了表；一笔现金被取走时各笔加起来不够（买学分、扣回从不因此被拒，差异由 `CASH_LOTS` 报出）。
+- **每日核对**（`qb.reconcile`，模板 `qb.system.recon-fee-credit`）：`FEE_CREDIT`（某发起方的 2190 = 其 `FEE_CREDIT` 钱包 = 各笔赠送剩余之和）、`CASH_LOTS`（2160 = 各笔现金剩余之和）、`FEE_PAYMENTS`（费用与账单的付款分录从 2160 / 2190 取走的 = 分摊之和；F-M1 之前的付款没有分摊，不核）。差异照旧给 `qb.reconcile` 待办。常见原因：有人绕过流程直接改了表；一笔现金被取走时各笔加起来不够（买学分、扣回从不因此被拒，差异由 `CASH_LOTS` 报出）。
 - **月报**（`qb.admin.monthly`）：付款仍是 `FEE_PAID`，新列 `feeCredit`（2190）与 `sponsorCash`（2160）分别是两种来源付的（借方为正）；作废的冲正在 `FEE_VOIDED`。余额表（`qb.admin.balances`）多 2190 一行，检查 `SPONSOR_WALLETS` 与 `NO_OVERDRAWN_WALLET` 含 2190。
 - **"发起方说平台费付得不对"的排查**：
   1. 账户：`SELECT kind, balance, held FROM qb_wallet WHERE owner_id = '<发起方>' AND kind IN ('FEE_CREDIT', 'CASH')`；各笔：`SELECT grant_id, source, remaining, expires_at FROM qb_fee_credit_grant WHERE sponsor_id = '<发起方>' AND remaining > 0 ORDER BY expires_at, granted_at`，`SELECT lot_id, source, remaining, arrived_at FROM qb_cash_lot WHERE sponsor_id = '<发起方>' AND remaining > 0 ORDER BY arrived_at`。
@@ -1140,7 +1141,7 @@ Quiz 与发布有主题词（平台词表中的词与自定义词），学者可
 - **到期作废**：任务 `qb.fee-credit-expire`（每天 02:47，`jabiz.fiscal-year-zone`），逐笔（`QB_FEE_CREDIT_EXPIRE`，`internal()`）在发起方钱包锁内重读，把**到期时剩余的部分**作废：借 2190 / 贷 5140，`remaining` 归零、记 `voided_amount` 与 `voided_at`，钱包 `FEE_CREDIT` 减少。已用掉的部分不受影响。错过的运行以 `JOB_RUN_REQUEST` 补跑（同一时刻幂等）。冻结在预付中的赠送部分随 M4。
 - **到期前提醒**：任务 `qb.fee-credit-remind`（每天 10:13，同一时区）选出有一笔将在 `qb.fee-credit.expiry-notice-days` 天内到期、还有剩余、尚未提醒过的发起方；逐个（`QB_FEE_CREDIT_REMIND`）在钱包锁内把这些笔记上 `reminded_at`（每笔只提醒一次），距上一封不足 24 小时的不发（下一天再发），发出事件 `qb.fee-credit.expiring`，由 `QB_MAIL_FEE_CREDIT` 寄邮件 `qb.fee-credit.expiring`（通知类，可退订，只在发起方入口的偏好中）。
 - **页面**：发起方钱包页的"平台费账户"各笔显示来源、金额、已用、剩余与到期；运营商的发起方页显示入驻赠送是否已发与"确认"按钮（只有持权限者看得到，负责人之外的成员由服务器拒绝）；平台管理系统"平台费"页的"平台费 Kudos"标签（财务只读）按运营商（发放时）、发起方或来源汇总，并列出每一笔的赠送、已用、剩余与到期作废。
-- **每日核对**（`qb.system.recon-fee-account`）：新项 `FEE_CREDIT_PROMOTION`——按运营商（发放时记在笔上的；`-` 为无），以赠送为来源的分录在 5140 上的借减贷 = 各笔金额 − 到期作废之和（`sponsorId` 一列此处是运营商）。`FEE_CREDIT`（2190 = 钱包 = 各笔剩余）照旧覆盖赠送与作废。
+- **每日核对**（`qb.system.recon-fee-credit`）：新项 `FEE_CREDIT_PROMOTION`——按运营商（发放时记在笔上的；`-` 为无），以赠送为来源的分录在 5140 上的借减贷 = 各笔金额 − 到期作废之和（`sponsorId` 一列此处是运营商）。`FEE_CREDIT`（2190 = 钱包 = 各笔剩余）照旧覆盖赠送与作废。
 - **月报**（`qb.admin.monthly`）：两个新种类 `FEE_CREDIT_GRANTED`（借 5140 / 贷 2190）与 `FEE_CREDIT_VOIDED`（借 2190 / 贷 5140），新列 `feeCreditPromotion`（5140）；用赠送支付的平台费照旧在 `FEE_PAID` 的 `feeCredit` 一列。余额表多 5140 一行。
 - **排查**：
   1. 某发起方的赠送：`SELECT grant_id, source, source_key, operator_id, amount, remaining, voided_amount, granted_at, expires_at, reminded_at FROM qb_fee_credit_grant WHERE sponsor_id = '<发起方>' ORDER BY granted_at`。
@@ -1178,7 +1179,7 @@ Quiz 与发布有主题词（平台词表中的词与自定义词），学者可
 - **一次终身**：每个发起方对平台模板的每个节点**终身只得一笔**（来源 `LIGHT`，来源键 `light:<模板>/<节点>`；需求方 2026-11-10）：撤销后再答合格、改派后在另一个运营商的副本中点亮同一节点都不再发。
 - **结算**：`QB_TREE_LIT_GRANT`（`internal()`，发起方钱包锁内）按发起方两个方向结算：节点"仍被点亮"（有没有撤销、有金额的点亮记录）而没有赠送的，以子流程 `QB_FEE_CREDIT_GRANT` 按最早一条点亮冻结的金额发一笔（有效期、记账、到期与提醒同 §7.39；每次至多 `quizbuks.tree-grants.max-per-run` 笔，缺省 50，其余下次）；有赠送而节点不再被点亮、还有剩余的作废剩余（借 2190 / 贷 5140，`remaining` 归零、`voided_amount` 累加；已用掉的不追回，需求方 2026-11-10）。总开关 `qb.fee-credit.grant.enabled` 关闭时、发起方已封禁或入驻未通过时不发（作废照做）。由三处触发：点亮后的事件 `qb.tree.grant-due`、撤销点亮（§7.27 的四眼）之后的事件 `qb.tree.lit-revoked`、每日任务 `qb.tree-grant-retry`（每天 03:29，`jabiz.fiscal-year-zone`，模板 `qb.system.tree-grants-due` 列出有待发或有待作废的发起方，逐个结算）——事件消费失败、开关开启之前点亮的、账单作废退回到撤销而未作废的赠送，都由它补上。开启之前已经撤销的点亮不发。待发的赠送在平台管理系统的模板 `qb.admin.tree-grants-pending`（`qb.admin.finance.read`，每个发起方每个来源键一行）中可见。错过的运行以 `JOB_RUN_REQUEST`（`POST /api/jobs/qb.tree-grant-retry/runs`，`job.run`）补跑（同一来源键不会发第二笔）。
 - **账单作废的退回**：作废账单时退回到**已作废**的赠送（到期作废或撤销作废）的部分当即再作废（`QB_FEE_REFUND` 过账借 2190 / 贷 5140，钱包不增加），不会让作废过的赠送重新可用。
-- **每日核对**（`qb.system.recon-fee-account`）：`LIGHT_GRANTS`——开关开着、节点仍被点亮而没有赠送（事件与补发都失败）；`LIGHT_VOIDS`——节点不再被点亮而赠送还有剩余（撤销的作废失败、或作废之后有退回而尚未补作废）。差异先看 `qb.admin.tree-grants-pending` 与任务 `qb.tree-grant-retry` 的最近一次运行；`LIGHT_VOIDS` 一般在次日的任务之后消失。月报沿用 `FEE_CREDIT_GRANTED` / `FEE_CREDIT_VOIDED`。
+- **每日核对**（`qb.system.recon-fee-credit`）：`LIGHT_GRANTS`——开关开着、节点仍被点亮而没有赠送（事件与补发都失败）；`LIGHT_VOIDS`——节点不再被点亮而赠送还有剩余（撤销的作废失败、或作废之后有退回而尚未补作废）。差异先看 `qb.admin.tree-grants-pending` 与任务 `qb.tree-grant-retry` 的最近一次运行；`LIGHT_VOIDS` 一般在次日的任务之后消失。月报沿用 `FEE_CREDIT_GRANTED` / `FEE_CREDIT_VOIDED`。
 - **部署**：迁移 V110；之后需要时以受控变更设 `qb.tree.grant.max-per-node` 与两个门槛参数（另一位管理员发布），再在平台管理系统的模板编辑器（`/admin/qb/trees`，只对点亮者为发起方的平台模板给出"点亮时的赠送额度"，副本只读显示模板的金额）上设赠送金额并提交审核。
 - **挑战（F-S4c）**：发起方在发起方中心的"挑战"标签（`/sponsor/profile/challenges`，模板 `qb.sponsor.challenges`，可开始与否同 `QB_SPONSOR_ATTEMPT_START`）看到所属运营商副本的节点、开放的功能与赠送额度，并以与学者相同的答题页（共用的 `qb/answer/`）作答；结果页说明点亮、开放的奖励方式与赠送额度，或等下一场。挑战不要求奖励方式（档位都是 0；缺省奖励方式为空的发起方照样能发布挑战）。发布向导绑定发起方点亮的节点时不给出奖励、预算、受众与共享视频等字段。审核页与运营商的副本页按节点显示"已点亮"人数（达到统计最低人数才显示）与"答过未点亮"人数（每日任务 `qb.tree-node-counts` 起也统计点亮者为发起方的图）。
 - **排查（挑战）**：发起方说看不到挑战：确认其入驻已通过、其归属的运营商（`qb.sponsor.operator`）与挑战卡片的 `operatorId` 一致、卡片 `forSponsors` 且在期间内；答过的挑战只列在"答过的挑战"中。
@@ -1196,7 +1197,7 @@ Quiz 与发布有主题词（平台词表中的词与自定义词），学者可
 - **部署**：迁移 V111；部署后执行一次 `QB_SETUP`（新的参数、审核规则与权限 `qb.sponsor.verification`、`qb.admin.verification.read`、`qb.sponsor-verification.revoke`），由另一位管理员发布审核规则的提案。邮件需 `jabiz.mail.enabled` 与 `jabiz.mail.base-url`（链接指向发起方页面）。
 - **排查**：发起方说收不到链接：查 `sys_mail_message` 中模板 `qb.sponsor-verification.confirm` 给该地址的记录与发送状态，再请对方查垃圾邮件、公司邮件网关是否拦截外部邮件；链接用不了（`QB_VERIFICATION_LINK_INVALID`）：是否过期、是否已被后发的链接取代、是否用别的账户登录打开。某发起方的认证记录：`SELECT verification_id, company_name, domain, method, status, submitted_at, verified_at, ended_at, reject_reason, revoke_reason FROM qb_sponsor_verification WHERE sponsor_id = '<发起方>' ORDER BY submitted_at DESC`。补发：`SELECT * FROM qb_fee_credit_grant WHERE sponsor_id = '<发起方>' AND source_key IN ('onboarding', 'certified')`。
 - **补发失败**（已认证、平台费账户页仍提示"认证后补到"、次日仍未补）：查任务 `qb.fee-credit-certified-due` 最近一次运行中该发起方一项的结果，与消费者 `qb.fee-credit-certified` 对该事件的尝试（`sys_outbox_attempt`）。常见原因：赠送开关关着（开启后次日补）、封禁中（解封后次日补）、赠送参数不合格（`qb.fee-credit.valid-days` 不在 1–999、`qb.fee-credit.grant.certified` 不是整数日元：以受控变更改正并发布）、过账失败（科目 5140 / 2190 未启用等，修好后）。改正后等次日的任务，或以 `JOB_RUN_REQUEST` 补跑 `qb.fee-credit-certified-due`（带原因）；不手工写赠送或分录。认证本身不受影响，不必重新审核。
-- **每日核对 `CERTIFIED_GRANTS`**（`qb.system.recon-fee-account`）：有补发而从未认证过（`expected` 0、`actual` 补发金额），或开户 + 补发超过补发时记下的认证金额（`expected` 记下的金额、`actual` 两笔之和）。都不应出现：出现即停开关（`qb.fee-credit.grant.enabled` 改为 false）、保留现场，报开发；多发的部分由财务以人工调整的流程处理，不改赠送表。
+- **每日核对 `CERTIFIED_GRANTS`**（`qb.system.recon-fee-credit`）：有补发而从未认证过（`expected` 0、`actual` 补发金额），或开户 + 补发超过补发时记下的认证金额（`expected` 记下的金额、`actual` 两笔之和）。都不应出现：出现即停开关（`qb.fee-credit.grant.enabled` 改为 false）、保留现场，报开发；多发的部分由财务以人工调整的流程处理，不改赠送表。
 
 ### 7.43 运营商转给直营发起方（F-M4）
 
@@ -1205,7 +1206,7 @@ Quiz 与发布有主题词（平台词表中的词与自定义词），学者可
 - **规则**：只经 `QB_OPERATOR_TRANSFER_TO_DIRECT`（运营商管理系统「账户」页的"转给直营发起方"，负责人、每次二次验证；每次提交带页面生成的请求键 `requestKey`（必填，缺少即 400），同时作为该请求的 `Idempotency-Key`：重发同一次提交得到第一次的回答，同一运营商的同一请求键不会转第二次（`QB_OPERATOR_TRANSFER_REPEATED`））。金额为不超过余额的整数（余额 = 结算记入 − 未驳回未取消的提现 − 已转出，模板 `qb.system.operator-balance`，提现与转入共用）；直营发起方取自运营商行，不能转给别的发起方；直营发起方入驻未通过或被封禁即拒绝（`QB_OPERATOR_TRANSFER_NO_DIRECT` / `_DIRECT_BANNED`，什么也不写）。不设四眼（钱给本运营商自己的发起方、不出平台），转出后**不能撤回**。
 - **账务**：每笔转入只记一次（`qb_operator_transfer_version`，保留 10 年）；过账借 2140 / 贷 2160（维度：直营发起方），同一事务中直营发起方的现金账户与现金笔（来源 `OPERATOR`）随之增加。这笔钱照 F-M1 的顺序付平台费（赠送额度先用，再按进账先后），**不能换学分**（`QB_KUDOS_BUY` 的可用额不含 `OPERATOR` 笔，页面显示"运营商转入（只用于支付平台费）"），发起方没有现金提现。
 - **充值被退款或争议扣回**：扣回的顺序是该充值自己的那一笔 → 发起方自己的其他现金笔（按进账先后）→ 最后才是 `OPERATOR` 笔。只有不得不取 `OPERATOR` 笔时（发起方自己的现金已不够），才取它，并给总部财务（`qb.reconcile`）一个待办"运营商转入的钱随充值的退款回到了卡上"（`task.qb.refund-check.OPERATOR_CASH`，来源 `stripe-operator-cash:<事件>`，一个事件一个）。处理：确认金额（待办中的金额）与该运营商、发起方；这笔钱已经离开平台，不冲正、不手工补；与运营商联系说明情况（它的平台费账户少了这笔），需要追偿时按合同处理。
-- **核对与月报**：每日核对 `OPERATOR_ACCOUNT`（`qb.system.recon-fee-account`，`sponsorId` 一列此处是运营商）比较 2140（经来源单据：结算、提现、转入）与"各结算的应付 − 单独付清的结算 − 已付的提现 − 转入"；`CASH_LOTS` 照旧比较 2160 与各笔。月报新类 `OPERATOR_TRANSFER_TO_DIRECT`。
+- **核对与月报**：每日核对 `OPERATOR_ACCOUNT`（`qb.system.recon-operator-account`，`sponsorId` 一列此处是运营商）比较 2140（经来源单据：结算、提现、转入）与"各结算的应付 − 单独付清的结算 − 已付的提现 − 转入"；`CASH_LOTS` 照旧比较 2160 与各笔。月报新类 `OPERATOR_TRANSFER_TO_DIRECT`。
 - **差异的处理**：`OPERATOR_ACCOUNT` 出现差异时，先查 `SELECT * FROM qb_operator_transfer_version WHERE operator_id = '<运营商>'` 与来源为 `QbOperatorTransfer` 的分录是否一一对应（每笔转入恰有一笔借 2140 / 贷 2160），再查该运营商的结算与提现。不手工写分录或改表；报开发。
 - **常见询问**：负责人说按钮不出现——运营商没有直营发起方（每日核对 `qb.admin.operator-health`），或登录的不是负责人；发起方说现金不能换学分——见页面的"运营商转入"一行。
 
@@ -1274,7 +1275,7 @@ Quiz 与发布有主题词（平台词表中的词与自定义词），学者可
     - 发起方状态问题：先由总部暂停该发布（`QB_PUBLICATION_ADMIN_PAUSE`，停止重试），处理发起方后再恢复（恢复时记费）。
     - 不要改表、不要绕过记费。
 - **作废从预付款付的账单**：作废（`FeeRequests` 的 `VOID`，四眼）冲正付款分录后，把从预付款付的部分退回账户（不退回预付款）：另过一笔借 2180、贷 2190 / 2160（来源为该预付款，月报 `PREPAYMENT_RELEASED`），赠送退回原笔、原笔已作废即再作废；冲正本身在月报 `FEE_VOIDED`。
-- **核对与月报**：每日核对 `PREPAYMENTS`（2180 按发起方 = 未关闭预付款的剩余）、`PREPAYMENT_STALE`（按发起方：已回到草稿、结束超过 `qb.prepayment.release.overdue-days`（普通参数，缺省 2 天）或发布不存在，仍有未关闭的预付款）、`PREPAYMENT_PARTS`（预付的预付款的分摊——冻结、退回，减去费用取走的——与其剩余不符）与 `PREPAYMENT_UNCHARGED`（发布已开始——LIVE、`FUNDS_SHORT` 或已有学者开始——而受众规则费还没有记，多半是某条进入 LIVE 的路径漏了记费，报开发）；月报新类 `PREPAYMENT_FROZEN`、`PREPAYMENT_USED`、`PREPAYMENT_RELEASED`，新列 `feePrepayments`（2180）。分录导出需要映射 `qb.journal.account.2180`（受控，`QB_SETUP` 提出，另一位管理员发布）。
+- **核对与月报**：每日核对 `PREPAYMENTS`（2180 按发起方 = 未关闭预付款的剩余）、`PREPAYMENT_STALE`（按发起方：已回到草稿、结束超过 `qb.prepayment.release.overdue-days`（受控，缺省 2 天，§7.52）或发布不存在，仍有未关闭的预付款）、`PREPAYMENT_PARTS`（预付的预付款的分摊——冻结、退回，减去费用取走的——与其剩余不符）与 `PREPAYMENT_UNCHARGED`（发布已开始——LIVE、`FUNDS_SHORT` 或已有学者开始——而受众规则费还没有记，多半是某条进入 LIVE 的路径漏了记费，报开发）；月报新类 `PREPAYMENT_FROZEN`、`PREPAYMENT_USED`、`PREPAYMENT_RELEASED`，新列 `feePrepayments`（2180）。分录导出需要映射 `qb.journal.account.2180`（受控，`QB_SETUP` 提出，另一位管理员发布）。
 - **差异的处理**：`PREPAYMENTS` 有差异时，先查 `SELECT * FROM qb_prepayment WHERE sponsor_id = '<发起方>'` 与来源为 `QbPrepayment` 的分录、`qb_fee_payment_version` 中 `target_id` 或 `prepayment_id` 为该预付款的分摊是否对应；`PREPAYMENT_STALE` 多半是退回失败或每日任务没有运行，查该发布的操作记录与任务的运行；`PREPAYMENT_PARTS` 是缺陷（分摊与剩余不一致时付款与退回都会拒绝而不是少付），报开发。`ENDED` 的发布仍有预付款而任务已跑过：手工运行任务的补跑（`JOB_RUN_REQUEST` `qb.prepayment-release`，带原因）。不手工写分录或改表；报开发。
 - **常见询问**：发起方说提交被拒——向导最后一步的"资金"一栏写明各项与差额，充值或等赠送到账后再提交；发起方问钱去了哪里——发布页的"预付款"与平台费账户的"冻结在预付款中"一行；预付款不是费用，回到草稿时全额退回、结束后一天内退回剩余。
 - **受众规则价目**：需求方 2026-11-09 确认删除总部自己的 `direct` 价目表与参数 `qb.audience.price.fallback`：只有运营商的价目表（负责人或总部为它设置），运营商没有价目表即不收。已有安装中 `direct` 的价目行与该参数保留不读，下次清理时删除。
@@ -1352,7 +1353,7 @@ Quiz 与发布有主题词（平台词表中的词与自定义词），学者可
 - **手工开凭证**（平台管理系统"平台费"页，费用行的"开贷项凭证"）：财务（`qb.fee.manage`）提出原费用、金额（不含税）与原因（印在凭证上），另一位管理员批准（`qb.fee-request.review`）。**上限**：一笔费用的全部凭证（自动与手工）的金额 ≤ 原费用的金额，税 ≤ 原费用的税；每张凭证的税 = min（⌊金额 × 原费用税率⌋，税的余额），开满的那张取税的余额。超出即 422 `QB_FEE_CREDIT_NOTE_EXCEEDS`。**批准时余额已不够**（期间开了别的凭证）：不少开，申请为 `FAILED`，财务收到待办"已批准的平台费申请未能执行"，按新的余额重新提出。账单已作废的费用不能开凭证（422 `QB_FEE_CREDIT_NOTE_VOIDED`）。
 - **何时作废、何时开凭证**：账单整张开错、还没有凭证也没被凭证抵过时作废；有凭证或被抵过的账单不能作废（422 `QB_FEE_INVOICE_HAS_CREDIT_NOTE`，批准时才出现的也同样以 `FAILED` 结束并给财务待办），更正只能开凭证。
 - **运营商分成**：运营商月结算多两列：当月开具的凭证金额（不含税，按费用记费时的运营商）与扣减 = ⌊凭证 × （1 − 当月方案的平台比例）⌋。扣减是成本（与固定费、获客费用并列），不够扣的结转下月；结算单上有"贷项凭证扣减"一行。
-- **核对**（每日对账）：`AUDIENCE_REFUND_MISSING`（结束超过 `qb.audience.refund.missing-after-hours` 小时（普通参数，缺省 30）仍未判定：看任务的运行与失败的项，修好后用 `JOB_RUN_REQUEST` 补跑 `qb.audience-refund` 最近的计划时刻）；`AUDIENCE_REFUND_NO_PERIOD`（按预付款列出判定为没有期间、财务还没处理的：财务决定退就手工开凭证，不退就对该预付款（核对行的参照）运行流程 `QB_AUDIENCE_REFUND_CLOSE` 并写明原因（`qb.fee.manage`；核对页上的按钮随 F-M14），结果为 `NONE_FINANCE`；两者都会让这一行消失）；`AUDIENCE_FEE_NOT_LIVE`（有受众规则费而发布从未上架：报开发）；`CREDIT_NOTE_USES`、`CREDIT_NOTE_LIMITS`、`CREDIT_NOTE_USE_VOID`、`CREDIT_UNUSED_WITH_DUE`（报开发，不手工改表）；`FEES_RECEIVABLE` 已含未用贷项。
+- **核对**（每日对账）：`AUDIENCE_REFUND_MISSING`（结束超过 `qb.audience.refund.missing-after-hours` 小时（受控，缺省 30，§7.52）仍未判定：看任务的运行与失败的项，修好后用 `JOB_RUN_REQUEST` 补跑 `qb.audience-refund` 最近的计划时刻）；`AUDIENCE_REFUND_NO_PERIOD`（按预付款列出判定为没有期间、财务还没处理的：财务决定退就手工开凭证，不退就对该预付款（核对行的参照）运行流程 `QB_AUDIENCE_REFUND_CLOSE` 并写明原因（`qb.fee.manage`；核对页上的按钮随 F-M14），结果为 `NONE_FINANCE`；两者都会让这一行消失）；`AUDIENCE_FEE_NOT_LIVE`（有受众规则费而发布从未上架：报开发）；`CREDIT_NOTE_USES`、`CREDIT_NOTE_LIMITS`、`CREDIT_NOTE_USE_VOID`、`CREDIT_UNUSED_WITH_DUE`（报开发，不手工改表）；`FEES_RECEIVABLE` 已含未用贷项。
 - **发起方看到的**：发布页"预付款"下列出该发布的凭证（号、天数、金额）；"资金 → 账单"有"贷项凭证"一栏（可下载 PDF，首次下载时签发，之后给同一份），账单上写明已用凭证抵减的金额，平台费账户显示未用的贷项。凭证的 PDF 与收据一同保留（十年）。
 
 ### 7.51 封禁与钱（F-M15 a0）
@@ -1360,11 +1361,28 @@ Quiz 与发布有主题词（平台词表中的词与自定义词），学者可
 封禁后，已签发的访问令牌在到期前仍能调用接口，所以每个由人发起的动钱流程自己再读封禁（422 `QB_USER_BANNED`，什么也不写）。`docs/quizbuks/plans/impl/F-M15.md` §5.4。
 
 - **运营商一侧**：负责人或成员被封禁后，确认入驻赠送、设付费方式、保存提现银行账户、申请与取消提现、移除成员、撤销认证、设配送价、转入直营发起方都被拒绝；解封后照常。总部的动作（建运营商、加减成员、指派发起方、抽查、方案、结算与付款、提现的付款与驳回、平台费申请、关闭无期间的退回）不检查：总部角色的持有人只能停用、不能封禁。新增由人发起的流程忘了检查，测试 `BanCoverageTest` 会失败（豁免表写明理由）。
+- **运营商一侧的其余动作与学者的曝光上报**（F-ban-coverage）：被封禁的成员也不能作废奖品、裁决电子奖品、设奖励方式、做潜在客户的各项（设置、方向、批准、放弃、拒收名单、发信服务器）、给区域例外（增加、改期、撤销）、下架共享视频、回复帮助、请求 AI 翻译检查、暂停 / 恢复 / 结束发布、下架页面与商品、处理举报、封禁或解封发起方、复制 / 采用 / 退役知识图；被封禁的学者的 App 上报曝光（`QB_EXPOSURE_REPORT`）也被拒；被封禁的学者或发起方也不能改自己的设置（含公开名与证书公开页，`QB_SETTINGS_SAVE`）、开关证书核实页（`QB_CERTIFICATE_SHARE_SET`、`QB_SPONSOR_CERTIFICATE_SHARE_SET`）或改素材库。奖励方式另检查成员关系：被移出团队或运营商被暂停后，令牌未到期也被拒（`QB_OPERATOR_NOT_MEMBER` / `QB_OPERATOR_SUSPENDED`）。范围由角色推出，`BanCoverageTest` 固定；豁免写在该测试里并附理由（只读、本人偏好、撤回自己尚无后果的东西）。
+- **令牌窗口与审批的残留风险**：封禁不吊销会话，已签发的访问令牌在到期前（缺省 15 分钟，`jabiz.security.jwt.access-token-ttl`）仍有效；刷新令牌在下一次刷新时被登录守卫拒绝。平台的审批决定流程 `APPROVAL_DECIDE` 不能带应用层的封禁检查：被封禁的运营商成员持有效令牌，在这个窗口内仍可批准或驳回发起方入驻与发布的评审。缓解：窗口有限；评审是两人的（须另一位成员）；运营商入口每个动作要二次验证，封禁后无法重新验证。真正的修补需要平台的审批人检查接入点（平台请求，ROADMAP 候选），不在应用里做。
 - **赠送**：被封禁的发起方不再得到新的赠送（入驻、点亮、认证补发、追加）。追加赠送在提出时即拒绝（422 `QB_FEE_CREDIT_BANNED`；手工记费照常可以提出）；审核期间被封禁的，批准时申请以"驳回"（`REJECTED`）结束，什么也不发，解封后由财务重新提出。同一来源键已经发过的仍返回原笔（重放不报错）。
 - **到期提醒**：封禁期间不寄"赠送即将到期"的邮件，也不记已提醒；解封后仍在提醒期内的照常提醒。赠送照常到期。
 - **注销时钱表的文字**：账单、费用、申请、充值、转入直营的记录都保留；只抹去其中的自由文字（手工费用与申请的理由、账单的作废理由、手工入账的理由与汇款人名、负责人在转入时写的备注；可空的列写空，必填的写 `***`）。转入的备注随写的负责人或收款的直营发起方任一方的注销而抹去。手工入账的理由因此可以为空（迁移 V120 放宽了检查），流程仍要求填写。
 
-### 7.52 平台承担的 AI 成本与提供方的支出上限（F-M10）
+### 7.52 每日核对的级别与待办（F-M14a）
+
+每个核对项有一个级别（`docs/quizbuks/plans/impl/F-M14.md` §1.2、§3.1b）。逐项的总表（含义、常见原因、怎么办）随 F-M14a 的第二部分补上。
+
+- **差异**：已结束月份的账会因此错或不全。运行为 `DIFF`，告警 `qb-reconcile-diff`，月末分录导出被拒（`QB_JOURNAL_RECON_NOT_OK`）；财务（`qb.reconcile`）每天至多一个待办"核对发现差异"，标题写明差异条数与涉及几项核对。
+- **需关注**：账是平的、已结束月份不受影响，只需要有人看或做一个决定。运行仍为 `OK`，不告警、不拦导出；每个（核对项, 对象）给负责的人一个待办"核对需关注"，标题写明核对项、对象、应为与实际。现在的四项：`DISTRIBUTION_PRICE_RANGE`（运营商的配送费价目超出总部范围：改价目或改范围）、`AUDIENCE_REFUND_NO_PERIOD`（财务决定开凭证或用 `QB_AUDIENCE_REFUND_CLOSE` 记下不开，§7.50）、`CREDIT_UNUSED_WITH_DUE`（下一次开账单或抵用时自行了结）、`HELP_USAGE_TOTAL`（AI 帮助的月用量，由内容管理员负责，见 §7.53）。
+- **提示**：只是信息（`TAKER_WALLET_LAG`、`DISTRIBUTION_AT_FLOOR`），不建待办。
+- **待办的建立与关闭**：任务 `qb.recon-attention` 与 `qb.recon-tasks-close`，每天 UTC 18:52（日本时间 03:52，核对之后 15 分钟），每次至多 200 项，剩下的次日继续；补跑用 `JOB_RUN_REQUEST`。
+  - **关注待办**：同一对象只要有一个未办的就不再建；不再出现即以完成关闭。人手工关了而条件还在，次日会重建：要处理的是条件，不是待办。
+  - **差异待办**：后一天的取代前一天的（前一天的以取消关闭）；一次没有差异的运行把它以完成关闭。
+  - **不动的情况**：当天的核对没有运行时，两个任务什么也不做（由 `qb-reconcile-missing` 叫人）。补跑的核对（`JOB_RUN_REQUEST`）晚于 UTC 18:52 完成时，当天的两个任务已经跑过、什么也没做：核对补跑之后，再对这两个任务各补跑一次当天的计划时刻。补跑更早的时刻（其后已有更晚的运行）时，两个任务也什么都不做：待办只按最新的一次运行建立与关闭。一次运行的条目超过 1,000 条而被截断时，不关任何关注待办：不见不等于没有。
+- **截断时保留的次序**：学者钱包三项最先，然后差异、关注、提示。摘要里的计数永远是全的。
+- **两个阈值改为受控**（四眼）：`qb.prepayment.release.overdue-days`（预付款在发布结束后几天未退回即报）与 `qb.audience.refund.missing-after-hours`（受众规则费在发布结束后几小时未判定即报）。原则：决定核对报不报的阈值受控，只决定何时提醒的不受控。已有的安装保留现值（设置流程不再动已有的参数），以后修改要提出受控变更、由另一位管理员发布；新安装由 `QB_SETUP` 提出缺省值（2 天、30 小时），发布之前天数按 2 天计、小时数的检查不执行。
+- **模板**：原来的 `qb.system.recon-fee-account` 按领域拆成 `recon-fee-credit`、`recon-operator-account`、`recon-prepayments`、`recon-credit-notes` 四个，结果不变。
+
+### 7.53 平台承担的 AI 成本与提供方的支出上限（F-M10）
 
 **谁付什么**：学者与发起方问使用方法的 AI 帮助，和审核人用 AI 对照翻译（`TRANSLATION_CHECK`），是**平台出的钱**，不向发起方收；两者的估算美元合计后与同一个阈值比较（同一条告警、同一个待办），总部 AI 页分开列出。AI 获客（Q48d）由运营商承担，但付给提供方的是平台同一把密钥，向运营商收回由 F-M9 或财务处理；发起方自己用 AI 的费用见 F-M9 的那一节。**不记账**：账本里没有“AI 成本”科目，记的又是估算，月底与发票对不上；每月由财务拿提供方的账单对照。
 
@@ -1392,7 +1410,7 @@ Quiz 与发布有主题词（平台词表中的词与自定义词），学者可
   | 到了提供方的上限之后 | 调用被提供方拒绝，发起方的 AI 与帮助的作业按失败结束（帮助的页面提示转人工）；失败的作业不会自动重做，用户重新提交 | | |
   | 恢复步骤 | ①在总部 AI 页看是谁用得多（按月、不看个人）；②确认不是被刷（必要时调低每人每天次数、关开关（受控），或在提供方管理页面吊销密钥，§7.8 的紧急停止）；③财务批准后，超级管理员在提供方管理页面调高上限或等到下月；④通知用户可以重新提交 | 财务批准，超级管理员执行 | |
 
-- **每日核对**：钱包核对（§7.2）多一项 `HELP_USAGE_TOTAL`：每个月全平台一行（`qb_help_usage` 的 `*`）的提问数、输入 Token、输出 Token、估算美元**不小于**各人的行之和。是“不小于”而不是“相等”：删除账号时本人的行被抹除、全平台行保留，对话已被保留期删掉时只加全平台行。**只是提示，不算差异**（`ReconChecks.NOTES`）：结果仍为 `OK`，不触发 `qb-reconcile-diff`、不拦月度分录导出、不建每日待办；引用写月份和量，如 `2026-10:costMicros`（核对项只存整数，所以美元按百万分之一美元存）。F-M14 的分级核对落地后改为“关注”级，由 `qb.admin.help.gaps` 的持有者（内容管理员）负责。
+- **每日核对**：钱包核对（§7.2）多一项 `HELP_USAGE_TOTAL`：每个月全平台一行（`qb_help_usage` 的 `*`）的提问数、输入 Token、输出 Token、估算美元**不小于**各人的行之和。是“不小于”而不是“相等”：删除账号时本人的行被抹除、全平台行保留，对话已被保留期删掉时只加全平台行。**是“需关注”级，不算差异**（`ReconChecks.ATTENTION`，§7.52）：结果仍为 `OK`，不触发 `qb-reconcile-diff`、不拦月度分录导出，也不进财务的待办；每个（月份, 量）给 `qb.admin.help.gaps` 的持有者（内容管理员）建一个待办“核对需关注”，来源键 `recon-attn:HELP_USAGE_TOTAL:<月>:<量>`，待办链接到总部 AI 页（`/qb/ai`，内容管理员打得开；财务的核对页他们打不开）；引用写月份和量，如 `2026-10:costMicros`（核对项只存整数，所以美元按百万分之一美元存）。该月的差异不再出现时待办自动完成；人手工关了而差异还在，次日会再建。
 - **总部 AI 页的限制**：翻译核对一列按作业完成时记下的区域（部署的 `jabiz.fiscal-year-zone`）归月，与用量的月份一致；某个月只有翻译核对、没有任何 AI 帮助的提问时，该月不出现在表里（告警与待办仍算它）。审核人账号被抹除时其核对作业的行随之删除，之后本月合计少算，接受。
 
 ## 8. 升级到线 1.3（S0 的迁移 V29、V30）

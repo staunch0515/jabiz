@@ -206,6 +206,20 @@ describe("the operator's account", () => {
   })
 })
 
+describe("the platform operator's account (F-M12, question 6)", () => {
+  it('offers its lead no withdrawal and says why, while transfers stay', async () => {
+    server.account = account({ platformOperator: true })
+    const { container } = renderAccount()
+    expect(await screen.findByTestId('withdrawals-platform')).toHaveTextContent(
+      'The platform operator’s account is not open for withdrawal')
+    await screen.findAllByTestId('withdrawal-row')
+    expect(screen.queryByTestId('withdraw-form')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('withdraw-amount')).not.toBeInTheDocument()
+    expect(await screen.findByTestId('transfer-form')).toBeInTheDocument()
+    await expectAccessible(container)
+  })
+})
+
 describe("the transfers to the direct Sponsor (F-M4)", () => {
   it('lets the lead move an amount with a note after confirming, and lists the transfers', async () => {
     server.rows[TEMPLATE.ownTransfers] = [{ transferId: 't1', amount: '3000', note: 'October fees',

@@ -1,5 +1,7 @@
 package com.jabiz.quizbuks.wallet;
 
+import com.jabiz.quizbuks.QbPermissions;
+
 import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.List;
@@ -141,14 +143,57 @@ public final class ReconChecks {
     /** Codes no longer reported that runs written before may still name: readable, never written. */
     public static final List<String> RETIRED = List.of(DISTRIBUTION_PRICE_OUT_OF_RANGE);
 
+    /** The checks that only note something: a run with notes alone is {@code OK}, and nobody is asked. */
+    public static final Set<String> NOTES = Set.of(TAKER_WALLET_LAG, DISTRIBUTION_AT_FLOOR);
+
     /**
-     * The checks that only note something: a run with notes alone is {@code OK}. {@link #HELP_USAGE_TOTAL} is one until
-     * the reconciliation grades its checks (F-M14): as a difference it would raise the page-level alert
-     * {@code qb-reconcile-diff}, stop the monthly journal export (QB_JOURNAL_RECON_NOT_OK) and make finance a task every
-     * day, none of which the help's counters deserve; it does not mend itself either (the rows are erased or kept as they
-     * are). It becomes an "attention" check owned by {@code qb.admin.help.gaps} when F-M14 is in.
+     * F-M14 (docs/quizbuks/plans/impl/F-M14.md §1.2): the checks that need someone to look or decide while the books
+     * agree and no month already closed is wrong or short. A run with these (and notes) alone is {@code OK}: the gauge,
+     * the alert and the journal export see differences only; the owner gets one task per check and object
+     * ({@link ReconTasks}).
      */
-    public static final Set<String> NOTES = Set.of(TAKER_WALLET_LAG, DISTRIBUTION_AT_FLOOR, HELP_USAGE_TOTAL);
+    public static final Set<String> ATTENTION = Set.of(DISTRIBUTION_PRICE_RANGE, AUDIENCE_REFUND_NO_PERIOD,
+        CREDIT_UNUSED_WITH_DUE, HELP_USAGE_TOTAL);
+
+    /** F-M14: the dictionary of each check's level (made from these sets). */
+    public static final String LEVEL_DICTIONARY = "urn:jabiz:dict:quizbuks:recon-level";
+
+    /** How much a check found matters (F-M14 §1.2): one level per check. */
+    public enum Level {
+        /** A month already closed is wrong or short because of it: the run is DIFF, the export waits. */
+        DIFFERENCE,
+        /** The books agree; someone looks or decides: a task, the run stays OK. */
+        ATTENTION,
+        /** Information only. */
+        NOTE
+    }
+
+    /** The level of a check. */
+    public static Level level(String check) {
+        return NOTES.contains(check) ? Level.NOTE : ATTENTION.contains(check) ? Level.ATTENTION : Level.DIFFERENCE;
+    }
+
+    /**
+     * The permission whose holders are asked about a check (F-M14 §3.1b, G4): finance's {@code qb.reconcile} unless
+     * named here. A task goes to one permission, so each owner gets their own.
+     */
+    static final Map<String, String> OWNERS = Map.of(HELP_USAGE_TOTAL, QbPermissions.ADMIN_HELP_GAPS);
+
+    /**
+     * Where a check's task leads when its owner cannot open finance's reconciliation page: the AI help's usage is on
+     * headquarters' AI page, which the content administrators (owners of {@link #HELP_USAGE_TOTAL}) can open.
+     */
+    static final Map<String, String> LINKS = Map.of(HELP_USAGE_TOTAL, "/qb/ai");
+
+    /** The page a check's task leads to: its own, else the reconciliation page. */
+    public static String link(String check) {
+        return LINKS.getOrDefault(check, ReconTasks.RECONCILIATION_PAGE);
+    }
+
+    /** Who is asked about a check: its owner's permission. */
+    public static String owner(String check) {
+        return OWNERS.getOrDefault(check, QbPermissions.RECONCILE);
+    }
 
     public static final String OK = "OK";
     public static final String DIFF = "DIFF";
@@ -180,9 +225,24 @@ public final class ReconChecks {
             return counts.values().stream().mapToInt(Integer::intValue).sum();
         }
 
-        /** The differences: the items that are not notes. */
+        /** The differences: the items neither notes nor for attention (F-M14). */
         public int differences() {
-            return counts.entrySet().stream().filter(e -> !NOTES.contains(e.getKey()))
+            return count(Level.DIFFERENCE);
+        }
+
+        /** The items for attention. */
+        public int attention() {
+            return count(Level.ATTENTION);
+        }
+
+        /** How many checks found differences. */
+        public int checksDiffering() {
+            return (int) counts.entrySet().stream().filter(e -> e.getValue() > 0
+                && level(e.getKey()) == Level.DIFFERENCE).count();
+        }
+
+        private int count(Level level) {
+            return counts.entrySet().stream().filter(e -> level(e.getKey()) == level)
                 .mapToInt(Map.Entry::getValue).sum();
         }
     }
@@ -277,8 +337,10 @@ public final class ReconChecks {
     public static final Set<String> TAKER_CHECKS = Set.of(TAKER_WALLET, TAKER_IN_TRANSFER, TAKER_WALLET_LAG);
 
     /**
-     * The run's outcome from every difference found, keeping {@code maxItems} as items: the takers' first, so that
-     * the next run finds whom this one found (the "two runs in a row" rule) however many other differences there are.
+     * The run's outcome from every item found, keeping {@code maxItems} as items: the takers' first, so that the next
+     * run finds whom this one found (the "two runs in a row" rule) however many other items there are; then the
+     * differences, those for attention and the notes (F-M14, review M5: a note never pushes out a difference). The
+     * counts are always all of them. The run is {@code DIFF} only for a difference.
      */
     public static Result result(List<Item> found, int maxItems) {
         Map<String, Integer> counts = new TreeMap<>();
@@ -287,9 +349,12 @@ public final class ReconChecks {
         StringJoiner json = new StringJoiner(",", "{", "}");
         counts.forEach((check, count) -> json.add("\"" + check + "\":" + count));
         List<Item> ordered = new ArrayList<>(found.stream().filter(i -> TAKER_CHECKS.contains(i.check())).toList());
-        found.stream().filter(i -> !TAKER_CHECKS.contains(i.check())).forEach(ordered::add);
+        for (Level level : Level.values()) {
+            found.stream().filter(i -> !TAKER_CHECKS.contains(i.check()) && level(i.check()) == level)
+                .forEach(ordered::add);
+        }
         List<Item> kept = List.copyOf(ordered.size() <= maxItems ? ordered : ordered.subList(0, maxItems));
-        boolean differs = found.stream().anyMatch(item -> !NOTES.contains(item.check()));
+        boolean differs = found.stream().anyMatch(item -> level(item.check()) == Level.DIFFERENCE);
         return new Result(differs ? DIFF : OK, kept, Map.copyOf(counts), json.toString());
     }
 

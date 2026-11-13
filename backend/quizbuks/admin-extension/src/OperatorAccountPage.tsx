@@ -336,8 +336,11 @@ function Withdrawals({ account }: { account: OperatorAccount }) {
   ], [t, points, statusLabel, lead, busy, queryClient])
   return (
     <Section title={t('account.withdrawals')} testId="account-withdrawals">
-      <p className="text-muted-foreground text-sm">{t(lead ? 'account.withdrawalsHint' : 'account.withdrawalsLeadOnly')}</p>
-      {lead && <WithdrawalForm account={account} />}
+      {account.platformOperator
+        // F-M12 (question 6): the platform operator does not withdraw; the server refuses it too.
+        ? <p className="text-muted-foreground text-sm" data-testid="withdrawals-platform">{t('account.withdrawalsPlatform')}</p>
+        : <p className="text-muted-foreground text-sm">{t(lead ? 'account.withdrawalsHint' : 'account.withdrawalsLeadOnly')}</p>}
+      {lead && !account.platformOperator && <WithdrawalForm account={account} />}
       {query.isError
         ? <LoadFailed error={query.error} onRetry={() => void query.refetch()} />
         : (

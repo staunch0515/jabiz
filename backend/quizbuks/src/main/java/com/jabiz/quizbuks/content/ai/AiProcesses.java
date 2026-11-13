@@ -717,6 +717,9 @@ public final class AiProcesses {
                         return ctx;
                     })
                     .outputMapper(ctx -> ctx.get(OUTPUT, RequestOutput.class))
+                    // F-ban-coverage: a banned reviewer's still valid token is refused before anything else (it starts
+                    // a billed job).
+                    .steps(CallerChecks::refuseBanned)
                     .step("Load the settings", loadSettings())
                     .step("Load the publication", LoadEntity.by(QbPublications.defaultDataset(
                         QbPublications.PUBLICATION), PUBLICATION_ID, PUBLICATION))

@@ -229,6 +229,8 @@ public final class DigitalPrizeProcesses {
                         a -> a.whenField("status", DigitalPrizeStatus.DISPUTED))
                     .contextFactory((s, input) -> start(s, input, input.digitalPrizeId()))
                     .outputMapper(ctx -> ctx.get(OUTPUT, PrizeOutput.class));
+                // F-ban-coverage: a banned member's still valid token is refused before anything else.
+                CallerChecks.refuseBanned(pb);
                 pb.step("Load the days to send", LoadParams.<ProcessContext>of(ProcessContext::opTime, PARAMS,
                     QbParams.DIGITAL_SEND_DAYS));
                 // Q48e-1: an operator's member is checked within the act, before the record's lock.

@@ -280,4 +280,4 @@ groups:
         labels: { severity: warning, area: ai }
         annotations:
           summary: 'The estimated dollars of the AI help and the reviewers translation checks reached $JABIZ_ALERT_QB_HELP_COST_PERCENT% of qb.help.global-monthly-usd-alert this month (the gauge qb.help.cost.percent). Look at the AI page and the provider bill; finance gets a task at the next daily check. Nothing is stopped by dollars.'
-          runbook: docs/quizbuks/operations.md section 7.52
+          runbook: docs/quizbuks/operations.md section 7.53

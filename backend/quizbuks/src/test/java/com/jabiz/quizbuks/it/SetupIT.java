@@ -578,11 +578,11 @@ class SetupIT extends QbItSupport {
             QbParams.OPERATOR_WITHDRAWAL_COOLDOWN_HOURS, "24"));
         // F-M3: how long the company verification's link is good (not controlled).
         expected.put(QbParams.VERIFICATION_LINK_HOURS, "48");
-        // F-M5: when an ended publication's open prepayment is a difference (not controlled).
+        // F-M5: when an ended publication's open prepayment is a difference (controlled since F-M14).
         expected.put(QbParams.PREPAYMENT_RELEASE_OVERDUE_DAYS, "2");
         // F-F11a: the bytes one import request carries (an ordinary parameter).
         expected.put(QbParams.CONTENT_IMPORT_BATCH_BYTES, "3145728");
-        // F-M7 (N9): the daily check of the audience fees not decided.
+        // F-M7 (N9): the daily check of the audience fees not decided (controlled since F-M14).
         expected.put(QbParams.AUDIENCE_REFUND_MISSING_AFTER_HOURS, "30");
         // F-C7: drafting from a website (the switch off; the limits of one request and of a month).
         expected.putAll(Map.of(QbParams.SITE_PROFILE_ENABLED, "false", QbParams.SITE_PROFILE_MONTHLY, "10",

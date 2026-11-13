@@ -248,6 +248,14 @@ public final class QbParams {
         List.of(DISTRIBUTION_BILLING_ENABLED), DISTRIBUTION_RANGE, List.of(DISTRIBUTION_FINAL_END_GRACE_SEC,
             DISTRIBUTION_UNSETTLED_AFTER_HOURS, DISTRIBUTION_FINAL_MISSING_AFTER_HOURS))
         .flatMap(List::stream).toList();
+    /**
+     * F-M14 (docs/quizbuks/plans/impl/F-M14.md §5, G7): how long the daily reconciliation waits before it reports a
+     * prepayment not given back and an audience fee not decided. They decide whether the check reports at all, so they
+     * are controlled (four eyes), as the distribution checks' hours are; a value that only says when to remind is not.
+     * An installation that has them keeps its values: the setup creates or proposes a parameter only once.
+     */
+    public static final List<String> RECON_THRESHOLDS = List.of(PREPAYMENT_RELEASE_OVERDUE_DAYS,
+        AUDIENCE_REFUND_MISSING_AFTER_HOURS);
     /** The cap's kind, which the controlled change that first sets it gives (yen, whole). */
     public static final Map<String, Object> FEE_CREDIT_MANUAL_MAX_KIND = Map.of("type", "monetary", "currency", "JPY",
         "scale", 0);
@@ -585,7 +593,7 @@ public final class QbParams {
         OPERATOR_PLANS, OPERATOR_WITHDRAWAL, List.of(TOPUP_BANK_MIN, TOPUP_BANK_MAX), BANK_RECEIVING, WITHDRAWAL_BANK, AUDIENCE_BILLING_PARAMS,
         CASH_ACCOUNT_PARAMS, FEE_PARAMS,
         List.of(ENTRY_FEE_ENABLED), List.of(USAGE_FREE_BYTES), List.of(VIDEO_MAINLAND_SITES), HELP_CONTROLLED, FEE_CREDIT_PARAMS,
-        SITE_PROFILE_CONTROLLED, DISTRIBUTION_CONTROLLED, REWARD_KUDOS, HELP_USER_LIMITS)
+        SITE_PROFILE_CONTROLLED, DISTRIBUTION_CONTROLLED, REWARD_KUDOS, RECON_THRESHOLDS, HELP_USER_LIMITS)
         .flatMap(List::stream).toList();
 
     /** A parameter: its key, kind (as the platform writes kinds) and first value. */
@@ -984,9 +992,6 @@ public final class QbParams {
         new Param(REWARD_KUDOS_ENABLED, BOOL, true,
             "Whether a publication may offer the reward method PLATFORM (Kudos paid by QuizBuks); off at the first "
                 + "launch (F-F10a)"),
-        // F-M10: the AI help's daily questions (controlled; the last of CONTROLLED).
-        new Param(HELP_USER_DAILY, Map.of("type", "numeric", "precision", 4, "scale", 0), "20",
-            "The questions to the AI help one person asks a day (0: none)"),
         // F-M3: company verification (ordinary; last).
         new Param(VERIFICATION_LINK_HOURS, Map.of("type", "numeric", "precision", 3, "scale", 0), "48",
             "How many hours the link mailed to a company address to verify a sponsor's company stays good (1 to 168)"),
@@ -1001,7 +1006,10 @@ public final class QbParams {
         // F-M7 (N9): the daily check (ordinary; last).
         new Param(AUDIENCE_REFUND_MISSING_AFTER_HOURS, Map.of("type", "numeric", "precision", 3, "scale", 0), "30",
             "After how many hours of a publication's end an audience fee whose unused days are not decided yet is "
-                + "reported by the daily check (the daily job decides at 03:37)"));
+                + "reported by the daily check (the daily job decides at 03:37)"),
+        // F-M10: the AI help's daily questions (controlled; the last of CONTROLLED).
+        new Param(HELP_USER_DAILY, Map.of("type", "numeric", "precision", 4, "scale", 0), "20",
+            "The questions to the AI help one person asks a day (0: none)"));
 
     /** The declared value of a parameter: what {@code QB_SETUP} writes. */
     public static String defaultOf(String key) {

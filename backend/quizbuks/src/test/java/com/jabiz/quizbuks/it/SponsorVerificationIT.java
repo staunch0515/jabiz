@@ -201,7 +201,7 @@ class SponsorVerificationIT extends TreeItSupport {
     }
 
     List<Map<String, Object>> differences() {
-        return items("qb.system.recon-fee-account", TestTokens.bearer(tokens, "fm3-recon",
+        return feeAccountItems(TestTokens.bearer(tokens, "fm3-recon",
             QbPermissions.WALLET_SYSTEM), Map.of());
     }
 
