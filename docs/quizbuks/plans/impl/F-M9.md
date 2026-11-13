@@ -2,7 +2,7 @@
 
 状态：已批准实施（总控 2026-11-13）。
 
-规格 `docs/quizbuks/first-launch-spec.md` F-M9（规则、参数、运营闭合、验收）；上下文是 F-M1、F-M5、F-M6 已合入的"账户 + 预付款 + 记费"，以及 F-C7（官网生成）、F-C10（帮助 AI）。格式照 `F-M.md` §8、§9。分支 `1.3/quizbuks-FM9-ai-credit`；分三个 PR：**a-1 后端**（数据、计价、购买、请求时的预留与作业结束时的结算；`qb.ai.fee.enabled` 仍关着），**a-2 后端**（退回、到期、月度记费、核对与月报、运营商分成的 AI 种类），**b 页面**（发起方 AI 额度页与各 AI 面板、总部 AI 页、帮助、`operations.md`）。迁移号 **V125**（总控 2026-11-13；V121–V124 已由 F-M8、F-M12a、F-M12b 使用），只在 a-1，开 PR 前再与总控确认。
+规格 `docs/quizbuks/first-launch-spec.md` F-M9（规则、参数、运营闭合、验收）；上下文是 F-M1、F-M5、F-M6 已合入的"账户 + 预付款 + 记费"，以及 F-C7（官网生成）、F-C10（帮助 AI）。格式照 `F-M.md` §8、§9。分支 `1.3/quizbuks-FM9-ai-credit`；分三个 PR：**a-1 后端**（数据、计价、购买、请求时的预留与作业结束时的结算；`qb.ai.fee.enabled` 仍关着），**a-2 后端**（退回、到期、月度记费、核对与月报、运营商分成的 AI 种类），**b 页面**（发起方 AI 额度页与各 AI 面板、总部 AI 页、帮助、`operations.md`）。迁移号 **V124**（总控 2026-11-13 更正：基线最大为 V122，V123 是 S3 的 #689，须先于本项合并），只在 a-1，开 PR 前再与总控确认。
 
 ## 1 现状与范围
 
@@ -147,7 +147,7 @@
   - 提示（不算差异）`AI_FEE_ABSORBED`：平台承担的作业（`absorbedYen` 与 `unrecordedUsd`），供总部查看；`FEE_CREDIT_PROMOTION` 的 5140 比较要包含 AI 额度中的作废（来源 `QbFeeCreditGrant`，与 §4 第 5 条一致，实现时确认它按来源筛选的方式）。
 - **月报**：§5 的五类；`FEE_CHARGED` 下 `AI` 种类分列。
 - **依赖 F-M7（未合并，分支 `origin/1.3/quizbuks-FM7-audience`）**——逻辑上不依赖它的贷项凭证，但会改同一批文件，须在它合入后拉取并合并：
-  1. 迁移号：F-M7 已合并（V119）；本项用 V125（总控 2026-11-13）。
+  1. 迁移号：F-M7 已合并（V119）；本项用 V124（总控 2026-11-13 更正；V123 为 #689，须先合并）。
   2. `FeeProcesses` / `QbPrepayments`（它给预付款加 `refundDecidedAt`、`refundOutcome`）/ `FeeConfig` / `QbParams` / `FirstLaunchSwitches` / `FeeRequests`：同文件的并行修改，冲突在合并时解决。
   3. `wallet.sql`（它加 `creditNoteCredit`，改"未付"的算法）、`recon-fee-account.sql`、`monthly.sql`、`recon-fee-receivable.sql`：本项在其上追加。
   4. 贷项凭证可以对任意费用开手工凭证：对种类 `AI` 的费用，按 F-M7 的规则退到账户（不是 AI 额度）。**本项不依赖它，但保留一个测试确认对 AI 费开贷项凭证不出错**（待它合入后补，列为 b 的测试）。
@@ -237,7 +237,7 @@
 - 推到 a-2 的：可用额中"已过期未作废的赠送"一项（随到期任务）、`qb.ai.fee.enabled` 改 `ACTIVE`、"收费关而官网生成开"时拒绝并在启动检查警告（问题 6）、审核人对照检查与帮助 AI 不动额度的断言、锁序测试（AI 锁内不取钱包锁，a-2 才有 AI → 钱包的路径）。a-1 的开关仍是 `WAITING` 且列入 `KEY_BEFORE_MEANING`，首次上线时必须为关（`FirstLaunchSwitchesCheck`）。
 
 
-**F-M12a（#687）合并后的修订（2026-11-13）**：§3 末条原写"`operator-fees.sql` 加一处筛选"，该模板已由 #687 删除，分成基数改为按清单 `qb.operator.share.kinds`（缺省不含 `AI`）；本项改为给 AI 费填 `shareExcluded`（成本部分）并补 AI 种类的结算 IT（总控：合并条件）。下文 M2 一条中的"`operator-fees.sql` 一处筛选"以此为准。迁移号 V125，拆成 a-1、a-2、b 三个 PR（§0 开头）。
+**F-M12a（#687）合并后的修订（2026-11-13）**：§3 末条原写"`operator-fees.sql` 加一处筛选"，该模板已由 #687 删除，分成基数改为按清单 `qb.operator.share.kinds`（缺省不含 `AI`）；本项改为给 AI 费填 `shareExcluded`（成本部分）并补 AI 种类的结算 IT（总控：合并条件）。下文 M2 一条中的"`operator-fees.sql` 一处筛选"以此为准。迁移号 V124，拆成 a-1、a-2、b 三个 PR（§0 开头）。
 
 审查对象 `56528a85d` 的计划；决定已写进上文各节，这里列去处。
 - **高**：
