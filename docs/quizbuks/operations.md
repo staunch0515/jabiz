@@ -1372,7 +1372,7 @@ Quiz 与发布有主题词（平台词表中的词与自定义词），学者可
 
 ### 7.52 每日核对的级别与待办（F-M14a）
 
-每个核对项有一个级别（`docs/quizbuks/plans/impl/F-M14.md` §1.2、§3.1b）。逐项的总表（含义、常见原因、怎么办）随 F-M14a 的第二部分补上。
+每个核对项有一个级别（`docs/quizbuks/plans/impl/F-M14.md` §1.2、§3.1b）。逐项的总表（含义、常见原因、怎么办）见 §7.55。
 
 - **差异**：已结束月份的账会因此错或不全。运行为 `DIFF`，告警 `qb-reconcile-diff`，月末分录导出被拒（`QB_JOURNAL_RECON_NOT_OK`）；财务（`qb.reconcile`）每天至多一个待办"核对发现差异"，标题写明差异条数与涉及几项核对。
 - **需关注**：账是平的、已结束月份不受影响，只需要有人看或做一个决定。运行仍为 `OK`，不告警、不拦导出；每个（核对项, 对象）给负责的人一个待办"核对需关注"，标题写明核对项、对象、应为与实际。现在的四项：`DISTRIBUTION_PRICE_RANGE`（运营商的配送费价目超出总部范围：改价目或改范围）、`AUDIENCE_REFUND_NO_PERIOD`（财务决定开凭证或用 `QB_AUDIENCE_REFUND_CLOSE` 记下不开，§7.50）、`CREDIT_UNUSED_WITH_DUE`（下一次开账单或抵用时自行了结）、`HELP_USAGE_TOTAL`（AI 帮助的月用量，由内容管理员负责，见 §7.53）。
@@ -1442,6 +1442,74 @@ Quiz 与发布有主题词（平台词表中的词与自定义词），学者可
 - **月报**（`qb.admin.monthly`）：`EXPOSURE_DEPOSIT`（冻结与追加）、`EXPOSURE_RELEASED`、`EXPOSURE_CHARGED` 三个类别，`PREPAYMENT_FROZEN / RELEASED` 不再含这些。
 - **争议**：发起方问"为什么收了这么多"——发布页的"共享视频的曝光"写明已购、已用、剩余、单价与历次结算（计入的次数与金额）；计入的次数的争议先看曝光计数页（可疑刷量，§7.31）。已收的曝光费只经贷项凭证或平台费账户的人工调整更正（§7.50），不改结算行。
 - **升级**：迁移 V121；部署后运行一次 `QB_SETUP`（新参数、新权限），再按上线检查清单设好运营商价目、范围、最少购买次数与追加上限，最后经受控变更打开 `qb.exposure.billing.enabled`。没有新的环境变量。回滚：恢复备份（§2.3）并启动旧 jar；没有反向迁移。
+
+### 7.55 每日核对与月报分类一览（F-M14a）
+
+**核对总表**（`ReconChecks.ALL`，共 52 项：差异 44、需关注 5、提示 3）。级别的含义与待办见 §7.52；"差异"拦月末分录导出，"需关注"与"提示"不拦。"报开发"＝代码或数据有缺陷，不要手工改表；"补跑"一律经 `JOB_RUN_REQUEST`（任务名、计划时刻与原因）。核对页每组标题下的一句"怎么办"与本表一致。
+
+| 码 | 查什么 | 级别 | 常见原因 | 怎么办 | 谁处理 | 相关项 |
+|---|---|---|---|---|---|---|
+| `SPONSOR_WALLET` | 发起方钱包缓存 = 2110（按发起方） | 差异 | 缓存被流程以外改动；过账与缓存不在同一事务 | 核对两者的明细，按账本更正缓存（不改账本） | 报开发 | TOTAL_2110 |
+| `SPONSOR_PENDING_COUNT` | 待支付笔数缓存 = 答题记录 | 差异 | 同上 | 同上 | 报开发 | SPONSOR_PENDING_AMOUNT |
+| `SPONSOR_PENDING_AMOUNT` | 待支付金额缓存 = 待支付答题的奖励 | 差异 | 同上 | 同上 | 报开发 | SPONSOR_PENDING_COUNT |
+| `TOTAL_2110` | 2110 合计 = 全部发起方钱包缓存合计 | 差异 | 某个发起方的缓存不对 | 先看 SPONSOR_WALLET 的条目 | 报开发 | SPONSOR_WALLET |
+| `LEDGER_ZERO` | 每笔交易借贷之差为 0 | 差异 | 账本被直接写入 | 报开发；不手工改账本 | 报开发 | — |
+| `TOPUP_LEDGER` | 已付充值的 2110 贷方 = 金额 | 差异 | 充值入账漏过或重复 | 按充值查 Stripe 与过账 | 财务 / 报开发 | TOPUP_ARRIVALS |
+| `TOPUP_ARRIVALS` | 已付充值恰有一笔入账交易 | 差异 | Webhook 重复或漏处理 | 同上（§7.1） | 财务 / 报开发 | TOPUP_LEDGER |
+| `TOPUP_REFUNDS` | 充值的 2110 借方 = 记录的退款与争议扣回 | 差异 | 退款或争议事件未处理 | §7.5 | 财务 | — |
+| `TOPUP_FEE` | 充值记录的手续费 = 过账的手续费 | 差异 | 手续费回读失败 | 按充值查 Stripe 的余额交易 | 财务 | — |
+| `TAKER_WALLET` | 学者钱包缓存 = 2120（连续两次才算） | 差异 | 缓存随事件更新失败 | 等下一次核对；仍在则报开发 | 报开发 | TAKER_WALLET_LAG |
+| `TAKER_IN_TRANSFER` | 学者在途缓存 = 2130（连续两次才算） | 差异 | 同上 | 同上 | 报开发 | TRANSFER_IN_TRANSIT |
+| `TAKER_WALLET_LAG` | 本次才发现的学者缓存落后 | 提示 | 事件稍后才到 | 不用处理；已请求重算 | — | TAKER_WALLET |
+| `TRANSFER_LEDGER` | 转账从 2120 扣出的 = 其状态与金额 | 差异 | 转账状态与过账不一致 | 按转账查 Stripe（§7.4） | 财务 | TRANSFER_IN_TRANSIT |
+| `TRANSFER_IN_TRANSIT` | 转账在 2130 的 = 其状态 | 差异 | 同上 | 同上 | 财务 | TRANSFER_LEDGER |
+| `CASH_ACCOUNT` | 现金账户缓存 = 2160（按发起方） | 差异 | 缓存被流程以外改动 | 按账本更正缓存 | 报开发 | TOTAL_2160、CASH_LOTS |
+| `TOTAL_2160` | 2160 合计 = 全部现金账户缓存合计 | 差异 | 某个发起方的缓存不对 | 先看 CASH_ACCOUNT | 报开发 | CASH_ACCOUNT |
+| `FEES_RECEIVABLE` | 1130 = 未付账单 + 未开账单的后付费用 − 未用贷项 | 差异 | 付款、作废或凭证漏过账 | 按发起方对平台费账户（§7.38） | 财务 / 报开发 | FEE_PAYMENTS |
+| `ENTRY_FEES_UNSETTLED` | 2170 不为负（按发起方） | 差异 | 报名费结算多结 | §7.20 | 报开发 | — |
+| `FEE_CREDIT` | 2190 = 赠送钱包 = 各笔剩余 | 差异 | 赠送笔与过账不一致 | §7.39 | 报开发 | FEE_CREDIT_PROMOTION |
+| `CASH_LOTS` | 2160 = 现金笔剩余 | 差异 | 现金笔与过账不一致 | §7.38 | 报开发 | CASH_ACCOUNT |
+| `FEE_PAYMENTS` | 付款分录 = 付款的分摊 | 差异 | 付款写了过账没写分摊（或反之） | §7.38 | 报开发 | FEES_RECEIVABLE |
+| `FEE_CREDIT_PROMOTION` | 5140（按运营商）= 发放 − 作废 | 差异 | 赠送或作废漏过账 | §7.39 | 报开发 | FEE_CREDIT |
+| `LIGHT_GRANTS` | 点亮赠送没有对应的点亮 | 差异 | 点亮被撤销而赠送未作废，或过账出错 | §7.41 | 报开发 | LIGHT_VOIDS |
+| `LIGHT_VOIDS` | 撤销点亮后赠送剩余未作废 | 差异 | 结算任务失败 | 补跑 qb.tree-grant-retry；仍在则报开发 | 财务 | LIGHT_GRANTS |
+| `CERTIFIED_GRANTS` | 企业认证补发与认证或额度不符 | 差异 | 补发条件判断有误 | §7.42 | 报开发 | — |
+| `OPERATOR_ACCOUNT` | 2140（按运营商）= 结算 − 提现 − 转出 | 差异 | 结算、提现或转出漏过账 | §7.13、§7.43 | 报开发 | — |
+| `PREPAYMENTS` | 2180（按发起方）= 未关闭预付款剩余 | 差异 | 预付款与过账不一致 | §7.47 | 报开发 | PREPAYMENT_PARTS |
+| `PREPAYMENT_STALE` | 应退而未退的预付款 | 差异 | 退回任务失败或没跑 | 补跑 qb.prepayment-release | 财务 | PREPAYMENTS |
+| `PREPAYMENT_PARTS` | 预付款的分摊之和 = 剩余 | 差异 | 分摊行漏写 | §7.47 | 报开发 | PREPAYMENTS |
+| `PREPAYMENT_UNCHARGED` | 已开始的发布没记受众规则费 | 差异 | 进入 LIVE 的路径漏了记费 | 报开发 | 报开发 | AUDIENCE_FEE_NOT_LIVE |
+| `DISTRIBUTION_DEPOSITS` | 2180 用途配送费（按发布）= 预付款剩余 | 差异 | 配送费预付款与过账不一致 | §7.48 | 报开发 | DISTRIBUTION_UNSETTLED |
+| `DISTRIBUTION_UNSETTLED` | 月结算漏做的月份 | 差异 | 月结算任务失败 | 补跑配送费月结算 | 财务 | DISTRIBUTION_FINAL_MISSING |
+| `DISTRIBUTION_FINAL_MISSING` | 结束后的最后一次结算漏做 | 差异 | 最后结算任务失败 | 补跑配送费最后结算 | 财务 | DISTRIBUTION_UNSETTLED |
+| `DISTRIBUTION_PRICE_RANGE` | 运营商价目超出总部现在的范围 | 需关注 | 总部收窄了范围 | 请运营商改价目，或总部调整范围（受控） | 财务 | DISTRIBUTION_AT_FLOOR |
+| `DISTRIBUTION_AT_FLOOR` | 按下限计费的进行中的发布 | 提示 | 发起方自报的档位金额过低 | 不用处理（给运营商与总部看） | — | DISTRIBUTION_PRICE_RANGE |
+| `EXPOSURE_DEPOSITS` | 2180 用途曝光费（按发布）= 未关闭的预付款剩余 | 差异 | 预付款被手工改过，或某次冻结 / 追加没有写全 | §7.54；报开发 | 财务 | EXPOSURE_UNIT_MISMATCH |
+| `EXPOSURE_SETTLED_OVER` | 某发布各结算行的次数之和超过已购 | 差异 | 有人改了已购，或重复结算 | §7.54；报开发 | 财务 | EXPOSURE_AMOUNT_MISMATCH |
+| `EXPOSURE_UNSETTLED` | 月末之后过了 `qb.exposure.unsettled-after-hours` 仍没有该月或 `final` 的结算行 | 差异 | 月度任务没有运行或该项失败 | 看任务的运行与失败的项，修好后补跑 `qb.exposure-fee`（最早的月份起逐月，§7.54） | 财务 | EXPOSURE_FINAL_MISSING |
+| `EXPOSURE_FINAL_MISSING` | 发布结束超过 `qb.exposure.final-missing-after-hours` 仍没有 `final` 行 | 差异 | 结束任务没有运行或该项失败 | 看任务的运行与失败的项，修好后补跑 `qb.exposure-final` | 财务 | EXPOSURE_UNSETTLED |
+| `EXPOSURE_SETTLED_SHORT` | `final` 行的次数少于它那一刻已计入的次数（不超过已购） | 差异 | 结算行写错 | 补结算前先看该发布的各行（§7.54）；报开发 | 财务 | EXPOSURE_SETTLED_OVER |
+| `EXPOSURE_AMOUNT_MISMATCH` | 各结算行的金额之和 ≠ ⌈最大次数 × 单价⌉ | 差异 | 有行被手工动过或重复 | 报开发 | 财务 | EXPOSURE_SETTLED_OVER |
+| `EXPOSURE_UNIT_MISMATCH` | 只有已购没有单价，或只有单价没有已购 | 差异 | 两者本应一起写 | 查最近的提交或回到草稿的记录；报开发 | 财务 | EXPOSURE_DEPOSITS |
+| `EXPOSURE_PRICE_RANGE` | 运营商的曝光价目超出总部现在的范围 | 需关注 | 总部改了范围 | 请运营商重设价目，或总部放宽范围（受控） | 财务 | EXPOSURE_UNPURCHASED |
+| `EXPOSURE_UNPURCHASED` | 进行中、用他人视频却没有已购的发布 | 提示 | 开关打开之前提交的，或运营商没有价目 | 不用处理（给运营商与总部看，不建待办） | — | EXPOSURE_PRICE_RANGE |
+| `AUDIENCE_REFUND_MISSING` | 结束后超过小时数仍未判定退回 | 差异 | 退回任务失败或没跑 | 补跑 qb.audience-refund（§7.50） | 财务 | AUDIENCE_REFUND_NO_PERIOD |
+| `AUDIENCE_REFUND_NO_PERIOD` | 没有期间可算天数的受众规则费 | 需关注 | 旧数据没有计费期间 | 开凭证，或用 QB_AUDIENCE_REFUND_CLOSE 记下不开（§7.50） | 财务 | AUDIENCE_REFUND_MISSING |
+| `AUDIENCE_FEE_NOT_LIVE` | 记了受众规则费而发布从未上架 | 差异 | 上架失败后费用未退 | 报开发 | 报开发 | PREPAYMENT_UNCHARGED |
+| `CREDIT_NOTE_USES` | 凭证退回与抵用之和超过凭证合计 | 差异 | 分配规则出错 | 报开发；不手工改表 | 报开发 | CREDIT_NOTE_LIMITS |
+| `CREDIT_NOTE_LIMITS` | 一笔费用的凭证超过原额或原税 | 差异 | 上限检查漏过 | 报开发 | 报开发 | CREDIT_NOTE_USES |
+| `CREDIT_NOTE_USE_VOID` | 贷项用在已作废的账单上 | 差异 | 作废与抵用并发 | 报开发 | 报开发 | — |
+| `CREDIT_UNUSED_WITH_DUE` | 有未用贷项的同时有未付账单 | 需关注 | 抵用尚未发生 | 通常下一次开账单或抵用时自行了结；持续则报开发 | 财务 | FEES_RECEIVABLE |
+| `HELP_USAGE_TOTAL` | 每个月 AI 帮助的全平台用量（提问数、Token、估算美元）不小于各人之和（F-M10，§7.53） | 需关注 | 全平台行少记（缺陷）；删除账号或保留期只会让全平台行更大 | 内容管理员在总部 AI 页（`/qb/ai`）看该月用量；持续则报开发 | 内容管理员（`qb.admin.help.gaps`） | — |
+
+**已知局限**
+- 关注待办手工关闭而条件仍在，次日会重建；"已持续 n 天"从连续找到同一（核对项, 对象）的那几次运行中的第一次算起（UTC 日数）：某次运行不再找到它即重新数，没有运行的日子不打断；核对页一次至多显示 100 个关注条目的天数。
+- 一次运行的条目超过 1,000 条时只保存前 1,000 条（学者钱包、差异、关注、提示的次序），摘要里的计数是全的；此时不自动关闭关注待办。
+- 摘要是各码计数的 JSON，写在 2,000 个字符的列里；每项 7 位数时约 1,100 个字符，`ReconChecksTest` 在余量不足 150 个字符时失败。
+- 配送费"月结算漏做"的缺省阈值 30 小时：月初 00:00 起 30 小时是 2 日 06:00，而 2 日的核对在 03:37，所以最早 3 日才报。
+- 核对按 UTC 18:37 运行；按 `jabiz.fiscal-year-zone` 排的任务随该设置移动，表中的先后以 `Asia/Tokyo` 为前提。
+
+**月报分类**（`qb.admin.monthly`，按来源单据、是否冲正、所动科目与方向归类，每笔只归一类）：`TOPUP`、`BANK_TOPUP`、`MANUAL_TOPUP`、`GRANT`、`REFUND`、`DISPUTE`、`STRIPE_FEE`、`REWARD`、`TRANSFER_SENT`、`TRANSFER_SETTLED`、`WITHDRAWAL_PAID`、`TRANSFER_FAILED`、`TRANSFER_REVERSED`、`PAYOUT`、`PAYOUT_FAILED`、`OPERATOR_SHARE`、`OPERATOR_PAID`、`REFERRAL_REWARD`、`CASH_TOPUP`、`CASH_BANK_TOPUP`、`CASH_REFUND`、`CASH_DISPUTE`、`KUDOS_BOUGHT`、`KUDOS_SOLD`、`FEE_CHARGED`、`FEE_PAID`、`FEE_VOIDED`、`ENTRY_FEE`、`ENTRY_FEE_SETTLED`、`FEE_CREDIT_GRANTED`、`FEE_CREDIT_VOIDED`、`OPERATOR_TRANSFER_TO_DIRECT`、`PREPAYMENT_FROZEN`、`PREPAYMENT_USED`、`PREPAYMENT_RELEASED`、`DISTRIBUTION_CHARGED`、`DISTRIBUTION_DEPOSIT`、`DISTRIBUTION_RELEASED`、`FEE_CREDIT_NOTE`、`FEE_CREDIT_RECOVERED`、`EXPOSURE_CHARGED`、`EXPOSURE_DEPOSIT`（冻结与追加）、`EXPOSURE_RELEASED`、`OTHER`。规则一句话：**退回与扣回不另立类，按它在账上的方向落进已有的类**——退回到预付款的是 `FEE_PAID` 的负数，预付款退回账户是 `PREPAYMENT_RELEASED`，到期赠送的作废是 `FEE_CREDIT_VOIDED`；运营商结算中对赠送额度的扣回（及其退还）是 `FEE_CREDIT_RECOVERED`（F-M12，按结算记账，不另是退回）；凭证本身是 `FEE_CREDIT_NOTE`；抵用不过账。`PREPAYMENT_USED` 不分用途（各费用的记账已按种类分行）。归不进去的才是 `OTHER`（只应有开发期没有来源的入账）；新增一种过账时，同一个 PR 里加它的类（`backend/quizbuks/CLAUDE.md`）。
 
 ## 8. 升级到线 1.3（S0 的迁移 V29、V30）
 

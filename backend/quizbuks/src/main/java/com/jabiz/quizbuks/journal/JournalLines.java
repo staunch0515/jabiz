@@ -169,9 +169,9 @@ public final class JournalLines {
 
     // ---- the files ---------------------------------------------------------------------------------------------------
 
-    static final List<String> VOUCHER_COLUMNS = List.of("voucher_no", "date", "line_no", "side", "account_code",
+    public static final List<String> VOUCHER_COLUMNS = List.of("voucher_no", "date", "line_no", "side", "account_code",
         "platform_account", "sponsor_id", "amount", "memo");
-    static final List<String> DETAIL_COLUMNS = List.of("voucher_no", "line_no", "transaction_id", "booking_time",
+    public static final List<String> DETAIL_COLUMNS = List.of("voucher_no", "line_no", "transaction_id", "booking_time",
         "recorded_at", "platform_account", "side", "sponsor_id", "amount", "source", "source_id", "reference");
 
     /** The voucher for the accounting system: its summary lines only. */

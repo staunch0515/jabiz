@@ -19,6 +19,7 @@ import {
 import { readAccountBalances, readFinanceSummary, readReconSummary } from './finance-api'
 import { readFeeAccountTotals } from './fee-api'
 import { LoadFailed, Section } from './components'
+import { levelCounts } from './finance'
 import { FundSwitches } from './FundSwitches'
 import { money, useLabels, when } from './hooks'
 import { ACCOUNTS, DICTIONARY, PATH, PERMISSION } from './ids'
@@ -146,6 +147,7 @@ export default function FinanceOverviewPage() {
       value: <LoadFailed error={recon.error} onRetry={() => void recon.refetch()} /> }]
   } else if (reconciles && recon.data) {
     const r = recon.data
+    const levels = levelCounts(r.lastRunSummary)
     reconItems = [
       { key: 'recon', label: t('finance.overview.lastRun'), value: r.lastRunId
         ? (
@@ -153,10 +155,15 @@ export default function FinanceOverviewPage() {
             data-status={r.lastRunStatus ?? ''}>
             {t('finance.overview.lastRunValue', { time: when(r.lastRunAt),
               status: t(`finance.recon.status.${r.lastRunStatus === 'DIFF' ? 'DIFF' : 'OK'}`),
-              n: r.lastRunItems })}
+              n: levels.differences })}
           </Link>
         )
         : t('finance.overview.noRun') },
+      ...(r.lastRunId ? [{ key: 'levels', label: t('finance.overview.lastRunLevelsLabel'), value: (
+        <Link to={PATH.reconRun(r.lastRunId)} className={linkClass} data-testid="finance-last-run-levels"
+          data-differences={levels.differences} data-attention={levels.attention} data-notes={levels.notes}>
+          {t('finance.overview.lastRunLevels', { d: levels.differences, a: levels.attention, k: levels.notes })}
+        </Link>) }] : []),
       { key: 'tasks', label: t('finance.overview.openTasks'), value: (
         <CountLink to={PATH.tasks} count={r.openTasks}
           label={t('finance.overview.openTasksLink', { n: r.openTasks })} testId="finance-tasks" />) },
