@@ -71,7 +71,11 @@ CREATE INDEX qb_exposure_settlement_version_period_only_idx ON qb_exposure_settl
 CREATE TABLE qb_exposure_notice (
     notice_id    varchar(36)   PRIMARY KEY,
     publication_id varchar(36) NOT NULL UNIQUE,
+    -- The number bought when the reminder was sent (0: none sent yet); the next waits for a different number.
     notified_for numeric(9, 0) NOT NULL CHECK (notified_for >= 0),
+    -- The exposures counted when the publication was last looked at, so that it is looked at again only when more
+    -- were counted (the job's candidates are all those under half left; the real ratio is a parameter).
+    checked_used numeric(12, 0) NOT NULL DEFAULT 0 CHECK (checked_used >= 0),
     notified_at  timestamptz   NOT NULL,
     version      bigint        NOT NULL
 );

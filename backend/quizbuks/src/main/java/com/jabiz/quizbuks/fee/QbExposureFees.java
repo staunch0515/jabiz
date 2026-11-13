@@ -103,6 +103,8 @@ public final class QbExposureFees {
             .asText(36));
         // The number bought when the reminder was sent: the next one waits for a different number.
         eb.field("notifiedFor", f -> f.physicalColumn("notified_for").required(true).processOnly().asNumeric(9, 0));
+        // The exposures counted when it was last looked at: looked at again only when more were counted.
+        eb.field("checkedUsed", f -> f.physicalColumn("checked_used").required(true).processOnly().asNumeric(12, 0));
         eb.field("notifiedAt", f -> f.physicalColumn("notified_at").required(true).processOnly()
             .asTemporal(TemporalRole.EVENT_TIME));
         eb.field("version", f -> f.physicalColumn("version").asVersion());
