@@ -56,6 +56,8 @@ export interface OperatorAccount {
   transferred: string
   /** F-M4: whether the operator has a direct Sponsor to move money to. */
   hasDirectSponsor: boolean
+  /** F-M12 (question 6): the platform operator's account is not withdrawn from (the server refuses it). */
+  platformOperator: boolean
   balance: string
   /** The least one withdrawal may take (`qb.operator.withdrawal.min`). */
   minimum: string | null
@@ -83,6 +85,7 @@ export async function readAccount(): Promise<OperatorAccount | null> {
     withdrawn: amount(row.withdrawn),
     transferred: amount(row.transferred),
     hasDirectSponsor: bool(row.hasDirectSponsor),
+    platformOperator: bool(row.platformOperator),
     balance: amount(row.balance),
     minimum: str(row.minimum),
     cooldownHours: str(row.cooldownHours),

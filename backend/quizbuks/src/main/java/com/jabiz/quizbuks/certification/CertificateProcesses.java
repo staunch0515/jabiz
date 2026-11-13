@@ -391,6 +391,9 @@ public final class CertificateProcesses {
             })
             .outputMapper(ctx -> new ShareOutput(ctx.get(CERT_ID, String.class),
                 ctx.get(INPUT, ShareInput.class).shared()))
+            // F-ban-coverage: turning sharing on opens a public verify page, so a banned caller's still valid token
+            // is refused before anything else (off as well: one rule, and a ban already hides what it should).
+            .steps(CallerChecks::refuseBanned)
             .step("Take the certificate's lock", HoldLock.<ProcessContext>exclusive(
                 ctx -> "qb.certificate-doc:" + ctx.get(CERT_ID)))
             // Through the caller's own dataset: another person's certificate is not found (404).

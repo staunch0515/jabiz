@@ -107,6 +107,8 @@ public final class BanProcesses {
                 .contextFactory((start, input) -> AccountEditing.start(start, input, AccountEditing.canonical(input.userId())))
                 .outputMapper(ctx -> ctx.get(OUTPUT, BanOutput.class));
             if (operator) {
+                // F-ban-coverage: a banned member neither bans nor unbans; refused before anything else.
+                CallerChecks.refuseBanned(pb);
                 OperatorChecks.member(pb);
             }
             AccountEditing.lock(pb);
@@ -263,6 +265,8 @@ public final class BanProcesses {
                 .contextFactory((start, input) -> AccountEditing.start(start, input, AccountEditing.canonical(input.userId())))
                 .outputMapper(ctx -> ctx.get(OUTPUT, BanOutput.class));
             if (operator) {
+                // F-ban-coverage: a banned member neither bans nor unbans; refused before anything else.
+                CallerChecks.refuseBanned(pb);
                 OperatorChecks.member(pb);
             }
             AccountEditing.lock(pb);
