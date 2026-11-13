@@ -1380,17 +1380,27 @@ class CustomerPersonalData implements PersonalDataEraser {
         // 订单引用客户，客户保留，名字在每个版本中覆盖
         return List.of(ErasedEntity.keep("Customer", "userId", "customerName"));
     }
-    public List<ErasureLoad> loads() { return List.of(ErasureLoad.of("customers", CUSTOMER_DATASET, "userId")); }
+    public List<ErasureLoad> loads() {   // 只要个数（17zz22）
+        return List.of(ErasureLoad.count("customers", CUSTOMER_DATASET, "userId"));
+    }
     public List<ErasureNotice> notices(ErasureSubject subject) {   // 申请前提示（17i-b）
-        return subject.rows("customers").isEmpty() ? List.of() : List.of(ErasureNotice.of("commerce.orders-kept"));
+        return subject.count("customers") == 0 ? List.of() : List.of(ErasureNotice.of("commerce.orders-kept"));
     }
 }
 ```
 
 - `ErasedEntity.delete(实体, 用户字段, 个人字段…)`、`clear(…)`、`keep(…)`，`.documents(版式…)`；提示的文案在消息 `erasure.notice.<代码>`。
+- 提示所需的数据（17zz22）：都是"用户字段 = 本人"的行，在数据视图的范围内读（不看它的权限），每个预读一条语句。
+  `ErasureLoad.of(名, 视图, 用户字段)` 读整行，至多 100 行（`ErasureSubject.MAX_ROWS`），超出即错、整个申请失败，绝不截短；
+  `ErasureLoad.count(…)` 只取个数，`ErasureLoad.sum(…, 字段)` 只取数值或金额字段的合计（没有行为 0），都只返回一行、与行数无关；
+  三者都可以 `.where(字段, 值…)` 加固定条件（一个值为等于，几个值为 `IN`，几个条件都要成立；值是代码中的常量）。
+  以 `subject.rows(名)`、`subject.count(名)`、`subject.sum(名)` 取用；`count` / `sum` 遇到没有声明或读法不对的名字时抛错，不给 0。
+  提示只要个数或合计时用 `count` / `sum`：一个人的行可能远多于 100（兑换券、发布、奖励），读整行会让他申请不了注销。
 - 同一实体可按不同的用户字段声明几次（D62 第 8 条，17zb）：各条声明各自找行，同一行只写一次（有 `delete` 即删除，否则清空找到它的各条的字段）；清除对一张表一条语句，每列只在声明它的声明找到该行时覆盖；审计与单据只按找到该行的声明处理。抹除删除的普通表行在清除时已不在表中，按审计记录中的用户字段找到，审计照样遮蔽。
 - 启动检查（类别 `ERASURE`）：实体存在，同一实体、同一用户字段只声明一次；用户字段与个人字段是它的字段，个人字段不是主键；`clear` 的字段可空且可改；
   不可空的个人字段须是能写下 `***` 的文本（或 JSON）；版式存在。
+  预读（`AccountDeletionChecks`）：数据视图存在，用户字段、条件的字段与合计的字段是它的字段；同名的预读含义相同（视图、字段、读法与条件都相同）；
+  条件与合计不用敏感或遮蔽的字段（否则提示会透露其值）；条件的值是字段能保存的（字典中的码、能转成数字的数）；合计的字段是数值或金额（17zz22）。
 
 ### 17.4 测试
 
@@ -1399,6 +1409,7 @@ class CustomerPersonalData implements PersonalDataEraser {
 `ErasureWithoutMaintenanceIT`（没有维护连接时抹除完成、清除 `ERASURE_PURGE_UNAVAILABLE`、历史仍在）、core `ErasedEntityTest`、runtime `AccountErasureTest`（被几条声明找到的行只写一次）、`ErasureEvidenceTest`（同一行的两条条目按自己的顺序签名）。
 `AccountDeletionIT`（17.5：门户中申请，身份确认、提示、冷静期、到期由定时任务抹除并清除；撤回后不执行；凭邮件链接申请，未验证的地址收不到链接，提示未确认时链接仍有效；
 管理员安排与撤回，受保护权限的持有人被拒；法律保全时申请保持待执行；没有维护连接时启动失败、加载声明有误的启动检查）、`SignInEntriesTest`（`admin` 与接受 `*` 的入口不能开启）。
+`ErasureLoadTotalsIT`（17zz22：一人 150 行时个数与合计各一条语句、条件只算符合的、几个条件都要成立、没有行的合计为 0，数据视图的范围照旧；读整行超过 100 行照旧报错、加条件后读得到；时态实体的个数；启动检查的各种错误）、core `ErasureLoadTest`。
 
 ### 17.5 申请：冷静期与定时任务【阶段 17i-b】
 

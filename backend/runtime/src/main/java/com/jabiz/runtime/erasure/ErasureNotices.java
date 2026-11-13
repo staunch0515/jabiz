@@ -18,6 +18,7 @@ import org.springframework.stereotype.Component;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
+import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -26,9 +27,10 @@ import java.util.Map;
 
 /**
  * What the applications' erasers want a user to know before the account is deleted (decision D62 item 7;
- * docs/design/10-security.md section 17.5): reads the data their {@link PersonalDataEraser#loads()} declare (rows of a
- * dataset whose user field is the user, at most {@link ErasureSubject#MAX_ROWS} each; more is an error, never cut
- * short), then asks every eraser. The text of a notice is the message {@code erasure.notice.<code>}.
+ * docs/design/10-security.md section 17.5): reads the data their {@link PersonalDataEraser#loads()} declare (of a
+ * dataset's rows whose user field is the user, with the load's fixed conditions: the rows, at most
+ * {@link ErasureSubject#MAX_ROWS} each, more is an error, never cut short; or their count; or a field's total), then
+ * asks every eraser. The text of a notice is the message {@code erasure.notice.<code>}.
  */
 @Component
 public class ErasureNotices {
@@ -59,8 +61,7 @@ public class ErasureNotices {
         if (erasers.all().isEmpty()) {
             return Mono.just(List.of());
         }
-        return load(userId).map(data -> {
-            ErasureSubject subject = new ErasureSubject(userId, data);
+        return load(userId).map(subject -> {
             Map<String, ErasureNotice> notices = new LinkedHashMap<>();
             for (PersonalDataEraser eraser : erasers.all()) {
                 eraser.notices(subject).forEach(notice -> notices.putIfAbsent(notice.code(), notice));
@@ -80,28 +81,52 @@ public class ErasureNotices {
         return new Violation("acknowledgedNotices", MESSAGE_PREFIX + notice.code(), notice.code(), notice.params());
     }
 
-    private Mono<Map<String, List<Map<String, Object>>>> load(String userId) {
+    /** What the loads read, one statement each (phase 17zz22: rows, a count or a total). */
+    private Mono<ErasureSubject> load(String userId) {
         Map<String, ErasureLoad> loads = new LinkedHashMap<>();
         erasers.all().forEach(eraser -> eraser.loads().forEach(load -> loads.putIfAbsent(load.name(), load)));
+        Map<String, List<Map<String, Object>>> rows = new LinkedHashMap<>();
+        Map<String, Long> counts = new LinkedHashMap<>();
+        Map<String, BigDecimal> sums = new LinkedHashMap<>();
         return Flux.fromIterable(loads.values())
-            .concatMap(load -> rows(load, userId).map(rows -> Map.entry(load.name(), rows)))
-            .collectMap(Map.Entry::getKey, Map.Entry::getValue, LinkedHashMap::new)
-            .map(map -> (Map<String, List<Map<String, Object>>>) map);
+            .concatMap(load -> read(load, userId, rows, counts, sums))
+            .then(Mono.fromSupplier(() -> new ErasureSubject(userId, rows, counts, sums)));
     }
 
-    private Mono<List<Map<String, Object>>> rows(ErasureLoad load, String userId) {
+    private Mono<Void> read(ErasureLoad load, String userId, Map<String, List<Map<String, Object>>> rows,
+        Map<String, Long> counts, Map<String, BigDecimal> sums) {
         DatasetDefinition dataset = datasets.findById(load.dataset())
             .orElseThrow(() -> new IllegalStateException("Unknown dataset " + load.dataset()));
         EntityDefinition def = definitions.getOrThrow(dataset.targetEntityType());
-        // The id as text, converted to the field's type by the query compiler; one past the limit, so that more rows
-        // than allowed are noticed instead of cut off.
-        EntityQuery query = EntityQuery.builder().where(new QueryPredicate.Eq(load.userField(), userId))
-            .limit(ErasureSubject.MAX_ROWS + 1).build();
-        return entities.queryAll(dataset, def, query).map(EntityInstance::attributes).collectList()
-            .flatMap(rows -> rows.size() > ErasureSubject.MAX_ROWS
-                ? Mono.error(new IllegalStateException("Load " + load.name() + " found more than "
-                    + ErasureSubject.MAX_ROWS + " rows"))
-                : Mono.just(List.copyOf(rows)));
+        return switch (load.kind()) {
+            // One past the limit, so that more rows than allowed are noticed instead of cut off.
+            case ROWS -> entities.queryAll(dataset, def, query(load, userId, ErasureSubject.MAX_ROWS + 1))
+                .map(EntityInstance::attributes).collectList()
+                .flatMap(found -> found.size() > ErasureSubject.MAX_ROWS
+                    ? Mono.error(new IllegalStateException("Load " + load.name() + " found more than "
+                        + ErasureSubject.MAX_ROWS + " rows"))
+                    : Mono.fromRunnable(() -> rows.put(load.name(), List.copyOf(found))));
+            case COUNT -> entities.count(dataset, def, query(load, userId, 1))
+                .doOnNext(count -> counts.put(load.name(), count)).then();
+            case SUM -> entities.sum(dataset, def, query(load, userId, 1), load.field())
+                .doOnNext(sum -> sums.put(load.name(), sum)).then();
+        };
+    }
+
+    /**
+     * The user's rows, with the load's fixed conditions: the user id as text and the conditions' constants, converted
+     * to the fields' types by the query compiler. No order: none is needed to count, add up or show a few rows.
+     */
+    static EntityQuery query(ErasureLoad load, String userId, int limit) {
+        List<QueryPredicate> all = new ArrayList<>();
+        all.add(new QueryPredicate.Eq(load.userField(), userId));
+        for (ErasureLoad.Condition condition : load.conditions()) {
+            all.add(condition.values().size() == 1
+                ? new QueryPredicate.Eq(condition.field(), condition.values().getFirst())
+                : new QueryPredicate.In(condition.field(), condition.values()));
+        }
+        QueryPredicate where = all.size() == 1 ? all.getFirst() : new QueryPredicate.And(all);
+        return EntityQuery.builder().where(where).limit(limit).build();
     }
 
     /** The codes of the notices that {@code acknowledged} does not name. */

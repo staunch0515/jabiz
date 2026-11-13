@@ -423,6 +423,25 @@ public final class R2dbcStorageEngine implements StorageEngine {
     }
 
     @Override
+    public Mono<java.math.BigDecimal> sum(PhysicalQueryPlan plan, String column) {
+        String col = SqlIdentifiers.require(column);
+        return Mono.deferContextual(view -> {
+            if (plan.matchesNothing()) {
+                return Mono.just(java.math.BigDecimal.ZERO);
+            }
+            StringBuilder sql = new StringBuilder("SELECT coalesce(sum(").append(col).append("), 0) AS total FROM ")
+                .append(plan.source());
+            if (plan.whereClause() != null && !plan.whereClause().isBlank()) {
+                sql.append(" WHERE ").append(plan.whereClause());
+            }
+            return query(view, sql.toString(), plan.bindParams(), plan.timeout(), texts(List.of(sql.toString())))
+                .next()
+                .map(row -> row.get("total") instanceof java.math.BigDecimal total ? total
+                    : new java.math.BigDecimal(String.valueOf(row.get("total"))));
+        });
+    }
+
+    @Override
     public Flux<Map<String, Object>> select(String sql, Map<String, BoundValue> params) {
         return Flux.deferContextual(view -> {
             if (isQuery(sql)) {

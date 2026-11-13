@@ -1034,6 +1034,22 @@ public class DatasetEntityManager {
     }
 
     /**
+     * Total of {@code field} (a number or an amount) over the entities the query matches within the dataset scope, 0
+     * when none do; for a temporal entity over the versions in effect now. Its paging and sorting are ignored.
+     *
+     * @throws IllegalArgumentException when the entity has no such field
+     */
+    public Mono<java.math.BigDecimal> sum(DatasetDefinition dataset, EntityDefinition def, EntityQuery query,
+        String field) {
+        com.jabiz.entity.FieldDefinition fd = def.findField(field)
+            .orElseThrow(() -> new IllegalArgumentException("Entity " + def.name + " has no field " + field));
+        String column = com.jabiz.query.SqlIdentifiers.require(fd.physicalColumn());
+        return RequestContexts.current().flatMap(request -> readEngine(dataset)
+            .sum(queryCompiler.compile(dataset, def, query, dataset.scope().resolve(request),
+                timeSlice(dataset, def, null, null)), column));
+    }
+
+    /**
      * History of a temporal entity: all its versions with the operations that wrote them. Empty when the entity
      * does not exist or its latest state (a tombstone included) lies outside the dataset scope; refused when the
      * dataset does not allow time travel.
