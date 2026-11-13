@@ -1601,7 +1601,7 @@ export const publishingJa: typeof publishingEn = {
       maxWinners: '最大当選者数',
       maxWinnersHint: '任意：報酬を受け取れるテイカーの数。',
       exposureRequested: '購入する表示回数',
-      exposureRequestedHint: '他のスポンサーが共有した動画を使い、プラットフォームが露出料を請求する場合のみ：購入する回数（最低回数は提出時に確認されます）。数えられた回数分だけ支払い、残りは終了後に返却されます。',
+      exposureRequestedHint: '他の主催者が共有した動画を使い、プラットフォームが露出料を請求する場合のみ：購入する回数（最低回数は提出時に確認されます）。数えられた回数分だけ支払い、残りは終了後に返却されます。',
       tiers: '報酬段階',
       version: 'クイズのバージョンの内容',
       rewardMethod: '報酬の支払い方法',

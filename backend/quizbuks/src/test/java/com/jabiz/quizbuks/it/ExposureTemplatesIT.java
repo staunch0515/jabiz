@@ -143,4 +143,33 @@ class ExposureTemplatesIT extends ExposureFeeItSupport {
         }
     }
 
+    @Test
+    void theToDoListCountsTheRunningPublicationsWithLittleLeftOfTheExposuresBought() {
+        autoApprove(true);
+        String provider = reviewedSponsor("fm8d-low-provider");
+        String sharedVideoId = approvedVideo(provider);
+        String sponsor = reviewedSponsor("fm8d-low");
+        grant(sponsor, 10_000, clock.instant().plus(Duration.ofDays(400)));
+        String publicationId = draft(sponsor, "fm8d-low", sharedVideoId, 100L, clock.instant());
+        submit(sponsorToken(sponsor), publicationId);
+        java.util.function.Supplier<Object> low = () -> items("qb.sponsor.todo", sponsorToken(sponsor),
+            Map.of("params", Map.of("at", clock.instant().toString()))).getFirst().get("exposureLow");
+        assertThat(String.valueOf(low.get())).isEqualTo("0");
+        for (int i = 0; i < 95; i++) {
+            execute("INSERT INTO qb_exposure (exposure_id, publication_id, user_id, publisher_id, provider_id, "
+                + "counted_at, surface, counted_sec, timer, capped_days, created_at, version) VALUES (?, ?, ?, ?, ?, "
+                + "?, 'START', 10, 'SCREEN', 0, ?, 1)", UUID.randomUUID().toString(), publicationId,
+                "fm8d-low-" + UUID.randomUUID(), sponsor, provider, Timestamp.from(clock.instant()),
+                Timestamp.from(clock.instant()));
+        }
+        // 5 of 100 left, at or below a tenth (qb.exposure.low-ratio): counted; the reminder off (0): not.
+        assertThat(String.valueOf(low.get())).isEqualTo("1");
+        run("PARAM_SET", admin(), body("key", com.jabiz.quizbuks.setup.QbParams.EXPOSURE_LOW_RATIO, "value", "0"));
+        try {
+            assertThat(String.valueOf(low.get())).isEqualTo("0");
+        } finally {
+            run("PARAM_SET", admin(), body("key", com.jabiz.quizbuks.setup.QbParams.EXPOSURE_LOW_RATIO, "value", "0.1"));
+        }
+        assertThat(String.valueOf(low.get())).isEqualTo("1");
+    }
 }
