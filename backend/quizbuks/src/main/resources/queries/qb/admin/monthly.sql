@@ -142,9 +142,18 @@ kinds AS (
                     AND p.a1120 > 0 AND p.a1110 < 0 THEN 'PAYOUT'
                WHEN p.src = 'QbStripePayout' AND p.reversal AND p.accts = '1110,1120'
                     AND p.a1120 < 0 AND p.a1110 > 0 THEN 'PAYOUT_FAILED'
+               -- F-M12: the share posting (reference op_): debit 5130 the share, credit 2140 what is payable, and 4110 what it
+               -- recovers (credit) or returns (debit); without a share, 2140 against 4110 alone.
                WHEN p.src = 'QbOperatorSettlement' AND NOT p.reversal
                     AND p.accts IN ('2140,5130', '2140,4110,5130', '4110,5130')
-                    AND p.a5130 > 0 AND p.a2140 <= 0 AND p.a4110 <= 0 THEN 'OPERATOR_SHARE'
+                    AND p.a5130 > 0 AND p.a2140 <= 0 THEN 'OPERATOR_SHARE'
+               WHEN p.src = 'QbOperatorSettlement' AND NOT p.reversal
+                    AND p.accts = '2140,4110' AND p.a2140 < 0 AND p.a4110 > 0 THEN 'OPERATOR_SHARE'
+               -- F-M12: the take-back of granted credit (reference opg_): 2140 against 5140; when given back, 4110 too
+               -- (what pays the cost carried), either way the row's 5140 column is the sign of it.
+               WHEN p.src = 'QbOperatorSettlement' AND NOT p.reversal
+                    AND p.accts IN ('2140,5140', '2140,4110,5140', '4110,5140') AND p.a5140 <> 0
+                    THEN 'FEE_CREDIT_RECOVERED'
                WHEN p.src IN ('QbOperatorSettlement', 'QbOperatorWithdrawal') AND NOT p.reversal
                     AND p.accts = '1120,2140' AND p.a2140 > 0 AND p.a1120 < 0 THEN 'OPERATOR_PAID'
                -- Q87a: top-ups into the cash account (2160 in place of 2110), as the Kudos ones.
@@ -267,8 +276,8 @@ FROM (VALUES (1, 'TOPUP'), (2, 'BANK_TOPUP'), (3, 'MANUAL_TOPUP'), (4, 'GRANT'),
              (29, 'ENTRY_FEE_SETTLED'), (30, 'FEE_CREDIT_GRANTED'), (31, 'FEE_CREDIT_VOIDED'),
              (32, 'OPERATOR_TRANSFER_TO_DIRECT'), (33, 'PREPAYMENT_FROZEN'), (34, 'PREPAYMENT_USED'),
              (35, 'PREPAYMENT_RELEASED'), (36, 'DISTRIBUTION_CHARGED'), (37, 'DISTRIBUTION_DEPOSIT'),
-             (38, 'DISTRIBUTION_RELEASED'), (39, 'FEE_CREDIT_NOTE'), (40, 'EXPOSURE_CHARGED'),
-             (41, 'EXPOSURE_DEPOSIT'), (42, 'EXPOSURE_RELEASED'), (43, 'OTHER'))
+             (38, 'DISTRIBUTION_RELEASED'), (39, 'FEE_CREDIT_NOTE'), (40, 'FEE_CREDIT_RECOVERED'),
+             (41, 'EXPOSURE_CHARGED'), (42, 'EXPOSURE_DEPOSIT'), (43, 'EXPOSURE_RELEASED'), (44, 'OTHER'))
          AS c (seq, kind)
 LEFT JOIN kinds k ON k.kind = c.kind
 GROUP BY c.seq, c.kind

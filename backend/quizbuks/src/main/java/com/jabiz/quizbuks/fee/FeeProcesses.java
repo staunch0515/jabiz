@@ -120,6 +120,8 @@ public final class FeeProcesses {
      *                  counting against the credit limit); none: paid from the account as fees arise
      * @param tax       F-M8: the tax given by the caller, whose rule is not the fee's own on this amount (the exposure fee's
      *                  is cumulative: the tax on all settled so far less what was charged); none: the fee's own rule
+     * @param shareExcluded F-M12: the part of the amount (before tax, yen) that does not enter the operator's share
+     *                  (an AI fee's cost to the platform); none: 0, and never more than the amount
      */
     public record ChargeInput(@NotBlank @Size(max = 128) String sponsorId,
         @NotBlank @Pattern(regexp = "MONTHLY|MANUAL|AUDIENCE|DISTRIBUTION|EXPOSURE") String kind,
@@ -127,18 +129,19 @@ public final class FeeProcesses {
         @NotNull @DecimalMin("1") @DecimalMax(MAX_AMOUNT) @Digits(integer = 13, fraction = 0) BigDecimal amount,
         @Size(max = QbFees.REASON_LENGTH) String reason, @Size(max = QbFees.SOURCE_LENGTH) String sourceKey,
         @Size(max = 128) String chargedBy, @Size(max = 36) String operatorId, @Size(max = 36) String prepaymentId,
-        @DecimalMin("0") @DecimalMax(MAX_AMOUNT) @Digits(integer = 13, fraction = 0) BigDecimal tax) {
-
-        /** As before F-M8: the tax is the fee's own rule on this amount. */
-        public ChargeInput(String sponsorId, String kind, String period, BigDecimal amount, String reason,
-            String sourceKey, String chargedBy, String operatorId, String prepaymentId) {
-            this(sponsorId, kind, period, amount, reason, sourceKey, chargedBy, operatorId, prepaymentId, null);
-        }
+        @DecimalMin("0") @DecimalMax(MAX_AMOUNT) @Digits(integer = 13, fraction = 0) BigDecimal tax,
+        @DecimalMin("0") @DecimalMax(MAX_AMOUNT) @Digits(integer = 13, fraction = 0) BigDecimal shareExcluded) {
 
         /** A fee of the sponsor's current operator, paid from the account (the monthly fee, a fee by hand). */
         public ChargeInput(String sponsorId, String kind, String period, BigDecimal amount, String reason,
             String sourceKey, String chargedBy) {
-            this(sponsorId, kind, period, amount, reason, sourceKey, chargedBy, null, null, null);
+            this(sponsorId, kind, period, amount, reason, sourceKey, chargedBy, null, null, null, null);
+        }
+
+        /** As before F-M8 and F-M12: the tax is the fee's own rule on this amount, the whole amount enters the share. */
+        public ChargeInput(String sponsorId, String kind, String period, BigDecimal amount, String reason,
+            String sourceKey, String chargedBy, String operatorId, String prepaymentId) {
+            this(sponsorId, kind, period, amount, reason, sourceKey, chargedBy, operatorId, prepaymentId, null, null);
         }
     }
 
@@ -376,9 +379,16 @@ public final class FeeProcesses {
         values.put("sourceKey", input.sourceKey());
         values.put("chargedAt", ctx.opTime());
         values.put("chargedBy", input.chargedBy());
+        values.put("shareExcluded", shareExcluded(input));
         ctx.put(CHARGE_ID, String.valueOf(ctx.changes().insert(QbFees.CHARGE, values)));
         ctx.put(BILLING_MODE, billingMode);
         ctx.put(TOTAL, input.amount().add(tax));
+    }
+
+    /** F-M12: the part of the fee kept out of the operator's share: as given, 0 if none, never more than the amount. */
+    static BigDecimal shareExcluded(ChargeInput input) {
+        BigDecimal given = input.shareExcluded() == null ? BigDecimal.ZERO : input.shareExcluded();
+        return given.max(BigDecimal.ZERO).min(input.amount());
     }
 
     /** F-M11: the operator given by the caller, else the sponsor's operator now. */

@@ -194,6 +194,10 @@
 - **前端**：发起方页面 Vitest（向导的曝光行、追加购买对话框、剩余提醒横幅、历次结算；亮暗两种外观 axe）；`admin-extension` 的 `exposureFee.test.tsx`（价目页、结算列表、空与权限、axe）；`pnpm app:check` 类检查照常。
 - **端到端**（`quizbuks-web/e2e/tests/launch-loop.spec.ts` 第 2′ 步的合计含曝光预付，开关打开；新增一步"学者看够、`JOB_RUN_REQUEST` 补跑结算、发起方页面看到已用与结算"；`exposure.spec.ts` 加"用完后结束并退回未用"与"追加购买"）。
 
+### 7.1 与 F-M12 b 的衔接：运营商结算的"曝光就绪"条件
+
+F-M12 b（S3）的就绪模板 `qb.system.operator-settlement-readiness`（`READINESS EXTENSION POINT`，每行一个 `blockedBy` 原因，现有 `DISTRIBUTION`、`INVOICE`）还没有合入 1.3/quizbuks，所以本 PR 不接，**b 合并时加 `EXPOSURE` 一支**（总控 2026-11-13 定先后：F-M8c 先合并、b 后合，S3 加分支）。条件：该月应做曝光结算、**冻结的运营商**（`QbPublication.billingOperatorId`，不是发起方现在的运营商）是该运营商的发布，还没有该月或 `final` 的 `QbExposureSettlement` 行；"该月应做曝光结算"的表达式与 `qb.system.exposure-due` 的取项条件相同（`DistributionDueConditionTest` 的单一表达式不另写第三份：`TEMPLATES` 里加该模板，期望的 `greatest(startAt, approvedAt)` 出现次数加 1）。已结束过宽限的发布月度项不写行、由结束任务写 `final`（审查 H1、L3），所以这一支要把"已有 `final` 行"当作就绪，没有 `final` 行的已结束发布则要等到结束任务（每天 03:12）之后。`ExposureOperatorShareIT` 证明曝光费进分成基数（取自冻结的运营商、不扣除成本）。
+
 ## 8. 与 F-M7 的关系（"依赖 F-M7（未合并）"一览）
 
 读 `origin/1.3/quizbuks-FM7-audience`（草稿：受众规则费的上架后退回、贷项凭证 `QbFeeCreditNote`，迁移 V119）得到：

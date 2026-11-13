@@ -232,7 +232,7 @@ public final class ExposureSettlements {
             EntityInstance prepayment = FeeGate.first(ctx, PREPAYMENT);
             ctx.put(CHARGE_INPUT, new FeeProcesses.ChargeInput(ref.sponsorId(), FeeRules.EXPOSURE, period,
                 figures.amount(), null, "exposure:" + ref.publicationId() + ":" + period, null, operatorId,
-                prepayment == null ? null : String.valueOf(prepayment.id()), figures.tax()));
+                prepayment == null ? null : String.valueOf(prepayment.id()), figures.tax(), null));
         }
     }
 
