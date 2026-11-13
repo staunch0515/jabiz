@@ -288,4 +288,70 @@ class ExposureFeeIT extends ExposureFeeItSupport {
         assertThat(dec(exposurePrepayment(a[1]).get("amount"))).isEqualByComparingTo("115");
         run(com.jabiz.quizbuks.identity.BanProcesses.UNBAN, boss, body("userId", a[0], "note", "Cleared"));
     }
+
+    /** Gives the prepayment {@code n} more parts (rows of the payments table, as top-ups would make). */
+    private void parts(String sponsor, String prepaymentId, int n) {
+        java.sql.Timestamp at = java.sql.Timestamp.from(clock.instant());
+        long seq = ((Number) query("SELECT nextval('op_process_seq') AS n").getFirst().get("n")).longValue();
+        execute("INSERT INTO op_process (process_seq_id, process_name, process_version, actor_id, op_time) "
+            + "VALUES (?, 'it', 1, 'it', now())", seq);
+        execute("WITH ids AS (INSERT INTO entity_registry (entity_id, entity_type, created_seq_id) "
+            + "SELECT gen_random_uuid(), 'QbFeePayment', ? FROM generate_series(1, ?) RETURNING entity_id) "
+            + "INSERT INTO qb_fee_payment_version (payment_id, version_no, effect_start_time, created_time, "
+            + "process_seq_id, sponsor_id, target_entity, target_id, sub_account, cash_lot_id, amount, paid_at, "
+            + "transaction_id) SELECT entity_id, 1, ?, ?, ?, ?, 'QbPrepayment', ?, 'CASH', 'lot-it', 1, ?, "
+            + "'it' FROM ids", seq, n, at, at, seq, sponsor, prepaymentId, at);
+    }
+
+    @Test
+    void aPrepaidPrepaymentWithTooManyPartsTakesNoMoreAndAPostpaidOneHasNone() {
+        String[] a = bought("fm8-parts", 105, 5_000).split("\\|");
+        submit(sponsorToken(a[0]), a[1]);
+        parts(a[0], String.valueOf(exposurePrepayment(a[1]).get("prepayment_id")), 1_000);
+        assertThat(codes(refused(PublicationExposureTopUp.TOP_UP, sponsorToken(a[0]), topUp(a[0], a[1], 105, 5), 422)))
+            .contains(FeeCodes.EXPOSURE_PARTS_LIMIT);
+        assertThat(dec(exposurePrepayment(a[1]).get("amount"))).isEqualByComparingTo("115");
+        assertThat(ledger("2180", a[0])).isEqualByComparingTo("115");
+
+        // A postpaid one has no parts to give back: the limit does not apply to it.
+        String sponsor = reviewedSponsor("fm8-parts-post");
+        String sharedVideoId = approvedVideo(reviewedSponsor("fm8-parts-post-provider"));
+        billing(sponsor, "POSTPAID", 100_000);
+        String publicationId = draft(sponsor, "Parts post", sharedVideoId, 105L);
+        submit(sponsorToken(sponsor), publicationId);
+        parts(sponsor, String.valueOf(exposurePrepayment(publicationId).get("prepayment_id")), 1_000);
+        run(PublicationExposureTopUp.TOP_UP, sponsorToken(sponsor), topUp(sponsor, publicationId, 105, 5));
+        assertThat(dec(exposurePrepayment(publicationId).get("amount"))).isEqualByComparingTo("121");
+    }
+
+    @Test
+    void aSponsorWithUnpaidFeesBeyondWhatTheirBillingAllowsCannotTopUp() {
+        param(QbParams.FEE_OVERDUE_BLOCK, "true");
+        String[] a = bought("fm8-unpaid", 105, 5_000).split("\\|");
+        submit(sponsorToken(a[0]), a[1]);
+        String invoiceId = java.util.UUID.randomUUID().toString();
+        execute("INSERT INTO qb_fee_invoice (invoice_id, invoice_no, sponsor_id, billing_mode, period, amount, tax, "
+            + "total, status, issued_at, due_on) VALUES (?, ?, ?, 'PREPAID', '2026-10', 1000, 100, 1100, 'OPEN', now(), "
+            + "current_date)", invoiceId, "IT-" + invoiceId.substring(0, 8), a[0]);
+        assertThat(codes(refused(PublicationExposureTopUp.TOP_UP, sponsorToken(a[0]), topUp(a[0], a[1], 105, 5), 422)))
+            .contains(FeeCodes.FEE_UNPAID);
+        assertThat(dec(exposurePrepayment(a[1]).get("amount"))).isEqualByComparingTo("115");
+        // Paid, it goes through.
+        execute("UPDATE qb_fee_invoice SET status = 'PAID', paid_at = now(), paid_amount = total, payment_transaction_id = 'it' WHERE invoice_id = ?", invoiceId);
+        run(PublicationExposureTopUp.TOP_UP, sponsorToken(a[0]), topUp(a[0], a[1], 105, 5));
+        assertThat(dec(exposurePrepayment(a[1]).get("amount"))).isEqualByComparingTo("121");
+    }
+
+    @Test
+    void aBannedSponsorTopsUpAgainOnceUnbanned() {
+        String[] a = bought("fm8-unban", 105, 5_000).split("\\|");
+        submit(sponsorToken(a[0]), a[1]);
+        String boss = com.jabiz.runtime.test.TestTokens.bearer(tokens, "fm8-boss2", com.jabiz.quizbuks.setup.QbRoles
+            .of(com.jabiz.quizbuks.setup.QbRoles.ADMIN_SUPER).permissions().toArray(String[]::new));
+        run("QB_USER_BAN", boss, body("userId", a[0], "reason", "Fraud"));
+        refused(PublicationExposureTopUp.TOP_UP, sponsorToken(a[0]), topUp(a[0], a[1], 105, 5), 422);
+        run(com.jabiz.quizbuks.identity.BanProcesses.UNBAN, boss, body("userId", a[0], "note", "Cleared"));
+        run(PublicationExposureTopUp.TOP_UP, sponsorToken(a[0]), topUp(a[0], a[1], 105, 5));
+        assertThat(dec(exposurePrepayment(a[1]).get("amount"))).isEqualByComparingTo("121");
+    }
 }
