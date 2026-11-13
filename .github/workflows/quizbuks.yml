@@ -29,9 +29,55 @@ permissions:
 # platform's ci.yml (build-application, app-paths). The jobs start together: the end-to-end tests do not wait for the
 # web checks, so the slowest job sets the time.
 jobs:
+  # What the pull request changes (tools/quizbuks/ci/scope.sh): when every changed file is under docs/, only the quick job
+  # `docs` below runs and the others are skipped (GitHub shows a skipped job as passing for a required check); one file
+  # outside docs/, the workflow itself included, or any run that is not a pull request runs everything as before.
+  scope:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      full: ${{ steps.scope.outputs.full }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          # A pull request is checked out as its merge commit: its first parent is the base, so two commits are enough
+          # to list what the pull request changes.
+          fetch-depth: 2
+      - id: scope
+        run: |
+          if [ "${{ github.event_name }}" = pull_request ] && git rev-parse -q --verify HEAD^2 >/dev/null; then
+            full="$(git diff --name-only HEAD^1 HEAD | tools/quizbuks/ci/scope.sh)"
+          else
+            full=true
+          fi
+          echo "full=$full" >> "$GITHUB_OUTPUT"
+          echo "full check: $full"
+
+  # The checks that read documents (they also run when the pull request changes more than documents): the terms, the
+  # numbered sections of operations.md, the store listing texts and the script that decides the scope. A few seconds, so
+  # a pull request that changes only documents is checked in about a minute (the rest of the line's checks are skipped).
+  docs:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+      - name: The store listing texts (docs/quizbuks/store, Q49d)
+        run: node --test tools/quizbuks/store/listing.test.mjs
+      - name: The product's terms (F-F5)
+        run: node --test tools/quizbuks/terms/terms.test.mjs
+      - name: The numbered sections of operations.md (each number once, references to sections that exist)
+        run: node --test tools/quizbuks/ops-sections/ops-sections.test.mjs
+      - name: Which pull requests may skip the full check
+        run: tools/quizbuks/test/ci-scope.test.sh
+
   # The QuizBuks front ends (docs/quizbuks/plans/QP-pages.md section 7): the app and the sponsor console use the
   # platform's versions (app:check), pass their own lint, types and tests, and keep the shared folder src/qb the same.
   web:
+    needs: scope
+    if: ${{ needs.scope.outputs.full == 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -66,12 +112,6 @@ jobs:
         run: diff -r quizbuks-web/app/src/qb quizbuks-web/sponsor/src/qb
       - name: The content tool (tools/quizbuks/content, Q36)
         run: node --test tools/quizbuks/content/lib.test.mjs
-      - name: The store listing texts (docs/quizbuks/store, Q49d)
-        run: node --test tools/quizbuks/store/listing.test.mjs
-      - name: The product's terms (F-F5)
-        run: node --test tools/quizbuks/terms/terms.test.mjs
-      - name: The numbered sections of operations.md (each number once, references to sections that exist)
-        run: node --test tools/quizbuks/ops-sections/ops-sections.test.mjs
       - name: App
         working-directory: quizbuks-web/app
         run: |
@@ -164,6 +204,8 @@ jobs:
   # over a set value or in live mode. Then the stack as a person starts it on this machine: built and started with
   # compose and no .env, it must become healthy with the placeholders' warnings (deploy/quizbuks/README.md).
   deploy:
+    needs: scope
+    if: ${{ needs.scope.outputs.full == 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 25
     env:
@@ -227,6 +269,8 @@ jobs:
   # The packaged application starts on an empty database, migrates, passes its startup checks, reports healthy and
   # serves its three front ends.
   package:
+    needs: scope
+    if: ${{ needs.scope.outputs.full == 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 25
     services:
@@ -336,7 +380,8 @@ jobs:
   # below is their result. Three, not two: the slower of two shards took ~24m41s against the 25-minute limit kept under.
   e2e-shard:
     name: e2e (${{ matrix.shard }}/3)
-    if: ${{ !github.event.pull_request.draft && !inputs.home-baselines }}
+    needs: scope
+    if: ${{ needs.scope.outputs.full == 'true' && !github.event.pull_request.draft && !inputs.home-baselines }}
     # Pinned: ubuntu-latest became 26.04, where Playwright 1.56 has no Chromium ("does not support chromium on
     # ubuntu26.04-x64"). Back to ubuntu-latest once Playwright is upgraded to a version that supports it.
     runs-on: ubuntu-24.04
@@ -591,8 +636,8 @@ jobs:
 
   # The shards' result under the job's former name, so that a required check "e2e" keeps working.
   e2e:
-    needs: e2e-shard
-    if: ${{ !cancelled() && !github.event.pull_request.draft && !inputs.home-baselines }}
+    needs: [scope, e2e-shard]
+    if: ${{ !cancelled() && needs.scope.outputs.full == 'true' && !github.event.pull_request.draft && !inputs.home-baselines }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
@@ -602,7 +647,8 @@ jobs:
 
   # tools/quizbuks/local-demo.sh as a person runs it: start with the demo data on a fresh database, then stop.
   local-demo:
-    if: ${{ !github.event.pull_request.draft }}
+    needs: scope
+    if: ${{ needs.scope.outputs.full == 'true' && !github.event.pull_request.draft }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
     services:
