@@ -54,7 +54,7 @@ JOIN {{QbSponsorOperator}} a ON a.{{QbSponsorOperator.userId}} = s.{{QbSponsor.u
 JOIN {{QbOperatorMember}} me ON me.{{QbOperatorMember.removedAt}} IS NULL
   AND me.{{QbOperatorMember.operatorId}} = a.{{QbSponsorOperator.operatorId}}
 LEFT JOIN LATERAL (
-    SELECT sum(i.{{QbFeeInvoice.total}} - i.{{QbFeeInvoice.paidAmount}}) AS f_total,
+    SELECT sum(i.{{QbFeeInvoice.total}} - i.{{QbFeeInvoice.creditApplied}} - i.{{QbFeeInvoice.paidAmount}}) AS f_total,
            count(*) FILTER (WHERE i.{{QbFeeInvoice.status}} = 'OVERDUE') AS f_overdue
     FROM {{QbFeeInvoice}} i
     WHERE i.{{QbFeeInvoice.sponsorId}} = s.{{QbSponsor.userId}}

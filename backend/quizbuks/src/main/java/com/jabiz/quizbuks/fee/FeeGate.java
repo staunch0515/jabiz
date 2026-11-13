@@ -49,7 +49,7 @@ public final class FeeGate {
         BigDecimal unpaid = BigDecimal.ZERO;
         boolean overdue = false;
         for (EntityInstance invoice : list(ctx, UNPAID)) {
-            unpaid = unpaid.add(money(invoice.get("total")).subtract(money(invoice.get("paidAmount"))));
+            unpaid = unpaid.add(QbFees.owed(invoice));
             overdue |= QbFees.OVERDUE.equals(invoice.get("status"));
         }
         return new FeeRules.Standing(FeeRules.billingModeOf(sponsor == null ? null : sponsor.get("billingMode"),

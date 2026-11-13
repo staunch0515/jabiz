@@ -32,6 +32,8 @@ export interface Settlement {
   platformShare: string
   operatorShare: string
   prospectingCost: string
+  /** F-M7: what credit notes on the operator's Sponsors' fees took off the month's share. */
+  creditNoteDeduction: string
   carriedIn: string
   payable: string
   carriedOut: string
@@ -57,6 +59,7 @@ function toSettlement(row: Row): Settlement {
     platformShare: amount(row.platformShare),
     operatorShare: amount(row.operatorShare),
     prospectingCost: amount(row.prospectingCost),
+    creditNoteDeduction: amount(row.creditNoteDeduction),
     carriedIn: amount(row.carriedIn),
     payable: amount(row.payable),
     carriedOut: amount(row.carriedOut),

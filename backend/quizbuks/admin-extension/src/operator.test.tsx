@@ -30,6 +30,7 @@ const server = vi.hoisted(() => ({
   reviews: [] as Record<string, unknown>[],
   sponsors: [] as Record<string, unknown>[],
   billing: [] as Record<string, unknown>[],
+  creditNotes: [] as Record<string, unknown>[],
   team: {} as Record<string, unknown>,
   runQuery: vi.fn(),
   runProcess: vi.fn(),
@@ -98,6 +99,7 @@ beforeEach(() => {
         : id === TEMPLATE.operatorReviews ? server.reviews
           : id === TEMPLATE.operatorSponsors ? server.sponsors
             : id === TEMPLATE.operatorBilling ? server.billing
+            : id === TEMPLATE.operatorFeeCreditNotes ? server.creditNotes
               : id === TEMPLATE.operatorOverview ? [{ mySponsors: 1, sponsors: 9, sponsorsInReview: 2,
                 publicationsInReview: 3, livePublications: 4, myLivePublications: 1, myCompletions: 120 }]
                 : id === TEMPLATE.sponsors ? [{ userId: SPONSOR, company: 'Acme', reviewStatus: 'APPROVED' }]
@@ -423,6 +425,29 @@ describe('the operator', () => {
     await waitFor(() => expect(server.runProcess).toHaveBeenCalledWith(FEE_PROCESS.billingSet,
       { userId: 'other', billingMode: 'POSTPAID', creditLimit: 10000, reason: 'Trusted' }))
     await waitFor(() => expect(screen.queryByTestId('billing-dialog')).not.toBeInTheDocument())
+  })
+
+  it('lists the credit notes on its Sponsors\' fees, read only and never who issued them (F-M7)', async () => {
+    server.get.mockImplementation(async (path: string) => {
+      if (path === '/api/dictionaries/{urn}') return []
+      throw new ApiError(404, { detail: 'Not found' })
+    })
+    server.creditNotes = [{ creditNoteId: 'cn-1', creditNoteNo: 'QBC-2026-00001', company: 'Acme', invoiceNo: 'QBF-2026-00001',
+      billingMode: 'PREPAID', reason: 'AUDIENCE_UNUSED', endReason: 'WITHDRAWN', usedDays: 3, note: null, amount: 400, tax: 40,
+      total: 440, appliedOwn: 0, refundedCash: 100, refundedCredit: 340, voidedCredit: 0, used: 40, creditLeft: 300,
+      issuedAt: '2026-11-05T01:00:00Z', issuedBy: null }]
+    const { container } = renderAt('/qb/operator/billing', '/qb/operator/billing', <OperatorBillingPage />)
+    const section = await screen.findByTestId('operator-credit-notes')
+    const row = await within(section).findByTestId('fee-credit-note-row')
+    expect(within(row).getByTestId('fee-credit-note-no')).toHaveTextContent('QBC-2026-00001')
+    // The operator sees points, not yen.
+    expect(within(row).getByTestId('fee-credit-note-total')).toHaveTextContent('440 Kudos')
+    expect(within(row).getByTestId('fee-credit-note-left')).toHaveTextContent('300 Kudos')
+    expect(within(section).queryByRole('columnheader', { name: 'Issued by' })).not.toBeInTheDocument()
+    expect(within(row).queryByTestId('user-name')).not.toBeInTheDocument()
+    expect(server.runQuery).toHaveBeenCalledWith(TEMPLATE.operatorFeeCreditNotes, expect.anything())
+    expect(server.runQuery).not.toHaveBeenCalledWith(TEMPLATE.feeCreditNotes, expect.anything())
+    await expectAccessible(container)
   })
 
   it('lifts a ban its operator made', async () => {

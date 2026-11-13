@@ -1034,6 +1034,29 @@ public class DatasetEntityManager {
     }
 
     /**
+     * Total of {@code field} (a number or an amount) over the entities the query matches within the dataset scope, 0
+     * when none do; for a temporal entity over the versions in effect now. Its paging and sorting are ignored.
+     *
+     * @throws IllegalArgumentException when the entity has no such field, or it is sensitive, masked, or not a number
+     *     or an amount
+     */
+    public Mono<BigDecimal> sum(DatasetDefinition dataset, EntityDefinition def, EntityQuery query, String field) {
+        FieldDefinition fd = def.findField(field)
+            .orElseThrow(() -> new IllegalArgumentException("Entity " + def.name + " has no field " + field));
+        // Defence in depth (the callers' startup checks refuse these too): a total tells about the values it adds up.
+        if (fd.sensitive() || fd.isMasked()) {
+            throw new IllegalArgumentException("Field " + def.name + "." + field + " is sensitive or masked: not added up");
+        }
+        if (!(fd.kind() instanceof SemanticKind.Numeric || fd.kind() instanceof SemanticKind.Monetary)) {
+            throw new IllegalArgumentException("Field " + def.name + "." + field + " is not a number or an amount");
+        }
+        return observations.mono(PlatformObservations.DATASET_QUERY, "sum " + def.name, tags(dataset),
+            RequestContexts.current().flatMap(request -> readEngine(dataset)
+                .sum(queryCompiler.compile(dataset, def, query, dataset.scope().resolve(request),
+                    timeSlice(dataset, def, null, null)), fd.physicalColumn())));
+    }
+
+    /**
      * History of a temporal entity: all its versions with the operations that wrote them. Empty when the entity
      * does not exist or its latest state (a tombstone included) lies outside the dataset scope; refused when the
      * dataset does not allow time travel.

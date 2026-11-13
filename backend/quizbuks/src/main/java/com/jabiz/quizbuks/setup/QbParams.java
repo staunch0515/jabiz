@@ -219,6 +219,8 @@ public final class QbParams {
     public static final String VERIFICATION_LINK_HOURS = "qb.sponsor-verification.link-hours";
     /** F-M5 (M3 of its review): days after its end an open prepayment is a difference of the daily check. */
     public static final String PREPAYMENT_RELEASE_OVERDUE_DAYS = "qb.prepayment.release.overdue-days";
+    /** F-M7 (N9): after how many hours of its end an audience fee not decided is reported by the daily check. */
+    public static final String AUDIENCE_REFUND_MISSING_AFTER_HOURS = "qb.audience.refund.missing-after-hours";
     /**
      * F-M6 (docs/quizbuks/plans/impl/F-M.md §9): the distribution fee. Whether a submission sets its deposit aside and
      * freezes its price per start (read at the submission only: turning it off does not touch what was submitted);
@@ -975,10 +977,14 @@ public final class QbParams {
         new Param(PREPAYMENT_RELEASE_OVERDUE_DAYS, DAYS, "2",
             "How many days after a publication ends a prepayment still open is reported by the daily check (1 to 30; "
                 + "the daily job gives it back within a day)"),
-        // F-F11a: the bytes of one import request (ordinary; last).
+        // F-F11a: the bytes of one import request (ordinary).
         new Param(CONTENT_IMPORT_BATCH_BYTES, Map.of("type", "numeric", "precision", 7, "scale", 0), "3145728",
             "The most bytes one import request carries; the page cuts a large bank into batches by it as well as by "
-                + "the question count (65536 to 3500000)"));
+                + "the question count (65536 to 3500000)"),
+        // F-M7 (N9): the daily check (ordinary; last).
+        new Param(AUDIENCE_REFUND_MISSING_AFTER_HOURS, Map.of("type", "numeric", "precision", 3, "scale", 0), "30",
+            "After how many hours of a publication's end an audience fee whose unused days are not decided yet is "
+                + "reported by the daily check (the daily job decides at 03:37)"));
 
     /** The declared value of a parameter: what {@code QB_SETUP} writes. */
     public static String defaultOf(String key) {

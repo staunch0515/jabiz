@@ -22,6 +22,7 @@ F-F5（`docs/quizbuks/first-launch-spec.md`）固定的用词。界面、邮件�
 | 付平台费的账户 | 平台费账户 | プラットフォーム利用料アカウント | Platform fee account | |
 | 赠送的平台费额度 | 赠送额度 | 付与クレジット | Granted credit | |
 | AI 的额度 | AI 额度 | AI クレジット | AI credit | |
+| 减少应收的单据（F-M7） | 贷项凭证 | 返還インボイス | Credit note | |
 
 ## 各部分的名字（F-F5b，需求方 2026-11-07）
 

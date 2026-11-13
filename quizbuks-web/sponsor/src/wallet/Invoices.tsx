@@ -22,6 +22,7 @@ import {
   downloadInvoiceDocument,
   feeAccountAvailable,
   INVOICE_UNPAID,
+  invoiceOwed,
   payEarly,
   payInvoice,
   readInvoiceStatuses,
@@ -31,6 +32,7 @@ import {
   type InvoiceStatus,
   type SponsorWallet,
 } from './api'
+import { CreditNotes } from './CreditNotes'
 import './messages'
 
 const PAGE_SIZE = 10
@@ -81,7 +83,8 @@ export function Invoices({ wallet }: { wallet: SponsorWallet }) {
       setNotice({ kind: 'ok', text: output.status === 'PAID'
         ? t('wallet.invoices.paid', { number: output.invoiceNo, cash: formatKudos(output.cashBalance) })
         : t('wallet.invoices.paidPart', { number: output.invoiceNo, amount: formatKudos(output.paidNow),
-          owed: formatKudos(Math.max(0, output.total - output.paidAmount)) }) })
+          owed: formatKudos(invoiceOwed({ total: output.total, paidAmount: output.paidAmount,
+            creditApplied: invoices.data?.items.find((item) => item.invoiceId === output.invoiceId)?.creditApplied ?? 0 })) }) })
       await queryClient.invalidateQueries({ queryKey: WALLET_QUERY })
     },
     onError: (error) => setNotice({ kind: 'error', text: problemText(error) }),
@@ -115,7 +118,17 @@ export function Invoices({ wallet }: { wallet: SponsorWallet }) {
       cell: ({ row }) => <span data-testid="invoice-row-total">{formatKudos(row.original.total)}</span> },
     // F-M1: an invoice may be paid in part; what is paid of it.
     { id: 'paidAmount', header: t('wallet.invoices.paidAmount'), enableSorting: false, meta: { className: 'text-right' },
-      cell: ({ row }) => <span data-testid="invoice-row-paid">{formatKudos(row.original.paidAmount)}</span> },
+      cell: ({ row }) => (
+        <>
+          <span data-testid="invoice-row-paid">{formatKudos(row.original.paidAmount)}</span>
+          {/* F-M7: what credit notes paid of the total, apart from what was paid from the account. */}
+          {row.original.creditApplied > 0 && (
+            <span className="text-muted-foreground block text-xs" data-testid="invoice-row-credit-applied">
+              {t('wallet.invoices.creditApplied', { amount: formatKudos(row.original.creditApplied) })}
+            </span>
+          )}
+        </>
+      ) },
     { id: 'dueOn', header: t('wallet.invoices.due'),
       cell: ({ row }) => (row.original.dueOn ? formatDate(row.original.dueOn) : '—') },
     { id: 'status', header: t('wallet.invoices.status'), meta: { card: 'badge' },
@@ -129,7 +142,7 @@ export function Invoices({ wallet }: { wallet: SponsorWallet }) {
       cell: ({ row }) => {
         const invoice = row.original
         const unpaid = INVOICE_UNPAID.includes(invoice.status)
-        const owed = Math.max(0, invoice.total - invoice.paidAmount)
+        const owed = invoiceOwed(invoice)
         const covered = accountAvailable >= owed
         return (
           <span className="flex flex-wrap justify-end gap-2">
@@ -207,6 +220,7 @@ export function Invoices({ wallet }: { wallet: SponsorWallet }) {
             }}
             rowProps={(row) => ({ 'data-testid': 'invoice-row', 'data-invoice': row.invoiceId, 'data-status': row.status })} />
         )}
+      <CreditNotes />
     </section>
   )
 }
