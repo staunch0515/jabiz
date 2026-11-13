@@ -108,7 +108,7 @@ public final class FeeProcesses {
 
     /**
      * @param sponsorId the sponsor (their user id) charged
-     * @param kind      {@code MONTHLY}, {@code MANUAL}, (F-M5) {@code AUDIENCE} or (F-M6) {@code DISTRIBUTION}
+     * @param kind      {@code MONTHLY}, {@code MANUAL}, (F-M5) {@code AUDIENCE}, (F-M6) {@code DISTRIBUTION} or (F-M8) {@code EXPOSURE}
      * @param period    the month ({@code yyyy-MM}) the fee belongs to
      * @param amount    the fee before tax, in yen
      * @param reason    why (a manual fee); a monthly fee has none
@@ -120,7 +120,7 @@ public final class FeeProcesses {
      *                  counting against the credit limit); none: paid from the account as fees arise
      */
     public record ChargeInput(@NotBlank @Size(max = 128) String sponsorId,
-        @NotBlank @Pattern(regexp = "MONTHLY|MANUAL|AUDIENCE|DISTRIBUTION") String kind,
+        @NotBlank @Pattern(regexp = "MONTHLY|MANUAL|AUDIENCE|DISTRIBUTION|EXPOSURE") String kind,
         @NotBlank @Pattern(regexp = "\\d{4}-\\d{2}") String period,
         @NotNull @DecimalMin("1") @DecimalMax(MAX_AMOUNT) @Digits(integer = 13, fraction = 0) BigDecimal amount,
         @Size(max = QbFees.REASON_LENGTH) String reason, @Size(max = QbFees.SOURCE_LENGTH) String sourceKey,
@@ -163,7 +163,7 @@ public final class FeeProcesses {
      * operator the fee was charged under, and the due days loaded once.
      */
     public record SettleInput(@NotBlank @Size(max = 128) String sponsorId, @NotBlank @Size(max = 36) String chargeId,
-        @NotBlank @Pattern(regexp = "\\d{4}-\\d{2}") String period, @NotBlank @Pattern(regexp = "MONTHLY|MANUAL|DISTRIBUTION") String kind,
+        @NotBlank @Pattern(regexp = "\\d{4}-\\d{2}") String period, @NotBlank @Pattern(regexp = "MONTHLY|MANUAL|DISTRIBUTION|EXPOSURE") String kind,
         @NotNull @DecimalMin("0") @DecimalMax(MAX_AMOUNT) @Digits(integer = 13, fraction = 0) BigDecimal amount,
         @NotNull @DecimalMin("0") @DecimalMax(MAX_AMOUNT) @Digits(integer = 13, fraction = 0) BigDecimal tax,
         @NotNull @DecimalMin("1") @DecimalMax(MAX_AMOUNT) @Digits(integer = 13, fraction = 0) BigDecimal total,

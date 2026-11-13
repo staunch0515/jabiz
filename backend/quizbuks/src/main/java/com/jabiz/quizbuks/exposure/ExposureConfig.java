@@ -95,6 +95,13 @@ public class ExposureConfig {
         return PublicationExposure.purchasedSet();
     }
 
+    /** F-M8: the sponsor buys more exposures for a publication that bought some. */
+    @Bean
+    ProcessDefinition<com.jabiz.quizbuks.publishing.PublicationExposureTopUp.TopUpInput,
+        com.jabiz.quizbuks.publishing.PublicationExposureTopUp.TopUpOutput, ProcessContext> qbExposureTopUp() {
+        return com.jabiz.quizbuks.publishing.PublicationExposureTopUp.topUp();
+    }
+
     @Bean
     ProcessDefinition<PublicationExposure.EndInput, PublicationOutput, ProcessContext> qbPublicationExposureEnd() {
         return END;

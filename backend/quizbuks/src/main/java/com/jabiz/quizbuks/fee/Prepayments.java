@@ -58,6 +58,7 @@ public final class Prepayments {
     public static final String FREEZE = "QB_PREPAYMENT_FREEZE";
     public static final String USE = "QB_PREPAYMENT_USE";
     public static final String CHARGE = "QB_PREPAYMENT_CHARGE";
+    public static final String TOP_UP = "QB_PREPAYMENT_TOP_UP";
     public static final String RELEASE = "QB_PREPAYMENT_RELEASE";
     public static final String RELEASE_ITEM = "QB_PREPAYMENT_RELEASE_ITEM";
     public static final String RELEASE_JOB = "qb.prepayment-release";
@@ -67,6 +68,7 @@ public final class Prepayments {
     static final String FROZEN = "Platform fee prepayment set aside";
     static final String USED = "Platform fee paid from its prepayment";
     static final String RELEASED = "Platform fee prepayment given back";
+    static final String TOPPED_UP = "Platform fee prepayment raised";
 
     /** How many prepayments one publication has at most (one a purpose), and how many parts one has. */
     public static final int MAX_PER_PUBLICATION = 20;
@@ -90,6 +92,16 @@ public final class Prepayments {
         @NotNull @DecimalMin("0") @DecimalMax(FeeProcesses.MAX_AMOUNT) @Digits(integer = 13, fraction = 0)
         BigDecimal chargeAmount,
         @Size(max = 36) String operatorId, @Size(max = QbPrepayments.DETAIL_LENGTH) String detail) {}
+
+    /**
+     * F-M8: raises the open prepayment of a purpose by {@code amount} (an exposure top-up); the mode is the prepayment's.
+     *
+     * @param amount what is added (the deposit with its tax, worked out by the caller from the cumulative rule)
+     */
+    public record TopUpInput(@NotBlank @Size(max = 128) String sponsorId, @NotBlank @Size(max = 36) String publicationId,
+        @NotBlank @Pattern(regexp = "EXPOSURE") String purpose,
+        @NotNull @DecimalMin("1") @DecimalMax(FeeProcesses.MAX_AMOUNT) @Digits(integer = 13, fraction = 0)
+        BigDecimal amount) {}
 
     /** @param credit of it, from the fee credit; {@code cash} from the cash (both 0 for a postpaid one) */
     public record FreezeOutput(String prepaymentId, BigDecimal credit, BigDecimal cash) {}
@@ -161,6 +173,7 @@ public final class Prepayments {
     static final String PUBLICATION = "publication";
     static final String RELEASE_CALL = "releaseCall";
     static final String FINAL_SETTLEMENT = "finalSettlement";
+    static final String OPEN_PREPAYMENT = "openPrepayment";
 
     private Prepayments() {}
 
@@ -193,7 +206,7 @@ public final class Prepayments {
             .step("Save the prepayment", SaveChanges.now())
             .step("Post it", CallProcess.<ProcessContext>when(ctx -> ctx.contains(POST_INPUT), LedgerProcesses.POST, 1,
                 ctx -> ctx.get(POST_INPUT), POSTING))
-            .compute("Record its parts", (metadata, ctx) -> recordFrozen(ctx)));
+            .compute("Record its parts", (metadata, ctx) -> recordFrozen(ctx, freezeInput(ctx).sponsorId())));
     }
 
     static void setAside(ProcessContext ctx) {
@@ -212,6 +225,11 @@ public final class Prepayments {
         values.put("frozenAt", ctx.opTime());
         String id = String.valueOf(ctx.changes().insert(QbPrepayments.PREPAYMENT, values));
         ctx.put(PREPAYMENT_ID, id);
+        post(ctx, input, id, FROZEN);
+    }
+
+    /** Takes {@code input.amount()} from the credit then the cash and posts it to 2180, for a prepaid one. */
+    private static void post(ProcessContext ctx, FreezeInput input, String id, String description) {
         if (!QbPrepayments.PREPAID.equals(input.mode())) {
             return;
         }
@@ -234,15 +252,76 @@ public final class Prepayments {
         }
         lines.add(new LedgerProcesses.Line(QbLedger.FEE_PREPAYMENTS, Direction.CREDIT, input.amount(), null,
             dimensions(input.sponsorId(), input.publicationId(), input.purpose())));
-        ctx.put(POST_INPUT, new LedgerProcesses.PostInput(ctx.opTime(), FROZEN, reference(input.purpose()), lines,
+        ctx.put(POST_INPUT, new LedgerProcesses.PostInput(ctx.opTime(), description, reference(input.purpose()), lines,
             QbPrepayments.PREPAYMENT, id));
     }
 
-    static void recordFrozen(ProcessContext ctx) {
+    // ---- top up (F-M8) -----------------------------------------------------------------------------------------------
+
+    /**
+     * {@value #TOP_UP}: adds to the open prepayment of a purpose (under the wallet lock the caller holds), from the credit
+     * then the cash as {@value #FREEZE} does, with the same posting; the new parts point at the same prepayment. A prepayment
+     * no longer open (settled, given back) is a defect of the caller, which refuses it first with its own code.
+     */
+    public static ProcessDefinition<TopUpInput, FreezeOutput, ProcessContext> topUp() {
+        return ProcessDefinition.define(TOP_UP, 1, TopUpInput.class, FreezeOutput.class, ProcessContext.class, pb -> pb
+            .description("Raises a publication's open prepayment from the sponsor's fee credit and cash (under the wallet "
+                + "lock the caller holds).")
+            .permissions(QbPermissions.FEE_SYSTEM)
+            .subProcessOnly()
+            .contextFactory(Prepayments::context)
+            .outputMapper(ctx -> {
+                FeeAllocation.Result result = ctx.contains(ALLOCATION)
+                    ? ctx.get(ALLOCATION, FeeAllocation.Result.class) : null;
+                return new FreezeOutput((String) ctx.get(PREPAYMENT_ID),
+                    result == null ? BigDecimal.ZERO : result.credit(),
+                    result == null ? BigDecimal.ZERO : result.cash());
+            })
+            .step("Read the account and the prepayment", QueryEntities.<ProcessContext>all(
+                QueryEntities.query(QbFeeAccount.defaultDataset(QbFeeAccount.GRANT),
+                    ctx -> FeeSettlement.credits(topUpInput(ctx).sponsorId(), ctx.opTime()), CREDITS),
+                QueryEntities.query(CashLots.dataset(), ctx -> CashLots.open(topUpInput(ctx).sponsorId()), LOTS),
+                QueryEntities.query(QbWallets.defaultDataset(QbWallets.WALLET),
+                    ctx -> QbWallets.query(QbWallets.CASH, topUpInput(ctx).sponsorId()), CASH_WALLET),
+                QueryEntities.query(QbWallets.defaultDataset(QbWallets.WALLET),
+                    ctx -> QbWallets.query(QbWallets.FEE_CREDIT, topUpInput(ctx).sponsorId()), CREDIT_WALLET),
+                QueryEntities.query(QbFees.defaultDataset(QbPrepayments.PREPAYMENT), ctx -> EntityQuery.builder()
+                    .where(new QueryPredicate.And(List.of(
+                        new QueryPredicate.Eq("publicationId", topUpInput(ctx).publicationId()),
+                        new QueryPredicate.Eq("purpose", topUpInput(ctx).purpose()),
+                        new QueryPredicate.Eq("status", QbPrepayments.OPEN)))).limit(1).build(), OPEN_PREPAYMENT)))
+            .compute("Raise it", (metadata, ctx) -> raise(ctx))
+            .step("Post it", CallProcess.<ProcessContext>when(ctx -> ctx.contains(POST_INPUT), LedgerProcesses.POST, 1,
+                ctx -> ctx.get(POST_INPUT), POSTING))
+            .compute("Record its parts", (metadata, ctx) -> recordFrozen(ctx, topUpInput(ctx).sponsorId())));
+    }
+
+    static void raise(ProcessContext ctx) {
+        TopUpInput input = topUpInput(ctx);
+        EntityInstance prepayment = FeeGate.first(ctx, OPEN_PREPAYMENT);
+        if (prepayment == null) {
+            throw new IllegalStateException("Publication " + input.publicationId() + " has no open " + input.purpose()
+                + " prepayment to raise");
+        }
+        String id = String.valueOf(prepayment.id());
+        ctx.put(PREPAYMENT_ID, id);
+        Map<String, Object> values = new LinkedHashMap<>();
+        values.put("amount", FeeGate.money(prepayment.get("amount")).add(input.amount()));
+        values.put("remaining", FeeGate.money(prepayment.get("remaining")).add(input.amount()));
+        ctx.changes().update(QbPrepayments.PREPAYMENT, prepayment.id(), prepayment.version(), values);
+        // The posting is the freeze's, with the prepayment's own mode (not the sponsor's billing now).
+        post(ctx, new FreezeInput(input.sponsorId(), input.publicationId(), input.purpose(),
+            String.valueOf((Object) prepayment.get("mode")), input.amount(), BigDecimal.ZERO, null, null), id, TOPPED_UP);
+    }
+
+    static TopUpInput topUpInput(ProcessContext ctx) {
+        return ctx.get(INPUT, TopUpInput.class);
+    }
+
+    static void recordFrozen(ProcessContext ctx, String sponsorId) {
         if (!ctx.contains(ALLOCATION)) {
             return;
         }
-        FreezeInput input = freezeInput(ctx);
         FeeAllocation.Result result = ctx.get(ALLOCATION, FeeAllocation.Result.class);
         String transactionId = ctx.get(POSTING, LedgerProcesses.PostOutput.class).transactionId();
         String id = (String) ctx.get(PREPAYMENT_ID);
@@ -250,18 +329,18 @@ public final class Prepayments {
         Map<String, EntityInstance> lots = FeeSettlement.byId(FeeGate.list(ctx, LOTS));
         for (FeeAllocation.Part part : result.parts()) {
             boolean credit = QbFeeAccount.FEE_CREDIT.equals(part.subAccount());
-            insertPart(ctx, input.sponsorId(), QbPrepayments.PREPAYMENT, id, part.subAccount(),
+            insertPart(ctx, sponsorId, QbPrepayments.PREPAYMENT, id, part.subAccount(),
                 credit ? part.lotId() : null, credit ? null : part.lotId(), part.amount(), transactionId, null);
             EntityInstance lot = credit ? grants.get(part.lotId()) : lots.get(part.lotId());
             ctx.changes().update(credit ? QbFeeAccount.GRANT : QbFeeAccount.CASH_LOT, lot.id(), lot.version(),
                 Map.of("remaining", FeeGate.money(lot.get("remaining")).subtract(part.amount())));
         }
         if (result.credit().signum() > 0) {
-            QbWallets.change(ctx, FeeGate.first(ctx, CREDIT_WALLET), QbWallets.FEE_CREDIT, input.sponsorId(),
+            QbWallets.change(ctx, FeeGate.first(ctx, CREDIT_WALLET), QbWallets.FEE_CREDIT, sponsorId,
                 result.credit().negate(), 0, BigDecimal.ZERO);
         }
         if (result.cash().signum() > 0) {
-            QbWallets.change(ctx, FeeGate.first(ctx, CASH_WALLET), QbWallets.CASH, input.sponsorId(),
+            QbWallets.change(ctx, FeeGate.first(ctx, CASH_WALLET), QbWallets.CASH, sponsorId,
                 result.cash().negate(), 0, BigDecimal.ZERO);
         }
     }

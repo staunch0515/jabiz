@@ -154,7 +154,9 @@ public final class PublicationLifecycle {
                     // F-M6 (review L2): with the distribution range, which a priced submission must find published.
                     java.util.stream.Stream.concat(java.util.stream.Stream.of(QbParams.FEE_OVERDUE_BLOCK,
                         QbParams.FEE_DEFAULT_BILLING_MODE, QbParams.AUDIENCE_BILLING_ENABLED, QbParams.FEE_TAX_RATE,
-                        QbParams.DISTRIBUTION_BILLING_ENABLED), QbParams.DISTRIBUTION_RANGE.stream())
+                        QbParams.DISTRIBUTION_BILLING_ENABLED, QbParams.EXPOSURE_BILLING_ENABLED,
+                        QbParams.EXPOSURE_MIN_PURCHASE), java.util.stream.Stream.concat(
+                        QbParams.DISTRIBUTION_RANGE.stream(), QbParams.EXPOSURE_RANGE.stream()))
                         .toArray(String[]::new)))
                 // Q87 (D-Q87-5): unpaid platform fees beyond what the sponsor's billing allows stop a submission.
                 .steps(b -> com.jabiz.quizbuks.fee.FeeGate.load(b, ctx -> ctx.request().actorId()))
@@ -202,7 +204,10 @@ public final class PublicationLifecycle {
                     PublicationEditing.publication(ctx)))
                 .steps(PublicationPrepayments::freeze)
                 .compute("Submit", (metadata, ctx) -> submitted(ctx))
-                .steps(PublicationPrepayments::after));
+                .steps(PublicationPrepayments::after)
+                // F-M8: the exposures bought are set on the publication after its own write is saved (the sub-process
+                // reads the publication again, in the lock held), and its revision is the one answered.
+                .steps(PublicationPrepayments::buyExposures));
     }
 
     static final String BENEFIT_PURCHASE = "benefitPurchase";

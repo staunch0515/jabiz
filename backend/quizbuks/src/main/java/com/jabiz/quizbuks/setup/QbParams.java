@@ -249,6 +249,29 @@ public final class QbParams {
             DISTRIBUTION_UNSETTLED_AFTER_HOURS, DISTRIBUTION_FINAL_MISSING_AFTER_HOURS))
         .flatMap(List::stream).toList();
     /**
+     * F-M8 (docs/quizbuks/plans/impl/F-M8.md §5): the exposure fee. Whether a submission buys exposures and freezes their
+     * price is read at the submission only (turning it off does not touch a publication that was submitted while on); the
+     * headquarters' range of the operators' prices, the least number bought, the grace after an end, the daily check's
+     * hours and the biggest top-up are controlled; when the reminder says a purchase is running out is not.
+     */
+    public static final String EXPOSURE_BILLING_ENABLED = "qb.exposure.billing.enabled";
+    public static final String EXPOSURE_UNIT_MIN = "qb.exposure.unit.min";
+    public static final String EXPOSURE_UNIT_MAX = "qb.exposure.unit.max";
+    public static final String EXPOSURE_MIN_PURCHASE = "qb.exposure.min-purchase";
+    /** Not {@link #EXPOSURE_END_GRACE_SEC} (the counting check's, not controlled, 60): this one is the final settlement's. */
+    public static final String EXPOSURE_FINAL_END_GRACE_SEC = "qb.exposure.final.end-grace-sec";
+    public static final String EXPOSURE_UNSETTLED_AFTER_HOURS = "qb.exposure.unsettled-after-hours";
+    public static final String EXPOSURE_FINAL_MISSING_AFTER_HOURS = "qb.exposure.final-missing-after-hours";
+    public static final String EXPOSURE_TOP_UP_MAX = "qb.exposure.top-up.max";
+    /** The share of what was bought at or below which the sponsor is reminded (0: never); not controlled. */
+    public static final String EXPOSURE_LOW_RATIO = "qb.exposure.low-ratio";
+    /** The headquarters' range of the operators' exposure prices, in the order the price check reads them. */
+    public static final List<String> EXPOSURE_RANGE = List.of(EXPOSURE_UNIT_MIN, EXPOSURE_UNIT_MAX);
+    /** The controlled ones, in the order of {@link #CONTROLLED} (before {@link #REWARD_KUDOS}). */
+    public static final List<String> EXPOSURE_CONTROLLED = List.of(EXPOSURE_BILLING_ENABLED, EXPOSURE_UNIT_MIN,
+        EXPOSURE_UNIT_MAX, EXPOSURE_MIN_PURCHASE, EXPOSURE_FINAL_END_GRACE_SEC, EXPOSURE_UNSETTLED_AFTER_HOURS,
+        EXPOSURE_FINAL_MISSING_AFTER_HOURS, EXPOSURE_TOP_UP_MAX);
+    /**
      * F-M14 (docs/quizbuks/plans/impl/F-M14.md §5, G7): how long the daily reconciliation waits before it reports a
      * prepayment not given back and an audience fee not decided. They decide whether the check reports at all, so they
      * are controlled (four eyes), as the distribution checks' hours are; a value that only says when to remind is not.
@@ -593,7 +616,8 @@ public final class QbParams {
         OPERATOR_PLANS, OPERATOR_WITHDRAWAL, List.of(TOPUP_BANK_MIN, TOPUP_BANK_MAX), BANK_RECEIVING, WITHDRAWAL_BANK, AUDIENCE_BILLING_PARAMS,
         CASH_ACCOUNT_PARAMS, FEE_PARAMS,
         List.of(ENTRY_FEE_ENABLED), List.of(USAGE_FREE_BYTES), List.of(VIDEO_MAINLAND_SITES), HELP_CONTROLLED, FEE_CREDIT_PARAMS,
-        SITE_PROFILE_CONTROLLED, DISTRIBUTION_CONTROLLED, REWARD_KUDOS, RECON_THRESHOLDS, HELP_USER_LIMITS)
+        SITE_PROFILE_CONTROLLED, DISTRIBUTION_CONTROLLED, EXPOSURE_CONTROLLED, REWARD_KUDOS, RECON_THRESHOLDS,
+        HELP_USER_LIMITS)
         .flatMap(List::stream).toList();
 
     /** A parameter: its key, kind (as the platform writes kinds) and first value. */
@@ -988,7 +1012,36 @@ public final class QbParams {
         new Param(DISTRIBUTION_FINAL_MISSING_AFTER_HOURS, Map.of("type", "numeric", "precision", 3, "scale", 0),
             "48", "After how many hours of its end a publication without its final distribution settlement is "
                 + "reported by the daily check"),
-        // F-F10a: the Kudos reward switch (controlled, after the F-C7 ones: the last of CONTROLLED, and so the last proposal of QB_SETUP, which follows this list).
+        // F-M8: the exposure fee (the ordinary reminder first, then the controlled ones before the Kudos reward switch).
+        new Param(EXPOSURE_LOW_RATIO, Map.of("type", "numeric", "precision", 4, "scale", 4), "0.1",
+            "The sponsor is reminded when what is left of the exposures bought is at most this share of them (0 to 0.5; "
+                + "0: never)"),
+        new Param(EXPOSURE_BILLING_ENABLED, BOOL, false,
+            "Whether a publication that uses another's shared video buys exposures at its submission (read at the "
+                + "submission only; publications submitted while on are settled to their end)"),
+        new Param(EXPOSURE_UNIT_MIN, DISTRIBUTION_RATE_KIND, "1.0000",
+            "The least price per exposure an operator may set, in yen (a placeholder: confirmed by the requester before "
+                + "qb.exposure.billing.enabled is turned on)"),
+        new Param(EXPOSURE_UNIT_MAX, DISTRIBUTION_RATE_KIND, "100.0000",
+            "The highest price per exposure an operator may set, in yen (a placeholder: confirmed by the requester)"),
+        new Param(EXPOSURE_MIN_PURCHASE, Map.of("type", "numeric", "precision", 9, "scale", 0), "100",
+            "The fewest exposures a submission buys (1 to 999,999,999; a placeholder: set by the requester before "
+                + "qb.exposure.billing.enabled is turned on; a top-up has no least)"),
+        new Param(EXPOSURE_FINAL_END_GRACE_SEC, Map.of("type", "numeric", "precision", 5, "scale", 0), "3600",
+            "How many seconds after a publication ended its final exposure settlement waits, so that the reports on "
+                + "the way are counted (60 to 86400; less counts as 60). Not qb.exposure.reconcile.end-grace-sec, which "
+                + "the check of the counting uses"),
+        new Param(EXPOSURE_UNSETTLED_AFTER_HOURS, Map.of("type", "numeric", "precision", 3, "scale", 0), "30",
+            "After how many hours of a month a publication not settled for the month before is reported by the daily "
+                + "check (1 to 720; the monthly exposure settlement runs on the 2nd at 00:47)"),
+        new Param(EXPOSURE_FINAL_MISSING_AFTER_HOURS, Map.of("type", "numeric", "precision", 3, "scale", 0), "48",
+            "After how many hours of its end a publication without its final exposure settlement is reported by the "
+                + "daily check (1 to 720)"),
+        new Param(EXPOSURE_TOP_UP_MAX, Map.of("type", "numeric", "precision", 9, "scale", 0), "1000000",
+            "The most exposures one top-up buys (1 to 999,999,999; a placeholder; keeps the parts of a deposit within "
+                + "what it can be shared into)"),
+        // F-F10a: the Kudos reward switch (controlled, after the F-C7, F-M6 and F-M8 ones; the F-M14 thresholds and the help's
+        // daily limit come after it, in the order of CONTROLLED, which QB_SETUP's proposals follow).
         new Param(REWARD_KUDOS_ENABLED, BOOL, true,
             "Whether a publication may offer the reward method PLATFORM (Kudos paid by QuizBuks); off at the first "
                 + "launch (F-F10a)"),
