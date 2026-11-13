@@ -428,4 +428,48 @@ class ExposureSettleIT extends ExposureFeeItSupport {
         });
         assertThat(differences(other)).isEmpty();
     }
+
+    /** F-M8c review M3: the month's report puts the exposure fee's freezes, top-up, charges and release in its own kinds. */
+    @Test
+    void theMonthlyReportHasTheExposureFeeInItsOwnKinds() {
+        // The report is the whole platform's: start a day after what the tests before posted.
+        clock.set(clock.instant().plus(Duration.ofDays(1)));
+        Instant from = clock.instant();
+        String[] p = boughtPublication("fm8-monthly", 100);
+        String sponsor = p[0];
+        String publicationId = p[1];
+        // A top-up of 100 more: the deposit is 220 in all (110 + 110).
+        run(com.jabiz.quizbuks.publishing.PublicationExposureTopUp.TOP_UP, sponsorToken(sponsor), body(
+            "publicationId", publicationId, "expectedPurchased", 100, "additional", 100));
+        assertThat(dec(exposurePrepayment(publicationId).get("amount"))).isEqualByComparingTo("220");
+        String month = period(clock.instant());
+        successes(publicationId, sponsor, p[2], 150, clock.instant());
+        // The month is settled (150 exposures: 150 yen and 15 of tax), the publication ends and the rest is given back.
+        monthlyIn(YearMonth.parse(month).plusMonths(1));
+        run("QB_PUBLICATION_ADMIN_END", contentAdmin(), body("publicationId", publicationId, "reason", "F-M8 test"));
+        finalRun(clock.instant().plus(Duration.ofHours(3)));
+        assertThat(exposurePrepayment(publicationId)).containsEntry("status", "RELEASED");
+        Instant to = clock.instant().plus(Duration.ofDays(1));
+        String token = com.jabiz.runtime.test.TestTokens.bearer(tokens, "fm8-monthly-finance",
+            "qb.admin.finance.read");
+        Map<String, Map<String, Object>> byKind = new java.util.HashMap<>();
+        items("qb.admin.monthly", token, Map.of("params", Map.of("from", from.toString(), "to", to.toString()),
+            "limit", 100)).forEach(row -> byKind.put(String.valueOf(row.get("category")), row));
+        // Frozen and topped up: two postings of 110; given back: what the settlement did not use (220 - 165).
+        assertThat(dec(byKind.get("EXPOSURE_DEPOSIT").get("transactionCount"))).isEqualByComparingTo("2");
+        assertThat(dec(byKind.get("EXPOSURE_DEPOSIT").get("amount"))).isEqualByComparingTo("220");
+        assertThat(dec(byKind.get("EXPOSURE_RELEASED").get("transactionCount"))).isEqualByComparingTo("1");
+        assertThat(dec(byKind.get("EXPOSURE_RELEASED").get("amount"))).isEqualByComparingTo("55");
+        assertThat(dec(byKind.get("EXPOSURE_CHARGED").get("amount"))).isEqualByComparingTo("165");
+        // The kinds of the other charges do not hold them.
+        assertThat(dec(byKind.get("PREPAYMENT_FROZEN").get("amount"))).isEqualByComparingTo("0");
+        assertThat(dec(byKind.get("PREPAYMENT_RELEASED").get("amount"))).isEqualByComparingTo("0");
+        assertThat(dec(byKind.get("FEE_CHARGED").get("amount"))).isEqualByComparingTo("0");
+        // The deposit is used to the yen and given back for the rest: what the month holds in the prepayments' account
+        // closes to nothing (frozen -220, used 165, given back 55), and the charge is revenue and tax on 150 yen.
+        assertThat(byKind.values().stream().map(row -> dec(row.get("feePrepayments")))
+            .reduce(BigDecimal.ZERO, BigDecimal::add)).isEqualByComparingTo("0");
+        assertThat(dec(byKind.get("EXPOSURE_CHARGED").get("feeRevenue"))).isEqualByComparingTo("-150");
+        assertThat(dec(byKind.get("EXPOSURE_CHARGED").get("taxPayable"))).isEqualByComparingTo("-15");
+    }
 }
