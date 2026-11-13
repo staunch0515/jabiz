@@ -82,7 +82,7 @@ class ReconcileIT extends TopUpItSupport {
         Instant at = now().plus(Duration.ofMinutes(3));
         assertThat(reconcile(at)).isEqualTo(JobRunner.Outcome.SUCCEEDED);
         Map<String, Object> current = run(at);
-        assertThat((String) current.get("summary")).contains("\"DISTRIBUTION_PRICE_OFF_RANGE\":0")
+        assertThat((String) current.get("summary")).contains("\"DISTRIBUTION_PRICE_RANGE\":0")
             .doesNotContain(ReconChecks.DISTRIBUTION_PRICE_OUT_OF_RANGE);
         // The old run as it was written (inserted, as the sealed rows are never changed): its summary names the old code.
         String oldRun = java.util.UUID.randomUUID().toString();
@@ -92,7 +92,7 @@ class ReconcileIT extends TopUpItSupport {
             + "scheduled_time, status, checked_at, item_count, summary) SELECT ?::uuid, version_no, "
             + "effect_start_time - interval '1000 days', created_time - interval '1000 days', process_seq_id, "
             + "scheduled_time - interval '1000 days', status, checked_at - interval '1000 days', item_count, "
-            + "replace(summary, 'DISTRIBUTION_PRICE_OFF_RANGE', 'DISTRIBUTION_PRICE_OUT_OF_RANGE') "
+            + "replace(summary, 'DISTRIBUTION_PRICE_RANGE', 'DISTRIBUTION_PRICE_OUT_OF_RANGE') "
             + "FROM qb_recon_run_version WHERE run_id = ?::uuid", oldRun, String.valueOf(current.get("run_id")));
         String finance = tokenOf("recon-retired", com.jabiz.quizbuks.setup.QbRoles.ADMIN_FINANCE);
         assertThat(items("qb.admin.recon-runs", finance, Map.of("limit", 500)))

@@ -414,16 +414,16 @@ class DistributionIT extends PrepaymentItSupport {
         execute("UPDATE qb_distribution_price SET rate = 2 WHERE operator_id = ?", operator);
         assertThat(ReconChecks.coded(items("qb.system.recon-fee-account", system, Map.of())).stream()
             .filter(item -> operator.equals(item.partyId())))
-            .extracting(ReconChecks.Item::check).containsExactly(ReconChecks.DISTRIBUTION_PRICE_OFF_RANGE);
+            .extracting(ReconChecks.Item::check).containsExactly(ReconChecks.DISTRIBUTION_PRICE_RANGE);
         // The query run before deploying (operations.md, launch-checklist.md) finds the same operator.
         assertThat(offRangeBeforeDeploying()).contains(operator);
     }
 
-    /** The operators tools/quizbuks/sql/distribution-prices-off-range.sql lists, at the test's clock. */
+    /** The operators tools/quizbuks/sql/distribution-price-range.sql lists, at the test's clock. */
     List<String> offRangeBeforeDeploying() {
         try {
             String sql = java.nio.file.Files.readString(java.nio.file.Path.of(
-                "../../tools/quizbuks/sql/distribution-prices-off-range.sql"));
+                "../../tools/quizbuks/sql/distribution-price-range.sql"));
             assertThat(sql).contains("now()");
             return query(sql.replace("now()", "CAST('" + clock.instant() + "' AS timestamptz)").replace(";", ""))
                 .stream().map(row -> String.valueOf(row.get("operator_id"))).toList();

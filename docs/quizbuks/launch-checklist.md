@@ -206,7 +206,7 @@
 
 ## 上线
 
-- [ ] **配送费价目都在总部的范围内**（核对项 `DISTRIBUTION_PRICE_OFF_RANGE` 第一次真正运行）：部署之前在 staging 库与正式库上各执行一次 `psql "$DATABASE_URL" -f tools/quizbuks/sql/distribution-prices-off-range.sql`，结果为空；有行时先改价目或范围（`operations.md` §4 检查清单、§7.48）
+- [ ] **配送费价目都在总部的范围内**（核对项 `DISTRIBUTION_PRICE_RANGE` 第一次真正运行）：部署之前在 staging 库与正式库上各执行一次 `psql "$DATABASE_URL" -f tools/quizbuks/sql/distribution-price-range.sql`，结果为空；有行时先改价目或范围（`operations.md` §4 检查清单、§7.48）
       确认人： ／ 日期： ／ 依据：
 - [ ] 正式系统上线；第一批真实用户走通闭环（学者答题、发起方发布、运营商审核、兑换）；结果记在本项的"依据"
       确认人： ／ 日期： ／ 依据：

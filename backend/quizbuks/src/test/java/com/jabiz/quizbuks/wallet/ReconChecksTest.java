@@ -135,7 +135,7 @@ class ReconChecksTest {
         // Every check by name, the F-M6 notes (DISTRIBUTION_AT_FLOOR) among them.
         assertThat(result.summary()).startsWith("{\"CASH_ACCOUNT\":0,\"CASH_LOTS\":0,\"CERTIFIED_GRANTS\":0,"
             + "\"DISTRIBUTION_AT_FLOOR\":0,\"DISTRIBUTION_DEPOSITS\":0,\"DISTRIBUTION_FINAL_MISSING\":0,"
-            + "\"DISTRIBUTION_PRICE_OFF_RANGE\":0,\"DISTRIBUTION_UNSETTLED\":0,\"ENTRY_FEES_UNSETTLED\":0,"
+            + "\"DISTRIBUTION_PRICE_RANGE\":0,\"DISTRIBUTION_UNSETTLED\":0,\"ENTRY_FEES_UNSETTLED\":0,"
             + "\"FEES_RECEIVABLE\":0,\"FEE_CREDIT\":0,\"FEE_CREDIT_PROMOTION\":0,\"FEE_PAYMENTS\":0,")
             .contains("\"LEDGER_ZERO\":0").contains("\"TOPUP_FEE\":0");
     }

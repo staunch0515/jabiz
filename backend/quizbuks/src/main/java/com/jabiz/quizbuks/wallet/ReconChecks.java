@@ -71,9 +71,9 @@ public final class ReconChecks {
     /** F-M6: publications ended {@code qb.distribution.final-missing-after-hours} ago without a final settlement. */
     public static final String DISTRIBUTION_FINAL_MISSING = "DISTRIBUTION_FINAL_MISSING";
     /** F-M6: operators' prices outside the headquarters' range as it is now (sponsorId holds the operator). */
-    public static final String DISTRIBUTION_PRICE_OFF_RANGE = "DISTRIBUTION_PRICE_OFF_RANGE";
+    public static final String DISTRIBUTION_PRICE_RANGE = "DISTRIBUTION_PRICE_RANGE";
     /**
-     * Retired (never reported): the first name of {@link #DISTRIBUTION_PRICE_OFF_RANGE}. Its 31 characters did not fit
+     * Retired (never reported): the first name of {@link #DISTRIBUTION_PRICE_RANGE}. Its 31 characters did not fit
      * {@code qb_recon_item_version.check_code} (30): the template's cast cut it short and the run dropped it. Runs
      * written before the rename hold it in their sealed summaries ({@code ":0"}), so the dictionary keeps it, disabled.
      */
@@ -114,7 +114,7 @@ public final class ReconChecks {
         FEES_RECEIVABLE, ENTRY_FEES_UNSETTLED, FEE_CREDIT, CASH_LOTS, FEE_PAYMENTS, FEE_CREDIT_PROMOTION,
         LIGHT_GRANTS, LIGHT_VOIDS, CERTIFIED_GRANTS, OPERATOR_ACCOUNT, PREPAYMENTS, PREPAYMENT_STALE,
         PREPAYMENT_PARTS, PREPAYMENT_UNCHARGED, DISTRIBUTION_DEPOSITS, DISTRIBUTION_UNSETTLED,
-        DISTRIBUTION_FINAL_MISSING, DISTRIBUTION_PRICE_OFF_RANGE, DISTRIBUTION_AT_FLOOR);
+        DISTRIBUTION_FINAL_MISSING, DISTRIBUTION_PRICE_RANGE, DISTRIBUTION_AT_FLOOR);
 
     /** Codes no longer reported that runs written before may still name: readable, never written. */
     public static final List<String> RETIRED = List.of(DISTRIBUTION_PRICE_OUT_OF_RANGE);

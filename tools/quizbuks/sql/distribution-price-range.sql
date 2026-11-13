@@ -1,11 +1,11 @@
 -- Operators whose distribution price is outside the headquarters' range as it is now: the rows the daily
--- reconciliation reports as DISTRIBUTION_PRICE_OFF_RANGE (the same conditions as qb.system.recon-fee-account).
+-- reconciliation reports as DISTRIBUTION_PRICE_RANGE (the same conditions as qb.system.recon-fee-account).
 -- Run it before deploying the version that renamed the check (before it, the check was never reported): every row
 -- is a difference from the first run on, and the journal export needs the latest run after the month's end to be
 -- OK (docs/quizbuks/operations.md §7.2). An empty result is the go-ahead; otherwise bring those prices within the
 -- range, or the range around them, first.
 --
---   psql "$DATABASE_URL" -f tools/quizbuks/sql/distribution-prices-off-range.sql
+--   psql "$DATABASE_URL" -f tools/quizbuks/sql/distribution-price-range.sql
 --
 -- Read-only. A range parameter not set (or not a number) checks nothing, as in the reconciliation.
 WITH current_params AS (
