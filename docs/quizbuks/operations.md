@@ -1339,7 +1339,7 @@ Quiz 与发布有主题词（平台词表中的词与自定义词），学者可
 
 受众规则费上架时一次记全期（F-M5）；发布提前结束时按未用天数开**贷项凭证**；财务也可以对任何一笔费用手工开凭证（四眼）。原费用与它的账单从不修改（`docs/quizbuks/plans/impl/F-M.md` §10）。
 
-- **开关**：`qb.audience.billing.enabled`（受控，首次上线为开）；`qb.audience.fee.refund-unused-days`（受控，缺省关，由需求方另定）。退不退按**发布结束那一刻**的开关：结束时关、之后打开不补退；结束时开、之后关掉照退。下架（`ADMIN`）与到期结束（`EXPIRED`）不退。
+- **开关**：`qb.audience.billing.enabled`（受控，首次上线为开）；`qb.audience.fee.refund-unused-days`（受控，缺省关，由需求方另定）。退不退按**发布结束那一刻**的开关：结束时关、之后打开不补退；结束时开、之后关掉照退。结束那一刻开关还没有发布过值的，按"关"处理（`NONE_SWITCH_OFF`）。下架（`ADMIN`）与到期结束（`EXPIRED`）不退。
 - **退回任务** `qb.audience-refund`：每天 03:37（`jabiz.fiscal-year-zone`，部署设置 `QB_AUDIENCE_REFUND_CRON`；一次至多 `quizbuks.audience-refund.max-items`，缺省 10000），在 03:07 的配送费结束结算与 03:23 的预付款退回之后。每项一笔已记费的受众规则费，只判定一次，结果写在预付款上（`refund_decided_at` / `refund_outcome`：`REFUNDED` 退回、`CREDITED` 成为贷项、`NONE_SWITCH_OFF`、`NONE_REASON`、`NONE_ZERO`、`NONE_NO_PERIOD`）。已用天数 = 从计费的开始到结束，按 24 小时向上取整、至少 1 天（暂停的天也算）；应收 = max（最低使用费，日价合计 × 已用天数），按冻结时的报价；退回额 = 原费用 − 应收。F-M7 之前冻结的预付款没有计费期间，取冻结时刻的发布期间；读不到即 `NONE_NO_PERIOD`。
 - **凭证的去向（一条规则）**：先抵这笔费用所在账单还欠的部分（`OPEN` / `PARTIAL` / `OVERDUE`）；**预付**的费用再把超出部分退回付款的地方（最后付的先退：同一时刻先退账户付的、再退预付款付的，各自先现金后赠送），从预付款付的部分经预付款退回（与作废时同一条路径），退到已作废的赠送当即再作废；**后付**的从不退现金。再剩下的是**贷项**：立即按开具时刻抵该发起方其他未付的账单，抵不完的留给下一张账单（预付记费、后付月账单、提前付清都先用贷项）。所以"有未用贷项"与"有未付账单"不会同时出现（核对 `CREDIT_UNUSED_WITH_DUE`）。
 - **欠多少**：账单的欠额 = 合计 − 已抵（`creditApplied`）− 已付。被凭证抵完的账单为 `PAID`（`paid_at` 有值，没有付款分录，不开收据）。

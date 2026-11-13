@@ -77,9 +77,10 @@ public final class AudienceRefundJob {
                     ctx.contains(OUTCOME) ? (String) ctx.get(OUTCOME) : SKIPPED, ref(ctx).prepaymentId()))
                 .step("Lock the sponsor's wallets", HoldLock.<ProcessContext>exclusive(
                     ctx -> QbWallets.lockName(QbWallets.SPONSOR, ref(ctx).sponsorId())))
-                // The switch as it was when the publication ended: turned on later, it gives nothing back.
-                .step("Load the switch at the end", LoadParams.<ProcessContext>of(ctx -> ref(ctx).endedAt(), PARAMS,
-                    QbParams.AUDIENCE_REFUND_UNUSED_DAYS))
+                // The switch as it was when the publication ended: turned on later, it gives nothing back. M1 of the
+                // review: a controlled value not yet published then is off (NONE_SWITCH_OFF), never a failing item.
+                .step("Load the switch at the end", LoadParams.<ProcessContext>optional(ctx -> ref(ctx).endedAt(),
+                    PARAMS, QbParams.AUDIENCE_REFUND_UNUSED_DAYS))
                 .step("Read the prepayment, the publication and the fee", QueryEntities.<ProcessContext>all(
                     QueryEntities.query(QbFeeAccount.defaultDataset(QbPrepayments.PREPAYMENT), ctx -> EntityQuery
                         .builder().where(new QueryPredicate.In("prepaymentId", FeeGate.ids(ref(ctx).prepaymentId())))
@@ -139,7 +140,8 @@ public final class AudienceRefundJob {
         Map<String, Object> period = rows(ctx).isEmpty() ? Map.of() : rows(ctx).getFirst();
         AudienceRefunds.Quote quote = AudienceRefunds.quote((String) prepayment.get("detail"),
             instant(period.get("startAt")), instant(period.get("endAt")));
-        Boolean on = ctx.get(PARAMS, ParamValues.class).get(QbParams.AUDIENCE_REFUND_UNUSED_DAYS, Boolean.class);
+        Boolean on = ctx.get(PARAMS, ParamValues.class).find(QbParams.AUDIENCE_REFUND_UNUSED_DAYS, Boolean.class)
+            .orElse(Boolean.FALSE);
         Instant endedAt = instant(publication.get("endedAt"));
         String endReason = publication.get("endReason") == null ? null
             : String.valueOf((Object) publication.get("endReason"));

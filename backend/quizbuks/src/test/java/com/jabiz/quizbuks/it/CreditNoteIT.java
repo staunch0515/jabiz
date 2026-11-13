@@ -444,4 +444,32 @@ class CreditNoteIT extends CreditNoteItSupport {
         assertThat(creditNote(chargeId, 100)).containsEntry("status", QbFees.DONE);
         assertThat(notes(sponsor)).hasSize(1003);
     }
+
+    /**
+     * M1 of the review: the switch is controlled, so it may have had no published value yet when the publication
+     * ended. Then it is off (NONE_SWITCH_OFF, decided once), not an item failing every day.
+     */
+    @Test
+    void aSwitchWithNoValueYetWhenThePublicationEndedIsOff() {
+        autoApprove(true);
+        String sponsor = pricedSponsor("fm7-unset");
+        cash(sponsor, 1_000);
+        credit(sponsor, 10_000);
+        String publicationId = oneWinnerAudienceDraft(sponsor, "FM7 unset");
+        submit(sponsorToken(sponsor), publicationId);
+        goLive(publicationId);
+        Map<String, Object> ref = new java.util.HashMap<>(endEarly(sponsor, publicationId));
+        // Ended before the switch's first published value (if any was published in this schema yet).
+        Object first = query("SELECT min(effect_start_time) AS t FROM sys_param_version WHERE param_key = ?",
+            QbParams.AUDIENCE_REFUND_UNUSED_DAYS).getFirst().get("t");
+        Instant endedAt = first == null ? clock.instant() : ((Timestamp) first).toInstant().minusSeconds(60);
+        ref.put("endedAt", endedAt.toString());
+        assertThat(query("SELECT 1 AS found FROM sys_param_version WHERE param_key = ? AND effect_start_time <= ?",
+            QbParams.AUDIENCE_REFUND_UNUSED_DAYS, Timestamp.from(endedAt))).isEmpty();
+
+        assertThat(((FeeProcesses.ItemOutput) systemRun(AudienceRefundJob.ITEM, ref)).outcome())
+            .isEqualTo("NONE_SWITCH_OFF");
+        assertThat(prepayments(publicationId).getFirst()).containsEntry("refund_outcome", "NONE_SWITCH_OFF");
+        assertThat(notes(sponsor)).isEmpty();
+    }
 }
