@@ -204,7 +204,10 @@ class JournalLinesTest {
     void theTemplatesKeepTheSponsorOfTheAccountsKeptPerSponsor() throws java.io.IOException {
         java.util.regex.Pattern list = java.util.regex.Pattern.compile(
             "CASE WHEN a\\.\\{\\{LedgerAccount\\.accountCode}} IN \\(([^)]*)\\) THEN e\\.\\{\\{LedgerEntry\\.dimension1}}");
-        for (String template : List.of("journal-summary", "journal-detail", "journal-parts")) {
+        // Where each template writes the sponsor: the summary in its select and its group by, the detail likewise,
+        // the parts once.
+        Map<String, Integer> places = Map.of("journal-summary", 2, "journal-detail", 2, "journal-parts", 1);
+        for (String template : places.keySet()) {
             String sql;
             try (var in = JournalLinesTest.class.getResourceAsStream("/queries/qb/system/" + template + ".sql")) {
                 sql = new String(in.readAllBytes(), StandardCharsets.UTF_8);
@@ -217,7 +220,7 @@ class JournalLinesTest {
                     .map(a -> a.strip().replace("'", "")).collect(Collectors.toSet());
                 assertThat(accounts).as(template).isEqualTo(JournalLines.PER_SPONSOR);
             }
-            assertThat(found).as(template).isPositive();
+            assertThat(found).as(template).isEqualTo(places.get(template));
         }
         assertThat(JournalLines.PER_SPONSOR).contains(QbLedger.FEES_RECEIVABLE, QbLedger.FEE_PREPAYMENTS);
     }

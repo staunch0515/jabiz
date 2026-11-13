@@ -3,7 +3,8 @@ id: qb.system.journal-summary
 description: >-
   The summary voucher of a journal export (Q9d, D-Q9d-2, D-Q9d-4): what it takes from the ledger summed by account and
   side, and by sponsor on the accounts kept per sponsor (2110, 2160, 2190, 1130, 2180; the takers' accounts summed),
-  with how many transactions each line sums - a few hundred rows however many postings the month has
+  with how many transactions each line sums - one row per account and side, and on those accounts per sponsor and
+  side: grows with the sponsors that moved in the period, not with the postings
 entities: [LedgerAccount, LedgerTransaction, LedgerEntry]
 params:
   to:              { like: LedgerTransaction.bookingTime, required: true, description: "The period's end: transactions booked before it" }
