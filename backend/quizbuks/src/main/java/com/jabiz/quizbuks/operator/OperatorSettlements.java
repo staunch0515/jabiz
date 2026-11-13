@@ -692,6 +692,11 @@ public final class OperatorSettlements {
             group.sort(Comparator.comparing(r -> String.valueOf(r.get("chargeId"))));
             List<BigDecimal> weights = group.stream().map(r -> money(r.get("chargeTotal"))).toList();
             List<String> order = group.stream().map(r -> String.valueOf(r.get("chargeId"))).toList();
+            // Fees of no positive total paid with credit cannot be cut over; such a payment is left out rather than
+            // failing the operator's settlement every day, and the reconciliation's coverage reports it.
+            if (!OperatorShareRules.splittable(weights)) {
+                continue;
+            }
             List<BigDecimal> parts = OperatorShareRules.split(money(group.getFirst().get("paymentAmount")), weights,
                 order);
             for (int i = 0; i < group.size(); i++) {

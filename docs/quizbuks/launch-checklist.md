@@ -86,6 +86,8 @@
       确认人： ／ 日期： ／ 依据：
 - [ ] **曝光的最少购买次数**（F-M8 问题 3）：提交发布时最少购买的曝光次数（`qb.exposure.min-purchase`）现为占位的 100 次；上线前由需求方定数并以受控变更设好（追加购买不设最少）
       确认人： ／ 日期： ／ 依据：
+- [ ] **运营商分成的 8 个设置**（F-M12 a）：部署后，`QB_SETUP` 提出的 `qb.operator.share.kinds`、`qb.operator.share.ai-cost-in-base`、`qb.operator.credit-recovery.rate`、`qb.operator.gift.treatment.*`（4 个）、`qb.operator.gift.recover-outside-base` 已由另一位管理员发布（四眼）；未发布时结算任务对每个运营商都 422 `QB_OPERATOR_NO_SHARE_SETTING`。**必须在部署后的第一次结算任务之前完成**（staging：12 月的第一次任务之前）
+      确认人： ／ 日期： ／ 依据：
 
 ## 内容与运营
 

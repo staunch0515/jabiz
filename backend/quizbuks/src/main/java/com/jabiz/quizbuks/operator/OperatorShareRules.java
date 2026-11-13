@@ -143,6 +143,11 @@ public final class OperatorShareRules {
      * the first in {@code order} (the fees' ids). The parts add up to {@code total} exactly, for a negative total
      * (given back) as for a positive.
      */
+    /** Whether {@link #split} can cut over these weights: their sum is positive. */
+    public static boolean splittable(List<BigDecimal> weights) {
+        return weights.stream().reduce(BigDecimal.ZERO, BigDecimal::add).signum() > 0;
+    }
+
     public static List<BigDecimal> split(BigDecimal total, List<BigDecimal> weights, List<String> order) {
         if (weights.size() != order.size()) {
             throw new IllegalArgumentException("A weight and an order key for each part");
