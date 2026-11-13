@@ -271,6 +271,7 @@ public final class QbParams {
     public static final List<String> EXPOSURE_CONTROLLED = List.of(EXPOSURE_BILLING_ENABLED, EXPOSURE_UNIT_MIN,
         EXPOSURE_UNIT_MAX, EXPOSURE_MIN_PURCHASE, EXPOSURE_FINAL_END_GRACE_SEC, EXPOSURE_UNSETTLED_AFTER_HOURS,
         EXPOSURE_FINAL_MISSING_AFTER_HOURS, EXPOSURE_TOP_UP_MAX);
+    /**
      * F-M14 (docs/quizbuks/plans/impl/F-M14.md §5, G7): how long the daily reconciliation waits before it reports a
      * prepayment not given back and an audience fee not decided. They decide whether the check reports at all, so they
      * are controlled (four eyes), as the distribution checks' hours are; a value that only says when to remind is not.
