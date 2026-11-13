@@ -3,6 +3,7 @@ package com.jabiz.quizbuks.it;
 import com.jabiz.process.ProcessAccess;
 import com.jabiz.process.ProcessDefinition;
 import com.jabiz.quizbuks.setup.QbRoles;
+import com.jabiz.runtime.process.steps.HoldLock;
 import org.assertj.core.api.SoftAssertions;
 import org.junit.jupiter.api.Test;
 
@@ -58,7 +59,6 @@ class BanCoverageTest extends PlayItSupport {
         Map.entry("QB_REFERRAL_VIEW", READ_ONLY),
         Map.entry("QB_ATTEMPT_RESULT", READ_ONLY),
         Map.entry("QB_SPONSOR_ATTEMPT_RESULT", READ_ONLY),
-        Map.entry("QB_SETTINGS_SAVE", OWN_PREFERENCE),
         Map.entry("QB_BLOCK_ADD", "本人的屏蔽清单，不影响他人"),
         Map.entry("QB_BLOCK_REMOVE", "本人的屏蔽清单，不影响他人"),
         Map.entry("QB_MESSAGE_MARK", "本人收件箱的已读，不影响他人"),
@@ -70,8 +70,6 @@ class BanCoverageTest extends PlayItSupport {
         Map.entry("QB_SHARED_VIDEO_WITHDRAW", OWN_WITHDRAW + "：收回自己的共享，封禁本身会撤回"),
         Map.entry("QB_TREE_WITHDRAW", OWN_WITHDRAW + "：撤回自己的评审申请，只收回、不产生新效果"),
         Map.entry("QB_TOPUP_BANK_CANCEL", OWN_WITHDRAW + "：只把自己尚无资金的银行充值置为已取消，不过账（计划 §5b）"),
-        Map.entry("QB_CERTIFICATE_SHARE_SET", "本人证书核实页的开关，只能关闭或开启自己的"),
-        Map.entry("QB_SPONSOR_CERTIFICATE_SHARE_SET", "本人证书核实页的开关，只能关闭或开启自己的"),
         Map.entry("APPROVAL_DECIDE", "平台流程，应用层不能加检查；残留风险与缓解见计划 §6 和 operations.md")));
 
     /** The sponsors' processes that also need an approved onboarding, told together with the ban (CLAUDE.md). */
@@ -91,9 +89,6 @@ class BanCoverageTest extends PlayItSupport {
      * the locks directly (nothing else is read or written before it). A new process takes the standard first step.
      */
     static final Map<String, String> BAN_AFTER_LOCK = new TreeMap<>(Map.ofEntries(
-        Map.entry("QB_ASSET_COLLECT", LOCK_FIRST + "（素材库的锁）"),
-        Map.entry("QB_ASSET_DELETE", LOCK_FIRST + "（素材库的锁）"),
-        Map.entry("QB_ASSET_SAVE", LOCK_FIRST + "（素材库的锁）"),
         Map.entry("QB_CONSENT_ACCEPT", LOCK_FIRST),
         Map.entry("QB_PRODUCT_DELETE", LOCK_FIRST),
         Map.entry("QB_PRODUCT_SAVE", LOCK_FIRST),
@@ -107,9 +102,22 @@ class BanCoverageTest extends PlayItSupport {
         Map.entry("QB_SPONSOR_PROFILE_SAVE", LOCK_FIRST)));
 
     /** The gaps closed by F-M15 a0 and by this work: found here, so that nothing can drop them from the scope. */
-    static final Set<String> CLOSED = Set.of("QB_FEE_CREDIT_ONBOARDING", "QB_OPERATOR_BILLING_SET",
-        "QB_OPERATOR_BANK_ACCOUNT_SAVE", "QB_OPERATOR_WITHDRAWAL_REQUEST", "QB_OPERATOR_WITHDRAWAL_CANCEL",
-        "QB_OPERATOR_MEMBER_DROP", "QB_SPONSOR_VERIFICATION_REVOKE");
+    static final Set<String> CLOSED = Set.of(
+        // F-M15 a0
+        "QB_FEE_CREDIT_ONBOARDING", "QB_OPERATOR_BILLING_SET", "QB_OPERATOR_BANK_ACCOUNT_SAVE",
+        "QB_OPERATOR_WITHDRAWAL_REQUEST", "QB_OPERATOR_WITHDRAWAL_CANCEL", "QB_OPERATOR_MEMBER_DROP",
+        "QB_SPONSOR_VERIFICATION_REVOKE",
+        // F-ban-coverage (plan §4; BanOperatorActsIT)
+        "QB_REDEMPTION_VOID", "QB_DIGITAL_PRIZE_RESOLVE", "QB_SPONSOR_REWARD_METHODS_SET",
+        "QB_PROSPECT_SETTINGS_SAVE", "QB_PROSPECT_DIRECTION_SAVE", "QB_PROSPECT_APPROVE", "QB_PROSPECT_DISCARD",
+        "QB_PROSPECT_BLOCK_ADD", "QB_PROSPECT_MAIL_SERVER_SET", "QB_PROSPECT_MAIL_SERVER_REMOVE",
+        "QB_REGION_EXCEPTION_ADD", "QB_REGION_EXCEPTION_EXPIRY_SET", "QB_REGION_EXCEPTION_REVOKE",
+        "QB_SHARED_VIDEO_TAKEDOWN", "QB_HELP_REPLY", "QB_AI_TRANSLATION_CHECK_REQUEST",
+        "QB_OPERATOR_PUBLICATION_PAUSE", "QB_OPERATOR_PUBLICATION_RESUME", "QB_OPERATOR_PUBLICATION_END",
+        "QB_OPERATOR_SPONSOR_PAGE_TAKEDOWN", "QB_OPERATOR_PRODUCT_TAKEDOWN", "QB_OPERATOR_PRODUCT_RESTORE",
+        "QB_OPERATOR_REPORT_RESOLVE", "QB_OPERATOR_SPONSOR_BAN", "QB_OPERATOR_SPONSOR_UNBAN",
+        "QB_TREE_COPY", "QB_TREE_ADOPT", "QB_TREE_RETIRE", "QB_EXPOSURE_REPORT",
+        "QB_SETTINGS_SAVE", "QB_CERTIFICATE_SHARE_SET", "QB_SPONSOR_CERTIFICATE_SHARE_SET");
 
     /** How many processes the scope held when it was written; a new one only raises it. */
     static final int MIN_INVENTORY = 219;
@@ -191,19 +199,21 @@ class BanCoverageTest extends PlayItSupport {
                 .contains(SPONSOR_STEP);
             Path it = tests.resolve(entry.getValue().it() + ".java");
             assertThat(it).as("the IT of " + entry.getKey()).exists();
-            // Some assert it by its constant (AccountCodes.USER_BANNED), some by its code (QB_USER_BANNED).
-            assertThat(Files.readString(it)).as(entry.getValue().it() + " asserts the ban for " + entry.getKey())
-                .contains("USER_BANNED");
+            // Some assert it by its constant (AccountCodes.USER_BANNED), some by its code (QB_USER_BANNED); the
+            // process is named there too (by its code), so the IT is about this process and not another's ban.
+            String source = Files.readString(it);
+            assertThat(source).as(entry.getValue().it() + " asserts the ban for " + entry.getKey())
+                .contains("USER_BANNED").contains("\"" + entry.getKey() + "\"");
         }
     }
 
-    /** Whether every step before the ban's is a lock ("Lock ..." or "Hold ..."). */
+    /** Whether every step before the ban's is a lock: its handler is the platform's {@link HoldLock}. */
     static boolean onlyLocksBeforeTheBan(ProcessDefinition<?, ?, ?> definition) {
         for (var step : definition.steps()) {
             if (BAN_STEP.equals(step.stepName())) {
                 return true;
             }
-            if (!step.stepName().startsWith("Lock") && !step.stepName().startsWith("Hold")) {
+            if (!HoldLock.class.equals(step.handlerClass())) {
                 return false;
             }
         }

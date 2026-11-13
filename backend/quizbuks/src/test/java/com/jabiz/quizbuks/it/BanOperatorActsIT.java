@@ -184,6 +184,7 @@ class BanOperatorActsIT extends CreditNoteItSupport {
         notRefusedForTheBan(ProspectProcesses.APPROVE, b.lead(), approve);
         notRefusedForTheBan(ProspectProcesses.DISCARD, b.lead(), discard);
         notRefusedForTheBan(ProspectProcesses.BLOCK_ADD, b.lead(), block);
+        notRefusedForTheBan(ProspectProcesses.MAIL_SERVER_SET, b.lead(), server);
         notRefusedForTheBan(ProspectProcesses.MAIL_SERVER_REMOVE, b.lead(), body());
     }
 
@@ -268,6 +269,19 @@ class BanOperatorActsIT extends CreditNoteItSupport {
             .containsEntry("banned", false);
     }
 
+    /**
+     * A banned member does not lift their own ban through the operators' unban, while their token lasts. (Members ban
+     * sponsors only, {@code QB_OPERATOR_NOT_A_SPONSOR}, so a member's ban is headquarters'.)
+     */
+    @Test
+    void aBannedMemberDoesNotUnbanThemself() {
+        Banned b = banned("self");
+        writingNothing(() -> refusedForTheBan(BanProcesses.OPERATOR_UNBAN, b.lead(),
+            body("userId", b.operator().leadId(), "note", "Not me")));
+        assertThat(query("SELECT banned FROM qb_user_ban_version WHERE user_id = ?::uuid ORDER BY version_no DESC",
+            b.operator().leadId()).getFirst()).containsEntry("banned", true);
+    }
+
     // ---- the knowledge graphs -----------------------------------------------------------------------------------
 
     @Test
@@ -285,6 +299,37 @@ class BanOperatorActsIT extends CreditNoteItSupport {
         notRefusedForTheBan(TreeProcesses.COPY, b.lead(), copy);
         notRefusedForTheBan(TreeProcesses.ADOPT, b.lead(), adopt);
         notRefusedForTheBan(TreeProcesses.RETIRE, b.lead(), retire);
+    }
+
+    // ---- one's settings and the certificates' verify pages -----------------------------------------------------
+
+    /**
+     * The settings hold the unique public name and the public certification page; a certificate's sharing opens its
+     * public verify page. A banned taker or Sponsor changes neither while their token lasts.
+     */
+    @Test
+    void aBannedPersonChangesNoPublicNameAndSharesNoCertificate() {
+        String taker = newTaker(unique("t-ban-public"), "JP");
+        String takerToken = taker(taker);
+        String sponsor = newSponsor(unique("s-ban-public"));
+        String sponsorToken = sponsorToken(sponsor);
+        String handle = ("ban" + UUID.randomUUID().toString().replace("-", "")).substring(0, 16);
+        Map<String, Object> settings = body("publicHandle", handle, "publicPage", true);
+        Map<String, Object> share = body("certificateId", anId(), "shared", true);
+        run("QB_USER_BAN", bossToken(), body("userId", taker, "reason", "Fraud"));
+        run("QB_USER_BAN", bossToken(), body("userId", sponsor, "reason", "Fraud"));
+        writingNothing(() -> {
+            refusedForTheBan("QB_SETTINGS_SAVE", takerToken, settings);
+            refusedForTheBan("QB_SETTINGS_SAVE", sponsorToken, body("soundOn", false));
+            refusedForTheBan("QB_CERTIFICATE_SHARE_SET", takerToken, share);
+            refusedForTheBan("QB_SPONSOR_CERTIFICATE_SHARE_SET", sponsorToken, share);
+        });
+        assertThat(query("SELECT 1 FROM qb_user_settings WHERE public_handle = ?", handle)).isEmpty();
+        run(BanProcesses.UNBAN, bossToken(), body("userId", taker, "note", "Cleared"));
+        run(BanProcesses.UNBAN, bossToken(), body("userId", sponsor, "note", "Cleared"));
+        run("QB_SETTINGS_SAVE", takerToken, settings);
+        notRefusedForTheBan("QB_CERTIFICATE_SHARE_SET", takerToken, share);
+        notRefusedForTheBan("QB_SPONSOR_CERTIFICATE_SHARE_SET", sponsorToken, share);
     }
 
     // ---- the taker ----------------------------------------------------------------------------------------------
