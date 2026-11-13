@@ -1,5 +1,7 @@
 # F-M8 曝光费（钱的部分）：实施计划（草稿，待总控与需求方确认）
 
+状态：已经 Fable 审查并修改；第 10 节的问题待需求方答复；答复前不开始实施。
+
 依据：`docs/quizbuks/first-launch-spec.md` F-M8（以它为准）与 F-S13、F-M 的钱总则；格式与做法照 `docs/quizbuks/plans/impl/F-M.md` §9（F-M6 配送费，最近的同类）。读过的代码：`fee/`（`Prepayments`、`DistributionSettlements`、`DistributionPrices`、`DistributionRules`、`QbPrepayments`、`FeeConfig`）、`exposure/`、`publishing/`（`PublicationPrepayments`、`PublicationExposure`）、`wallet/ReconChecks`、`setup/QbParams`、`setup/FirstLaunchSwitches`、迁移 V97、V116、V117。
 分支 `1.3/quizbuks-FM8-exposure-fee`（暂定名），迁移取"开 PR 时取下一个编号"（V118 已被 F-F11a 用，F-M7 暂定 V119，见第 8 节）。
 
