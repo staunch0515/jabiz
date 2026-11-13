@@ -10,6 +10,7 @@ import com.jabiz.query.QueryPredicate;
 import com.jabiz.quizbuks.QbPermissions;
 import com.jabiz.quizbuks.identity.AccountEditing;
 import com.jabiz.quizbuks.identity.BanRules;
+import com.jabiz.quizbuks.identity.CallerChecks;
 import com.jabiz.quizbuks.identity.QbAccounts;
 import com.jabiz.quizbuks.identity.SponsorStatus;
 import com.jabiz.quizbuks.operator.OperatorChecks;
@@ -162,7 +163,7 @@ public final class FeeCredits {
             .outputMapper(FeeCredits::grantOutput)
             .step("Load the validity", LoadParams.<ProcessContext>of(ProcessContext::opTime, PARAMS,
                 QbParams.FEE_CREDIT_VALID_DAYS))
-            .step("Read the lot, the sponsor's operator and the wallet", QueryEntities.<ProcessContext>all(
+            .step("Read the lot, the sponsor's operator, the wallet and the ban", QueryEntities.<ProcessContext>all(
                 QueryEntities.query(QbFeeAccount.defaultDataset(QbFeeAccount.GRANT), ctx -> EntityQuery.builder()
                     .where(new QueryPredicate.And(List.of(
                         new QueryPredicate.In("sponsorId", FeeGate.ids(grantInput(ctx).sponsorId())),
@@ -170,7 +171,11 @@ public final class FeeCredits {
                 QueryEntities.query(QbOperators.defaultDataset(QbOperators.ASSIGNMENT),
                     ctx -> FeeProcesses.bySponsor("userId", grantInput(ctx).sponsorId()), ASSIGNMENT),
                 QueryEntities.query(QbWallets.defaultDataset(QbWallets.WALLET),
-                    ctx -> QbWallets.query(QbWallets.FEE_CREDIT, grantInput(ctx).sponsorId()), CREDIT_WALLET)))
+                    ctx -> QbWallets.query(QbWallets.FEE_CREDIT, grantInput(ctx).sponsorId()), CREDIT_WALLET),
+                // F-M15 a0: every grant refuses a banned sponsor (one statement still).
+                QueryEntities.query(QbAccounts.defaultDataset(QbAccounts.BAN), ctx -> EntityQuery.builder()
+                    .where(new QueryPredicate.In("userId", AccountEditing.uuids(grantInput(ctx).sponsorId())))
+                    .limit(1).build(), BAN)))
             .compute("Record the lot", (metadata, ctx) -> recordGrant(ctx))
             // Written first: the posting names it as its source.
             .step("Save the lot", SaveChanges.now())
@@ -181,6 +186,12 @@ public final class FeeCredits {
     static void recordGrant(ProcessContext ctx) {
         if (FeeGate.first(ctx, EXISTING) != null) {
             return;
+        }
+        // After the replay: a lot granted before the ban is still given back for its key.
+        EntityInstance ban = FeeGate.first(ctx, BAN);
+        if (BanRules.banned(ban == null ? null : ban.attributes())) {
+            throw new BusinessRuleViolationException(new Violation("sponsorId", FeeCodes.FEE_CREDIT_BANNED,
+                "A banned sponsor is granted no platform fee Kudos", Map.of()));
         }
         GrantInput input = grantInput(ctx);
         BigDecimal days = input.validDays() != null ? BigDecimal.valueOf(input.validDays())
@@ -237,6 +248,7 @@ public final class FeeCredits {
                     .permissions(QbPermissions.FEE_CREDIT_ONBOARDING_CONFIRM)
                     .contextFactory(FeeProcesses::context)
                     .outputMapper(ctx -> ctx.get(GRANTED_NOW, GrantOutput.class));
+                CallerChecks.refuseBanned(pb);
                 OperatorChecks.member(pb);
                 OperatorChecks.ownSponsor(pb, ctx -> onboardingInput(ctx).sponsorId());
                 pb.step("Load the switch and the amounts", LoadParams.<ProcessContext>of(ProcessContext::opTime, PARAMS,
@@ -393,7 +405,7 @@ public final class FeeCredits {
                     QbParams.FEE_CREDIT_EXPIRY_NOTICE_DAYS))
                 .step("Lock the sponsor's wallet", HoldLock.<ProcessContext>exclusive(
                     ctx -> QbWallets.lockName(QbWallets.SPONSOR, sponsorRef(ctx).sponsorId())))
-                .step("Read the open lots and the last reminder", QueryEntities.<ProcessContext>all(
+                .step("Read the open lots, the last reminder and the ban", QueryEntities.<ProcessContext>all(
                     QueryEntities.query(QbFeeAccount.defaultDataset(QbFeeAccount.GRANT), ctx -> EntityQuery.builder()
                         .where(new QueryPredicate.And(List.of(
                             new QueryPredicate.In("sponsorId", FeeGate.ids(sponsorRef(ctx).sponsorId())),
@@ -404,7 +416,10 @@ public final class FeeCredits {
                         .where(new QueryPredicate.And(List.of(
                             new QueryPredicate.In("sponsorId", FeeGate.ids(sponsorRef(ctx).sponsorId())),
                             new QueryPredicate.IsNotNull("remindedAt"))))
-                        .orderBy("remindedAt", false).limit(1).build(), LAST_REMINDED)))
+                        .orderBy("remindedAt", false).limit(1).build(), LAST_REMINDED),
+                    QueryEntities.query(QbAccounts.defaultDataset(QbAccounts.BAN), ctx -> EntityQuery.builder()
+                        .where(new QueryPredicate.In("userId", AccountEditing.uuids(sponsorRef(ctx).sponsorId())))
+                        .limit(1).build(), BAN)))
                 .compute("Decide", (metadata, ctx) -> remind(ctx))
                 .step("Ask the mail to tell the sponsor", PublishEvent.<ProcessContext>when(
                     ctx -> "REMINDED".equals(ctx.get(OUTCOME)), EXPIRING_EVENT, ctx -> ctx.get(PAYLOAD))));
@@ -412,6 +427,12 @@ public final class FeeCredits {
 
     static void remind(ProcessContext ctx) {
         ctx.put(OUTCOME, "NONE");
+        // F-M15 a0: a banned sponsor is not told, and no lot is marked told (after an unban they are, if still due).
+        EntityInstance ban = FeeGate.first(ctx, BAN);
+        if (BanRules.banned(ban == null ? null : ban.attributes())) {
+            ctx.put(OUTCOME, "BANNED");
+            return;
+        }
         EntityInstance last = FeeGate.first(ctx, LAST_REMINDED);
         if (!FeeCreditRules.reminderAllowed(last == null ? null : (Instant) last.get("remindedAt"), ctx.opTime())) {
             return;

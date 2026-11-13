@@ -21,6 +21,8 @@ export const WALLET_PROCESS = {
   /** Q87b: the postpaid fees not invoiced yet, paid early (each gets an invoice of its own, paid). */
   payEarly: 'QB_FEE_PAY_EARLY',
   invoiceDocument: 'QB_FEE_INVOICE_DOCUMENT',
+  /** F-M7: a credit note's document, issued once and kept (same pattern as the invoice's). */
+  creditNoteDocument: 'QB_FEE_CREDIT_NOTE_DOCUMENT',
 } as const
 
 /** SQL templates (`queries/qb/sponsor`). */
@@ -40,6 +42,8 @@ export const WALLET_TEMPLATE = {
   /** F-M1: the account's lots with money left, and how each fee was paid. */
   feeAccountLots: 'qb.sponsor.fee-account-lots',
   feePayments: 'qb.sponsor.fee-payments',
+  /** F-M7: the credit notes the platform issued to the Sponsor. */
+  feeCreditNotes: 'qb.sponsor.fee-credit-notes',
 } as const
 
 /** The sponsor's own top-ups, read only (the checkout's address included: it is theirs). */

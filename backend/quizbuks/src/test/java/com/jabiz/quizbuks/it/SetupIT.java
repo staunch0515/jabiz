@@ -540,6 +540,8 @@ class SetupIT extends QbItSupport {
         expected.put(QbParams.PREPAYMENT_RELEASE_OVERDUE_DAYS, "2");
         // F-F11a: the bytes one import request carries (an ordinary parameter).
         expected.put(QbParams.CONTENT_IMPORT_BATCH_BYTES, "3145728");
+        // F-M7 (N9): the daily check of the audience fees not decided.
+        expected.put(QbParams.AUDIENCE_REFUND_MISSING_AFTER_HOURS, "30");
         // F-C7: drafting from a website (the switch off; the limits of one request and of a month).
         expected.putAll(Map.of(QbParams.SITE_PROFILE_ENABLED, "false", QbParams.SITE_PROFILE_MONTHLY, "10",
             QbParams.SITE_PROFILE_DAILY, "3", QbParams.SITE_PROFILE_MAX_PAGES, "10",
