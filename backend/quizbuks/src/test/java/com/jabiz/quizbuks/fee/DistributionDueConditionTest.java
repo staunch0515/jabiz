@@ -12,16 +12,18 @@ import java.util.regex.Pattern;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * F-M6 (N1 of Fable's second review): the places that decide which months a publication's distribution fee is due
- * for (the monthly jobs' items, the postpaid invoice's wait, the operator settlement's wait and the daily checks) start from when it went on: the
- * greater of its start and its approval, written the same in each, and none of them reads the start alone.
+ * F-M6 (N1 of Fable's second review), F-M8: the places that decide which months a publication's distribution or exposure
+ * fee is due for (the monthly jobs' items, the postpaid invoice's wait, the daily checks and the operator settlement's
+ * readiness) start from when it went on: the greater of its start and its approval, written the same in each, and none
+ * of them reads the start alone.
  */
 class DistributionDueConditionTest {
 
     static final Path SYSTEM = Path.of("src/main/resources/queries/qb/system");
     /**
-     * The templates and how many fees' due conditions each holds (F-M8: the invoice's wait holds two, F-M12 b's operator settlement readiness the distribution fee's; the daily check's
-     * prepayments statement holds the distribution fee's, F-M8c adds the exposure fee's to it).
+     * The templates and how many due conditions (the distribution fee's or the exposure fee's) each holds: the two fees'
+     * own due templates one each, the postpaid invoice's wait and the operator settlement's readiness both fees' (two), the
+     * daily check one in each of its two statements (prepayments: distribution; exposure: exposure).
      */
     static final java.util.Map<String, Integer> TEMPLATES = java.util.Map.of("distribution-due.sql", 1,
         "exposure-due.sql", 1, "fee-invoices-due.sql", 2, "recon-prepayments.sql", 1,

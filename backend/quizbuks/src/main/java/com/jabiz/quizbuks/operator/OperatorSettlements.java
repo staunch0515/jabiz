@@ -539,7 +539,7 @@ public final class OperatorSettlements {
      * <p>The cap (§3.9, option B): the settlement's lines are the voids, the new credit-used lines on fees counted
      * before, and, for each fee counted now, one for the fee and one for each part of the credit used on it. They fit
      * the cap together, in this order: the voids first (oldest fee first), then the credit-used lines of fees counted
-     * before (oldest payment first, a line at a time), then the fees, oldest first (chargedAt, charge id), each with
+     * before (per payment and fee, the oldest payment first), then the fees, oldest first (chargedAt, charge id), each with
      * its own credit-used lines, which are never cut from it. What does not fit waits for the next settlement.
      */
     @SuppressWarnings("unchecked")
@@ -576,9 +576,9 @@ public final class OperatorSettlements {
         for (int i = voidsTaken; i < voids.size(); i++) {
             deferredVoids.add(String.valueOf(voids.get(i).get("chargeId")));
         }
-        // 2. The credit-used lines: those each waiting fee brings (decided with the fee, never cut), those of a payment that
-        // also touches a waiting fee (written with it), and the new ones on fees counted before, which wait by payment,
-        // the oldest first, in what the voids leave.
+        // 2. The credit-used lines: those each waiting fee brings (decided with the fee, never cut from it), and the new ones
+        // on fees counted before, which wait per (payment, fee), the oldest payment first, in what the voids leave (also the
+        // lines of a payment that pays a waiting fee too: a payment's lines may be written in different settlements).
         Map<String, Integer> giftLines = new LinkedHashMap<>();
         List<Map<String, Object>> prior = new ArrayList<>();
         for (Map<String, Object> row : rows(ctx, GIFTS)) {

@@ -13,7 +13,6 @@ import org.junit.jupiter.api.TestMethodOrder;
 
 import java.time.Duration;
 import java.time.Instant;
-import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -91,9 +90,7 @@ class OperatorSettlementReadinessExposureIT extends ExposureFeeItSupport {
         // The default 5 days: the 5th is still inside, the 7th is past.
         assertThat(run(who[0], 2037, "02", "2037-03-05T00:00:00Z").blockedBy()).contains("EXPOSURE");
         assertThat(settled(who[0], "2037-02")).isFalse();
-        Map<String, Object> out = Map.of();
         assertThat(run(who[0], 2037, "02", "2037-03-07T00:00:00Z").blockedBy()).isEmpty();
         assertThat(settled(who[0], "2037-02")).isTrue();
-        assertThat(out).isEmpty();
     }
 }

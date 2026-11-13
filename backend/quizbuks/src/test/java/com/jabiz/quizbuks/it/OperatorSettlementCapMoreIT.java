@@ -247,6 +247,12 @@ class OperatorSettlementCapMoreIT extends CapItSupport {
         Map<String, Object> march = settle(who[0], "2048-03", "2048-04-02T00:00:00Z");
         assertThat(lineCharges(march.get("settlement_id"), "VOID")).hasSize(2);
         assertThat(lineCharges(march.get("settlement_id"), "GIFT")).hasSize(2);
+        // The two oldest of the three new parts (paid a second apart), not any two.
+        assertThat(query("SELECT source_id FROM qb_operator_settlement_line_version WHERE settlement_id = ? AND "
+            + "line_kind = 'GIFT'", march.get("settlement_id"))).extracting(r -> r.get("source_id"))
+            .containsExactlyInAnyOrderElementsOf(query("SELECT payment_id FROM qb_fee_payment_version WHERE target_id = ? "
+                + "AND sub_account = 'FEE_CREDIT' AND paid_at >= TIMESTAMPTZ '2048-03-10T00:00:00Z' ORDER BY paid_at "
+                + "LIMIT 2", paid).stream().map(r -> String.valueOf(r.get("payment_id"))).toList());
         assertThat(lineCharges(march.get("settlement_id"), "CHARGE")).isEmpty();
         assertThat(march).containsEntry("capped", true).containsEntry("uncounted", 4);
         Map<String, Object> april = settle(who[0], "2048-04", "2048-05-02T00:00:00Z");
@@ -254,5 +260,94 @@ class OperatorSettlementCapMoreIT extends CapItSupport {
         assertThat(lineCharges(april.get("settlement_id"), "GIFT")).hasSize(1);
         assertThat(lineCharges(april.get("settlement_id"), "CHARGE")).containsExactlyElementsOf(waiting);
         assertThat(april).containsEntry("capped", false);
+    }
+
+    /** Parts of 1 yen of credit on a fee (or whatever target), copies of one payment, paid a second apart from {@code from}. */
+    private static void parts(String template, int count, String targetEntity, String targetId, String from) {
+        String table = "it_parts_" + Math.abs(System.nanoTime() % 1_000_000);
+        execute("CREATE TABLE " + table + " AS SELECT n, gen_random_uuid() AS pid FROM generate_series(1, CAST(? AS int)) n",
+            count);
+        execute("INSERT INTO entity_registry (entity_id, entity_type, created_seq_id) SELECT p.pid, r.entity_type, "
+            + "r.created_seq_id FROM " + table + " p, entity_registry r WHERE r.entity_id = ?::uuid", template);
+        execute("INSERT INTO qb_fee_payment_version (payment_id, version_no, effect_start_time, created_time, "
+            + "process_seq_id, sponsor_id, target_entity, target_id, sub_account, grant_id, cash_lot_id, amount, "
+            + "paid_at, transaction_id, prepayment_id) SELECT p.pid, 1, t.effect_start_time, t.created_time, "
+            + "t.process_seq_id, t.sponsor_id, ?, ?, t.sub_account, t.grant_id, t.cash_lot_id, 1, "
+            + "CAST(? AS timestamptz) + p.n * interval '1 second', t.transaction_id, t.prepayment_id FROM " + table
+            + " p JOIN qb_fee_payment_version t ON t.payment_id = ?::uuid", targetEntity, targetId, from, template);
+        execute("DROP TABLE " + table);
+    }
+
+    /**
+     * One payment's lines written over two settlements still add up: an invoice holds fee A (counted) and fee B (waiting); the
+     * credit-used lines of A fill the cap in March, so B does not fit and is counted in April. The payment's line for A is
+     * March's, its line for B April's: each (payment, fee) has one line and the two sum to the payment.
+     */
+    @Test
+    @Order(7)
+    void aPaymentsLinesWrittenOverTwoSettlementsStillAddUpToThePayment() {
+        String[] who = start(2049);
+        setControlledParam(QbParams.OPERATOR_SHARE_KINDS, QbParams.defaultOf(QbParams.OPERATOR_SHARE_KINDS));
+        param(QbParams.OPERATOR_SETTLEMENT_READINESS_MAX_DAYS, "0");
+        billing(who[1], "POSTPAID", 100_000);
+        String a = fees(who[1], 1, 10_000, "2049-02-10T01:00:00Z").getFirst();
+        settle(who[0], "2049-02", "2049-03-02T00:00:00Z");
+        String b = "0f000000-0000-4000-8000-0000000000b2";
+        OperatorSettlementCapIT.copyFee(a, b);
+        clock.set(Instant.parse("2049-03-06T01:00:00Z"));
+        systemRun(FeeProcesses.INVOICE_ITEM, body("sponsorId", who[1], "period", "2049-02"));
+        grant(who[1], 5_000, Instant.parse("2053-01-01T00:00:00Z"));
+        Object invoiceId = query("SELECT invoice_id FROM qb_fee_invoice WHERE sponsor_id = ? AND charge_id IS NULL",
+            who[1]).getFirst().get("invoice_id");
+        run(FeeProcesses.PAY, sponsorToken(who[1]), body("invoiceId", String.valueOf(invoiceId)));
+        String payment = String.valueOf(query("SELECT payment_id FROM qb_fee_payment_version WHERE target_id = ? AND "
+            + "sub_account = 'FEE_CREDIT'", String.valueOf(invoiceId)).getFirst().get("payment_id"));
+        BigDecimal amount = (BigDecimal) query("SELECT amount FROM qb_fee_payment_version WHERE payment_id = ?::uuid",
+            payment).getFirst().get("amount");
+        // Three more parts on A, paid before the invoice's: with the invoice's part for A they are the four lines of the cap.
+        parts(payment, 3, "QbFeeCharge", a, "2049-03-01T01:00:00Z");
+
+        Map<String, Object> march = settle(who[0], "2049-03", "2049-04-02T00:00:00Z");
+        assertThat(lineCharges(march.get("settlement_id"), "GIFT")).hasSize(4);
+        assertThat(lineCharges(march.get("settlement_id"), "CHARGE")).isEmpty();
+        Map<String, Object> april = settle(who[0], "2049-04", "2049-05-02T00:00:00Z");
+        assertThat(lineCharges(april.get("settlement_id"), "CHARGE")).containsExactly(b);
+        assertThat(lineCharges(april.get("settlement_id"), "GIFT")).containsExactly(b);
+
+        List<Map<String, Object>> lines = query("SELECT charge_id, gift_gross FROM qb_operator_settlement_line_version "
+            + "WHERE line_kind = 'GIFT' AND source_id = ?", payment);
+        assertThat(lines).extracting(l -> l.get("charge_id")).containsExactlyInAnyOrder(a, b);
+        assertThat(lines.stream().map(l -> n(l, "gift_gross")).reduce(BigDecimal.ZERO, BigDecimal::add))
+            .isEqualByComparingTo(amount);
+        assertThat(query("SELECT source_id, charge_id FROM qb_operator_settlement_line_version WHERE line_kind = 'GIFT' "
+            + "GROUP BY source_id, charge_id HAVING count(*) > 1")).isEmpty();
+    }
+
+    /** Voids that fill the whole cap leave no room for any credit-used line that month. */
+    @Test
+    @Order(8)
+    void voidsThatFillTheWholeCapTakeNoCreditUsedLineThatMonth() {
+        String[] who = start(2050);
+        setControlledParam(QbParams.OPERATOR_SHARE_KINDS, QbParams.defaultOf(QbParams.OPERATOR_SHARE_KINDS));
+        List<String> voided = fees(who[1], 4, 100, "2050-02-10T01:00:00Z");
+        settle(who[0], "2050-02", "2050-03-02T00:00:00Z");
+        grant(who[1], 10_500, Instant.parse("2054-01-01T00:00:00Z"));
+        String paid = fees(who[1], 1, 10_000, "2050-03-10T01:00:00Z").getFirst();
+        settle(who[0], "2050-03", "2050-04-02T00:00:00Z");
+        String template = String.valueOf(query("SELECT payment_id FROM qb_fee_payment_version WHERE target_id = ? AND "
+            + "sub_account = 'FEE_CREDIT'", paid).getFirst().get("payment_id"));
+        clock.set(Instant.parse("2050-04-05T01:00:00Z"));
+        for (String id : voided) {
+            voidInvoice(invoiceOf(id).get("invoice_id"));
+        }
+        parts(template, 3, "QbFeeCharge", paid, "2050-04-10T01:00:00Z");
+
+        Map<String, Object> april = settle(who[0], "2050-04", "2050-05-02T00:00:00Z");
+        assertThat(lineCharges(april.get("settlement_id"), "VOID")).hasSize(4);
+        assertThat(lineCharges(april.get("settlement_id"), "GIFT")).isEmpty();
+        assertThat(april).containsEntry("capped", true);
+        Map<String, Object> may = settle(who[0], "2050-05", "2050-06-02T00:00:00Z");
+        assertThat(lineCharges(may.get("settlement_id"), "GIFT")).hasSize(3);
+        assertThat(lineCharges(may.get("settlement_id"), "VOID")).isEmpty();
     }
 }

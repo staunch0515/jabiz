@@ -1125,8 +1125,8 @@ public final class QbParams {
         // F-M12 b: how long a month's settlement waits for the distribution fees and invoices (controlled, after the
         // share settings so the proposals before it keep their places).
         new Param(OPERATOR_SETTLEMENT_READINESS_MAX_DAYS, Map.of("type", "numeric", "precision", 2, "scale", 0), "5",
-            "How many days after a month's end an operator's settlement waits for its sponsors' distribution fees and "
-                + "monthly invoices before it settles anyway (0 to 31; 0: it does not wait)"),
+            "How many days after a month's end an operator's settlement waits for its sponsors' distribution fees, "
+                + "exposure fees and monthly invoices before it settles anyway (0 to 31; 0: it does not wait)"),
         // F-M12 c: when the daily check reports a month an operator has no settlement for (controlled; the last).
         new Param(OPERATOR_SETTLEMENT_WAITING_AFTER_HOURS, Map.of("type", "numeric", "precision", 4, "scale", 0), "48",
             "How many hours after a month's end an operator still without its settlement for the month is reported "
