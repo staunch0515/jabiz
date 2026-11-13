@@ -70,7 +70,7 @@ class HelpIT extends HelpItSupport {
     @Test
     void eachPersonAsksAtMostTheDailyQuestionsAndEverybodyAtMostTheMonthlyTokens() {
         String taker = newTaker("t-fc10-daily-" + UUID.randomUUID(), "JP");
-        setParam(QbParams.HELP_USER_DAILY, "2");
+        param(QbParams.HELP_USER_DAILY, "2");
         try {
             ask(taker(taker), null, QbHelp.APP, "First?", null);
             ask(taker(taker), null, QbHelp.APP, "Second?", null);
@@ -82,7 +82,7 @@ class HelpIT extends HelpItSupport {
             advance(Duration.ofDays(1));
             ask(taker(taker), null, QbHelp.APP, "Next day?", null);
         } finally {
-            setParam(QbParams.HELP_USER_DAILY, "20");
+            param(QbParams.HELP_USER_DAILY, "20");
         }
         runJobs();
 

@@ -147,6 +147,15 @@ export interface HelpUsageRow {
   monthlyTokens: number
   /** The share of `qb.help.global-monthly-tokens` used (cache reads weighted), in percent; null without a cap. */
   percentUsed: number | null
+  /** F-M10: the reviewers' translation checks of the month (the platform pays for them too) and their estimate. */
+  checkJobs: number
+  checksUsd: string | null
+  /** The help's and the checks' estimates together, the alert (0: none) and the share of it, null with no alert. */
+  totalUsd: string | null
+  alertUsd: string | null
+  percentOfAlert: number | null
+  /** Whether the unrounded dollars reached the alert (an alert of 0 never). */
+  reachedAlert: boolean
 }
 
 export async function readHelpUsage(month: string | null): Promise<HelpUsageRow[]> {
@@ -164,6 +173,12 @@ export async function readHelpUsage(month: string | null): Promise<HelpUsageRow[
     people: num(row.people),
     monthlyTokens: num(row.monthlyTokens),
     percentUsed: row.percentUsed == null ? null : num(row.percentUsed),
+    checkJobs: num(row.checkJobs),
+    checksUsd: str(row.checksUsd),
+    totalUsd: str(row.totalUsd),
+    alertUsd: str(row.alertUsd),
+    percentOfAlert: row.percentOfAlert == null ? null : num(row.percentOfAlert),
+    reachedAlert: num(row.reachedAlert) > 0,
   }))
 }
 

@@ -180,7 +180,7 @@ export const financeMessages = {
       whole: 'The whole ledger',
       more: 'Showing {{shown}} of {{total}} differences.',
       level: 'Level',
-      helpMore: 'What to do in general: see operations §7.53.',
+      helpMore: 'What to do in general: see operations §7.54.',
       attentionDays_one: 'Needs attention for {{count}} day',
       attentionDays_other: 'Needs attention for {{count}} days',
       help: {
@@ -226,6 +226,7 @@ export const financeMessages = {
         CREDIT_NOTE_LIMITS: 'A fee\'s credit notes come to more than the fee\'s amount or tax. Finance opens the fee and its notes and voids the excess; this should not happen, so report it to development.',
         CREDIT_NOTE_USE_VOID: 'A credit note\'s credit was used on a voided invoice. Finance opens the note and gives the credit back; report it to development as a code defect.',
         CREDIT_UNUSED_WITH_DUE: 'A Sponsor has credit left while an invoice is unpaid. The books agree: finance asks the Sponsor whether to use the credit on the invoice, or applies it as agreed.',
+        HELP_USAGE_TOTAL: 'The AI help\'s usage of everybody for a month is below the sum of the people\'s. The books agree: the content administrators check the month\'s usage on the headquarters\' AI page (their task leads there); erased accounts only make it larger, never smaller.',
       },
     },
     investor: {
@@ -556,7 +557,7 @@ export const financeMessages = {
       whole: '整个账本',
       more: '显示 {{total}} 项差异中的 {{shown}} 项。',
       level: '级别',
-      helpMore: '总体怎么办：见运营文档 §7.53。',
+      helpMore: '总体怎么办：见运营文档 §7.54。',
       attentionDays_one: '需关注已持续 {{count}} 天',
       attentionDays_other: '需关注已持续 {{count}} 天',
       help: {
@@ -602,6 +603,7 @@ export const financeMessages = {
         CREDIT_NOTE_LIMITS: '某笔费用的贷项凭证合计超过了该费用的金额或税额。财务打开该费用及其凭证并作废多出的部分；这本不应发生，报告给开发。',
         CREDIT_NOTE_USE_VOID: '某张贷项凭证的额度被用在已作废的发票上。财务打开该凭证并退回额度；作为代码缺陷报告给开发。',
         CREDIT_UNUSED_WITH_DUE: '发起方还有未用的额度，同时有发票未付。账是平的：财务询问该发起方是否用额度抵付发票，或按约定抵付。',
+        HELP_USAGE_TOTAL: 'AI 帮助某月的全平台用量低于各人用量之和。账是平的：由内容管理员在总部 AI 页查看该月用量（待办链接到那里）；删除账号只会让全平台用量更大，不会更小。',
       },
     },
     investor: {
@@ -932,7 +934,7 @@ export const financeMessages = {
       whole: '元帳全体',
       more: '差異 {{total}} 件のうち {{shown}} 件を表示しています。',
       level: 'レベル',
-      helpMore: '全体の対応：運用ドキュメント §7.53 を参照。',
+      helpMore: '全体の対応：運用ドキュメント §7.54 を参照。',
       attentionDays_one: '要確認の状態が {{count}} 日続いています',
       attentionDays_other: '要確認の状態が {{count}} 日続いています',
       help: {
@@ -978,6 +980,7 @@ export const financeMessages = {
         CREDIT_NOTE_LIMITS: '手数料の返還インボイスの合計が、手数料の金額または税額を超えています。財務は手数料とノートを開いて超過分を無効にします。本来起こらないため、開発に報告します。',
         CREDIT_NOTE_USE_VOID: '返還インボイスの残額が、無効化された請求書に充当されています。財務はノートを開いて残額を戻し、コードの不具合として開発に報告します。',
         CREDIT_UNUSED_WITH_DUE: '主催者にクレジットが残っているのに、未払いの請求書があります。帳簿は合っています。財務は主催者にクレジットを請求書へ充当するか確認し、合意どおりに充当します。',
+        HELP_USAGE_TOTAL: 'AI ヘルプのある月の全体の利用量が個人別の合計を下回っています。帳簿は合っています：コンテンツ管理者が本部の AI ページでその月の利用量を確認します（タスクのリンク先）。アカウント削除で全体の利用量が小さくなることはありません。',
       },
     },
     investor: {
