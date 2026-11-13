@@ -517,8 +517,15 @@ class ExposureIT extends PlayItSupport {
         assertThat(submit(sponsorToken(user), draftId).get("status")).isEqualTo("LIVE");
         assertThat(number(card(draftId).get("exposure_purchased"))).isEqualTo(5);
         // Topped up while on: the card follows; none is unlimited again.
+        // The production callers give no price: what is frozen stays as it is (none, here: nothing froze one). Only a
+        // caller that gives one (the end-to-end tests' root) freezes it, and a later call without it keeps it.
+        assertThat(row(draftId).get("exposure_unit")).isNull();
+        run(PURCHASE_RELAY, TestTokens.bearer(tokens, "fs13-purchase", QbPermissions.PUBLICATION_SYSTEM),
+            body("publicationId", draftId, "purchased", 6L, "unit", 2));
+        assertThat((java.math.BigDecimal) row(draftId).get("exposure_unit")).isEqualByComparingTo("2");
         purchase(draftId, 8L);
         assertThat(number(row(draftId).get("exposure_purchased"))).isEqualTo(8);
+        assertThat((java.math.BigDecimal) row(draftId).get("exposure_unit")).isEqualByComparingTo("2");
         assertThat(number(card(draftId).get("exposure_purchased"))).isEqualTo(8);
         purchase(draftId, null);
         assertThat(card(draftId).get("exposure_purchased")).isNull();

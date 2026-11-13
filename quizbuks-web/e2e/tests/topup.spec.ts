@@ -78,14 +78,15 @@ for (const appearance of ['light', 'dark'] as const) {
     const mail = await mailTo(request, sponsor.email, /top-up of 1,500 Kudos has arrived/)
     expect(linkIn(mail.text, '/money/wallet').pathname).toBe('/sponsor/money/wallet')
 
-    // The console's account page lists its three notifications, which the sponsor may turn off (D49; F-M2 the
-    // granted platform fee Kudos expiring).
+    // The console's account page lists its four notifications, which the sponsor may turn off (D49; F-M2 the
+    // granted platform fee Kudos expiring; F-M8 the exposures nearly used up).
     await page.goto('/sponsor/account')
     const preferences = page.getByTestId('account-mail')
-    await expect(preferences.getByTestId('mail-preference')).toHaveCount(3)
+    await expect(preferences.getByTestId('mail-preference')).toHaveCount(4)
     await expect(preferences).toContainText('Publications short of funds')
     await expect(preferences).toContainText('Publication ended')
     await expect(preferences).toContainText('Platform fee Kudos expiring')
+    await expect(preferences).toContainText('Exposures nearly used up')
     await expectAccessible(page, at('sponsor account with mail preferences'))
   })
 }
