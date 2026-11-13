@@ -1416,22 +1416,6 @@ Quiz 与发布有主题词（平台词表中的词与自定义词），学者可
 - **每日核对**：钱包核对（§7.2）多一项 `HELP_USAGE_TOTAL`：每个月全平台一行（`qb_help_usage` 的 `*`）的提问数、输入 Token、输出 Token、估算美元**不小于**各人的行之和。是“不小于”而不是“相等”：删除账号时本人的行被抹除、全平台行保留，对话已被保留期删掉时只加全平台行。**是“需关注”级，不算差异**（`ReconChecks.ATTENTION`，§7.52）：结果仍为 `OK`，不触发 `qb-reconcile-diff`、不拦月度分录导出，也不进财务的待办；每个（月份, 量）给 `qb.admin.help.gaps` 的持有者（内容管理员）建一个待办“核对需关注”，来源键 `recon-attn:HELP_USAGE_TOTAL:<月>:<量>`，待办链接到总部 AI 页（`/qb/ai`，内容管理员打得开；财务的核对页他们打不开）；引用写月份和量，如 `2026-10:costMicros`（核对项只存整数，所以美元按百万分之一美元存）。该月的差异不再出现时待办自动完成；人手工关了而差异还在，次日会再建。
 - **总部 AI 页的限制**：翻译核对一列按作业完成时记下的区域（部署的 `jabiz.fiscal-year-zone`）归月，与用量的月份一致；某个月只有翻译核对、没有任何 AI 帮助的提问时，该月不出现在表里（告警与待办仍算它）。审核人账号被抹除时其核对作业的行随之删除，之后本月合计少算，接受。
 
-## 8. 升级到线 1.3（S0 的迁移 V29、V30）
-
-S0（`shopify/S0-publisher.md`）给发布、档位、卡片、会话、分析、现金 / 兑换 / 电子奖品与码池、邀请加上 `publisher_kind`（已有的行全部为 `SPONSOR`），并把普通表的 `sponsor_id` 列改名为 `publisher_id`。
-五张只追加表（发布、档位、现金、兑换、电子奖品的 `*_version`）由 V29 改名、V30 改回 `sponsor_id`：它们的行已被完整性封存，封存过的列不能改名（设计 21 §2.1，S0 §10）。
-迁移只有 DDL、不改写行，但旧 jar 不能在新表上运行、新 jar 不能在旧表上运行（一步到位，同 V10 的锁拆分），所以**停机升级**：
-
-1. 停止应用（`docker compose stop app` 或服务器的 `deploy-app.sh` 之前先停旧容器）。
-2. 确认 Outbox 已投递完：`SELECT count(*) FROM sys_outbox WHERE delivered_time IS NULL`（表名以平台 `db/jabiz` 为准）为 0。
-   事件 `qb.publication.status` 的载荷从 `sponsorId` 改为 `publisherKind` + `publisherId`：升级前未投递的这类事件，新版本的消费者读不到发布方，**什么也不做**（最坏丢一封发布状态的通知邮件，不影响数据）；钱包事件的载荷不变。
-3. 启动新 jar：Flyway 依次执行 V29 与 V30（**一起执行，不要停在 V29**：只停在 V29 时一旦封存运行，V30 之后这些块会报告被改）。V29 做 `ALTER TABLE … RENAME COLUMN`、`ADD COLUMN … DEFAULT 'SPONSOR'` 再 `DROP DEFAULT`、`CHECK`、索引改名、重建视图 `qb_publication_owner`；V30 把五张只追加表的列名改回。`qb_attempt` 很大时 `CHECK` 的校验扫一遍表，秒级。
-4. 升级后运行一次 `INTEGRITY_VERIFY`（或等每日的校验）：应当完好，升级前封存的行不报告 `MODIFIED`。
-5. 启动检查无新告警；待审核的发布照常（审批绑定的内容不含发布方）；平台管理系统「发布」列表多出"发布方类型"一列。
-6. 不需要再执行 `QB_SETUP`（没有新参数、新权限、新科目）。
-
-回滚：恢复升级前的备份（§2.3）并启动旧 jar；没有反向迁移。
-
 ### 7.54 曝光费（F-M8）
 
 用了**他人共享视频**（卡片的提供方不是发布方）的发布，按计入的曝光向平台付曝光费：提交时先买一个次数、冻结含税的预付，用多少收多少，超出已购的不收，结束后退回未用的（`docs/quizbuks/plans/impl/F-M8.md`）。学者读到的内容、曝光的计数（§7.31，F-S13）不变；用自己的视频、挑战与店面的发布不收，直营发起方照付。
@@ -1457,3 +1441,19 @@ S0（`shopify/S0-publisher.md`）给发布、档位、卡片、会话、分析�
 - **月报**（`qb.admin.monthly`）：`EXPOSURE_DEPOSIT`（冻结与追加）、`EXPOSURE_RELEASED`、`EXPOSURE_CHARGED` 三个类别，`PREPAYMENT_FROZEN / RELEASED` 不再含这些。
 - **争议**：发起方问"为什么收了这么多"——发布页的"共享视频的曝光"写明已购、已用、剩余、单价与历次结算（计入的次数与金额）；计入的次数的争议先看曝光计数页（可疑刷量，§7.31）。已收的曝光费只经贷项凭证或平台费账户的人工调整更正（§7.50），不改结算行。
 - **升级**：迁移 V121；部署后运行一次 `QB_SETUP`（新参数、新权限），再按上线检查清单设好运营商价目、范围、最少购买次数与追加上限，最后经受控变更打开 `qb.exposure.billing.enabled`。没有新的环境变量。回滚：恢复备份（§2.3）并启动旧 jar；没有反向迁移。
+
+## 8. 升级到线 1.3（S0 的迁移 V29、V30）
+
+S0（`shopify/S0-publisher.md`）给发布、档位、卡片、会话、分析、现金 / 兑换 / 电子奖品与码池、邀请加上 `publisher_kind`（已有的行全部为 `SPONSOR`），并把普通表的 `sponsor_id` 列改名为 `publisher_id`。
+五张只追加表（发布、档位、现金、兑换、电子奖品的 `*_version`）由 V29 改名、V30 改回 `sponsor_id`：它们的行已被完整性封存，封存过的列不能改名（设计 21 §2.1，S0 §10）。
+迁移只有 DDL、不改写行，但旧 jar 不能在新表上运行、新 jar 不能在旧表上运行（一步到位，同 V10 的锁拆分），所以**停机升级**：
+
+1. 停止应用（`docker compose stop app` 或服务器的 `deploy-app.sh` 之前先停旧容器）。
+2. 确认 Outbox 已投递完：`SELECT count(*) FROM sys_outbox WHERE delivered_time IS NULL`（表名以平台 `db/jabiz` 为准）为 0。
+   事件 `qb.publication.status` 的载荷从 `sponsorId` 改为 `publisherKind` + `publisherId`：升级前未投递的这类事件，新版本的消费者读不到发布方，**什么也不做**（最坏丢一封发布状态的通知邮件，不影响数据）；钱包事件的载荷不变。
+3. 启动新 jar：Flyway 依次执行 V29 与 V30（**一起执行，不要停在 V29**：只停在 V29 时一旦封存运行，V30 之后这些块会报告被改）。V29 做 `ALTER TABLE … RENAME COLUMN`、`ADD COLUMN … DEFAULT 'SPONSOR'` 再 `DROP DEFAULT`、`CHECK`、索引改名、重建视图 `qb_publication_owner`；V30 把五张只追加表的列名改回。`qb_attempt` 很大时 `CHECK` 的校验扫一遍表，秒级。
+4. 升级后运行一次 `INTEGRITY_VERIFY`（或等每日的校验）：应当完好，升级前封存的行不报告 `MODIFIED`。
+5. 启动检查无新告警；待审核的发布照常（审批绑定的内容不含发布方）；平台管理系统「发布」列表多出"发布方类型"一列。
+6. 不需要再执行 `QB_SETUP`（没有新参数、新权限、新科目）。
+
+回滚：恢复升级前的备份（§2.3）并启动旧 jar；没有反向迁移。
