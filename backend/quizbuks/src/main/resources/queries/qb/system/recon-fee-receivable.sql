@@ -1,10 +1,12 @@
 /*---
 id: qb.system.recon-fee-receivable
 description: Whether account 1130 (platform fees receivable) agrees with the open and overdue invoices, by sponsor, and 2160 in all with the cash caches (the daily reconciliation, Q87; differences only)
-entities: [QbFeeInvoice, QbFeeCharge, QbWallet, LedgerEntry, LedgerAccount]
+entities: [QbFeeInvoice, QbFeeCharge, QbFeeCreditNote, QbFeeCreditNoteUse, QbWallet, LedgerEntry, LedgerAccount]
 datasets:
   QbFeeInvoice: urn:jabiz:dataset:default:QbFeeInvoice
   QbFeeCharge: urn:jabiz:dataset:default:QbFeeCharge
+  QbFeeCreditNote: urn:jabiz:dataset:default:QbFeeCreditNote
+  QbFeeCreditNoteUse: urn:jabiz:dataset:default:QbFeeCreditNoteUse
   QbWallet: urn:jabiz:dataset:default:QbWallet
 results:
   checkCode: { kind: { type: text, maxLength: 30 } }
@@ -18,7 +20,9 @@ list:
 permissions: [qb.wallet.system]
 ---*/
 -- One statement, one snapshot. FEES_RECEIVABLE: 1130 for a sponsor (debit less credit) against the total of their
--- invoices still owed (a charge is posted when made, paid when its invoice is; a voided one is reversed).
+-- invoices still owed (a charge is posted when made, paid when its invoice is; a voided one is reversed), less the
+-- credit notes' credit not used yet (F-M7: a note credits 1130 when issued; what it paid of an invoice is off the
+-- invoice's owed already, what it gave back went back through 1130).
 -- TOTAL_2160: account 2160 (credit less debit) against every cash cache.
 SELECT CAST('FEES_RECEIVABLE' AS varchar(30)) AS checkCode,
        CAST(coalesce(i.i_sponsor, l.l_party) AS varchar(128)) AS sponsorId,
@@ -28,7 +32,7 @@ FROM (
     FROM (
         -- F-M1: what is still owed of an invoice paid in part.
         SELECT x.{{QbFeeInvoice.sponsorId}} AS o_sponsor,
-               x.{{QbFeeInvoice.total}} - x.{{QbFeeInvoice.paidAmount}} AS o_total
+               x.{{QbFeeInvoice.total}} - x.{{QbFeeInvoice.creditApplied}} - x.{{QbFeeInvoice.paidAmount}} AS o_total
         FROM {{QbFeeInvoice}} x
         WHERE x.{{QbFeeInvoice.status}} IN ('OPEN', 'PARTIAL', 'OVERDUE')
         UNION ALL
@@ -42,7 +46,14 @@ FROM (
               WHERE v.{{QbFeeInvoice.sponsorId}} = c.{{QbFeeCharge.sponsorId}}
                 AND (v.{{QbFeeInvoice.chargeId}} = CAST(c.{{QbFeeCharge.chargeId}} AS text)
                      OR (v.{{QbFeeInvoice.chargeId}} IS NULL
-                         AND v.{{QbFeeInvoice.period}} = c.{{QbFeeCharge.period}})))) o
+                         AND v.{{QbFeeInvoice.period}} = c.{{QbFeeCharge.period}})))
+        UNION ALL
+        -- F-M7: a note's credit left (its total less what it gave back and what its credit paid), owed the other way.
+        SELECT n.{{QbFeeCreditNote.sponsorId}},
+               -(n.{{QbFeeCreditNote.total}} - n.{{QbFeeCreditNote.refundedCash}} - n.{{QbFeeCreditNote.refundedCredit}}
+                 - coalesce((SELECT sum(u.{{QbFeeCreditNoteUse.amount}}) FROM {{QbFeeCreditNoteUse}} u
+                             WHERE u.{{QbFeeCreditNoteUse.creditNoteId}} = CAST(n.{{QbFeeCreditNote.creditNoteId}} AS text)), 0))
+        FROM {{QbFeeCreditNote}} n) o
     GROUP BY o.o_sponsor) i
 FULL OUTER JOIN (
     SELECT e.{{LedgerEntry.dimension1}} AS l_party,

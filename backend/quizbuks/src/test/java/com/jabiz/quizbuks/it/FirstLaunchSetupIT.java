@@ -77,8 +77,11 @@ class FirstLaunchSetupIT extends ContentItSupport {
             .containsEntry(QbParams.TOPUP_DEFAULT_TARGET, "CASH")
             .containsEntry(QbParams.ENTRY_FEE_ENABLED, "false");
         // The waiting rows whose key exists are proposed off (the declared value, which is false), not on.
-        assertThat(proposed).containsEntry(QbParams.AUDIENCE_BILLING_ENABLED, "false")
-            .containsEntry(QbParams.SITE_PROFILE_ENABLED, "false");
+        assertThat(proposed).containsEntry(QbParams.SITE_PROFILE_ENABLED, "false");
+        // F-M7: the audience fee is charged at the launch; the unused days are given back only once the requester
+        // turns that on (the declared value, off).
+        assertThat(proposed).containsEntry(QbParams.AUDIENCE_BILLING_ENABLED, "true")
+            .containsEntry(QbParams.AUDIENCE_REFUND_UNUSED_DAYS, "false");
         // The three that are on at the first launch, each stated here and not through the registry, so that a row
         // turned off there (or a value read wrongly from it) cannot pass unnoticed. The proposals of AI and help are
         // only published once the AI notice is (operations.md); the test publishes them to see the platform take them.

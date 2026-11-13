@@ -19,15 +19,21 @@ export const BILLING_MODES = ['PREPAID', 'POSTPAID'] as const
 export type BillingMode = (typeof BILLING_MODES)[number]
 export const billingModeOf = (value: unknown): BillingMode => (value === 'POSTPAID' ? 'POSTPAID' : 'PREPAID')
 
-/** A fee request's kind (backend `QbFees`): a fee charged by hand, or an invoice voided. */
-export const REQUEST_KINDS = ['MANUAL', 'VOID', 'CREDIT'] as const
+/**
+ * A fee request's kind (backend `QbFees`): a fee charged by hand, an invoice voided, platform fee Kudos granted, or
+ * (F-M7) a credit note issued by hand on a fee.
+ */
+export const REQUEST_KINDS = ['MANUAL', 'VOID', 'CREDIT', 'CREDIT_NOTE'] as const
 export type RequestKind = (typeof REQUEST_KINDS)[number]
 
 /** The invoice states (backend `QbFees`); the first three are unpaid (F-M1: an invoice may be paid in part). */
 export const INVOICE_STATUSES = ['OPEN', 'PARTIAL', 'OVERDUE', 'PAID', 'VOID'] as const
 export const INVOICE_UNPAID: readonly string[] = ['OPEN', 'PARTIAL', 'OVERDUE']
-/** The request states: waiting for the approval, done, or rejected (by the approver, or refused by the server). */
-export const REQUEST_STATUSES = ['REVIEW', 'DONE', 'REJECTED'] as const
+/**
+ * The request states: waiting for the approval, done, rejected (by the approver, or refused by the server) or, F-M7,
+ * approved but not done (a credit note the server could not issue by then).
+ */
+export const REQUEST_STATUSES = ['REVIEW', 'DONE', 'REJECTED', 'FAILED'] as const
 export const REQUEST_REVIEW = 'REVIEW'
 
 /** A row of `qb.admin.fee-charges`. */
@@ -63,6 +69,8 @@ export interface FeeInvoice {
   total: string
   /** F-M1: what has been paid of the total. */
   paidAmount: string
+  /** F-M7: what credit notes paid of the total. */
+  creditApplied: string
   status: string
   issuedAt: string | null
   dueOn: string | null
@@ -91,6 +99,10 @@ export interface FeeRequest {
   validDays: number | null
   grantId: string | null
 }
+
+/** What is still owed of an invoice: its total less what credit notes and payments covered (F-M7), as whole yen. */
+export const invoiceOwed = (invoice: Pick<FeeInvoice, 'total' | 'paidAmount' | 'creditApplied'>): number =>
+  Math.max(0, Number(invoice.total) - Number(invoice.creditApplied) - Number(invoice.paidAmount))
 
 function toCharge(row: Row): FeeCharge {
   return {
@@ -125,6 +137,7 @@ function toInvoice(row: Row): FeeInvoice {
     tax: amount(row.tax),
     total: amount(row.total),
     paidAmount: amount(row.paidAmount),
+    creditApplied: amount(row.creditApplied),
     status: String(row.status ?? ''),
     issuedAt: str(row.issuedAt),
     dueOn: str(row.dueOn),
@@ -138,7 +151,7 @@ function toInvoice(row: Row): FeeInvoice {
 function toRequest(row: Row): FeeRequest {
   return {
     requestId: String(row.requestId),
-    kind: row.kind === 'VOID' ? 'VOID' : row.kind === 'CREDIT' ? 'CREDIT' : 'MANUAL',
+    kind: row.kind === 'VOID' ? 'VOID' : row.kind === 'CREDIT' ? 'CREDIT' : row.kind === 'CREDIT_NOTE' ? 'CREDIT_NOTE' : 'MANUAL',
     sponsorId: String(row.sponsorId ?? ''),
     company: str(row.company),
     amount: str(row.amount),
@@ -204,11 +217,129 @@ export type FeeRequestInput =
   | { kind: 'MANUAL'; sponsorId: string; amount: number; reason: string }
   | { kind: 'VOID'; invoiceId: string; reason: string }
   | { kind: 'CREDIT'; sponsorId: string; amount: number; reason: string; validDays?: number }
+  | { kind: 'CREDIT_NOTE'; chargeId: string; amount: number; reason: string }
 
 /** Records the request for another administrator's approval; the output names the approval. */
 export const recordFeeRequest = (input: FeeRequestInput) =>
-  runProcess<{ requestId: string; kind: RequestKind; status: string; approvalRequestId: string | null }>(
-    FEE_PROCESS.request, input)
+  runProcess<{ requestId: string; kind: RequestKind; status: string; approvalRequestId: string | null;
+    creditNoteId?: string | null }>(FEE_PROCESS.request, input)
+
+// ---- F-M7: credit notes ----------------------------------------------------------------------------------------------
+
+/** `QbFeeCreditNote.reason`: the audience fee of unused days given back, or a note issued by hand. */
+export const CREDIT_NOTE_REASONS = ['AUDIENCE_UNUSED', 'MANUAL'] as const
+
+/** A row of `qb.admin.fee-credit-notes` (an operator's, `qb.operator.fee-credit-notes`, has no `issuedBy`). */
+export interface FeeCreditNote {
+  creditNoteId: string
+  creditNoteNo: string
+  sponsorId: string
+  company: string | null
+  operatorId: string | null
+  chargeId: string | null
+  invoiceNo: string | null
+  publicationId: string | null
+  billingMode: BillingMode
+  reason: string
+  endReason: string | null
+  usedDays: number | null
+  note: string | null
+  amount: string
+  tax: string
+  total: string
+  appliedOwn: string
+  refundedCash: string
+  refundedCredit: string
+  voidedCredit: string
+  used: string
+  creditLeft: string
+  issuedAt: string | null
+  issuedBy: string | null
+}
+
+/** The credit notes, newest first, with the bar's filters: finance's, or an operator's own Sponsors' (read only). */
+export async function readFeeCreditNotes(operator: boolean, offset: number, limit: number, sorts?: SortSpec[],
+  filters?: Filter[]): Promise<Page<FeeCreditNote>> {
+  const page = await runQuery<Row>(operator ? TEMPLATE.operatorFeeCreditNotes : TEMPLATE.feeCreditNotes,
+    { filters, sorts, offset, limit, count: true })
+  return {
+    total: page.total,
+    items: page.items.map((row): FeeCreditNote => ({
+      creditNoteId: String(row.creditNoteId),
+      creditNoteNo: String(row.creditNoteNo ?? ''),
+      sponsorId: String(row.sponsorId ?? ''),
+      company: str(row.company),
+      operatorId: str(row.operatorId),
+      chargeId: str(row.chargeId),
+      invoiceNo: str(row.invoiceNo),
+      publicationId: str(row.publicationId),
+      billingMode: billingModeOf(row.billingMode),
+      reason: String(row.reason ?? ''),
+      endReason: str(row.endReason),
+      usedDays: row.usedDays == null ? null : num(row.usedDays),
+      note: str(row.note),
+      amount: amount(row.amount),
+      tax: amount(row.tax),
+      total: amount(row.total),
+      appliedOwn: amount(row.appliedOwn),
+      refundedCash: amount(row.refundedCash),
+      refundedCredit: amount(row.refundedCredit),
+      voidedCredit: amount(row.voidedCredit),
+      used: amount(row.used),
+      creditLeft: amount(row.creditLeft),
+      issuedAt: str(row.issuedAt),
+      issuedBy: str(row.issuedBy),
+    })),
+  }
+}
+
+/** What a fee may still be credited by a credit note by hand (`qb.admin.fee-charge-credit`). */
+export interface ChargeCredit {
+  chargeId: string
+  sponsorId: string
+  company: string | null
+  kind: string
+  period: string
+  billingMode: BillingMode
+  amount: string
+  taxRate: string | null
+  tax: string
+  total: string
+  credited: string
+  creditedTax: string
+  /** What may still be credited before tax, and the tax a note that credits all the rest takes. */
+  creditable: string
+  taxLeft: string
+  notes: number
+  invoiceNo: string | null
+  invoiceStatus: string | null
+}
+
+/** The fee's credit position; null when there is no such fee. */
+export async function readChargeCredit(chargeId: string): Promise<ChargeCredit | null> {
+  const page = await runQuery<Row>(TEMPLATE.feeChargeCredit, { params: { chargeId }, limit: 1 })
+  const row = page.items[0]
+  if (!row) return null
+  return {
+    chargeId: String(row.chargeId),
+    sponsorId: String(row.sponsorId ?? ''),
+    company: str(row.company),
+    kind: String(row.kind ?? ''),
+    period: String(row.period ?? ''),
+    billingMode: billingModeOf(row.billingMode),
+    amount: amount(row.amount),
+    taxRate: str(row.taxRate),
+    tax: amount(row.tax),
+    total: amount(row.total),
+    credited: amount(row.credited),
+    creditedTax: amount(row.creditedTax),
+    creditable: amount(row.creditable),
+    taxLeft: amount(row.taxLeft),
+    notes: num(row.notes),
+    invoiceNo: str(row.invoiceNo),
+    invoiceStatus: str(row.invoiceStatus),
+  }
+}
 
 /** `FeeProcesses.BillingInput`: how a sponsor is billed from now on, with the credit (postpaid) and the reason. */
 export type BillingInput = {

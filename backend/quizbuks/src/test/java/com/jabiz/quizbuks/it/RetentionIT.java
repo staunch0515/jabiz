@@ -48,7 +48,8 @@ class RetentionIT extends PayoutItSupport {
             "InboundEvent receivedTime P10Y true");
         // Not the takers' certificates (Q77): no policy keeps them, so deleting the account clears them (TakerErasureIT).
         assertThat(policy("DocumentRun")).containsEntry("onlyField", "layoutId")
-            .containsEntry("onlyValues", List.of("qb.topup_receipt", "qb.operator_settlement", "qb.fee_invoice"));
+            .containsEntry("onlyValues", List.of("qb.topup_receipt", "qb.operator_settlement", "qb.fee_invoice",
+                "qb.fee_credit_note"));
 
         String sponsor = newSponsor("s-retention");
         String topUpId = openTopUp(sponsor, 5_000);

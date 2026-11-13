@@ -83,6 +83,8 @@ interface Server {
   /** F-M5: the funds check of a draft (nothing set aside by default) and a publication's prepayments. */
   funds?: Record<string, unknown>
   prepayments?: Record<string, unknown>[]
+  /** F-M7: the credit notes of the publication. */
+  creditNotes?: Record<string, unknown>[]
   distribution?: Record<string, unknown>
   distributionSettlements?: Record<string, unknown>[]
 }
@@ -204,6 +206,8 @@ function server(options: Server = {}) {
       }
       case '/api/queries/qb.sponsor.publication-prepayments':
         return json(200, { items: options.prepayments ?? [], offset: 0, limit: 100 })
+      case '/api/queries/qb.sponsor.fee-credit-notes':
+        return json(200, { items: options.creditNotes ?? [], offset: 0, limit: 100, total: options.creditNotes?.length ?? 0 })
       case '/api/queries/qb.sponsor.publication-distribution':
         return json(200, { items: options.distribution ? [options.distribution] : [], offset: 0, limit: 1 })
       case '/api/queries/qb.sponsor.publication-distribution-settlements':
@@ -1489,6 +1493,32 @@ describe('the tabs of a submitted publication (F-F3c)', () => {
     await expectAccessible()
   })
 
+  it('lists the credit notes of the publication, filtered by it, on the fees tab (F-M7)', async () => {
+    const { posted } = server({ publication: LIVE, creditNotes: [
+      { creditNoteId: 'cn1', creditNoteNo: 'QBC-2026-00001', invoiceNo: 'QBF-2026-00001', publicationId: 'p1',
+        reason: 'AUDIENCE_UNUSED', endReason: 'WITHDRAWN', usedDays: 3, amount: '400', tax: '40', total: '440',
+        refundedCash: '100', refundedCredit: '340', voidedCredit: '40', used: '0', creditLeft: '340',
+        issuedAt: '2026-11-05T00:00:00Z', documentNo: null }] })
+    window.history.replaceState(null, '', '/publications/p1/fees')
+    render(<App />)
+    const section = await screen.findByTestId('publication-credit-notes')
+    const row = within(section).getByTestId('publication-credit-note')
+    expect(within(row).getByTestId('publication-credit-note-number')).toHaveTextContent('QBC-2026-00001')
+    expect(row).toHaveTextContent('Days used: 3')
+    expect(row).toHaveTextContent('Credit note 440 Kudos (400 Kudos and tax 40 Kudos)')
+    expect(within(row).getByTestId('publication-credit-note-given-back'))
+      .toHaveTextContent('Given back: cash 100 Kudos, credit 340 Kudos · of which 40 Kudos voided, past its date')
+    const asked = posted.find((p) => p.path === '/api/queries/qb.sponsor.fee-credit-notes')
+    expect(asked?.body).toMatchObject({ filters: [{ field: 'publicationId', op: 'eq', value: 'p1' }] })
+    await expectAccessible()
+  })
+
+  it('shows no credit note section while there are none (F-M7)', async () => {
+    await open('/publications/p1/fees')
+    expect(await screen.findByTestId('publication-fees-hint')).toBeInTheDocument()
+    expect(screen.queryByTestId('publication-credit-notes')).toBeNull()
+  })
+
   it('shows the distribution fee: the price per start, the starts since the last settlement and each month (F-M6)',
     async () => {
       server({ publication: LIVE,
@@ -1783,6 +1813,9 @@ describe('condition fees (Q47c)', () => {
     expect(await screen.findByTestId('audience-fee-total')).toHaveTextContent('1,000')
     expect(screen.getByTestId('audience-fee-line')).toHaveTextContent('100 Kudos × 7 days')
     expect(screen.getByTestId('audience-fee-minimum')).toBeInTheDocument()
+    // F-M7: charged by the day, with no promise of a refund.
+    expect(screen.getByTestId('audience-fee')).toHaveTextContent('charged by the day')
+    expect(screen.getByTestId('audience-fee')).toHaveTextContent('do not count on a refund')
     expect(processCalls('QB_AUDIENCE_FEE_QUOTE')).toEqual([{ publicationId: 'p1' }, { publicationId: 'p1' }])
   })
 
