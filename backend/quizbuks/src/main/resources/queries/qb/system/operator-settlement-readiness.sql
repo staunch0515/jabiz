@@ -56,7 +56,8 @@ WHERE EXISTS (
                       WHERE i.{{QbFeeInvoice.sponsorId}} = c.{{QbFeeCharge.sponsorId}}
                         AND ((i.{{QbFeeInvoice.period}} = c.{{QbFeeCharge.period}} AND i.{{QbFeeInvoice.chargeId}} IS NULL)
                              OR i.{{QbFeeInvoice.chargeId}} = CAST(c.{{QbFeeCharge.chargeId}} AS text))))
--- READINESS EXTENSION POINT (F-M12 b): F-M8 (exposure fees) and F-M9 (the AI monthly charge) are not merged yet. When
+-- READINESS EXTENSION POINT (F-M12 b): the exposure fee's monthly settlement (F-M8's QB_EXPOSURE_SETTLE; its table
+-- qb_exposure_settlement_version exists, the process does not yet) and F-M9 (the AI monthly charge) are not merged. When
 -- they merge, each adds its step as one more branch here, "UNION ALL SELECT 'EXPOSURE' AS blockedBy WHERE EXISTS (...)"
 -- and "'AI'" (F-M9: a finished CREDIT AI job of the operator's sponsors, in the month, with no fee yet), with its
 -- entity and dataset in the header, and OperatorSettlementReadinessTest names the branch.

@@ -328,4 +328,13 @@ class OperatorShareRulesTest {
             BigDecimal.ONE, java.util.Map.of());
         assertThat(OperatorShareRules.Terms.fromText(bare.toText())).isEqualTo(bare);
     }
+
+    @Test
+    void weightsOfNoPositiveSumAreNotSplitButToldSo() {
+        assertThat(OperatorShareRules.splittable(List.of(new BigDecimal("1100"), BigDecimal.ZERO))).isTrue();
+        assertThat(OperatorShareRules.splittable(List.of(BigDecimal.ZERO, BigDecimal.ZERO))).isFalse();
+        assertThat(OperatorShareRules.splittable(List.of())).isFalse();
+        assertThatThrownBy(() -> OperatorShareRules.split(new BigDecimal("100"), List.of(BigDecimal.ZERO),
+            List.of("a"))).isInstanceOf(IllegalArgumentException.class);
+    }
 }

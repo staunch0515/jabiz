@@ -67,6 +67,9 @@ jabiz:
       "[QB_PUBLICATION_AUDIENCE_SAVE]": { per-user: 120, period: 1h }
       "[QB_PROFILE_ATTRIBUTES_SAVE]": { per-user: 60, period: 1h }
       "[QB_WITHDRAWAL_REQUEST]": { per-user: 20, period: 1h }
+      # F-M8: each top-up of the exposures bought adds parts to the publication's prepayment (at most a thousand in all);
+      # a sponsor tops up a few times in an hour, not a hundred.
+      "[QB_EXPOSURE_TOP_UP]": { per-user: 30, period: 1h }
       # Q16: importing a quiz file makes a whole draft (up to 100 questions) in one transaction. F-C4: a sponsor
       # package's check page checks every quiz file it carries (each version and the current content) once.
       "[QB_QUIZ_IMPORT_CHECK]": { per-user: 300, period: 1h }

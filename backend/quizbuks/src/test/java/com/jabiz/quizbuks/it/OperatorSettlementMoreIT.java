@@ -307,6 +307,25 @@ class OperatorSettlementMoreIT extends CreditNoteItSupport {
             copy, String.valueOf(lineId))).hasStackTraceContaining("qb_operator_settlement_line_version_source_idx");
     }
 
+    // ---- more lines than one write batch --------------------------------------------------------------------------
+
+    /** A settlement writes one line per fee: more than the platform's default batch of 100 is one settlement still. */
+    @Test
+    void aMonthOfMoreFeesThanTheDefaultWriteBatchIsSettledInOne() {
+        switchOn();
+        clock.set(Instant.parse("2027-03-10T01:00:00Z"));
+        String operatorId = operator("Many lines");
+        String sponsor = newSponsor(unique("fm12m-many"));
+        assign(sponsor, operatorId);
+        cash(sponsor, 200_000);
+        for (int i = 0; i < 120; i++) {
+            manualFee(sponsor, 100);
+        }
+        Map<String, Object> march = settle(operatorId, "2027-03", "2027-04-02T00:00:00Z");
+        assertThat(linesOf(march.get("settlement_id"), "CHARGE")).hasSize(120);
+        assertThat(new java.math.BigDecimal(String.valueOf(march.get("platform_fees")))).isEqualByComparingTo("12000");
+    }
+
     // ---- §3.6: a sponsor reassigned ------------------------------------------------------------------------------------
 
     @Test

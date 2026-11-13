@@ -67,6 +67,9 @@ public final class PublicationPrepayments {
     /** F-M6: the operator's distribution price, and what the publication's distribution fee came to. */
     static final String DISTRIBUTION_PRICE = "funds.distributionPrice";
     static final String DISTRIBUTION = "funds.distribution";
+    /** F-M8: the operator's exposure price, and what the publication's purchase came to. */
+    static final String EXPOSURE_PRICE = "funds.exposurePrice";
+    static final String EXPOSURE = "funds.exposure";
     static final String ITEMS = "funds.items";
     static final String OWED = "funds.owed";
     static final String FUNDS = "funds.funds";
@@ -85,7 +88,9 @@ public final class PublicationPrepayments {
     static final List<String> PARAM_KEYS = List.of(QbParams.AUDIENCE_BILLING_ENABLED, QbParams.FEE_TAX_RATE,
         QbParams.FEE_DEFAULT_BILLING_MODE, QbParams.DISTRIBUTION_BILLING_ENABLED, QbParams.DISTRIBUTION_RATE_MIN,
         QbParams.DISTRIBUTION_RATE_MAX, QbParams.DISTRIBUTION_UNIT_FLOOR_MIN, QbParams.DISTRIBUTION_UNIT_FLOOR_MAX,
-        QbParams.DISTRIBUTION_UNIT_CEILING_MAX, QbParams.DISTRIBUTION_MINIMUM_DEPOSIT_MAX);
+        QbParams.DISTRIBUTION_UNIT_CEILING_MAX, QbParams.DISTRIBUTION_MINIMUM_DEPOSIT_MAX,
+        QbParams.EXPOSURE_BILLING_ENABLED, QbParams.EXPOSURE_MIN_PURCHASE, QbParams.EXPOSURE_UNIT_MIN,
+        QbParams.EXPOSURE_UNIT_MAX);
 
     private PublicationPrepayments() {}
 
@@ -109,27 +114,9 @@ public final class PublicationPrepayments {
         }
         // One statement under the lock (L1 of the F-M5 review: the sponsor's billing and credit limit too); a
         // publication not concerned reads nothing (each condition is an IN of no values: no SQL at all, L5).
-        pb.step("Read the account, the audience rules and the operator", QueryEntities.<ProcessContext>all(
-                QueryEntities.query(com.jabiz.quizbuks.identity.QbAccounts.defaultDataset(
-                    com.jabiz.quizbuks.identity.QbAccounts.SPONSOR), ctx -> EntityQuery.builder()
-                    .where(new QueryPredicate.In("userId",
-                        FeeGate.ids(reads.test(ctx) ? sponsorOf(publication.apply(ctx)) : null))).limit(1).build(),
-                    SPONSOR),
-                // M4 of the F-M5 review: the cash lots, so that the check counts what the freeze can take.
-                QueryEntities.query(com.jabiz.quizbuks.fee.CashLots.dataset(), ctx -> com.jabiz.quizbuks.fee.CashLots
-                    .open(reads.test(ctx) ? sponsorOf(publication.apply(ctx)) : null), LOTS),
-                QueryEntities.query(QbFees.defaultDataset(com.jabiz.quizbuks.fee.QbFeeAccount.GRANT),
-                    ctx -> FeeSettlement.credits(reads.test(ctx) ? sponsorOf(publication.apply(ctx)) : null,
-                        ctx.opTime()), CREDITS),
-                QueryEntities.query(QbWallets.defaultDataset(QbWallets.WALLET), ctx -> QbWallets.query(QbWallets.CASH,
-                    reads.test(ctx) ? sponsorOf(publication.apply(ctx)) : null), CASH_WALLET),
-                QueryEntities.query(QbFees.defaultDataset(QbPrepayments.PREPAYMENT), ctx -> EntityQuery.builder()
-                    .where(new QueryPredicate.And(List.of(
-                        new QueryPredicate.In("sponsorId",
-                            FeeGate.ids(reads.test(ctx) ? sponsorOf(publication.apply(ctx)) : null)),
-                        new QueryPredicate.Eq("mode", QbPrepayments.POSTPAID),
-                        new QueryPredicate.Eq("status", QbPrepayments.OPEN))))
-                    .limit(MAX_POSTPAID + 1).build(), POSTPAID),
+        List<QueryEntities.Metadata<ProcessContext>> reads1 = new ArrayList<>(fundsReads(
+            ctx -> reads.test(ctx) ? sponsorOf(publication.apply(ctx)) : null));
+        reads1.addAll(List.of(
                 QueryEntities.query(QbAudience.CRITERION_DATASET, ctx -> EntityQuery.builder()
                     .where(new QueryPredicate.In("publicationId",
                         FeeGate.ids(reads.test(ctx) ? publication.apply(ctx).id() : null)))
@@ -141,7 +128,9 @@ public final class PublicationPrepayments {
                 QueryEntities.query(QbOperators.defaultDataset(QbOperators.ASSIGNMENT), ctx -> EntityQuery.builder()
                     .where(new QueryPredicate.In("userId",
                         FeeGate.ids(reads.test(ctx) ? sponsorOf(publication.apply(ctx)) : null)))
-                    .limit(1).build(), ASSIGNMENT)))
+                    .limit(1).build(), ASSIGNMENT)));
+        pb.step("Read the account, the audience rules and the operator", QueryEntities.<ProcessContext>all(
+                reads1.toArray(QueryEntities.Metadata[]::new)))
             // F-M6: the operator's distribution price joins the audience price list's read (one statement when either
             // is wanted, none when neither: a switch on adds one read to a submission without audience rules).
             .step("Read the operator's audience and distribution prices", QueryEntities.<ProcessContext>all(
@@ -151,7 +140,13 @@ public final class PublicationPrepayments {
                 QueryEntities.query(com.jabiz.quizbuks.fee.QbDistributions.defaultDataset(
                     com.jabiz.quizbuks.fee.QbDistributions.PRICE), ctx -> EntityQuery.builder()
                     .where(new QueryPredicate.In("operatorId", FeeGate.ids(reads.test(ctx) && distributionPriced(ctx)
-                        ? operatorOf(ctx) : null))).limit(1).build(), DISTRIBUTION_PRICE)))
+                        ? operatorOf(ctx) : null))).limit(1).build(), DISTRIBUTION_PRICE),
+                // F-M8: and the operator's exposure price, when the publication uses another's shared video.
+                QueryEntities.query(com.jabiz.quizbuks.fee.QbExposureFees.defaultDataset(
+                    com.jabiz.quizbuks.fee.QbExposureFees.PRICE), ctx -> EntityQuery.builder()
+                    .where(new QueryPredicate.In("operatorId", FeeGate.ids(reads.test(ctx)
+                        && exposurePriced(ctx, publication.apply(ctx)) ? operatorOf(ctx) : null))).limit(1).build(),
+                    EXPOSURE_PRICE)))
             .step("Read their prices", QueryEntities.<ProcessContext>of(
                 QbAudiencePricing.defaultDataset(QbAudiencePricing.PRICE), ctx -> EntityQuery.builder()
                     .where(new QueryPredicate.In("priceListId", FeeGate.list(ctx, LISTS).stream()
@@ -164,6 +159,31 @@ public final class PublicationPrepayments {
             .step("Read what a postpaid sponsor owes", RunTemplate.<ProcessContext>when(
                 ctx -> ctx.contains(ITEMS) && postpaid(ctx) && total(ctx).signum() > 0,
                 "qb.system.fee-receivable", ctx -> Map.of("sponsorId", sponsorOf(publication.apply(ctx))), OWED));
+    }
+
+    /**
+     * The reads of an account's funds, in one statement: the sponsor (billing, credit limit), the open cash lots (M4 of the
+     * F-M5 review: so that the check counts what the freeze can take), the fee credit not expired, the cash wallet and the
+     * open postpaid prepayments. {@code sponsor} returns none to read nothing (each condition is an IN of no values: no SQL
+     * at all). Shared by the submission and the exposure top-up (F-M8).
+     */
+    static List<QueryEntities.Metadata<ProcessContext>> fundsReads(Function<ProcessContext, String> sponsor) {
+        return List.of(
+            QueryEntities.query(com.jabiz.quizbuks.identity.QbAccounts.defaultDataset(
+                com.jabiz.quizbuks.identity.QbAccounts.SPONSOR), ctx -> EntityQuery.builder()
+                .where(new QueryPredicate.In("userId", FeeGate.ids(sponsor.apply(ctx)))).limit(1).build(), SPONSOR),
+            QueryEntities.query(com.jabiz.quizbuks.fee.CashLots.dataset(), ctx -> com.jabiz.quizbuks.fee.CashLots
+                .open(sponsor.apply(ctx)), LOTS),
+            QueryEntities.query(QbFees.defaultDataset(com.jabiz.quizbuks.fee.QbFeeAccount.GRANT),
+                ctx -> FeeSettlement.credits(sponsor.apply(ctx), ctx.opTime()), CREDITS),
+            QueryEntities.query(QbWallets.defaultDataset(QbWallets.WALLET), ctx -> QbWallets.query(QbWallets.CASH,
+                sponsor.apply(ctx)), CASH_WALLET),
+            QueryEntities.query(QbFees.defaultDataset(QbPrepayments.PREPAYMENT), ctx -> EntityQuery.builder()
+                .where(new QueryPredicate.And(List.of(
+                    new QueryPredicate.In("sponsorId", FeeGate.ids(sponsor.apply(ctx))),
+                    new QueryPredicate.Eq("mode", QbPrepayments.POSTPAID),
+                    new QueryPredicate.Eq("status", QbPrepayments.OPEN))))
+                .limit(MAX_POSTPAID + 1).build(), POSTPAID));
     }
 
     /** Whether the publication uses a rule and the rules are charged for (only then are the prices read). */
@@ -213,6 +233,56 @@ public final class PublicationPrepayments {
                 price.minimumDeposit()));
     }
 
+    /**
+     * F-M8: the exposure fee of the publication as its submission freezes it: the price per exposure, the exposures
+     * bought and the deposit (with its tax, and before it).
+     */
+    public record ExposureQuote(BigDecimal unit, long purchased, BigDecimal deposit, BigDecimal depositBeforeTax) {}
+
+    /**
+     * F-M8: whether the publication buys exposures at its submission (only then is the operator's price read): the switch
+     * is on, the sponsor has an operator, and the publication uses another's shared video.
+     */
+    static boolean exposurePriced(ProcessContext ctx, EntityInstance publication) {
+        return publication != null && operatorOf(ctx) != null && Boolean.TRUE.equals(
+            params(ctx).find(QbParams.EXPOSURE_BILLING_ENABLED, Boolean.class).orElse(false))
+            && othersVideo(ctx, publication);
+    }
+
+    /** Whether the publication's shared video is another sponsor's (read by {@link PublicationSharedVideos#load}). */
+    static boolean othersVideo(ProcessContext ctx, EntityInstance publication) {
+        EntityInstance video = PublicationSharedVideos.video(ctx, publication);
+        return video != null && !String.valueOf((Object) video.get("providerId"))
+            .equals(String.valueOf((Object) publication.get("publisherId")));
+    }
+
+    /**
+     * F-M8: the exposure fee of the publication, or none (switched off, no price, its own video, nothing asked for).
+     * A purchase below the least is still quoted: {@link #check} refuses it, so that the wizard shows its deposit too.
+     */
+    static ExposureQuote exposure(ProcessContext ctx, EntityInstance publication) {
+        if (!exposurePriced(ctx, publication)) {
+            return null;
+        }
+        EntityInstance row = FeeGate.first(ctx, EXPOSURE_PRICE);
+        BigDecimal rate = params(ctx).find(QbParams.FEE_TAX_RATE, BigDecimal.class).orElse(null);
+        Object requested = publication.get("exposureRequested");
+        if (row == null || rate == null || requested == null) {
+            return null;
+        }
+        long purchased = ((Number) requested).longValue();
+        BigDecimal unit = FeeGate.money(row.get("unit"));
+        return new ExposureQuote(unit, purchased, com.jabiz.quizbuks.fee.ExposureFeeRules.deposit(purchased, unit, rate),
+            com.jabiz.quizbuks.fee.ExposureFeeRules.cumulative(purchased, unit));
+    }
+
+    /** F-M8: the exposure fee as stored with its deposit's prepayment. */
+    static String exposureDetail(ExposureQuote quote) {
+        return "{\"unit\":" + quote.unit().toPlainString() + ",\"purchased\":" + quote.purchased()
+            + ",\"depositBeforeTax\":" + quote.depositBeforeTax().toPlainString() + ",\"deposit\":"
+            + quote.deposit().toPlainString() + "}";
+    }
+
     /** What the publication sets aside: the audience fee and its tax (F-M7), when there is one. */
     static List<PrepaymentRules.Item> items(ProcessContext ctx, EntityInstance publication) {
         boolean enabled = params(ctx).find(QbParams.AUDIENCE_BILLING_ENABLED, Boolean.class).orElse(false);
@@ -242,6 +312,15 @@ public final class PublicationPrepayments {
             if (distribution.deposit().signum() > 0) {
                 items.add(new PrepaymentRules.Item(QbPrepayments.DISTRIBUTION, distribution.deposit(), BigDecimal.ZERO,
                     distributionDetail(distribution)));
+            }
+        }
+        // F-M8: the exposures bought, set aside whole; the settlements charge them a month at a time.
+        ExposureQuote exposure = exposure(ctx, publication);
+        if (exposure != null) {
+            ctx.put(EXPOSURE, exposure);
+            if (exposure.deposit().signum() > 0) {
+                items.add(new PrepaymentRules.Item(QbPrepayments.EXPOSURE, exposure.deposit(), BigDecimal.ZERO,
+                    exposureDetail(exposure)));
             }
         }
         return List.copyOf(items);
@@ -302,6 +381,11 @@ public final class PublicationPrepayments {
                 return;
             }
         }
+        List<com.jabiz.entity.Violation> exposureProblems = exposureProblems(ctx, publication);
+        if (!exposureProblems.isEmpty()) {
+            exposureProblems.forEach(ctx::reject);
+            return;
+        }
         PrepaymentRules.Funds funds = funds(ctx);
         ctx.put(FUNDS, funds);
         com.jabiz.entity.Violation refusal = PrepaymentRules.refusal(funds);
@@ -318,8 +402,51 @@ public final class PublicationPrepayments {
         ctx.put(FREEZES, List.copyOf(freezes));
     }
 
+    /**
+     * F-M8: what is wrong with the exposures to buy: the range or the tax rate not published (nothing to freeze them
+     * against), fewer than the least asked for (or none), or a deposit more than any fee may be. None when the
+     * publication buys none.
+     */
+    static List<com.jabiz.entity.Violation> exposureProblems(ProcessContext ctx, EntityInstance publication) {
+        if (!exposurePriced(ctx, publication) || FeeGate.first(ctx, EXPOSURE_PRICE) == null) {
+            return List.of();
+        }
+        if (!com.jabiz.quizbuks.fee.ExposurePrices.range(params(ctx)).complete()) {
+            return List.of(com.jabiz.quizbuks.fee.ExposureFeeRules.rangeMissing());
+        }
+        if (params(ctx).find(QbParams.FEE_TAX_RATE, BigDecimal.class).isEmpty()) {
+            return List.of(new com.jabiz.entity.Violation(null, com.jabiz.quizbuks.fee.FeeCodes.FEE_PARAMS,
+                "The tax rate cannot be used", Map.of("rate", "null")));
+        }
+        // Like the other parameters: one that is not published refuses (no least read as 1).
+        if (params(ctx).find(QbParams.EXPOSURE_MIN_PURCHASE, BigDecimal.class).isEmpty()) {
+            return List.of(new com.jabiz.entity.Violation(null, com.jabiz.quizbuks.fee.FeeCodes.FEE_PARAMS,
+                "The fewest exposures a submission buys cannot be used", Map.of("param", QbParams.EXPOSURE_MIN_PURCHASE)));
+        }
+        long least = params(ctx).find(QbParams.EXPOSURE_MIN_PURCHASE, BigDecimal.class).get().longValue();
+        Object requested = publication.get("exposureRequested");
+        if (requested == null || ((Number) requested).longValue() < least) {
+            return List.of(new com.jabiz.entity.Violation("exposureRequested",
+                com.jabiz.quizbuks.fee.FeeCodes.EXPOSURE_PURCHASE_REQUIRED, "Buy at least " + least + " exposures",
+                Map.of("min", String.valueOf(least))));
+        }
+        ExposureQuote quote = ctx.contains(EXPOSURE) ? ctx.get(EXPOSURE, ExposureQuote.class) : null;
+        if (quote != null && quote.deposit().compareTo(new BigDecimal(com.jabiz.quizbuks.fee.FeeProcesses.MAX_AMOUNT)) > 0) {
+            return List.of(new com.jabiz.entity.Violation("exposureRequested",
+                com.jabiz.quizbuks.fee.FeeCodes.EXPOSURE_DEPOSIT_RANGE, "The exposures bought come to more than a fee "
+                + "may be", Map.of("purchased", String.valueOf(quote.purchased()), "unit", quote.unit().toPlainString(),
+                "max", com.jabiz.quizbuks.fee.FeeProcesses.MAX_AMOUNT)));
+        }
+        return List.of();
+    }
+
     /** The funds of the publication from the reads (the check, and the wizard's look). */
     static PrepaymentRules.Funds funds(ProcessContext ctx) {
+        return funds(ctx, billingMode(ctx));
+    }
+
+    /** As {@link #funds(ProcessContext)}, for a billing mode given (an exposure top-up: the prepayment's own). */
+    static PrepaymentRules.Funds funds(ProcessContext ctx, String billingMode) {
         List<PrepaymentRules.Item> items = itemsOf(ctx);
         if (FeeGate.list(ctx, POSTPAID).size() > MAX_POSTPAID) {
             throw new IllegalStateException("More than " + MAX_POSTPAID + " open postpaid prepayments");
@@ -328,7 +455,7 @@ public final class PublicationPrepayments {
             .reduce(BigDecimal.ZERO, BigDecimal::add);
         BigDecimal owed = ctx.contains(OWED) ? owedOf(ctx) : BigDecimal.ZERO;
         EntityInstance sponsor = FeeGate.first(ctx, SPONSOR);
-        return PrepaymentRules.check(items, new PrepaymentRules.Standing(billingMode(ctx), spendable(ctx), owed,
+        return PrepaymentRules.check(items, new PrepaymentRules.Standing(billingMode, spendable(ctx), owed,
             setAside, sponsor == null ? null : FeeGate.money(sponsor.get("creditLimit"))));
     }
 
@@ -367,11 +494,11 @@ public final class PublicationPrepayments {
         return ctx.contains(ITEMS) ? (List<PrepaymentRules.Item>) ctx.get(ITEMS) : List.of();
     }
 
-    private static BigDecimal total(ProcessContext ctx) {
+    static BigDecimal total(ProcessContext ctx) {
         return itemsOf(ctx).stream().map(PrepaymentRules.Item::amount).reduce(BigDecimal.ZERO, BigDecimal::add);
     }
 
-    private static boolean postpaid(ProcessContext ctx) {
+    static boolean postpaid(ProcessContext ctx) {
         return FeeRules.POSTPAID.equals(billingMode(ctx));
     }
 
@@ -395,6 +522,10 @@ public final class PublicationPrepayments {
             : null;
         values.put("distributionUnit", distribution == null ? null : distribution.unit());
         values.put("distributionAtFloor", distribution == null ? null : distribution.atFloor());
+        // F-M8: the price per exposure frozen (none: nothing was bought); the purchase itself is set afterwards by
+        // QB_EXPOSURE_PURCHASED_SET, the one writer of the exposures bought.
+        ExposureQuote exposure = ctx.contains(EXPOSURE) ? ctx.get(EXPOSURE, ExposureQuote.class) : null;
+        values.put("exposureUnit", exposure == null ? null : exposure.unit());
         return values;
     }
 
@@ -453,6 +584,29 @@ public final class PublicationPrepayments {
                 ctx -> ctx.get(CHARGE), CHARGED));
     }
 
+    static final String BOUGHT = "funds.bought";
+
+    /**
+     * F-M8 (M1 of the review): after the submission's own write is saved, the exposures bought are set on the publication
+     * by {@link PublicationExposure#PURCHASED_SET} (the one writer; the publication's lock is held), and the answer carries
+     * the revision that sub-process wrote (it writes a version of its own).
+     */
+    static <I, O> void buyExposures(ProcessDefinitionBuilder<I, O, ProcessContext> pb) {
+        Predicate<ProcessContext> buys = ctx -> !ctx.hasViolations() && ctx.contains(EXPOSURE)
+            && ctx.contains(FREEZES) && ((List<?>) ctx.get(FREEZES)).stream().anyMatch(freeze ->
+            QbPrepayments.EXPOSURE.equals(((Prepayments.FreezeInput) freeze).purpose()));
+        pb.step("Save the submission", com.jabiz.runtime.process.steps.SaveChanges.<ProcessContext>when(buys))
+            .step("Set the exposures bought", CallProcess.<ProcessContext>when(buys, PublicationExposure.PURCHASED_SET, 1,
+                ctx -> new PublicationExposure.PurchasedInput(PublicationEditing.publication(ctx).id() instanceof
+                    java.util.UUID id ? id : java.util.UUID.fromString(String.valueOf(PublicationEditing.publication(ctx)
+                    .id())), ctx.get(EXPOSURE, ExposureQuote.class).purchased()), BOUGHT))
+            .compute("Answer with the revision written", (metadata, ctx) -> {
+                if (ctx.contains(BOUGHT)) {
+                    ctx.put(PublicationEditing.OUTPUT, ctx.get(BOUGHT));
+                }
+            });
+    }
+
     // ---- the wizard's look ---------------------------------------------------------------------------------------------
 
     public static final String CHECK = "QB_PUBLICATION_FUNDS_CHECK";
@@ -499,22 +653,33 @@ public final class PublicationPrepayments {
                         ProcessContext::opTime, PARAMS, PARAM_KEYS.toArray(String[]::new)))
                     .steps(b -> FeeGate.load(b, ctx -> ctx.request().actorId()))
                     // F-M6: the highest tier sets the price per start.
-                    .steps(PublicationEditing::loadTiers);
+                    .steps(PublicationEditing::loadTiers)
+                    // F-M8: whose video it uses decides whether exposures are bought.
+                    .steps(b -> PublicationSharedVideos.load(b,
+                        ctx -> ctx.get(PublicationEditing.PUBLICATION, EntityInstance.class)));
                 load(pb, ctx -> ctx.get(PublicationEditing.PUBLICATION, EntityInstance.class), ctx -> true, false);
                 pb.compute("Check", (metadata, ctx) -> {
                     com.jabiz.entity.Violation unpriced = distributionProblem(ctx);
                     if (unpriced != null) {
                         throw new com.jabiz.runtime.BusinessRuleViolationException(List.of(unpriced));
                     }
+                    List<com.jabiz.entity.Violation> exposureProblems = exposureProblems(ctx,
+                        ctx.get(PublicationEditing.PUBLICATION, EntityInstance.class));
+                    if (!exposureProblems.isEmpty()) {
+                        throw new com.jabiz.runtime.BusinessRuleViolationException(exposureProblems);
+                    }
                     PrepaymentRules.Funds funds = ctx.contains(ITEMS) ? funds(ctx)
                         : PrepaymentRules.check(List.of(), new PrepaymentRules.Standing(FeeRules.PREPAID,
                             BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO));
                     DistributionQuote distribution = ctx.contains(DISTRIBUTION)
                         ? ctx.get(DISTRIBUTION, DistributionQuote.class) : null;
+                    ExposureQuote exposure = ctx.contains(EXPOSURE) ? ctx.get(EXPOSURE, ExposureQuote.class) : null;
                     ctx.put(CHECKED, new CheckOutput(funds.items().stream()
                         .map(item -> QbPrepayments.DISTRIBUTION.equals(item.purpose()) && distribution != null
                             ? new CheckItem(item.purpose(), item.amount(), item.chargeAmount(), distribution.unit(),
                                 distribution.atFloor())
+                            : QbPrepayments.EXPOSURE.equals(item.purpose()) && exposure != null
+                            ? new CheckItem(item.purpose(), item.amount(), item.chargeAmount(), exposure.unit(), null)
                             : new CheckItem(item.purpose(), item.amount(), item.chargeAmount(), null, null)).toList(),
                         funds.total(), funds.available(), funds.shortfall(), funds.billingMode(), funds.enough()));
                 });
