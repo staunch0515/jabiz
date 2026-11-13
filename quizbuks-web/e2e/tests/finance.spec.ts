@@ -3,8 +3,8 @@ import { bookingMonthOf, expectOverviewAccounts, transferInReview, transfersOf }
 import { query } from './content'
 import { adminToken, expect, prepareQuizbuks, test } from './support'
 
-/** The rows the funds switch card adds to the server's: WAITING_ROWS (3) and MANUAL_ROWS (2) of the extension. */
-const CARD_ONLY_ROWS = 5
+/** The rows the funds switch card adds to the server's: WAITING_ROWS (2) and MANUAL_ROWS (2) of the extension. */
+const CARD_ONLY_ROWS = 4
 
 /*
  * Finance's pages in the administration (docs/quizbuks/plans/Q9c-admin-finance.md): the overview counts the large
@@ -30,15 +30,18 @@ test('finance reviews a large transfer and issues the monthly report', async ({ 
   await expectOverviewAccounts(page, request)
   // F-F10b: the first launch's money switches, one row for each parameter of the registry (setup.FirstLaunchSwitches):
   // the rows from the server (the template qb.admin.first-launch-switches, read here so that a charge that turns active
-  // adds its rows to the expectation by itself), and the rows the card adds: the 3 that wait for a feature of the charge
+  // adds its rows to the expectation by itself), and the rows the card adds: the 2 that wait for a feature of the charge
   // groups whose key does not exist yet (WAITING_ROWS) and the 2 set up by hand (MANUAL_ROWS).
   // What the active rows say depends on the system (this one proposes the declared values, other specs change some),
   // so only the states that cannot change are fixed here.
   const fromServer = (await query(request, await adminToken(request), 'qb.admin.first-launch-switches', {})).length
   await expect(page.getByTestId('fund-switches')).toBeVisible()
   await expect(page.getByTestId('fund-switch')).toHaveCount(fromServer + CARD_ONLY_ROWS)
-  await expect(page.locator('[data-testid="fund-switch"][data-key="qb.exposure.billing.enabled"]'))
-    .toHaveAttribute('data-state', 'waiting')
+  // F-M8: the exposure fee's key exists (the template reads its value) but its settlements come with F-M8c, so the row
+  // shows its value like an active one and says that it waits.
+  const exposure = page.locator('[data-testid="fund-switch"][data-key="qb.exposure.billing.enabled"]')
+  await expect(exposure).toHaveAttribute('data-state', /^(match|differs|proposed|proposedDiffers|missing)$/)
+  await expect(exposure.getByTestId('fund-switch-note').filter({ hasText: 'F-M8' })).toHaveCount(1)
   // F-M7 delivered the audience fee: its switch is an ordinary one, read against its launch value.
   const audience = page.locator('[data-testid="fund-switch"][data-key="qb.audience.billing.enabled"]')
   await expect(audience).toHaveAttribute('data-state', /^(match|differs|proposed|proposedDiffers|missing)$/)
