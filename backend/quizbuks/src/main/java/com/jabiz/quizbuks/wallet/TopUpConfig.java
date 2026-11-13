@@ -292,6 +292,10 @@ class TopUpConfig {
             .item(ReconChecks.EXPOSURE_UNIT_MISMATCH, "en", "Exposures bought without a price frozen, or a price "
                 + "without a purchase", "zh", "有已购次数却没有冻结单价，或有单价却没有已购", "ja",
                 "購入数があるのに単価が固定されていない、またはその逆")
+            .item(ReconChecks.EXPOSURE_SETTLED_SHORT, "en", "Final exposure settlements that counted fewer than "
+                + "were counted", "zh", "最终结算的次数少于已计入的次数", "ja", "最終精算の回数が計上済みの回数より少ない")
+            .item(ReconChecks.EXPOSURE_AMOUNT_MISMATCH, "en", "Exposure settlements whose amounts do not add up to "
+                + "the count", "zh", "曝光结算的金额之和与次数不符", "ja", "精算額の合計が回数と一致しない露出料")
             .item(ReconChecks.EXPOSURE_UNPURCHASED, "en", "Publications of another's video that bought no exposures "
                 + "(a note)", "zh", "用他人视频却没有购买曝光的发布（仅提示）", "ja", "他人の動画を使い露出を購入していない公開（お知らせのみ）")
             .item(ReconChecks.CREDIT_NOTE_USES, "en", "Credit notes against what they gave back and paid",

@@ -145,17 +145,24 @@ abstract class PrepaymentItSupport extends TreeItSupport {
         params.put("unsettledHours", paramValue(QbParams.DISTRIBUTION_UNSETTLED_AFTER_HOURS));
         params.put("missingHours", paramValue(QbParams.DISTRIBUTION_FINAL_MISSING_AFTER_HOURS));
         String token = TestTokens.bearer(tokens, "fm5-recon", QbPermissions.WALLET_SYSTEM);
-        // F-M8: the exposure fee's checks, with their own hours.
-        Map<String, Object> exposure = new HashMap<>(Map.of("at", clock.instant().toString(), "zone", "Asia/Tokyo"));
-        exposure.put("unsettledHours", paramValue(QbParams.EXPOSURE_UNSETTLED_AFTER_HOURS));
-        exposure.put("missingHours", paramValue(QbParams.EXPOSURE_FINAL_MISSING_AFTER_HOURS));
+        // F-M8: the exposure fee's checks, with their own hours (the note EXPOSURE_UNPURCHASED is not a difference).
         List<Map<String, Object>> rows = new java.util.ArrayList<>(feeAccountItems(token, Map.of("params", params)));
-        rows.addAll(items("qb.system.recon-exposure", token, Map.of("params", exposure)));
+        rows.addAll(exposureChecks(sponsor));
         return rows.stream()
             .filter(row -> sponsor.equals(String.valueOf(row.get("sponsorId")))
                 && !"FEE_CREDIT_PROMOTION".equals(row.get("checkCode"))
                 && !"DISTRIBUTION_AT_FLOOR".equals(row.get("checkCode"))
                 && !"EXPOSURE_UNPURCHASED".equals(row.get("checkCode"))).toList();
+    }
+
+    /** Everything the exposure fee's daily check finds about the Sponsor, the note and the attention items too. */
+    List<Map<String, Object>> exposureChecks(String sponsor) {
+        Map<String, Object> exposure = new HashMap<>(Map.of("at", clock.instant().toString(), "zone", "Asia/Tokyo"));
+        exposure.put("unsettledHours", paramValue(QbParams.EXPOSURE_UNSETTLED_AFTER_HOURS));
+        exposure.put("missingHours", paramValue(QbParams.EXPOSURE_FINAL_MISSING_AFTER_HOURS));
+        return items("qb.system.recon-exposure", TestTokens.bearer(tokens, "fm5-recon", QbPermissions.WALLET_SYSTEM),
+            Map.of("params", exposure)).stream()
+            .filter(row -> sponsor.equals(String.valueOf(row.get("sponsorId")))).toList();
     }
 
     /** A parameter's published value now (none: not published). */

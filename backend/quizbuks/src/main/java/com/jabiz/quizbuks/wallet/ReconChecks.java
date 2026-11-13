@@ -114,6 +114,10 @@ public final class ReconChecks {
     public static final String EXPOSURE_PRICE_RANGE = "EXPOSURE_PRICE_RANGE";
     /** F-M8: a publication with a price frozen and nothing bought, or something bought and no price frozen. */
     public static final String EXPOSURE_UNIT_MISMATCH = "EXPOSURE_UNIT_MISMATCH";
+    /** F-M8c review M2: a final exposure settlement that counted fewer than were counted by its own time. */
+    public static final String EXPOSURE_SETTLED_SHORT = "EXPOSURE_SETTLED_SHORT";
+    /** F-M8c review M2: the amounts of a publication's settlements against the cumulative amount of its highest count. */
+    public static final String EXPOSURE_AMOUNT_MISMATCH = "EXPOSURE_AMOUNT_MISMATCH";
     /** F-M8 (a note): running publications of another's video that bought nothing. */
     public static final String EXPOSURE_UNPURCHASED = "EXPOSURE_UNPURCHASED";
     /** Account 2110 in all against all sponsors' cached balances. */
@@ -153,7 +157,8 @@ public final class ReconChecks {
         DISTRIBUTION_FINAL_MISSING, DISTRIBUTION_PRICE_RANGE, DISTRIBUTION_AT_FLOOR, AUDIENCE_REFUND_MISSING,
         AUDIENCE_REFUND_NO_PERIOD, AUDIENCE_FEE_NOT_LIVE, CREDIT_NOTE_USES, CREDIT_NOTE_LIMITS, CREDIT_NOTE_USE_VOID,
         CREDIT_UNUSED_WITH_DUE, HELP_USAGE_TOTAL, EXPOSURE_DEPOSITS, EXPOSURE_SETTLED_OVER, EXPOSURE_UNSETTLED,
-        EXPOSURE_FINAL_MISSING, EXPOSURE_PRICE_RANGE, EXPOSURE_UNIT_MISMATCH, EXPOSURE_UNPURCHASED);
+        EXPOSURE_FINAL_MISSING, EXPOSURE_PRICE_RANGE, EXPOSURE_UNIT_MISMATCH, EXPOSURE_UNPURCHASED,
+        EXPOSURE_SETTLED_SHORT, EXPOSURE_AMOUNT_MISMATCH);
 
     /** Codes no longer reported that runs written before may still name: readable, never written. */
     public static final List<String> RETIRED = List.of(DISTRIBUTION_PRICE_OUT_OF_RANGE);

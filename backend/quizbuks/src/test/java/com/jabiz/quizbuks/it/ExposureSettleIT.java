@@ -3,6 +3,7 @@ package com.jabiz.quizbuks.it;
 import com.jabiz.job.JobDefinition;
 import com.jabiz.quizbuks.fee.ExposureSettlements;
 import com.jabiz.quizbuks.fee.FeeProcesses;
+import com.jabiz.quizbuks.setup.QbParams;
 import com.jabiz.runtime.job.JobRunner;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -335,5 +336,96 @@ class ExposureSettleIT extends ExposureFeeItSupport {
         assertThat(settlements(publicationId).stream().map(row -> dec(row.get("amount")))
             .reduce(BigDecimal.ZERO, BigDecimal::add)).isEqualByComparingTo("28");
         assertThat(exposurePrepayment(publicationId)).containsEntry("status", "RELEASED");
+    }
+
+    /** Copies the settlement row of the publication as a row of its own (another period, another amount). */
+    private void extraSettlement(String publicationId, String period, int moreAmount) {
+        List<String> columns = query("SELECT column_name FROM information_schema.columns WHERE table_schema = "
+            + "current_schema() AND table_name = 'qb_exposure_settlement_version' AND is_identity = 'NO' "
+            + "AND (column_default IS NULL OR column_default NOT LIKE 'nextval%') ORDER BY ordinal_position").stream()
+            .map(row -> String.valueOf(row.get("column_name"))).toList();
+        String id = UUID.randomUUID().toString();
+        execute("INSERT INTO entity_registry (entity_id, entity_type, created_seq_id) SELECT ?::uuid, "
+            + "'QbExposureSettlement', process_seq_id FROM qb_exposure_settlement_version WHERE publication_id = ? "
+            + "LIMIT 1", id, publicationId);
+        String select = String.join(", ", columns.stream().map(c -> switch (c) {
+            case "settlement_id" -> "?::uuid";
+            case "version_no" -> "1";
+            case "period" -> "?";
+            case "final" -> "false";
+            case "amount" -> "v.amount + " + moreAmount;
+            case "total" -> "v.total + " + moreAmount;
+            default -> "v." + c;
+        }).toList());
+        execute("INSERT INTO qb_exposure_settlement_version (" + String.join(", ", columns) + ") SELECT " + select
+            + " FROM qb_exposure_settlement_version v WHERE v.publication_id = ? ORDER BY v.version_no DESC LIMIT 1",
+            id, period, publicationId);
+    }
+
+    @Test
+    void theDailyChecksFindAFinalSettlementThatCountedLessAndAmountsThatDoNotAddUp() {
+        String[] p = boughtPublication("fm8-short", 100);
+        String sponsor = p[0];
+        String publicationId = p[1];
+        Instant early = clock.instant().plusSeconds(60);
+        successes(publicationId, sponsor, p[2], 20, early);
+        run("QB_PUBLICATION_ADMIN_END", contentAdmin(), body("publicationId", publicationId, "reason", "F-M8 test"));
+        finalRun(clock.instant().plus(Duration.ofHours(3)));
+        assertThat(exposureChecks(sponsor)).isEmpty();
+        // Reports that were counted before the settlement but arrived after it: undercharged.
+        successes(publicationId, sponsor, p[2], 5, early.plusSeconds(60));
+        assertThat(exposureChecks(sponsor)).filteredOn(r -> "EXPOSURE_SETTLED_SHORT".equals(r.get("checkCode")))
+            .singleElement().satisfies(row -> {
+                assertThat(dec(row.get("expected"))).isEqualByComparingTo("25");
+                assertThat(dec(row.get("actual"))).isEqualByComparingTo("20");
+                assertThat(row.get("reference")).isEqualTo(publicationId);
+            });
+        // A row of amount that the count does not explain: the sum (20 + 27) is more than the cumulative amount (20).
+        extraSettlement(publicationId, "1999-01", 7);
+        assertThat(exposureChecks(sponsor)).filteredOn(r -> "EXPOSURE_AMOUNT_MISMATCH".equals(r.get("checkCode")))
+            .singleElement().satisfies(row -> {
+                assertThat(dec(row.get("expected"))).isEqualByComparingTo("20");
+                assertThat(dec(row.get("actual"))).isEqualByComparingTo("47");
+            });
+    }
+
+    @Test
+    void theDailyChecksFindAMonthNotSettledAPriceOutOfRangeAndAPublicationThatBoughtNothing() {
+        String[] p = boughtPublication("fm8-checks", 100);
+        String sponsor = p[0];
+        String month = period(clock.instant());
+        successes(p[1], sponsor, p[2], 5, clock.instant());
+        assertThat(exposureChecks(sponsor)).isEmpty();
+        // The month is over and the hours have passed (30): its settlement is not there.
+        clock.set(YearMonth.parse(month).plusMonths(1).atDay(3).atTime(12, 0).atZone(ZONE).toInstant());
+        assertThat(exposureChecks(sponsor)).filteredOn(r -> "EXPOSURE_UNSETTLED".equals(r.get("checkCode")))
+            .singleElement().satisfies(row -> {
+                assertThat(row.get("reference")).isEqualTo(month);
+                assertThat(dec(row.get("actual"))).isEqualByComparingTo("1");
+            });
+        monthlyIn(YearMonth.parse(month).plusMonths(1));
+        assertThat(exposureChecks(sponsor)).filteredOn(r -> "EXPOSURE_UNSETTLED".equals(r.get("checkCode"))).isEmpty();
+
+        // The headquarters raises the least price above the operator's: the operator is named (to look at).
+        String operator = String.valueOf(query("SELECT operator_id FROM qb_sponsor_operator WHERE user_id = ?",
+            sponsor).getFirst().get("operator_id"));
+        param(QbParams.EXPOSURE_UNIT_MIN, "2");
+        assertThat(exposureChecks(operator)).singleElement().satisfies(row ->
+            assertThat(row.get("checkCode")).isEqualTo("EXPOSURE_PRICE_RANGE"));
+        param(QbParams.EXPOSURE_UNIT_MIN, "1");
+
+        // Submitted while the switch was off: it bought nothing (a note, not a difference).
+        param(QbParams.EXPOSURE_BILLING_ENABLED, "false");
+        String other = reviewedSponsor("fm8-checks-other");
+        grant(other, 100_000, clock.instant().plus(Duration.ofDays(400)));
+        String sharedVideoId = approvedVideo(reviewedSponsor("fm8-checks-other-provider"));
+        String publicationId = draft(other, "fm8-unbought", sharedVideoId, 100L, clock.instant());
+        submit(sponsorToken(other), publicationId);
+        param(QbParams.EXPOSURE_BILLING_ENABLED, "true");
+        assertThat(exposureChecks(other)).singleElement().satisfies(row -> {
+            assertThat(row.get("checkCode")).isEqualTo("EXPOSURE_UNPURCHASED");
+            assertThat(dec(row.get("actual"))).isEqualByComparingTo("1");
+        });
+        assertThat(differences(other)).isEmpty();
     }
 }

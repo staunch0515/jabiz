@@ -1,12 +1,13 @@
 /*---
 id: qb.system.recon-exposure
 description: Whether the exposure fee agrees with the ledger and its settlements, by sponsor (F-M8) - the deposits (2180, purpose EXPOSURE) with what the open prepayments hold, settlements beyond what was bought, months and final rows not settled, prices outside the range, a price without a purchase or a purchase without its price, and (a note) running publications of another's video that bought nothing (the daily reconciliation; differences, one for attention and one note)
-entities: [LedgerEntry, LedgerAccount, QbPrepayment, QbPublication, QbPublicationCard, QbExposureSettlement, QbExposurePrice, SysParam]
+entities: [LedgerEntry, LedgerAccount, QbPrepayment, QbPublication, QbPublicationCard, QbExposureSettlement, QbExposurePrice, QbExposure, SysParam]
 datasets:
   QbPrepayment: urn:jabiz:dataset:default:QbPrepayment
   QbPublication: urn:jabiz:dataset:default:QbPublication
   QbPublicationCard: urn:jabiz:dataset:default:QbPublicationCard
   QbExposureSettlement: urn:jabiz:dataset:default:QbExposureSettlement
+  QbExposure: urn:jabiz:dataset:default:QbExposure
   QbExposurePrice: urn:jabiz:dataset:default:QbExposurePrice
   SysParam: urn:jabiz:dataset:now:SysParam
 params:
@@ -38,6 +39,13 @@ permissions: [qb.wallet.system]
 --   it is now (a bound not set does not bound).
 -- EXPOSURE_UNIT_MISMATCH (F-M8): by sponsor, a sponsor's publication with a price frozen and nothing bought, or something
 --   bought and no price frozen (the purchase and the price are written together).
+-- EXPOSURE_SETTLED_SHORT (F-M8c review M2): by sponsor and publication, a final settlement that counted fewer than were
+--   counted by its own time (expected min(counted before it, bought), actual its count): what the month and final runs
+--   leave behind when a row is written wrongly. Reports that arrive after the grace show up here too: they are
+--   undercharged. Scale: one count through the exposures' (publication, user) index for each final row; the rows of
+--   ended publications only grow, which a count of every one of them tolerates at the daily check.
+-- EXPOSURE_AMOUNT_MISMATCH (F-M8c review M2): by sponsor and publication, the amounts of all its settlements against
+--   the cumulative amount of its highest count (ceil(count x price)): expected the cumulative amount, actual the sum.
 -- EXPOSURE_UNPURCHASED (F-M8, a note): by sponsor, running publications of another sponsor's video that bought nothing
 --   (submitted before the switch was on, or whose operator had no price).
 WITH exposure_ledger AS (
@@ -154,3 +162,24 @@ WHERE xp.{{QbPublication.publisherKind}} = 'SPONSOR'
   AND xp.{{QbPublication.exposurePurchased}} IS NULL
   AND xc.{{QbPublicationCard.status}} IN ('SCHEDULED', 'LIVE', 'PAUSED', 'FUNDS_SHORT')
 GROUP BY xp.{{QbPublication.publisherId}}
+UNION ALL
+SELECT CAST('EXPOSURE_SETTLED_SHORT' AS varchar(30)), CAST(fin.{{QbExposureSettlement.sponsorId}} AS varchar(128)),
+       CAST(fin.{{QbExposureSettlement.publicationId}} AS varchar(128)),
+       CAST(least(sc.r_counted, xp.{{QbPublication.exposurePurchased}}) AS numeric),
+       CAST(fin.{{QbExposureSettlement.toCount}} AS numeric)
+FROM {{QbExposureSettlement}} fin
+JOIN {{QbPublication}} xp ON CAST(xp.{{QbPublication.publicationId}} AS text) = fin.{{QbExposureSettlement.publicationId}}
+CROSS JOIN LATERAL (SELECT count(*) AS r_counted FROM {{QbExposure}} e
+                    WHERE e.{{QbExposure.publicationId}} = fin.{{QbExposureSettlement.publicationId}}
+                      AND e.{{QbExposure.countedAt}} IS NOT NULL
+                      AND e.{{QbExposure.countedAt}} < fin.{{QbExposureSettlement.settledAt}}) sc
+WHERE fin.{{QbExposureSettlement.final}} AND xp.{{QbPublication.exposurePurchased}} IS NOT NULL
+  AND fin.{{QbExposureSettlement.toCount}} < least(sc.r_counted, xp.{{QbPublication.exposurePurchased}})
+UNION ALL
+SELECT CAST('EXPOSURE_AMOUNT_MISMATCH' AS varchar(30)), CAST(xs.{{QbExposureSettlement.sponsorId}} AS varchar(128)),
+       CAST(xs.{{QbExposureSettlement.publicationId}} AS varchar(128)),
+       CAST(ceil(max(xs.{{QbExposureSettlement.toCount}}) * max(xs.{{QbExposureSettlement.unit}})) AS numeric),
+       CAST(sum(xs.{{QbExposureSettlement.amount}}) AS numeric)
+FROM {{QbExposureSettlement}} xs
+GROUP BY xs.{{QbExposureSettlement.sponsorId}}, xs.{{QbExposureSettlement.publicationId}}
+HAVING sum(xs.{{QbExposureSettlement.amount}}) <> ceil(max(xs.{{QbExposureSettlement.toCount}}) * max(xs.{{QbExposureSettlement.unit}}))
