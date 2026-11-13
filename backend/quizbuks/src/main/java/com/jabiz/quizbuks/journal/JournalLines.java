@@ -19,8 +19,9 @@ import java.util.TreeSet;
 import java.util.regex.Pattern;
 
 /**
- * The summary voucher of an export (Q9d, D-Q9d-2, D-Q9d-4, D-Q9d-6): one line per account and side, the sponsor
- * prepayments (2110) one per sponsor besides (the accounting system's customer sub-ledger); the takers' accounts only
+ * The summary voucher of an export (Q9d, D-Q9d-2, D-Q9d-4, D-Q9d-6): one line per account and side, the accounts
+ * of {@link #PER_SPONSOR} (sponsor prepayments 2110, cash 2160, fee credit 2190, fees receivable 1130, prepayments
+ * set aside 2180) one per sponsor besides (the accounting system's customer sub-ledger); the takers' accounts only
  * per account (D-2). The database sums the lines (template {@code qb.system.journal-summary}); this numbers them and
  * writes the files: the voucher for the accounting system to import (summary lines only) and the detail, each posting
  * of each line, in parts (D-3; review H1).
@@ -34,15 +35,19 @@ public final class JournalLines {
     public static final Pattern ACCOUNT_CODE = Pattern.compile("[A-Za-z0-9][A-Za-z0-9._-]{0,19}");
     public static final int EXTERNAL_VOUCHER_LENGTH = 50;
 
-    /** The accounts carrying a line per sponsor. */
-    /** The accounts kept per sponsor: the Kudos wallets (2110), Q87a the cash accounts (2160), F-M1 the fee credit (2190). */
-    private static final java.util.Set<String> PER_SPONSOR = java.util.Set.of(QbLedger.SPONSOR_PREPAYMENTS,
-        QbLedger.SPONSOR_CASH, QbLedger.FEE_CREDIT);
+    /**
+     * The accounts kept per sponsor: the Kudos wallets (2110), Q87a the cash accounts (2160), F-M1 the fee credit
+     * (2190), the fees receivable (1130) and the prepayments set aside (2180). Each of them has the sponsor in its
+     * first dimension; the templates group them by it ({@code IN (...)} in journal-summary, -detail and -parts, the
+     * same list).
+     */
+    static final java.util.Set<String> PER_SPONSOR = java.util.Set.of(QbLedger.SPONSOR_PREPAYMENTS,
+        QbLedger.SPONSOR_CASH, QbLedger.FEE_CREDIT, QbLedger.FEES_RECEIVABLE, QbLedger.FEE_PREPAYMENTS);
 
     /** The detail's times, in Japan's time as the periods are. */
     private static final DateTimeFormatter TIME = DateTimeFormatter.ISO_OFFSET_DATE_TIME;
 
-    /** A sum of the summary template: an account, a side and (2110) a sponsor. */
+    /** A sum of the summary template: an account, a side and (the accounts kept per sponsor) a sponsor. */
     public record Group(String accountCode, String side, String sponsorId, BigDecimal amount, int transactions) {
 
         public Group {
@@ -52,7 +57,7 @@ public final class JournalLines {
         }
     }
 
-    /** One posting of an account in one transaction, on one side (and for 2110 one sponsor), as the template sums it. */
+    /** One posting of an account in one transaction, on one side (and per sponsor where kept so), as the template sums it. */
     public record Entry(String transactionId, Instant bookingTime, Instant recordedAt, String accountCode,
         String direction, String party, BigDecimal amount, String sourceEntity, String sourceId, String reference) {
 
@@ -63,7 +68,7 @@ public final class JournalLines {
             Objects.requireNonNull(amount, "amount");
         }
 
-        /** The sponsor of a 2110 line; none on the other accounts. */
+        /** The sponsor of a line of an account kept per sponsor; none on the other accounts. */
         String sponsor() {
             return PER_SPONSOR.contains(accountCode) ? party : null;
         }
@@ -73,7 +78,7 @@ public final class JournalLines {
      * A line of the voucher.
      *
      * @param externalCode the accounting system's account code; null when not mapped
-     * @param sponsorId    the sponsor (2110 only)
+     * @param sponsorId    the sponsor (the accounts kept per sponsor only)
      * @param transactions how many ledger transactions it sums
      */
     public record Line(int lineNo, String side, String accountCode, String externalCode, String sponsorId,

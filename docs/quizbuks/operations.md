@@ -461,6 +461,8 @@ FROM pg_stat_statements ORDER BY total_exec_time DESC LIMIT 20;
 | `QB_JOURNAL_TOO_LARGE` | 一笔交易超过半段：缺陷或异常数据，开问题 |
 | `QB_JOURNAL_NOTHING_POSTED` | 该期没有分录（正常） |
 
+**凭证按发起方的科目**：2110、2160、2190、1130（应收平台费）与 2180（预付款）每个发起方、借贷各一行（`sponsor_id` 为发起方），会计系统按客户辅助账导入；其余科目每个科目、借贷各一行。明细中每一行的 `line_no` 是它所属的凭证行，同一行号的明细合计等于该凭证行（`JournalFeeAccountsIT`）。1130 与 2180 在 2026-11-13 之前的导出中没有发起方（1130 每个发起方一行但 `sponsor_id` 为空、明细的行号对不上；2180 全体合为一行）：这些月份不重新导出，需要时按明细文件中分录的来源核对。
+
 ### 7.4 卡住的转账
 
 - **现象**：转账停在 `SENDING` 或 `CHECK`；待办"转账结果不明"；`jabiz.external.job{job_type="qb.stripe.transfer"}` 失败。
