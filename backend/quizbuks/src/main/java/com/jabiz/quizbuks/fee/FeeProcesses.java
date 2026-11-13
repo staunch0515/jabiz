@@ -309,6 +309,7 @@ public final class FeeProcesses {
                 QbFees.INVOICE_ISSUED_EVENT, FeeProcesses::invoicePayload)));
     }
 
+    // The billing mode and the total decided here are foreseen by creditMayPay (before anything is written): keep both.
     static void insertCharge(ProcessContext ctx, ZoneId zone) {
         ChargeInput input = chargeInput(ctx);
         ParamValues params = ctx.get(PARAMS, ParamValues.class);

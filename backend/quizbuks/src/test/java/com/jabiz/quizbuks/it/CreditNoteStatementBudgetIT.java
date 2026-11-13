@@ -30,7 +30,7 @@ class CreditNoteStatementBudgetIT extends CreditNoteItSupport {
      */
     static final int REFUND_ITEM = 25;
     /**
-     * The approval of a credit note by hand on a prepaid fee paid from the account, given back to it [27]: the approval
+     * The approval of a credit note by hand on a prepaid fee paid from the account, given back to it [29]: the approval
      * result's reads (the request, the sponsor, the approval, the fee and its invoice in one; the notes on the fee), then
      * the note as above, and the request's outcome.
      */

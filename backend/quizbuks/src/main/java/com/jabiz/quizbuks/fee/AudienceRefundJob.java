@@ -127,6 +127,7 @@ public final class AudienceRefundJob {
             .description("Closes an audience fee whose period could not be read, deciding that no credit note is "
                 + "issued on it.")
             .permissions(QbPermissions.FEE_MANAGE)
+            .requiresVerifiedEmail()
             .actsOn(QbPrepayments.PREPAYMENT, "prepaymentId", a -> a.whenField("refundOutcome",
                 AudienceRefunds.NONE_NO_PERIOD))
             .contextFactory((start, input) -> {

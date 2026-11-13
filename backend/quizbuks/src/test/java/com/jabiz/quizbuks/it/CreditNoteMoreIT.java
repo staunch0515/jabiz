@@ -235,6 +235,41 @@ class CreditNoteMoreIT extends CreditNoteItSupport {
         assertThat(notes(sponsor)).isEmpty();
     }
 
+    /** Closing takes qb.fee.manage and a verified address; a prepayment that does not exist is not found. */
+    @Test
+    void closingIsFinancesAndNeedsAPrepaymentThatExists() {
+        refused(AudienceRefundJob.CLOSE, TestTokens.bearer(tokens, "fm7-not-finance", QbPermissions.FEE_SYSTEM),
+            body("prepaymentId", UUID.randomUUID().toString(), "reason", "No"), 403);
+        refused(AudienceRefundJob.CLOSE, unverifiedTokenOf(user("fm7-unverified"),
+            com.jabiz.quizbuks.setup.QbRoles.ADMIN_FINANCE), body("prepaymentId", UUID.randomUUID().toString(),
+            "reason", "No"), 403);
+        refused(AudienceRefundJob.CLOSE, finance(), body("prepaymentId", UUID.randomUUID().toString(), "reason",
+            "No"), 404);
+    }
+
+    /**
+     * M-2 of the re-check: a note's issue date is the day in Japan (the fiscal year's zone), not UTC's: issued at 15:30
+     * UTC it is the next day's, and its PDF prints that date.
+     */
+    @Test
+    void aNotesIssueDateIsJapansDay() {
+        param(QbParams.FEE_MONTHLY, "1000");
+        String sponsor = newSponsor(unique("s-fm7-date"));
+        cash(sponsor, 2_000);
+        clock.set(Instant.parse("2027-03-10T15:30:00Z"));
+        assertThat(monthly(sponsor)).isEqualTo("CHARGED");
+        creditNote(monthlyCharge(sponsor).get("charge_id"), 100);
+        Map<String, Object> note = notes(sponsor).getFirst();
+        assertThat(String.valueOf(note.get("issued_on"))).isEqualTo("2027-03-11");
+        assertThat(items(CreditNotes.DOCUMENT_TEMPLATE, sponsorToken(sponsor), Map.of("params", Map.of(
+            "creditNoteId", String.valueOf(note.get("credit_note_id")))))).singleElement()
+            .satisfies(row -> assertThat(String.valueOf(row.get("issuedOn"))).isEqualTo("2027-03-11"));
+        assertThat(com.jabiz.quizbuks.fee.FeeDocuments.CREDIT_NOTE_LAYOUT.blocks()).filteredOn(block ->
+            block instanceof com.jabiz.document.DocumentLayout.Facts).singleElement()
+            .satisfies(block -> assertThat(((com.jabiz.document.DocumentLayout.Facts) block).columns())
+                .contains("issuedOn").doesNotContain("issuedAt"));
+    }
+
     /** A note by hand on the fee clears it too (finance decided to give something back). */
     @Test
     void aNoteByHandOnAFeeWithNoPeriodClearsTheCheck() {
