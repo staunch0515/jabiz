@@ -3,6 +3,7 @@ package com.jabiz.quizbuks.it;
 import com.jabiz.quizbuks.fee.FeeCodes;
 import com.jabiz.quizbuks.fee.Prepayments;
 import com.jabiz.quizbuks.publishing.PublicationExposureTopUp;
+import com.jabiz.quizbuks.setup.QbParams;
 import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;
