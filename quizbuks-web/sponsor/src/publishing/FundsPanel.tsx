@@ -52,7 +52,13 @@ export function FundsPanel({ publicationId, revision }: { publicationId: string;
                 <li key={item.purpose} data-testid="publication-funds-item" data-purpose={item.purpose}>
                   {t('publishing.funds.item', { purpose: t(`publishing.funds.purpose.${item.purpose}`),
                     amount: formatKudos(item.amount) })}
-                  {item.unit != null && (
+                  {item.unit != null && item.purpose === 'EXPOSURE' && item.purchased != null && (
+                    <span className="text-muted-foreground" data-testid="publication-funds-unit">
+                      {' '}{t('publishing.funds.exposureUnit', { n: item.purchased.toLocaleString(i18n.language),
+                        unit: formatUnit(item.unit) })}
+                    </span>
+                  )}
+                  {item.unit != null && item.purpose !== 'EXPOSURE' && (
                     <span className="text-muted-foreground" data-testid="publication-funds-unit">
                       {' '}{t(item.atFloor ? 'publishing.funds.unitAtFloor' : 'publishing.funds.unit',
                         { unit: formatUnit(item.unit) })}
