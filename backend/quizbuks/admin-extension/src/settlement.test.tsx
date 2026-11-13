@@ -31,7 +31,7 @@ vi.mock('@jabiz/admin', async (original) => {
 })
 
 const row = { settlementId: 's1', operatorId: 'op-1', operatorName: 'Kyushu Partners', month: '2026-11',
-  plan: '2', fixedFee: '20000', revenue: '22', platformShare: '0.2', operatorShare: '17', prospectingCost: '0', carriedIn: '0', payable: '17',
+  plan: '2', fixedFee: '20000', revenue: '22', platformShare: '0.2', operatorShare: '17', prospectingCost: '0', creditNoteDeduction: '3', carriedIn: '0', payable: '17',
   carriedOut: '0', status: 'ISSUED', documentNo: 's1', documentRunId: 'run-1', paidOn: null }
 
 beforeAll(async () => {
@@ -78,6 +78,8 @@ describe('the settlements', () => {
     // Finance sees yen, with the plan's fixed fee.
     expect(settlement).toHaveTextContent(/20,000/)
     expect(settlement).toHaveTextContent(/JPY|¥|￥/)
+    // F-M7: what credit notes took off the share.
+    expect(within(settlement).getByTestId('settlement-credit-note-deduction')).toHaveTextContent('3')
     expect(server.runQuery).toHaveBeenCalledWith(TEMPLATE.operatorSettlements, expect.anything())
     await expectAccessible(container)
     const user = userEvent.setup()
@@ -98,6 +100,7 @@ describe('the settlements', () => {
     expect(settlement).toHaveTextContent('17 Kudos')
     expect(settlement).toHaveTextContent('20,000 Kudos')
     expect(settlement).not.toHaveTextContent(/JPY|¥|￥/)
+    expect(within(settlement).getByTestId('settlement-credit-note-deduction')).toHaveTextContent('3 Kudos')
     expect(within(settlement).queryByTestId('settlement-pay')).not.toBeInTheDocument()
     expect(within(settlement).queryByTestId('settlement-download')).not.toBeInTheDocument()
   })

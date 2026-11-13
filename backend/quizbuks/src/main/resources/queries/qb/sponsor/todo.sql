@@ -70,7 +70,7 @@ SELECT
       WHERE u.{{QbVideoUse.status}} = 'SUBMITTED') AS videoUsesToConfirm,
     (SELECT count(*) FROM {{QbFeeInvoice}} i CROSS JOIN account a
       WHERE i.{{QbFeeInvoice.status}} IN ('OPEN', 'PARTIAL', 'OVERDUE')
-        AND i.{{QbFeeInvoice.total}} - i.{{QbFeeInvoice.paidAmount}} > a.available) AS feeInvoicesUncovered,
+        AND i.{{QbFeeInvoice.total}} - i.{{QbFeeInvoice.creditApplied}} - i.{{QbFeeInvoice.paidAmount}} > a.available) AS feeInvoicesUncovered,
     (SELECT count(*) FROM {{QbFeeCreditGrant}} g
       WHERE g.{{QbFeeCreditGrant.remaining}} > 0
         AND g.{{QbFeeCreditGrant.expiresAt}} > CAST(:at AS timestamptz)

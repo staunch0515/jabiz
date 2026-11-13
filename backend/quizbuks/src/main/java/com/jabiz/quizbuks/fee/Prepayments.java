@@ -308,6 +308,7 @@ public final class Prepayments {
             throw new IllegalStateException("Prepayment " + input.prepaymentId() + " is not open");
         }
         BigDecimal remaining = FeeGate.money(prepayment.get("remaining"));
+        // At most what it holds: FeeProcesses.creditMayPay foresees this to read the credit before the fee is written.
         BigDecimal paid = input.amount().min(remaining);
         Map<String, Object> values = new LinkedHashMap<>();
         values.put("remaining", remaining.subtract(paid));

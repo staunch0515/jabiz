@@ -1,0 +1,478 @@
+# Credit notes (docs/quizbuks/plans/impl/F-M.md §10.3-16, F-M7): QB_SETUP and its proposals, the monthly fee of 1,000
+# yen. Alice, a postpaid Sponsor, is charged October's fee (1,100 with tax). Finance credits 400 of it (a note of 440
+# by hand: one administrator proposes, another approves); with no invoice unpaid it is all credit, nothing given back.
+# November's run issues October's invoice, which takes the credit first: 440 of 1,100 paid by it, 660 owed. The daily
+# reconciliation finds nothing.
+name: Credit notes
+properties:
+  jabiz.jobs.lock-at-least-for: 0s
+  quizbuks.links.sponsor: https://sponsor.quizbuks.test/sponsor/
+clock: 2026-10-01T00:00:00Z
+actor: { id: installer, permissions: ["*"] }
+steps:
+  - process: QB_SETUP@latest
+    input: {}
+    save: { p1: "$.proposals[0]", p2: "$.proposals[1]", p3: "$.proposals[2]", p4: "$.proposals[3]",
+      p5: "$.proposals[4]", p6: "$.proposals[5]", p7: "$.proposals[6]", p8: "$.proposals[7]", p9: "$.proposals[8]",
+      p10: "$.proposals[9]", p11: "$.proposals[10]", p12: "$.proposals[11]", p13: "$.proposals[12]",
+      p14: "$.proposals[13]", p15: "$.proposals[14]", p16: "$.proposals[15]", p17: "$.proposals[16]",
+      p18: "$.proposals[17]", p19: "$.proposals[18]", p20: "$.proposals[19]", p21: "$.proposals[20]",
+      p22: "$.proposals[21]", p23: "$.proposals[22]", p24: "$.proposals[23]",
+      p25: "$.proposals[24]", p26: "$.proposals[25]", p27: "$.proposals[26]", p28: "$.proposals[27]",
+      p29: "$.proposals[28]", p30: "$.proposals[29]", p31: "$.proposals[30]",
+      p32: "$.proposals[31]", p33: "$.proposals[32]", p34: "$.proposals[33]",
+      p35: "$.proposals[34]", p36: "$.proposals[35]", p37: "$.proposals[36]", p38: "$.proposals[37]",
+      p39: "$.proposals[38]", p40: "$.proposals[39]", p41: "$.proposals[40]", p42: "$.proposals[41]",
+      p43: "$.proposals[42]", p44: "$.proposals[43]", p45: "$.proposals[44]", p46: "$.proposals[45]", p47: "$.proposals[46]",
+      p48: "$.proposals[47]", p49: "$.proposals[48]",
+      p50: "$.proposals[49]", p51: "$.proposals[50]", p52: "$.proposals[51]", p53: "$.proposals[52]", p54: "$.proposals[53]", p55: "$.proposals[54]", p56: "$.proposals[55]", p57: "$.proposals[56]", p58: "$.proposals[57]",
+      p59: "$.proposals[58]", p60: "$.proposals[59]", p61: "$.proposals[60]", p62: "$.proposals[61]", p63: "$.proposals[62]", p64: "$.proposals[63]", p65: "$.proposals[64]",
+      p66: "$.proposals[65]", p67: "$.proposals[66]", p68: "$.proposals[67]", p69: "$.proposals[68]", p70: "$.proposals[69]", p71: "$.proposals[70]", p72: "$.proposals[71]",
+      p73: "$.proposals[72]", p74: "$.proposals[73]", p75: "$.proposals[74]", p76: "$.proposals[75]", p77: "$.proposals[76]", p78: "$.proposals[77]", p79: "$.proposals[78]", p80: "$.proposals[79]", p81: "$.proposals[80]", p82: "$.proposals[81]", p83: "$.proposals[82]", p84: "$.proposals[83]", p85: "$.proposals[84]", p86: "$.proposals[85]", p87: "$.proposals[86]", p88: "$.proposals[87]", p89: "$.proposals[88]", p90: "$.proposals[89]", p91: "$.proposals[90]",
+      p92: "$.proposals[91]", p93: "$.proposals[102]", p94: "$.proposals[103]", p95: "$.proposals[104]", p96: "$.proposals[105]", p97: "$.proposals[106]", p98: "$.proposals[107]", p99: "$.proposals[108]",
+      r92: "$.proposals[92]", r93: "$.proposals[93]", r94: "$.proposals[94]", r95: "$.proposals[95]", r96: "$.proposals[96]", r97: "$.proposals[97]", r98: "$.proposals[98]", r99: "$.proposals[99]", r100: "$.proposals[100]", r101: "$.proposals[101]",
+      r109: "$.proposals[109]", r110: "$.proposals[110]", r111: "$.proposals[111]", r112: "$.proposals[112]", r113: "$.proposals[113]", r114: "$.proposals[114]", r115: "$.proposals[115]", r116: "$.proposals[116]", r117: "$.proposals[117]", r118: "$.proposals[118]", r119: "$.proposals[119]", r120: "$.proposals[120]", r121: "$.proposals[121]" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p1}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p2}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p3}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p4}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p5}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p6}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p7}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p8}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p9}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p10}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p11}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p12}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p13}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p14}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p15}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p16}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p17}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p18}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p19}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p20}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p21}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p22}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p23}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p24}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p25}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p26}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p27}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p28}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p29}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p30}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p31}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p32}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p33}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p34}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p35}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p36}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p37}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p38}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p39}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p40}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p41}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p42}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p43}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p44}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p45}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p46}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p47}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p48}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p49}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p50}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p51}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p52}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p53}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p54}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p55}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p56}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p57}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p58}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p59}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p60}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p61}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p62}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p63}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p64}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p65}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p66}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p67}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p68}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p69}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p70}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p71}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p72}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p73}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p74}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p75}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p76}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p77}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p78}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p79}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p80}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p81}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p82}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p83}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p84}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p85}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p86}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p87}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p88}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p89}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p90}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p91}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p92}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p93}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p94}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p95}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p96}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p97}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p98}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p99}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${r92}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${r93}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${r94}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${r95}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${r96}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${r97}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${r98}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${r99}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${r100}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${r101}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${r109}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${r110}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${r111}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${r112}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${r113}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${r114}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${r115}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${r116}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${r117}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${r118}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${r119}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${r120}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${r121}" }
+
+  - note: Alice, a Sponsor of the default operator.
+    process: SEC_USER_CREATE@latest
+    input: { userName: alice, displayName: Alice, email: alice@example.com }
+    save: { a: $.userId }
+
+  - note: The platform's administrator creates the default operator with its lead, its own sponsor (F-S1).
+    actor: { id: installer, permissions: ["*"], mfa: true }
+    process: SEC_USER_CREATE@latest
+    input: { userName: operator-lead, displayName: Operator lead, email: operator-lead@example.com }
+    save: { operatorLead: $.userId }
+  - verifyEmail: "${operatorLead}"
+  - actor: { id: operators-admin, permissions: [qb.admin.operators.write] }
+    process: QB_OPERATOR_SAVE@latest
+    input: { name: QuizBuks, contactName: QuizBuks, contactEmail: support@quizbuks.example,
+      leadUserId: "${operatorLead}", defaultForNew: true }
+
+  - actor: { id: "${a}", permissions: [qb.sponsor.me] }
+    process: QB_SPONSOR_APPLY@latest
+    input: { displayName: Alice, company: Capitals Inc, acceptTerms: true }
+    save: { onboarding: $.approvalRequestId }
+  - actor: { id: content-admin, permissions: [qb.review.sponsor, approval.decide] }
+    process: APPROVAL_DECIDE@latest
+    input: { requestId: "${onboarding}", decision: APPROVE }
+  - deliverEvents: true
+
+  - note: The monthly fee of 1,000 yen; Alice is billed after the month (postpaid, within 50,000).
+    actor: { id: super-admin, permissions: [control.propose] }
+    process: CONTROL_CHANGE_PROPOSE@latest
+    input: { targetEntity: SysParam, values: { paramKey: qb.fee.monthly, value: "1000" }, reason: Monthly fee }
+    save: { monthly: $.changeId }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${monthly}" }
+  - actor: { id: billing-admin, permissions: [qb.fee.billing] }
+    process: QB_OPERATOR_BILLING_SET@latest
+    input: { userId: "${a}", billingMode: POSTPAID, creditLimit: 50000, reason: Pays after the month }
+
+  - note: October's fee, as the monthly job's item charges it.
+    advanceClock: PT1H
+  - actor: { id: system }
+    process: QB_FEE_MONTHLY_ITEM@latest
+    input: { sponsorId: "${a}", period: "2026-10" }
+    expectOutput: { outcome: CHARGED }
+    save: { charge: $.id }
+
+  - note: Finance credits 400 of it; the one who proposed cannot approve, another administrator does.
+    actor: { id: finance, permissions: [qb.fee.manage] }
+    process: QB_FEE_REQUEST@latest
+    input: { kind: CREDIT_NOTE, chargeId: "${charge}", amount: 400, reason: Service was down four days }
+    save: { noteRequest: $.requestId, noteApproval: $.approvalRequestId }
+  - actor: { id: approver, permissions: [qb.topup.bank.approve, approval.decide] }
+    process: APPROVAL_DECIDE@latest
+    input: { requestId: "${noteApproval}", decision: APPROVE }
+  - deliverEvents: true
+  - expect:
+      query: qb.admin.fee-credit-notes
+      rows: 1
+      values: [{ reason: MANUAL, amount: 400, tax: 40, total: 440 }]
+
+  - note: November's run issues October's invoice; the credit pays 440 of it first.
+    setClock: 2026-11-02T00:00:00Z
+  - actor: { id: system }
+    process: QB_FEE_INVOICE_ISSUE_ITEM@latest
+    input: { sponsorId: "${a}", period: "2026-10" }
+    expectOutput: { outcome: ISSUED }
+    save: { invoice: $.id }
+  - expect: { entity: QbFeeInvoice, id: "${invoice}", fields: { status: PARTIAL, total: 1100, creditApplied: 440,
+      paidAmount: 0 } }
+  - runJob: { job: qb.reconcile, at: 2026-11-01T18:37:00Z }
+  - expect:
+      query: qb.admin.recon-runs
+      rows: 1
+      values: [{ status: OK }]
+snapshot:
+  entities: [QbFeeCharge, QbFeeInvoice, QbFeeCreditNote, QbFeeCreditNoteUse, QbFeeRequest, LedgerTransaction,
+    LedgerEntry, QbReconRun]
+  asOf: end

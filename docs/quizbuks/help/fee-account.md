@@ -57,6 +57,18 @@ The account pays as far as it goes; the rest stays on the invoice as unpaid. Whi
 
 The top of "Money → Platform fee account" shows the total, the Granted credit and the cash; below it, every amount that is left in the order it is used (with its expiry), and how each fee was paid.
 
+### 中文 · 贷项凭证是什么？发布提前结束会退钱吗？
+
+贷项凭证减少您应付的平台费，原来的费用和账单不变。它有两种来源：发布提前结束时退回受众规则费未用的天数（是否退回按平台的设置；被平台下架的不退）；平台的财务人员更正某笔费用（由另一位管理员批准）。凭证先抵这笔费用所在账单还欠的部分；预付的费用再把超出的部分退回原来付款的地方（现金或赠送的平台费 Kudos，已过期的赠送不再退回）；余下的成为贷项，先抵您以后的账单。在"资金 → 账单"的"贷项凭证"一栏可以看到每张凭证并下载 PDF；账单上写明已用凭证抵减的金额。
+
+### 日本語 · 返還インボイスとは？ 公開が早く終わると返金されますか？
+
+返還インボイスは、お支払いいただくプラットフォーム利用料を減らすものです。元の料金と請求書はそのままです。発行されるのは、公開が早く終了したときの対象条件の料金のうち未使用日数分（返金するかどうかはプラットフォームの設定によります。プラットフォームによる取り下げは対象外です）と、プラットフォームの経理担当が料金を訂正するとき（別の管理者が承認します）です。まずその料金の請求書の未払い分に充当し、前払いの料金は残りを支払元（現金または付与クレジット。期限切れの付与クレジットには戻りません）に返金します。それでも残る分は次回以降の請求書に先に充当します。「資金 → 請求書」の「返還インボイス」で一覧と PDF を確認でき、請求書には充当額が記されます。
+
+### English · What is a credit note? Do I get money back when a publication ends early?
+
+A credit note lowers what you owe in platform fees; the fee and its invoice stay as they were. One is issued when a publication ends early, for the unused days of its audience rule fee (whether they are given back depends on the platform's setting; a takedown by the platform is not), or when the platform's finance staff correct a fee (approved by a second administrator). It first pays what the fee's invoice still owes; for a prepaid fee it then gives the rest back to where it was paid from (cash or granted credit; granted credit that has expired is not given back); anything still left pays your next invoices first. See each credit note and download its PDF under "Credit notes" in "Money → Invoices"; an invoice shows what credit notes paid of it.
+
 ### 中文 · 学分现在能用吗？
 
 **首次上线时学分暂不使用。** 现在发起方页面的菜单中没有"钱包"，不能用现金换学分，学分不能换回现金，也不能转账或提现；发布暂时不能把学分设为奖励（奖励方式是到店领取的奖品、电子奖品等）。支付平台费用的是"平台费账户"，不是学分钱包。学分何时开放使用，请留意平台的公告；此前请不要为学分充值。

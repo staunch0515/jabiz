@@ -51,11 +51,21 @@ public final class FeeCodes {
     /** F-M6 (review L2): a bound of the headquarters' range (qb.distribution.*) is not published. */
     public static final String DISTRIBUTION_RANGE_MISSING = "QB_DISTRIBUTION_RANGE_MISSING";
 
+    /** F-M7: a credit note on a fee whose invoice is voided (what paid it went back with the void). */
+    public static final String CREDIT_NOTE_VOIDED = "QB_FEE_CREDIT_NOTE_VOIDED";
+    /** F-M7: only a prepayment decided NONE_NO_PERIOD is closed by finance. */
+    public static final String AUDIENCE_REFUND_NOT_OPEN = "QB_AUDIENCE_REFUND_NOT_OPEN";
+    /** F-M7 (N8): a credit note for more than the fee may still be credited; never issued for less. */
+    public static final String CREDIT_NOTE_EXCEEDS = "QB_FEE_CREDIT_NOTE_EXCEEDS";
+    /** F-M7: an invoice with a credit note on a fee of it, or paid by one, is not voided: credit it instead. */
+    public static final String INVOICE_HAS_CREDIT_NOTE = "QB_FEE_INVOICE_HAS_CREDIT_NOTE";
+
     public static final List<String> ALL = List.of(PUBLICATION_FUNDS, FEE_UNPAID, FEE_CASH_SHORT, FEE_INVOICE_STATE, FEE_SPONSOR,
         FEE_PERIOD, FEE_PARAMS, FEE_NO_REVIEW, FEE_BILLING_MODE, FEE_OWN, FEE_NOTHING_DUE, FEE_CREDIT_OFF,
         FEE_CREDIT_SPONSOR, FEE_CREDIT_GIVEN, FEE_CREDIT_MAX, FEE_CREDIT_LEAD, DISTRIBUTION_PRICE_REQUIRED,
         DISTRIBUTION_PRICE_RANGE, DISTRIBUTION_FLOOR_ABOVE_CEILING, DISTRIBUTION_DEPOSIT_RANGE,
-        DISTRIBUTION_RANGE_MISSING);
+        DISTRIBUTION_RANGE_MISSING, CREDIT_NOTE_VOIDED, CREDIT_NOTE_EXCEEDS, INVOICE_HAS_CREDIT_NOTE,
+        AUDIENCE_REFUND_NOT_OPEN);
 
     private FeeCodes() {}
 }

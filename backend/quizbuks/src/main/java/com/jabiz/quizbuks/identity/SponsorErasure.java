@@ -148,7 +148,12 @@ public class SponsorErasure {
                     ErasedEntity.delete(QbAccounts.SPONSOR, "userId", "contactName", "company", "intro", "avatar",
                         "introTranslations"),
                     // Money stays (ten years): only who paid a bank transfer is overwritten.
-                    ErasedEntity.keep(QbTopUps.TOPUP, "sponsorId", "payerName"));
+                    ErasedEntity.keep(QbTopUps.TOPUP, "sponsorId", "payerName"),
+                    // F-M7: credit notes stay as the invoices they credit do; the purge overwrites finance's
+                    // explanation (it may name the company), and their documents, which name it, unless retained with
+                    // the receipts' (RetentionPolicy of DocumentRun).
+                    ErasedEntity.keep(com.jabiz.quizbuks.fee.QbCreditNotes.CREDIT_NOTE, "sponsorId", "note")
+                        .documents(com.jabiz.quizbuks.fee.QbCreditNotes.LAYOUT_ID));
             }
 
             @Override
