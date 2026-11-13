@@ -61,9 +61,50 @@ class JournalFeeAccountsIT extends JournalItSupport {
         clock.set(one.end().plus(Duration.ofHours(4)));
         advance(JournalPeriods.SETTLE.plusMinutes(1));
 
-        // The preview (the voucher's lines): 1130 and 2180 one line per sponsor and side, the sponsor named.
+        // What the export reads and writes: the voucher's lines (the preview, the summary template and JournalLines),
+        // the parts, the detail rows and the detail file, as the export's processes do.
         Map<String, Object> preview = preview();
         List<Map<String, Object>> lines = (List<Map<String, Object>>) preview.get("lines");
+        String token = TestTokens.bearer(tokens, "jf", QbPermissions.JOURNAL_EXPORT);
+        Map<String, Object> params = Map.of("to", one.end().toString(), "knownAt", clock.instant().toString());
+        List<Map<String, Object>> groups = items("qb.system.journal-summary", token, Map.of("params", params,
+            "limit", 500));
+        JournalLines.Summary summary = JournalLines.summarize(JournalLines.groups(groups), Map.of());
+        Map<String, Object> partParams = new HashMap<>(params);
+        partParams.put("partRows", 500);
+        partParams.put("partBytes", 10_000_000);
+        List<Map<String, Object>> parts = items("qb.system.journal-parts", token, Map.of("params", partParams,
+            "limit", 50));
+        assertThat(parts).hasSize(1);
+        Map<String, Object> detailParams = new HashMap<>(params);
+        detailParams.put("firstTransaction", parts.getFirst().get("firstTransaction"));
+        detailParams.put("lastTransaction", parts.getFirst().get("lastTransaction"));
+        List<Map<String, Object>> rows = items("qb.system.journal-detail", token, Map.of("params", detailParams,
+            "limit", 500));
+        List<List<String>> csv = csv(JournalLines.detailCsv("V", JournalLines.entries(rows), summary.lineNumbers()));
+        List<List<String>> detail = csv.subList(1, csv.size());
+
+        // First: every row on a line of the voucher, and every line the sum of its rows (account, side and sponsor
+        // the line's own).
+        Map<String, BigDecimal> byLine = new TreeMap<>();
+        detail.forEach(r -> {
+            assertThat(r.get(1)).as("line number of " + r).isNotEmpty();
+            byLine.merge(r.get(1), new BigDecimal(r.get(8)), BigDecimal::add);
+        });
+        for (JournalLines.Line line : summary.lines()) {
+            String no = String.valueOf(line.lineNo());
+            assertThat(byLine.get(no)).as("detail total of line " + no + " " + line.accountCode() + " "
+                + line.side()).isNotNull().isEqualByComparingTo(line.amount());
+            assertThat(detail).filteredOn(r -> no.equals(r.get(1))).allSatisfy(r -> {
+                assertThat(r.get(5)).isEqualTo(line.accountCode());
+                assertThat(r.get(6)).isEqualTo(line.side());
+                assertThat(r.get(7)).isEqualTo(line.sponsorId() == null ? "" : line.sponsorId());
+            });
+        }
+        assertThat(byLine).hasSize(summary.lines().size());
+        assertThat(summary.lineNumbers()).hasSize(summary.lines().size());
+
+        // The preview (the voucher's lines): 1130 and 2180 one line per sponsor and side, the sponsor named.
         assertThat(lines).filteredOn(l -> "1130".equals(l.get("accountCode")))
             .extracting(l -> l.get("side"), l -> l.get("sponsorId"), l -> money(l.get("amount")).longValue())
             .containsExactlyInAnyOrder(tuple("DEBIT", a, 300L), tuple("DEBIT", b, 500L), tuple("CREDIT", a, 150L),
@@ -75,63 +116,24 @@ class JournalFeeAccountsIT extends JournalItSupport {
                 tuple("CREDIT", b, 600L, 1));
 
         // The templates: the summary keeps the sponsor of both accounts ...
-        String token = TestTokens.bearer(tokens, "jf", QbPermissions.JOURNAL_EXPORT);
-        Map<String, Object> params = Map.of("to", one.end().toString(), "knownAt", clock.instant().toString());
-        List<Map<String, Object>> groups = items("qb.system.journal-summary", token, Map.of("params", params,
-            "limit", 500));
         assertThat(groups).filteredOn(g -> "2180".equals(g.get("accountCode")))
             .extracting(g -> g.get("direction") + ":" + g.get("party") + ":" + money(g.get("amount")).intValue())
             .containsExactlyInAnyOrder("DEBIT:" + a + ":150", "CREDIT:" + a + ":400", "CREDIT:" + b + ":600");
-        JournalLines.Summary summary = JournalLines.summarize(JournalLines.groups(groups), Map.of());
         assertThat(summary.lines().stream().filter(l -> List.of("1130", "2180").contains(l.accountCode())))
             .hasSize(7).allSatisfy(l -> assertThat(l.sponsorId()).isIn(a, b));
-        assertThat(summary.lineNumbers()).hasSize(summary.lines().size());
 
         // ... and so do the parts and the detail (a row per transaction, account, side and sponsor).
-        Map<String, Object> partParams = new HashMap<>(params);
-        partParams.put("partRows", 500);
-        partParams.put("partBytes", 10_000_000);
-        List<Map<String, Object>> parts = items("qb.system.journal-parts", token, Map.of("params", partParams,
-            "limit", 50));
-        assertThat(parts).singleElement().satisfies(part -> {
-            assertThat(part).containsEntry("partNo", 1).containsEntry("transactions", 7)
-                .containsEntry("rowCount", 14);
-            assertThat(preview).containsEntry("detailRows", 14).containsEntry("detailParts", 1);
-        });
-        Map<String, Object> detailParams = new HashMap<>(params);
-        detailParams.put("firstTransaction", parts.getFirst().get("firstTransaction"));
-        detailParams.put("lastTransaction", parts.getFirst().get("lastTransaction"));
-        List<Map<String, Object>> rows = items("qb.system.journal-detail", token, Map.of("params", detailParams,
-            "limit", 500));
+        assertThat(parts.getFirst()).containsEntry("partNo", 1).containsEntry("transactions", 7)
+            .containsEntry("rowCount", 14);
+        assertThat(preview).containsEntry("detailRows", 14).containsEntry("detailParts", 1);
         assertThat(rows).hasSize(14);
         assertThat(rows).filteredOn(r -> List.of("1130", "2180").contains(r.get("accountCode"))).hasSize(7)
             .allSatisfy(r -> assertThat(r.get("party")).isIn(a, b));
 
-        // The detail file, as the export writes it: the sponsor on every 1130 and 2180 row ...
-        List<List<String>> csv = csv(JournalLines.detailCsv("V", JournalLines.entries(rows), summary.lineNumbers()));
-        List<List<String>> detail = csv.subList(1, csv.size());
+        // The detail file, as the export writes it: the sponsor on every 1130 and 2180 row.
         assertThat(detail).hasSize(14);
         assertThat(detail).filteredOn(r -> List.of("1130", "2180").contains(r.get(5))).hasSize(7)
             .allSatisfy(r -> assertThat(r.get(7)).isIn(a, b));
-
-        // ... every row on a line of the voucher, and every line the sum of its rows (account, side and sponsor
-        // the line's own).
-        Map<String, BigDecimal> byLine = new TreeMap<>();
-        detail.forEach(r -> {
-            assertThat(r.get(1)).as("line number of " + r).isNotEmpty();
-            byLine.merge(r.get(1), new BigDecimal(r.get(8)), BigDecimal::add);
-        });
-        assertThat(byLine).hasSize(summary.lines().size());
-        for (JournalLines.Line line : summary.lines()) {
-            String no = String.valueOf(line.lineNo());
-            assertThat(byLine.get(no)).as("line " + no + " " + line.accountCode() + " " + line.side())
-                .isEqualByComparingTo(line.amount());
-            assertThat(detail).filteredOn(r -> no.equals(r.get(1))).allSatisfy(r -> {
-                assertThat(r.get(5)).isEqualTo(line.accountCode());
-                assertThat(r.get(6)).isEqualTo(line.side());
-                assertThat(r.get(7)).isEqualTo(line.sponsorId() == null ? "" : line.sponsorId());
-            });
-        }
     }
 
     String pair(Instant at, String reference, String debit, Map<String, String> debitDims, String credit,
