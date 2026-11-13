@@ -76,6 +76,8 @@
 
 - [ ] 正式环境 `QB_SETUP` 的提案已由另一位管理员按 `operations.md` §4"首次上线的开关"的顺序发布；财务页"首次上线的资金开关"可比较的行全部"一致"，启动日志没有 `FirstLaunchSwitchesCheck` 的警告
       确认人： ／ 日期： ／ 依据：
+- [ ] **核对的两个阈值**（F-M14a，`operations.md` §7.52）：`qb.prepayment.release.overdue-days` 与 `qb.audience.refund.missing-after-hours` 已是受控参数。F-M7 之后还没跑过 `QB_SETUP` 的安装，`qb.audience.refund.missing-after-hours` 会成为提案：发布之前 `AUDIENCE_REFUND_MISSING` 不执行，所以要与其他提案一起发布；已有值的安装保留现值
+      确认人： ／ 日期： ／ 依据：
 - [ ] Stripe 正式模式的各项（本页"Stripe"）完成；小额实测充值进入现金子账户
       确认人： ／ 日期： ／ 依据：
 - [ ] 各运营商的价目表（配送费、受众规则费、曝光费）与 AI 额度的价格、倍数、汇率已以受控变更设好；赠送额度的金额与有效期已设

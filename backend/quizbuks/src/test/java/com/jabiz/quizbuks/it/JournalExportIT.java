@@ -179,8 +179,16 @@ class JournalExportIT extends JournalItSupport {
         assertThat(reconcile(clock.instant())).isEqualTo("DIFF");
         assertThat(refusedExport(two.label())).containsExactly(JournalCodes.RECON_NOT_OK);
         String correcting = post(two.start().plus(Duration.ofDays(3)), "2110", "1110", 25, other, "diff fixed");
+        // F-M14 (review M5): an item for attention (an operator's price outside the headquarters' range) and a note
+        // leave the run OK, so the export goes ahead; the difference above held it back.
+        execute("INSERT INTO qb_distribution_price (price_id, operator_id, rate, unit_floor, unit_ceiling, "
+            + "minimum_deposit, reason, updated_at, updated_by, version) VALUES (gen_random_uuid()::text, "
+            + "'op-journal-attention', 2, 1, 20, 500, 'F-M14', now(), 'it', 1)");
         advance(Duration.ofHours(1));
         assertThat(reconcile(clock.instant())).isEqualTo("OK");
+        assertThat(query("SELECT 1 FROM qb_recon_item_version i JOIN qb_recon_run_version r ON r.run_id = i.run_id "
+            + "WHERE r.scheduled_time = ? AND i.check_code = 'DISTRIBUTION_PRICE_RANGE'",
+            java.sql.Timestamp.from(clock.instant()))).hasSize(1);
         String withinMargin = post(two.start().plus(Duration.ofDays(4)), "1120", "1110", 15, null, "margin");
         advance(Duration.ofMinutes(5));
         Map<String, Object> second = export(two.label());
