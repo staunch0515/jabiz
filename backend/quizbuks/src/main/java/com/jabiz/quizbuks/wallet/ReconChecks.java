@@ -71,6 +71,12 @@ public final class ReconChecks {
     /** F-M6: publications ended {@code qb.distribution.final-missing-after-hours} ago without a final settlement. */
     public static final String DISTRIBUTION_FINAL_MISSING = "DISTRIBUTION_FINAL_MISSING";
     /** F-M6: operators' prices outside the headquarters' range as it is now (sponsorId holds the operator). */
+    public static final String DISTRIBUTION_PRICE_RANGE = "DISTRIBUTION_PRICE_RANGE";
+    /**
+     * Retired (never reported): the first name of {@link #DISTRIBUTION_PRICE_RANGE}. Its 31 characters did not fit
+     * {@code qb_recon_item_version.check_code} (30): the template's cast cut it short and the run dropped it. Runs
+     * written before the rename hold it in their sealed summaries ({@code ":0"}), so the dictionary keeps it, disabled.
+     */
     public static final String DISTRIBUTION_PRICE_OUT_OF_RANGE = "DISTRIBUTION_PRICE_OUT_OF_RANGE";
     /** F-M6: publications whose price per start is the operator's floor: a note for the operators, not a difference. */
     public static final String DISTRIBUTION_AT_FLOOR = "DISTRIBUTION_AT_FLOOR";
@@ -108,7 +114,10 @@ public final class ReconChecks {
         FEES_RECEIVABLE, ENTRY_FEES_UNSETTLED, FEE_CREDIT, CASH_LOTS, FEE_PAYMENTS, FEE_CREDIT_PROMOTION,
         LIGHT_GRANTS, LIGHT_VOIDS, CERTIFIED_GRANTS, OPERATOR_ACCOUNT, PREPAYMENTS, PREPAYMENT_STALE,
         PREPAYMENT_PARTS, PREPAYMENT_UNCHARGED, DISTRIBUTION_DEPOSITS, DISTRIBUTION_UNSETTLED,
-        DISTRIBUTION_FINAL_MISSING, DISTRIBUTION_PRICE_OUT_OF_RANGE, DISTRIBUTION_AT_FLOOR);
+        DISTRIBUTION_FINAL_MISSING, DISTRIBUTION_PRICE_RANGE, DISTRIBUTION_AT_FLOOR);
+
+    /** Codes no longer reported that runs written before may still name: readable, never written. */
+    public static final List<String> RETIRED = List.of(DISTRIBUTION_PRICE_OUT_OF_RANGE);
 
     /** The checks that only note something: a run with notes alone is {@code OK}. */
     public static final Set<String> NOTES = Set.of(TAKER_WALLET_LAG, DISTRIBUTION_AT_FLOOR);
@@ -215,18 +224,23 @@ public final class ReconChecks {
     /**
      * Rows {@code checkCode, expected, actual} of the totals, {@code topUpId, sponsorId, …} of the top-ups or
      * {@code transferId, userId, …} of the transfers.
+     *
+     * @throws IllegalStateException for a code that is not one of {@link #ALL} (one cut short by its column, a typo in
+     *     a template): the run fails rather than leave the check out unseen, and qb-reconcile-missing reports it
      */
     public static List<Item> coded(List<Map<String, Object>> rows) {
         List<Item> items = new ArrayList<>();
         for (Map<String, Object> row : rows) {
             String check = text(row.get("checkCode"));
-            if (check != null && ALL.contains(check)) {
-                String party = row.containsKey("userId") ? text(row.get("userId")) : text(row.get("sponsorId"));
-                // F-M6 (review M2, M4): the fee account's template names a publication or a month as its reference.
-                String reference = row.containsKey("transferId") ? text(row.get("transferId"))
-                    : row.containsKey("reference") ? text(row.get("reference")) : text(row.get("topUpId"));
-                add(items, check, party, reference, row.get("expected"), row.get("actual"));
+            if (check == null || !ALL.contains(check)) {
+                throw new IllegalStateException("A reconciliation template returned the check code '" + check
+                    + "', which is not one of ReconChecks.ALL");
             }
+            String party = row.containsKey("userId") ? text(row.get("userId")) : text(row.get("sponsorId"));
+            // F-M6 (review M2, M4): the fee account's template names a publication or a month as its reference.
+            String reference = row.containsKey("transferId") ? text(row.get("transferId"))
+                : row.containsKey("reference") ? text(row.get("reference")) : text(row.get("topUpId"));
+            add(items, check, party, reference, row.get("expected"), row.get("actual"));
         }
         return items;
     }

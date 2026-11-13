@@ -266,10 +266,14 @@ class TopUpConfig {
                 "zh", "某月未结算的配送费", "ja", "未精算の月がある配信料")
             .item(ReconChecks.DISTRIBUTION_FINAL_MISSING, "en", "Ended publications without their final distribution "
                 + "settlement", "zh", "已结束但无最终结算的配送费", "ja", "終了後に最終精算がない配信料")
-            .item(ReconChecks.DISTRIBUTION_PRICE_OUT_OF_RANGE, "en", "Distribution prices outside the headquarters' "
+            .item(ReconChecks.DISTRIBUTION_PRICE_RANGE, "en", "Distribution prices outside the headquarters' "
                 + "range", "zh", "超出总部范围的配送费价目", "ja", "本部の範囲外の配信料の価格")
             .item(ReconChecks.DISTRIBUTION_AT_FLOOR, "en", "Publications charged the least distribution price (a note)",
-                "zh", "按下限计费的配送费（仅提示）", "ja", "下限で計算した配信料（お知らせのみ）"));
+                "zh", "按下限计费的配送费（仅提示）", "ja", "下限で計算した配信料（お知らせのみ）")
+            // Retired: named in the summaries of runs written before its rename (ReconChecks.RETIRED).
+            .disabledItem(ReconChecks.DISTRIBUTION_PRICE_OUT_OF_RANGE, "en", "Distribution prices outside the "
+                + "headquarters' range (former name)", "zh", "超出总部范围的配送费价目（旧名）", "ja",
+                "本部の範囲外の配信料の価格（旧名）"));
     }
 
     /** Accounting evidence is kept ten years from the end of its fiscal year (Q10b, item 13; L-4). */

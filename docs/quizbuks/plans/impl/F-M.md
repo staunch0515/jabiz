@@ -435,7 +435,7 @@
   - `priceProblems`：各值 ≥ 0、下限 ≤ 上限、都在总部范围内。
 - `QB_OPERATOR_DISTRIBUTION_PRICE_SET`（运营商负责人，`OperatorChecks.member` 且是负责人，锁 `qb.operator:<运营商>`）与 `QB_DISTRIBUTION_PRICE_SET`（总部的财务 `qb.fee.manage`，为某个运营商设；不用 `qb.fee.billing`：运营商持有它，用于本运营商发起方的计费方式）。理由必填；只影响此后提交的发布（单价在提交时冻结）。
 - 总部范围是受控参数（四眼）：`qb.distribution.rate.min|max`、`unit-floor.min|max`、`unit-ceiling.max`、`minimum-deposit.max`。
-  - 保存价目时按当时的范围检查。范围改窄后已有价目不自动改，每日核对报 `DISTRIBUTION_PRICE_OUT_OF_RANGE`，给 `qb.admin.finance.read` 待办。
+  - 保存价目时按当时的范围检查。范围改窄后已有价目不自动改，每日核对报 `DISTRIBUTION_PRICE_RANGE`，给 `qb.admin.finance.read` 待办。
 - 规格补写定价规则（随本项提交）：单价按档位金额的最大值算，为 0 或没有档位即按下限。
 - **档位金额的单位（总控决定 1 的补充，2026-11-12）**：所有奖励方式的档位金额都是 **Kudos 数**（`RewardMethod`：非平台付奖的是奖品价值的 Kudos 数）。单价 = clamp(`rate` × 档位最大的 Kudos 数, 下限, 上限)，所有方式同一算法，不折算日元。`rate` 的单位是**日元 / Kudos**（每 1 Kudos 奖励收多少日元），不是百分比：规格 F-M6 的规则行、运营商价目页、总部范围 `qb.distribution.rate.min|max` 的参数说明与帮助三语都这样写。
 - **下限防自报偏低**：非平台付奖的档位金额是发起方自报的，报低即落到下限。所以 `qb.distribution.unit-floor.min` 的缺省值 > 0：先取占位值（`1.0000` 日元 / 人），参数说明写"打开 `qb.distribution.billing.enabled` 之前由需求方确认"，并登记到 F-F10 的上线开关清单（`FirstLaunchSwitches` 中 F-M6 那一行的前提）。结算行记 `atFloor`（单价 = 下限），结算列表 `qb.admin.distribution-settlements` 与运营商的结算页标出"按下限计费"，核对项 `DISTRIBUTION_AT_FLOOR`（只列出，不算差异）供运营商与总部查看。
@@ -539,7 +539,7 @@
   - `DISTRIBUTION_DEPOSITS`：2180 用途 `DISTRIBUTION` 按发布 = `OPEN` 预付款剩余；
   - `DISTRIBUTION_UNSETTLED`（9.6）；
   - `DISTRIBUTION_FINAL_MISSING`：结束超过 `qb.distribution.final-missing-after-hours`（缺省 48）仍没有 `final`；
-  - `DISTRIBUTION_PRICE_OUT_OF_RANGE`（9.3）；
+  - `DISTRIBUTION_PRICE_RANGE`（9.3）；
   - `DISTRIBUTION_AT_FLOOR`：只列出按下限计费的发布（不算差异），供运营商与总部查看（9.3）。
 - **月报**：
   - `PREPAYMENT_FROZEN` / `RELEASED` 按用途分出 `DISTRIBUTION_DEPOSIT` / `DISTRIBUTION_RELEASED`（规格的名字）；

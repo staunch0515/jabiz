@@ -80,7 +80,7 @@ permissions: [qb.wallet.system]
 --   many publications. Not checked without :zone.
 -- DISTRIBUTION_FINAL_MISSING (F-M6): by sponsor, the ended publications with a price per start and no final row
 --   qb.distribution.final-missing-after-hours (handed in) after their end: expected 0, actual how many.
--- DISTRIBUTION_PRICE_OUT_OF_RANGE (F-M6): by operator (sponsorId holds it), a price outside the headquarters' range as
+-- DISTRIBUTION_PRICE_RANGE (F-M6): by operator (sponsorId holds it), a price outside the headquarters' range as
 --   the parameters give it now (a bound not set does not bound): expected 0, actual 1.
 -- DISTRIBUTION_AT_FLOOR (F-M6, a note, not a difference): by sponsor, the publications not ended whose price per start
 --   is the operator's floor (their top tier set it no higher): expected 0, actual how many.
@@ -452,7 +452,7 @@ WHERE dp.{{QbPublication.distributionUnit}} IS NOT NULL
                     AND ds.{{QbDistributionSettlement.final}})
 GROUP BY dp.{{QbPublication.publisherId}}
 UNION ALL
-SELECT CAST('DISTRIBUTION_PRICE_OUT_OF_RANGE' AS varchar(30)), CAST(pr.{{QbDistributionPrice.operatorId}} AS varchar(128)), CAST(NULL AS varchar(128)),
+SELECT CAST('DISTRIBUTION_PRICE_RANGE' AS varchar(30)), CAST(pr.{{QbDistributionPrice.operatorId}} AS varchar(128)), CAST(NULL AS varchar(128)),
        CAST(0 AS numeric), CAST(1 AS numeric)
 FROM {{QbDistributionPrice}} pr
 CROSS JOIN distribution_params dpar

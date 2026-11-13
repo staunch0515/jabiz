@@ -1267,7 +1267,7 @@
   - 防自报偏低：非平台付奖的档位金额是发起方自报的，报低即落到下限；`qb.distribution.unit-floor.min` 的缺省值 > 0（占位 1 日元 / 人，打开开关前由需求方确认），按下限计费的结算与发布标出，核对列出（只提示，不算差异）。
   - 改派运营商不影响：按提交时冻结的运营商（F-M11）。
 - **参数**：`qb.distribution.billing.enabled`（false，受控）；总部范围 `qb.distribution.rate.min|max`、`unit-floor.min|max`、`unit-ceiling.max`、`minimum-deposit.max`（受控）；运营商价目表的比例、下限、上限、最低预付款（运营商设定）。
-- **运营闭合**：发起方向导的单价与预付、发布页的本月人数与预计、历次结算；运营商价目表页；总部范围与全部结算列表；结算任务 `qb.distribution-fee`（`JobDefinition.forEach`，`CRON_TZ`），完成后才开账单（F-M13）；核对 `DISTRIBUTION_DEPOSITS`、`DISTRIBUTION_UNSETTLED`、`DISTRIBUTION_FINAL_MISSING`、`DISTRIBUTION_PRICE_OUT_OF_RANGE`，提示 `DISTRIBUTION_AT_FLOOR`；`operations.md` §7.48 与发起方说明"学者得到的奖励就是发起方设定的全部"；月报 `DISTRIBUTION_DEPOSIT` / `DISTRIBUTION_RELEASED`、配送费的记费列为 `DISTRIBUTION_CHARGED`。
+- **运营闭合**：发起方向导的单价与预付、发布页的本月人数与预计、历次结算；运营商价目表页；总部范围与全部结算列表；结算任务 `qb.distribution-fee`（`JobDefinition.forEach`，`CRON_TZ`），完成后才开账单（F-M13）；核对 `DISTRIBUTION_DEPOSITS`、`DISTRIBUTION_UNSETTLED`、`DISTRIBUTION_FINAL_MISSING`、`DISTRIBUTION_PRICE_RANGE`，提示 `DISTRIBUTION_AT_FLOOR`；`operations.md` §7.48 与发起方说明"学者得到的奖励就是发起方设定的全部"；月报 `DISTRIBUTION_DEPOSIT` / `DISTRIBUTION_RELEASED`、配送费的记费列为 `DISTRIBUTION_CHARGED`。
 - **依赖**：F-M1、F-M5、F-M11、F-M13、Q92a。
 - **验收**：开关关不收；0 人不记费；1 人收 ⌈单价⌉；未答完与不合格都计；先扣预付再扣账户；跨月只按差额、每月只结一次；结束后释放；直营发起方照付（需求方 2026-11-12 确认）；学者读到的内容开关前后相同。
 - **不做**：最低配送费；配送人数上限；按配送费排序。
