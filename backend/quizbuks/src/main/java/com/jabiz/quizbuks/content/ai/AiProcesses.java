@@ -962,7 +962,7 @@ public final class AiProcesses {
             return;
         }
         AiQuestionsJob.Result result = completion.result(AiQuestionsJob.Result.class);
-        java.math.BigDecimal cost = AiCost.of(job.get("model"), result.servedModel(), usage, settings(ctx).price());
+        BigDecimal cost = AiCost.of(job.get("model"), result.servedModel(), usage, settings(ctx).price());
         Map<String, Object> values = finished(usage, cost, completion.attempts(), completion.finishedTime());
         boolean failed = false;
         if (QbAi.QUEUED.equals(job.get("status"))) {
@@ -1091,8 +1091,8 @@ public final class AiProcesses {
     /** Set to the cost when the outcome finished a reviewer's translation check (it counts towards the dollar alert). */
     static final String CHECK_COST = "checkCost";
 
-    static java.math.BigDecimal checkCost(ProcessContext ctx) {
-        return ctx.contains(CHECK_COST) ? (java.math.BigDecimal) ctx.get(CHECK_COST) : null;
+    static BigDecimal checkCost(ProcessContext ctx) {
+        return ctx.contains(CHECK_COST) ? (BigDecimal) ctx.get(CHECK_COST) : null;
     }
 
     /** Whether the outcome is of a reviewer's translation check still unfinished (the dollars are read for it only). */
@@ -1108,7 +1108,7 @@ public final class AiProcesses {
             return;
         }
         ClaudeApi.Usage usage = charged(failure.usage(), failure.unrecordedAttempts(), job);
-        java.math.BigDecimal cost = AiCost.of(job.get("model"), null, usage, settings(ctx).price());
+        BigDecimal cost = AiCost.of(job.get("model"), null, usage, settings(ctx).price());
         Map<String, Object> values = finished(usage, cost, failure.attempts(), failure.finishedTime());
         if (QbAi.QUEUED.equals(job.get("status"))) {
             values.put("status", QbAi.FAILED);

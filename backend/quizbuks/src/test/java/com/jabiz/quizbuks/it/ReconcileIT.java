@@ -8,11 +8,13 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
 
+import java.math.BigDecimal;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
@@ -81,14 +83,14 @@ class ReconcileIT extends TopUpItSupport {
             .filter(item -> "HELP_USAGE_TOTAL".equals(item.get("check_code"))).toList();
         assertThat(found).extracting(item -> item.get("reference")).containsExactlyInAnyOrder("2031-06:questions",
             "2031-06:outputTokens", "2031-06:costMicros");
-        assertThat(found).allSatisfy(item -> assertThat(new java.math.BigDecimal(String.valueOf(item.get("difference"))))
+        assertThat(found).allSatisfy(item -> assertThat(new BigDecimal(String.valueOf(item.get("difference"))))
             .isNegative());
     }
 
     private static void helpUsage(String month, String user, int questions, int in, int out, String usd) {
         execute("INSERT INTO qb_help_usage (usage_id, user_id, month, questions, failed_jobs, cancelled_jobs, "
             + "input_tokens, output_tokens, cost_usd, version) VALUES (?, ?, ?, ?, 0, 0, ?, ?, ?, 1)",
-            java.util.UUID.randomUUID().toString(), user, month, questions, in, out, new java.math.BigDecimal(usd));
+            UUID.randomUUID().toString(), user, month, questions, in, out, new BigDecimal(usd));
     }
 
     /** Some of everything: a paid top-up with a fee and a refund, rewards paid and pending. */
@@ -120,7 +122,7 @@ class ReconcileIT extends TopUpItSupport {
         assertThat((String) current.get("summary")).contains("\"DISTRIBUTION_PRICE_RANGE\":0")
             .doesNotContain(ReconChecks.DISTRIBUTION_PRICE_OUT_OF_RANGE);
         // The old run as it was written (inserted, as the sealed rows are never changed): its summary names the old code.
-        String oldRun = java.util.UUID.randomUUID().toString();
+        String oldRun = UUID.randomUUID().toString();
         execute("INSERT INTO entity_registry (entity_id, entity_type, created_seq_id) SELECT ?::uuid, entity_type, "
             + "created_seq_id FROM entity_registry WHERE entity_id = ?::uuid", oldRun, String.valueOf(current.get("run_id")));
         execute("INSERT INTO qb_recon_run_version (run_id, version_no, effect_start_time, created_time, process_seq_id, "

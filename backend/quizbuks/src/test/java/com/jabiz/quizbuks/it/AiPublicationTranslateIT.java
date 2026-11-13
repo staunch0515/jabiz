@@ -126,6 +126,7 @@ class AiPublicationTranslateIT extends AiItSupport {
             "language", "zh")).get("aiJobId");
         runJobs();
         assertThat(gauge.costValue()).isGreaterThan(gaugeBefore);
+        long gaugeAfterCheck = gauge.costValue();
 
         Map<String, Object> job = job(aiJobId);
         assertThat(job).containsEntry("kind", QbAi.KIND_TRANSLATION_CHECK).containsEntry("status", QbAi.READY)
@@ -146,5 +147,13 @@ class AiPublicationTranslateIT extends AiItSupport {
         List<Map<String, Object>> rows = items("qb.admin.ai-translation-check", reviewer(), Map.of("params",
             Map.of("publicationId", publicationId, "language", "zh"), "limit", 1));
         assertThat(rows).singleElement().satisfies(row -> assertThat(row).containsEntry("status", QbAi.READY));
+
+        // F-M10 review: another kind of job finishing (the questions of an article) does not know the month's dollars and must
+        // leave the gauge where the check put it, not reset it to 0.
+        List<String> other = quizWithArticle(token, "Rivers", "The Nile is a river in Africa. The Seine is in Paris.");
+        Object questionsJob = request(token, other.get(0), List.of(other.get(1)), 1).get("aiJobId");
+        runJobs();
+        assertThat(job(questionsJob)).containsEntry("status", QbAi.READY);
+        assertThat(gauge.costValue()).isEqualTo(gaugeAfterCheck);
     }
 }

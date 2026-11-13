@@ -4,6 +4,7 @@ import com.jabiz.process.ProcessContext;
 import com.jabiz.process.StepSpec;
 import com.jabiz.runtime.process.steps.RunTemplate;
 
+import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.ZoneId;
 import java.util.List;
@@ -32,14 +33,19 @@ public final class HelpCostGauge {
 
     /** Puts the share of the alert the dollars read come to, and their month, where {@link HelpUsageGauge} takes them. */
     @SuppressWarnings("unchecked")
-    public static void share(ProcessContext ctx, Instant finished, ZoneId zone, java.math.BigDecimal thisJobsCost) {
-        if (!ctx.contains(COSTS)) {
+    public static void share(ProcessContext ctx, Instant finished, ZoneId zone, BigDecimal thisJobsCost) {
+        // Not asked (the template did not run, or `when` was false and left an empty list), or no cost to add: this job
+        // does not know the month's dollars, so the gauge stays where it is.
+        if (!ctx.contains(COSTS) || thisJobsCost == null) {
             return;
         }
         List<Map<String, Object>> rows = (List<Map<String, Object>>) ctx.get(COSTS);
-        HelpCosts.Month month = HelpCosts.Month.of(rows == null || rows.isEmpty() ? null : rows.getFirst());
+        if (rows == null || rows.isEmpty()) {
+            return;
+        }
+        HelpCosts.Month month = HelpCosts.Month.of(rows.getFirst());
         // The dollars were read before this job's cost was written: its cost is added to them.
-        java.math.BigDecimal total = month.total().add(thisJobsCost == null ? java.math.BigDecimal.ZERO : thisJobsCost);
+        BigDecimal total = month.total().add(thisJobsCost);
         ctx.put(HelpUsageGauge.COST_PERCENT, HelpCosts.percent(total, month.alert()));
         ctx.put(HelpUsageGauge.MONTH, HelpCosts.monthOf(finished, zone));
     }
