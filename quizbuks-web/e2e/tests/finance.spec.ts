@@ -39,10 +39,9 @@ test('finance reviews a large transfer and issues the monthly report', async ({ 
   await expect(page.getByTestId('fund-switch')).toHaveCount(fromServer + CARD_ONLY_ROWS)
   await expect(page.locator('[data-testid="fund-switch"][data-key="qb.exposure.billing.enabled"]'))
     .toHaveAttribute('data-state', 'waiting')
-  // Its key exists: the card reads its value, and says it waits for its feature.
+  // F-M7 delivered the audience fee: its switch is an ordinary one, read against its launch value.
   const audience = page.locator('[data-testid="fund-switch"][data-key="qb.audience.billing.enabled"]')
   await expect(audience).toHaveAttribute('data-state', /^(match|differs|proposed|proposedDiffers|missing)$/)
-  await expect(audience.getByTestId('fund-switch-note')).toContainText('F-M7')
   await expect(page.locator('[data-testid="fund-switch"][data-key="qb.fee-credit.manual.max"]'))
     .toHaveAttribute('data-state', 'manual')
   await expect(page.locator('[data-testid="fund-switch"][data-key="qb.kudos.buy.enabled"]'))

@@ -117,6 +117,18 @@ public class FeeConfig {
             .item(QbPrepayments.RELEASED, "en", "Given back", "zh", "已退回", "ja", "返却済み"));
     }
 
+    /** F-M7: issuing a credit note (under the wallet lock its callers hold), and the reminders of what it paid. */
+    @Bean
+    ProcessDefinition<CreditNotes.IssueInput, CreditNotes.IssueOutput, ProcessContext> qbFeeCreditNoteIssue() {
+        return CreditNotes.issue(zone);
+    }
+
+    @Bean
+    ProcessDefinition<CreditNotes.TaskCloseInput, CreditNotes.TaskCloseOutput, ProcessContext>
+        qbFeeCreditNoteTaskClose() {
+        return CreditNotes.taskClose();
+    }
+
     @Bean
     ProcessDefinition<Prepayments.FreezeInput, Prepayments.FreezeOutput, ProcessContext> qbPrepaymentFreeze() {
         return Prepayments.freeze();
@@ -161,6 +173,41 @@ public class FeeConfig {
                 qbPrepaymentReleaseItem,
                 (scheduledTime, row) -> new Prepayments.ReleaseRef(String.valueOf(row.get("publicationId")),
                     String.valueOf(row.get("sponsorId")), String.valueOf(row.get("purpose"))))
+            .maxItems(maxItems);
+    }
+
+    /** F-M7: the item that decides an audience fee's unused days once. */
+    @Bean
+    ProcessDefinition<AudienceRefundJob.Ref, FeeProcesses.ItemOutput, ProcessContext> qbAudienceRefundItem() {
+        return AudienceRefundJob.item();
+    }
+
+    @Bean
+    ProcessDefinition<AudienceRefundJob.CloseInput, AudienceRefundJob.CloseOutput, ProcessContext>
+        qbAudienceRefundClose() {
+        return AudienceRefundJob.close();
+    }
+
+    /**
+     * F-M7 (§10.3-6): every day ({@code quizbuks.audience-refund.cron}, {@code QB_AUDIENCE_REFUND_CRON}; 03:37 in the
+     * fiscal year's zone, after the distribution fee's final settlements at 03:07 and the prepayments' release at
+     * 03:23), the audience fees of publications that ended and are not decided yet, at most
+     * {@code quizbuks.audience-refund.max-items} a run.
+     */
+    @Bean
+    JobDefinition<AudienceRefundJob.Ref> qbAudienceRefundJob(
+        ProcessDefinition<AudienceRefundJob.Ref, FeeProcesses.ItemOutput, ProcessContext> qbAudienceRefundItem,
+        @org.springframework.beans.factory.annotation.Value("${quizbuks.audience-refund.cron:0 37 3 * * *}")
+        String cron,
+        @org.springframework.beans.factory.annotation.Value("${quizbuks.audience-refund.max-items:10000}")
+        int maxItems) {
+        return JobDefinition.forEach(AudienceRefundJob.JOB, cron, zone,
+                JobItems.template(AudienceRefundJob.DUE_TEMPLATE, scheduledTime -> Map.of("at", scheduledTime),
+                    "prepaymentId"),
+                qbAudienceRefundItem,
+                (scheduledTime, row) -> new AudienceRefundJob.Ref(String.valueOf(row.get("prepaymentId")),
+                    String.valueOf(row.get("publicationId")), String.valueOf(row.get("sponsorId")),
+                    AudienceRefundJob.instant(row.get("endedAt"))))
             .maxItems(maxItems);
     }
 
@@ -295,6 +342,63 @@ public class FeeConfig {
         return own(QbFees.SPONSOR_INVOICES, QbFees.INVOICE);
     }
 
+    /** F-M7: credit notes and what their credit paid; finance reads them, the processes write them. */
+    @Bean
+    EntityDefinition qbFeeCreditNoteEntity() {
+        return QbCreditNotes.CREDIT_NOTE_ENTITY;
+    }
+
+    @Bean
+    EntityDefinition qbFeeCreditNoteUseEntity() {
+        return QbCreditNotes.USE_ENTITY;
+    }
+
+    @Bean
+    DatasetDefinition qbFeeCreditNoteDataset() {
+        return processOnly(QbCreditNotes.CREDIT_NOTE);
+    }
+
+    @Bean
+    DatasetDefinition qbFeeCreditNoteUseDataset() {
+        return processOnly(QbCreditNotes.USE);
+    }
+
+    @Bean
+    DatasetDefinition qbSponsorFeeCreditNoteDataset() {
+        return own(QbCreditNotes.SPONSOR_CREDIT_NOTES, QbCreditNotes.CREDIT_NOTE);
+    }
+
+    @Bean
+    DatasetDefinition qbSponsorFeeCreditNoteUseDataset() {
+        return own(QbCreditNotes.SPONSOR_USES, QbCreditNotes.USE);
+    }
+
+    @Bean
+    EntityDefinition qbFeeCreditNoteDocumentEntity() {
+        return QbCreditNotes.DOCUMENT_ENTITY;
+    }
+
+    @Bean
+    DatasetDefinition qbFeeCreditNoteDocumentDataset() {
+        return processOnly(QbCreditNotes.DOCUMENT);
+    }
+
+    /** The sponsor's own: their document process reads (and writes, as the process) through it. */
+    @Bean
+    DatasetDefinition qbSponsorFeeCreditNoteDocumentDataset() {
+        return own(QbCreditNotes.SPONSOR_DOCUMENTS, QbCreditNotes.DOCUMENT);
+    }
+
+    @Bean
+    DocumentLayout qbFeeCreditNoteLayout() {
+        return FeeDocuments.CREDIT_NOTE_LAYOUT;
+    }
+
+    @Bean
+    ProcessDefinition<CreditNotes.DocumentInput, CreditNotes.DocumentOutput, ProcessContext> qbFeeCreditNoteDocument() {
+        return CreditNotes.document();
+    }
+
     private DatasetDefinition processOnly(String entity) {
         return DatasetDefinition.define(QbFees.defaultDataset(entity), d -> d
             .targetEntityType(entity)
@@ -345,7 +449,34 @@ public class FeeConfig {
             .item(QbFees.REQUEST_MANUAL, "en", "Fee charged by hand", "zh", "手工记费", "ja", "手動の料金")
             .item(QbFees.REQUEST_VOID, "en", "Invoice voided", "zh", "作废账单", "ja", "請求書の取消")
             .item(QbFees.REQUEST_CREDIT, "en", "Platform fee Kudos granted by hand", "zh", "追加赠送平台费 Kudos",
-                "ja", "利用料 Kudos の追加付与"));
+                "ja", "利用料 Kudos の追加付与")
+            .item(QbFees.REQUEST_CREDIT_NOTE, "en", "Credit note by hand", "zh", "手工开贷项凭证", "ja",
+                "手動の返還インボイス"));
+    }
+
+    @Bean
+    StaticDictionary qbFeeCreditNoteReasonDictionary() {
+        return StaticDictionary.define(QbCreditNotes.REASON_DICTIONARY, d -> d
+            .item(QbCreditNotes.AUDIENCE_UNUSED, "en", "Unused days after an early end", "zh", "提前结束后未用的天数",
+                "ja", "早期終了後の未使用日数")
+            .item(QbCreditNotes.MANUAL, "en", "By hand", "zh", "手工", "ja", "手動"));
+    }
+
+    @Bean
+    StaticDictionary qbAudienceRefundOutcomeDictionary() {
+        return StaticDictionary.define(QbPrepayments.REFUND_OUTCOME_DICTIONARY, d -> d
+            .item(AudienceRefunds.REFUNDED, "en", "Given back", "zh", "已退回", "ja", "返金済み")
+            .item(AudienceRefunds.CREDITED, "en", "Credited", "zh", "已作贷项", "ja", "クレジット済み")
+            .item(AudienceRefunds.NONE_SWITCH_OFF, "en", "None: refunds were off", "zh", "不退：开关关闭", "ja",
+                "返金なし：設定がオフ")
+            .item(AudienceRefunds.NONE_REASON, "en", "None: not refundable", "zh", "不退：原因不可退", "ja",
+                "返金なし：対象外の理由")
+            .item(AudienceRefunds.NONE_ZERO, "en", "None: no unused days", "zh", "不退：没有未用天数", "ja",
+                "返金なし：未使用日数なし")
+            .item(AudienceRefunds.NONE_NO_PERIOD, "en", "None: no period", "zh", "不退：没有计费期间", "ja",
+                "返金なし：期間なし")
+            .item(AudienceRefunds.NONE_FINANCE, "en", "None: decided by finance", "zh", "不退：财务决定不开凭证", "ja",
+                "返金なし：経理が判断"));
     }
 
     @Bean
@@ -353,13 +484,20 @@ public class FeeConfig {
         return StaticDictionary.define(QbFees.REQUEST_STATUS_DICTIONARY, d -> d
             .item(QbFees.REVIEW, "en", "Awaiting approval", "zh", "待批准", "ja", "承認待ち")
             .item(QbFees.DONE, "en", "Done", "zh", "已执行", "ja", "実行済み")
-            .item(QbFees.REJECTED, "en", "Rejected", "zh", "已拒绝", "ja", "却下"));
+            .item(QbFees.REJECTED, "en", "Rejected", "zh", "已拒绝", "ja", "却下")
+            .item(QbFees.FAILED, "en", "Not done", "zh", "未能执行", "ja", "実行できず"));
     }
 
     /** {@code QBF-2026-00001}: one count per year, without gaps. */
     @Bean
     NumberSequence qbFeeInvoiceNumbers() {
         return NumberSequence.define(QbFees.INVOICE_SEQUENCE, s -> s.format("QBF-{scope}-{n:5}").scoped());
+    }
+
+    /** {@code QBC-2026-00001}: credit notes, one count per year, without gaps (F-M7). */
+    @Bean
+    NumberSequence qbFeeCreditNoteNumbers() {
+        return NumberSequence.define(QbCreditNotes.SEQUENCE, s -> s.format("QBC-{scope}-{n:5}").scoped());
     }
 
     @Bean
@@ -677,6 +815,22 @@ public class FeeConfig {
     @Bean
     RetentionPolicy qbFeeInvoiceRetention() {
         return RetentionPolicy.of(QbFees.INVOICE).keep(RETENTION).from("issuedAt").afterFiscalYearEnd();
+    }
+
+    /** F-M7: credit notes and what their credit paid are accounting evidence as invoices are. */
+    @Bean
+    RetentionPolicy qbFeeCreditNoteRetention() {
+        return RetentionPolicy.of(QbCreditNotes.CREDIT_NOTE).keep(RETENTION).from("issuedAt").afterFiscalYearEnd();
+    }
+
+    @Bean
+    RetentionPolicy qbFeeCreditNoteUseRetention() {
+        return RetentionPolicy.of(QbCreditNotes.USE).keep(RETENTION).from("usedAt").afterFiscalYearEnd();
+    }
+
+    @Bean
+    RetentionPolicy qbFeeCreditNoteDocumentRetention() {
+        return RetentionPolicy.of(QbCreditNotes.DOCUMENT).keep(RETENTION).from("issuedAt").afterFiscalYearEnd();
     }
 
     @Bean

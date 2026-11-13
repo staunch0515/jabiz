@@ -629,4 +629,44 @@ class SponsorVerificationIT extends TreeItSupport {
             execute("DELETE FROM qb_fee_credit_grant WHERE grant_id IN (?, ?)", a, b);
         }
     }
+
+    /**
+     * F-M15 a0: a banned Sponsor neither asks for a verification nor confirms its link (already refused); a banned
+     * member of the Sponsor's operator, whose session is still valid, withdraws nothing (the gap closed); unbanned,
+     * they do.
+     */
+    @Test
+    @Order(17)
+    void aBannedPersonSubmitsConfirmsAndRevokesNothing() {
+        String bossToken = tokenOf(userWithRole(unique("fm15-boss"), com.jabiz.quizbuks.setup.QbRoles.ADMIN_SUPER),
+            com.jabiz.quizbuks.setup.QbRoles.ADMIN_SUPER);
+        // The Sponsor: a link sent, then banned.
+        Setting linked = setting("fm15-link");
+        submit(linked.sponsor(), "Acme Ban Link", "acme-ban-link.example", "info@acme-ban-link.example");
+        String token = token("info@acme-ban-link.example");
+        run("QB_USER_BAN", bossToken, body("userId", linked.sponsor(), "reason", "Fraud"));
+        assertThat(codes(refused(VerificationProcesses.CONFIRM, sponsorToken(linked.sponsor()), body("token", token),
+            422))).containsExactly("QB_USER_BANNED");
+        assertThat(mine(linked.sponsor())).containsEntry("status", "LINK_SENT");
+        assertThat(submitRefused(linked.sponsor(), "Acme Ban Again", "acme-ban-again.example", null))
+            .containsExactly("QB_USER_BANNED");
+
+        // A member of the operator, banned while their session is valid.
+        Setting s = setting("fm15-revoke");
+        verifiedAddress(s.sponsor(), "owner@acme-fm15-revoke.example");
+        Map<String, Object> submitted = submit(s.sponsor(), "Acme Revoke", "acme-fm15-revoke.example", null);
+        decide(s.member(), submitted.get("approvalRequestId"), "APPROVE", null);
+        assertThat(row(submitted.get("verificationId"))).containsEntry("status", "APPROVED");
+        String member = verifiedUser(unique("fm15-member"));
+        run(OperatorProcesses.MEMBER_ADD, operatorsAdmin(), body("operatorId", s.operatorId(), "userId", member,
+            "lead", false));
+        String session = memberSession(member, s.operatorId());
+        run("QB_USER_BAN", bossToken, body("userId", member, "reason", "Fraud"));
+        assertThat(codes(refused(VerificationProcesses.REVOKE, session, body("sponsorId", s.sponsor(), "reason",
+            "Banned"), 422))).containsExactly("QB_USER_BANNED");
+        assertThat(row(submitted.get("verificationId"))).containsEntry("status", "APPROVED");
+        run(com.jabiz.quizbuks.identity.BanProcesses.UNBAN, bossToken, body("userId", member, "note", "Cleared"));
+        assertThat(run(VerificationProcesses.REVOKE, session, body("sponsorId", s.sponsor(), "reason", "Lapsed")))
+            .containsEntry("status", "REVOKED");
+    }
 }

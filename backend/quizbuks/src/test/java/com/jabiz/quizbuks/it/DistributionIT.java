@@ -13,6 +13,7 @@ import com.jabiz.quizbuks.operator.OperatorProcesses;
 import com.jabiz.quizbuks.operator.QbOperators;
 import com.jabiz.quizbuks.setup.QbParams;
 import com.jabiz.quizbuks.setup.QbRoles;
+import com.jabiz.quizbuks.wallet.ReconChecks;
 import com.jabiz.runtime.context.Actor;
 import com.jabiz.runtime.job.JobRunner;
 import com.jabiz.runtime.test.TestTokens;
@@ -399,6 +400,36 @@ class DistributionIT extends PrepaymentItSupport {
         assertThat(codes(refused(DistributionPrices.OPERATOR_SET, operatorSession(lead, operator), body("rate", "2",
             "unitFloor", "0.5", "unitCeiling", "20", "minimumDeposit", 500, "reason", "F-M6"), 422)))
             .containsOnly(FeeCodes.DISTRIBUTION_PRICE_RANGE);
+    }
+
+    @Test
+    void theDailyCheckReportsAPriceOutsideTheRangeItIsNow() {
+        String operator = operatorOf(distributionSponsor("fm6-price-range"));
+        String system = TestTokens.bearer(tokens, "fm6-price-recon", QbPermissions.WALLET_SYSTEM);
+        assertThat(ReconChecks.coded(items("qb.system.recon-fee-account", system, Map.of())).stream()
+            .filter(item -> operator.equals(item.partyId()))).isEmpty();
+        // The range narrowed after the price was set (here: the price set in the table, beyond the rate at most 1):
+        // the price stays and the daily check reports it, under its whole code, so ReconChecks keeps it.
+        assertThat(offRangeBeforeDeploying()).doesNotContain(operator);
+        execute("UPDATE qb_distribution_price SET rate = 2 WHERE operator_id = ?", operator);
+        assertThat(ReconChecks.coded(items("qb.system.recon-fee-account", system, Map.of())).stream()
+            .filter(item -> operator.equals(item.partyId())))
+            .extracting(ReconChecks.Item::check).containsExactly(ReconChecks.DISTRIBUTION_PRICE_RANGE);
+        // The query run before deploying (operations.md, launch-checklist.md) finds the same operator.
+        assertThat(offRangeBeforeDeploying()).contains(operator);
+    }
+
+    /** The operators tools/quizbuks/sql/distribution-price-range.sql lists, at the test's clock. */
+    List<String> offRangeBeforeDeploying() {
+        try {
+            String sql = java.nio.file.Files.readString(java.nio.file.Path.of(
+                "../../tools/quizbuks/sql/distribution-price-range.sql"));
+            assertThat(sql).contains("now()");
+            return query(sql.replace("now()", "CAST('" + clock.instant() + "' AS timestamptz)").replace(";", ""))
+                .stream().map(row -> String.valueOf(row.get("operator_id"))).toList();
+        } catch (java.io.IOException e) {
+            throw new java.io.UncheckedIOException(e);
+        }
     }
 
     @Test

@@ -151,6 +151,10 @@ export const TEMPLATE = {
   operatorFeeAccountLots: 'qb.operator.fee-account-lots',
   operatorFeePayments: 'qb.operator.fee-payments',
   feeRequests: 'qb.admin.fee-requests',
+  /** F-M7: the credit notes (finance; read only for an operator) and what a fee may still be credited. */
+  feeCreditNotes: 'qb.admin.fee-credit-notes',
+  operatorFeeCreditNotes: 'qb.operator.fee-credit-notes',
+  feeChargeCredit: 'qb.admin.fee-charge-credit',
   /** F-M2: the platform fee Kudos granted (headquarters, read only), each and summed; an operator's Sponsor's onboarding. */
   feeCreditGrants: 'qb.admin.fee-credit-grants',
   feeCreditSummary: 'qb.admin.fee-credit-summary',

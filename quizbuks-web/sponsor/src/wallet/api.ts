@@ -1,4 +1,4 @@
-import { api, fileNameOf, runProcess, runQuery, sessionFetch, toApiError, type Sort } from '@jabiz/client'
+import { api, fileNameOf, runProcess, runQuery, sessionFetch, toApiError, type Filter, type Sort } from '@jabiz/client'
 import { readDictionary, type DictionaryItem } from '../qb/api'
 import { WALLET_DATASET, WALLET_DICTIONARY, WALLET_PROCESS, WALLET_TEMPLATE } from './ids'
 import { WALLET_PATH } from '../shell/paths'
@@ -60,6 +60,8 @@ export interface SponsorWallet {
   cashFromOperator: number
   /** F-M5: what the prepayments of the Sponsor's publications still hold (set aside, not yet charged or given back). */
   prepaymentHeld: number
+  /** F-M7: the credit of credit notes not used yet; the next invoices take it first. */
+  creditNoteCredit: number
 }
 
 /** How the platform's fees are billed (Q87b): taken from the cash account at once, or invoiced monthly within a credit. */
@@ -141,6 +143,7 @@ export async function readWallet(): Promise<SponsorWallet> {
     feeCreditBalance: num(row.feeCreditBalance),
     cashFromOperator: num(row.cashFromOperator),
     prepaymentHeld: num(row.prepaymentHeld),
+    creditNoteCredit: num(row.creditNoteCredit),
   }
 }
 
@@ -434,6 +437,8 @@ export interface InvoiceRow {
   total: number
   /** F-M1: what has been paid of the total. */
   paidAmount: number
+  /** F-M7: what credit notes paid of the total. */
+  creditApplied: number
   status: InvoiceStatus
   issuedAt: string
   dueOn: string | null
@@ -454,6 +459,7 @@ export async function searchFeeInvoices({ sorts, offset, limit }: TopUpSearch) {
       tax: num(row.tax),
       total: num(row.total),
       paidAmount: num(row.paidAmount),
+      creditApplied: num(row.creditApplied),
       status: invoiceStatusOf(row.status),
       issuedAt: String(row.issuedAt ?? ''),
       dueOn: str(row.dueOn),
@@ -462,6 +468,10 @@ export async function searchFeeInvoices({ sorts, offset, limit }: TopUpSearch) {
     })),
   }
 }
+
+/** What is still owed of an invoice: its total less what credit notes and payments covered (F-M7). */
+export const invoiceOwed = (invoice: { total: number; paidAmount: number; creditApplied: number }): number =>
+  Math.max(0, invoice.total - invoice.creditApplied - invoice.paidAmount)
 
 /** A row of `qb.sponsor.fee-charges`: a fee the platform charged, and the invoice it is on. */
 export interface ChargeRow {
@@ -536,6 +546,23 @@ export async function payEarly(): Promise<EarlyPayOutput> {
     invoiceNos: Array.isArray(out.invoiceNos) ? out.invoiceNos.map(String) : [], remaining: num(out.remaining) }
 }
 
+/** Hands the PDF kept for a document run to the browser, under the name the server gave it. */
+async function saveDocumentPdf(documentRunId: string, fallbackName: string) {
+  const response = await sessionFetch(`/api/documents/runs/${encodeURIComponent(documentRunId)}/pdf`)
+  if (!response.ok) throw await toApiError(response)
+  const blob = await response.blob()
+  const url = URL.createObjectURL(blob)
+  try {
+    const link = document.createElement('a')
+    link.href = url
+    link.download = fileNameOf(response.headers.get('Content-Disposition')) ?? `${fallbackName}.pdf`
+    link.rel = 'noopener'
+    link.click()
+  } finally {
+    setTimeout(() => URL.revokeObjectURL(url), 0)
+  }
+}
+
 /**
  * The invoice's document (Q87b): issued by the server the first time, in the sponsor's language, the same one every
  * time after; then its PDF exactly as kept, handed to the browser (as the receipts).
@@ -543,19 +570,79 @@ export async function payEarly(): Promise<EarlyPayOutput> {
 export async function downloadInvoiceDocument(invoiceId: string, language: string | undefined) {
   const issued = await runProcess<{ documentRunId: string; documentNo: string | null }>(WALLET_PROCESS.invoiceDocument,
     { invoiceId, language: receiptLanguage(language) })
-  const response = await sessionFetch(`/api/documents/runs/${encodeURIComponent(issued.documentRunId)}/pdf`)
-  if (!response.ok) throw await toApiError(response)
-  const blob = await response.blob()
-  const url = URL.createObjectURL(blob)
-  try {
-    const link = document.createElement('a')
-    link.href = url
-    link.download = fileNameOf(response.headers.get('Content-Disposition')) ?? `${issued.documentNo ?? invoiceId}.pdf`
-    link.rel = 'noopener'
-    link.click()
-  } finally {
-    setTimeout(() => URL.revokeObjectURL(url), 0)
+  await saveDocumentPdf(issued.documentRunId, issued.documentNo ?? invoiceId)
+  return issued
+}
+
+// ---- F-M7: credit notes ----------------------------------------------------------------------------------------------
+
+/** `QbFeeCreditNote.reason`: the audience fee of the unused days given back, or a credit note issued by hand. */
+export type CreditNoteReason = 'AUDIENCE_UNUSED' | 'MANUAL'
+export const CREDIT_NOTE_REASONS: readonly CreditNoteReason[] = ['AUDIENCE_UNUSED', 'MANUAL']
+export const creditNoteReasonOf = (value: unknown): CreditNoteReason => value === 'MANUAL' ? 'MANUAL' : 'AUDIENCE_UNUSED'
+
+/** A row of `qb.sponsor.fee-credit-notes`. */
+export interface CreditNoteRow {
+  creditNoteId: string
+  creditNoteNo: string
+  invoiceNo: string | null
+  publicationId: string | null
+  reason: CreditNoteReason
+  endReason: string | null
+  usedDays: number | null
+  amount: number
+  tax: number
+  total: number
+  /** What was given back as cash, and as credit; the credit used so far and left. */
+  refundedCash: number
+  refundedCredit: number
+  /** Of the credit given back, what was voided at once (its lot past its date). */
+  voidedCredit: number
+  used: number
+  creditLeft: number
+  issuedAt: string
+  documentNo: string | null
+}
+
+export const creditNotesQuery = (publicationId?: string) => [...WALLET_QUERY, 'credit-notes', publicationId ?? null] as const
+
+export interface CreditNoteSearch extends TopUpSearch {
+  /** Only the credit notes of this publication. */
+  publicationId?: string
+}
+
+export async function searchCreditNotes({ sorts, offset, limit, publicationId }: CreditNoteSearch) {
+  const filters: Filter[] = publicationId ? [{ field: 'publicationId', op: 'eq', value: publicationId }] : []
+  const page = await runQuery<Row>(WALLET_TEMPLATE.feeCreditNotes, { sorts, offset, limit, count: true, filters })
+  return {
+    total: page.total,
+    items: page.items.map((row): CreditNoteRow => ({
+      creditNoteId: String(row.creditNoteId),
+      creditNoteNo: String(row.creditNoteNo ?? ''),
+      invoiceNo: str(row.invoiceNo),
+      publicationId: str(row.publicationId),
+      reason: creditNoteReasonOf(row.reason),
+      endReason: str(row.endReason),
+      usedDays: row.usedDays == null ? null : num(row.usedDays),
+      amount: num(row.amount),
+      tax: num(row.tax),
+      total: num(row.total),
+      refundedCash: num(row.refundedCash),
+      refundedCredit: num(row.refundedCredit),
+      voidedCredit: num(row.voidedCredit),
+      used: num(row.used),
+      creditLeft: num(row.creditLeft),
+      issuedAt: String(row.issuedAt ?? ''),
+      documentNo: str(row.documentNo),
+    })),
   }
+}
+
+/** The credit note's document: issued once, kept, then its PDF as kept (the same flow as the invoice's). */
+export async function downloadCreditNoteDocument(creditNoteId: string, language: string | undefined) {
+  const issued = await runProcess<{ creditNoteId: string; creditNoteNo: string; documentRunId: string;
+    documentNo: string | null }>(WALLET_PROCESS.creditNoteDocument, { creditNoteId, language: receiptLanguage(language) })
+  await saveDocumentPdf(issued.documentRunId, issued.documentNo ?? issued.creditNoteNo ?? creditNoteId)
   return issued
 }
 

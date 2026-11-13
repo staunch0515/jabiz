@@ -22,6 +22,8 @@ const server = vi.hoisted(() => ({
   charges: [] as Record<string, unknown>[],
   invoices: [] as Record<string, unknown>[],
   requests: [] as Record<string, unknown>[],
+  creditNotes: [] as Record<string, unknown>[],
+  chargeCredit: [] as Record<string, unknown>[],
   sponsors: [] as Record<string, unknown>[],
   onboarding: [] as Record<string, unknown>[],
   runQuery: vi.fn(),
@@ -59,6 +61,14 @@ const invoice = (change: Row = {}): Row => ({ invoiceId: INVOICE, invoiceNo: 'QB
   company: 'Acme', operatorId: null, period: '2026-10', billingMode: 'POSTPAID', amount: 1000, tax: 100, total: 1100,
   paidAmount: 300, status: 'OVERDUE', issuedAt: '2026-11-02T01:17:00Z', dueOn: '2026-12-02', paidAt: null, remindersSent: 1,
   voidedAt: null, voidReason: null, ...change })
+const creditNote = (change: Row = {}): Row => ({ creditNoteId: 'cn-1', creditNoteNo: 'QBC-2026-00001', sponsorId: SPONSOR,
+  company: 'Acme', operatorId: null, chargeId: CHARGE, invoiceNo: 'QBF-2026-00001', publicationId: 'pub-1',
+  billingMode: 'PREPAID', reason: 'AUDIENCE_UNUSED', endReason: 'WITHDRAWN', usedDays: 3, note: null, amount: 400, tax: 40,
+  total: 440, appliedOwn: 0, refundedCash: 100, refundedCredit: 340, voidedCredit: 0, used: 40, creditLeft: 300,
+  issuedAt: '2026-11-05T01:00:00Z', issuedBy: null, ...change })
+const chargeCredit = (change: Row = {}): Row => ({ chargeId: CHARGE, sponsorId: SPONSOR, company: 'Acme', kind: 'MONTHLY',
+  period: '2026-10', billingMode: 'PREPAID', amount: 1000, taxRate: '0.10', tax: 100, total: 1100, credited: 400,
+  creditedTax: 40, creditable: 600, taxLeft: 60, notes: 1, invoiceNo: 'QBF-2026-00001', invoiceStatus: 'PAID', ...change })
 const request = (change: Row = {}): Row => ({ requestId: REQUEST, kind: 'MANUAL', sponsorId: SPONSOR, company: 'Acme',
   amount: 500, invoiceId: null, reason: 'Extra support', status: 'REVIEW', requestedBy: FINANCE_ADMIN,
   requestedAt: '2026-11-03T01:00:00Z', approvalRequestId: APPROVAL, decidedAt: null, chargeId: null, ...change })
@@ -92,6 +102,8 @@ beforeEach(() => {
   server.charges = [charge()]
   server.invoices = [invoice()]
   server.requests = [request()]
+  server.creditNotes = [creditNote()]
+  server.chargeCredit = [chargeCredit()]
   server.onboarding = [{ enabled: true, grantedAt: null, amount: null, expiresAt: null }]
   server.sponsors = [{ userId: SPONSOR, company: 'Acme', contactName: 'Alice', reviewStatus: 'APPROVED' }]
   server.runQuery.mockReset().mockImplementation(async (id: string, options: { filters?: { field: string;
@@ -104,6 +116,8 @@ beforeEach(() => {
       : id === TEMPLATE.feeCharges ? server.charges
         : id === TEMPLATE.feeInvoices ? one(server.invoices, 'invoiceId')
           : id === TEMPLATE.feeRequests ? one(server.requests, 'requestId')
+            : id === TEMPLATE.feeCreditNotes ? server.creditNotes
+              : id === TEMPLATE.feeChargeCredit ? server.chargeCredit
             : id === TEMPLATE.feeAccount || id === TEMPLATE.operatorFeeAccount ? ACCOUNT
               : id === TEMPLATE.feeAccountLots || id === TEMPLATE.operatorFeeAccountLots ? LOTS
                 : id === TEMPLATE.feePayments || id === TEMPLATE.operatorFeePayments ? PAYMENTS
@@ -209,6 +223,81 @@ describe('FeesPage', () => {
       { kind: 'CREDIT', sponsorId: SPONSOR, amount: 3000, reason: 'Event partner', validDays: 30 }))
   })
 
+  it('shows what credit notes paid of an invoice, and what is owed after them and the payments (F-M7)', async () => {
+    server.invoices = [invoice({ paidAmount: 300, creditApplied: 500 })]
+    renderAt('/qb/finance/fees?tab=invoices', '/qb/finance/fees', <FeesPage />)
+    const row = await screen.findByTestId('fee-invoice-row')
+    expect(within(row).getByTestId('fee-invoice-credit-applied')).toHaveTextContent('500')
+    // 1,100 less 500 by credit notes and 300 paid.
+    expect(within(row).getByTestId('fee-invoice-owed')).toHaveTextContent('300')
+  })
+
+  it('lists the credit notes for finance, with who issued one by hand (F-M7)', async () => {
+    server.creditNotes = [creditNote(), creditNote({ creditNoteId: 'cn-2', creditNoteNo: 'QBC-2026-00002',
+      reason: 'MANUAL', publicationId: null, usedDays: null, note: 'Goodwill', issuedBy: FINANCE_ADMIN })]
+    const { container } = renderAt('/qb/finance/fees?tab=creditNotes', '/qb/finance/fees', <FeesPage />)
+    const rows = await screen.findAllByTestId('fee-credit-note-row')
+    expect(rows.map((row) => row.dataset.reason)).toEqual(['AUDIENCE_UNUSED', 'MANUAL'])
+    expect(within(rows[0]).getByTestId('fee-credit-note-no')).toHaveTextContent('QBC-2026-00001')
+    expect(within(rows[0]).getByTestId('fee-credit-note-total')).toHaveTextContent('440')
+    expect(within(rows[0]).getByTestId('fee-credit-note-cash')).toHaveTextContent('100')
+    expect(within(rows[0]).getByTestId('fee-credit-note-credit')).toHaveTextContent('340')
+    expect(within(rows[0]).getByTestId('fee-credit-note-left')).toHaveTextContent('300')
+    expect(rows[0]).toHaveTextContent('Audience fee of unused days')
+    expect(rows[1]).toHaveTextContent('Goodwill')
+    expect(within(rows[1]).getByTestId('user-name')).toHaveTextContent(FINANCE_ADMIN)
+    expect(server.runQuery).toHaveBeenCalledWith(TEMPLATE.feeCreditNotes, expect.anything())
+    await expectAccessible(container)
+  })
+
+  it('issues a credit note by hand: reads what may be credited, limits the amount, asks for the approval (F-M7)', async () => {
+    const { container } = renderAt('/qb/finance/fees', '/qb/finance/fees', <FeesPage />)
+    const user = userEvent.setup()
+    await user.click(within(await screen.findByTestId('fee-charge-row')).getByTestId('fee-charge-credit-note'))
+    const dialog = await screen.findByTestId('fee-credit-note-dialog')
+    expect(dialog).toHaveAttribute('data-charge', CHARGE)
+    expect(await within(dialog).findByTestId('fee-credit-note-creditable')).toHaveTextContent('600')
+    expect(within(dialog).getByTestId('fee-credit-note-tax-left')).toHaveTextContent('60')
+    expect(within(dialog).getByTestId('fee-credit-note-credited')).toHaveTextContent('400')
+    expect(server.runQuery).toHaveBeenCalledWith(TEMPLATE.feeChargeCredit, expect.objectContaining({
+      params: { chargeId: CHARGE } }))
+    await expectAccessible(container)
+    expect(within(dialog).getByTestId('fee-credit-note-submit')).toBeDisabled()
+    await user.type(within(dialog).getByTestId('fee-credit-note-amount'), '700')
+    await user.type(within(dialog).getByTestId('fee-credit-note-reason-input'), 'Billed twice')
+    await user.click(within(dialog).getByTestId('fee-credit-note-submit'))
+    // More than may be credited: not sent.
+    expect(server.runProcess).not.toHaveBeenCalled()
+    await user.clear(within(dialog).getByTestId('fee-credit-note-amount'))
+    await user.type(within(dialog).getByTestId('fee-credit-note-amount'), '600')
+    await user.click(within(dialog).getByTestId('fee-credit-note-submit'))
+    await waitFor(() => expect(server.runProcess).toHaveBeenCalledWith(FEE_PROCESS.request,
+      { kind: 'CREDIT_NOTE', chargeId: CHARGE, amount: 600, reason: 'Billed twice' }))
+    await waitFor(() => expect(screen.queryByTestId('fee-credit-note-dialog')).not.toBeInTheDocument())
+  })
+
+  it('shows the server\'s refusal of a credit note, and offers nothing for a voided invoice or a credited-out fee (F-M7)', async () => {
+    server.runProcess.mockRejectedValue(new ApiError(422, { detail: 'refused', violations: [
+      { field: null, ruleCode: 'QB_FEE_CREDIT_NOTE_EXCEEDS', message: 'The fee may still be credited 500.' }] }))
+    renderAt('/qb/finance/fees', '/qb/finance/fees', <FeesPage />)
+    const user = userEvent.setup()
+    await user.click(within(await screen.findByTestId('fee-charge-row')).getByTestId('fee-charge-credit-note'))
+    const dialog = await screen.findByTestId('fee-credit-note-dialog')
+    await user.type(await within(dialog).findByTestId('fee-credit-note-amount'), '600')
+    await user.type(within(dialog).getByTestId('fee-credit-note-reason-input'), 'Late')
+    await user.click(within(dialog).getByTestId('fee-credit-note-submit'))
+    expect(await within(dialog).findByTestId('fee-credit-note-problem')).toHaveTextContent('may still be credited 500')
+    await user.click(within(dialog).getByRole('button', { name: 'Cancel' }))
+    await waitFor(() => expect(screen.queryByTestId('fee-credit-note-dialog')).not.toBeInTheDocument())
+
+    server.chargeCredit = [chargeCredit({ invoiceStatus: 'VOID' })]
+    await user.click(within(await screen.findByTestId('fee-charge-row')).getByTestId('fee-charge-credit-note'))
+    const voided = await screen.findByTestId('fee-credit-note-dialog')
+    expect(await within(voided).findByTestId('fee-credit-note-voided')).toHaveTextContent('QBF-2026-00001')
+    expect(within(voided).queryByTestId('fee-credit-note-amount')).not.toBeInTheDocument()
+    expect(within(voided).getByTestId('fee-credit-note-submit')).toBeDisabled()
+  })
+
   it('shows headquarters the grants summed and each lot, read only', async () => {
     const { container } = renderAt('/qb/finance/fees?tab=grants', '/qb/finance/fees', <FeesPage />)
     const sums = await screen.findAllByTestId('fee-grant-sum-row')
@@ -242,6 +331,7 @@ describe('FeesPage', () => {
     expect(screen.queryByTestId('tab-requests')).not.toBeInTheDocument()
     expect(screen.queryByTestId('fee-new-manual')).not.toBeInTheDocument()
     expect(screen.queryByTestId('fee-new-void')).not.toBeInTheDocument()
+    expect(within(screen.getByTestId('fee-charge-row')).queryByTestId('fee-charge-credit-note')).not.toBeInTheDocument()
     expect(server.runQuery).not.toHaveBeenCalledWith(TEMPLATE.feeRequests, expect.anything())
   })
 })

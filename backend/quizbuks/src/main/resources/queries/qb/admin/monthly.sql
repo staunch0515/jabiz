@@ -210,6 +210,16 @@ kinds AS (
                     AND p.a2180 > 0 AND p.a2160 <= 0 AND p.a2190 <= 0 THEN 'PREPAYMENT_RELEASED'
                WHEN p.src = 'QbFeeCharge' AND NOT p.reversal AND p.accts = '1130,2180'
                     AND p.a2180 > 0 AND p.a1130 < 0 THEN 'PREPAYMENT_USED'
+               -- F-M7: a credit note (4120 and the tax against 1130, the source the note), and what it gives back of a
+               -- prepaid fee (1130 to the cash, the fee credit and the prepayments it was paid from): FEE_PAID taken
+               -- back, as a voided invoice's reversal; out of 2180 to the account is PREPAYMENT_RELEASED (its source
+               -- the prepayment).
+               WHEN p.src = 'QbFeeCreditNote' AND NOT p.reversal AND p.accts IN ('1130,4120', '1130,2150,4120')
+                    AND p.a1130 < 0 AND p.a4120 > 0 AND p.a2150 >= 0 THEN 'FEE_CREDIT_NOTE'
+               WHEN p.src = 'QbFeeCreditNote' AND NOT p.reversal
+                    AND p.accts IN ('1130,2160', '1130,2190', '1130,2160,2190', '1130,2180', '1130,2160,2180',
+                                    '1130,2180,2190', '1130,2160,2180,2190')
+                    AND p.a1130 > 0 AND p.a2160 <= 0 AND p.a2190 <= 0 AND p.a2180 <= 0 THEN 'FEE_PAID'
                ELSE 'OTHER'
            END AS kind
     FROM per_tx p
@@ -246,7 +256,7 @@ FROM (VALUES (1, 'TOPUP'), (2, 'BANK_TOPUP'), (3, 'MANUAL_TOPUP'), (4, 'GRANT'),
              (29, 'ENTRY_FEE_SETTLED'), (30, 'FEE_CREDIT_GRANTED'), (31, 'FEE_CREDIT_VOIDED'),
              (32, 'OPERATOR_TRANSFER_TO_DIRECT'), (33, 'PREPAYMENT_FROZEN'), (34, 'PREPAYMENT_USED'),
              (35, 'PREPAYMENT_RELEASED'), (36, 'DISTRIBUTION_CHARGED'), (37, 'DISTRIBUTION_DEPOSIT'),
-             (38, 'DISTRIBUTION_RELEASED'), (39, 'OTHER'))
+             (38, 'DISTRIBUTION_RELEASED'), (39, 'FEE_CREDIT_NOTE'), (40, 'OTHER'))
          AS c (seq, kind)
 LEFT JOIN kinds k ON k.kind = c.kind
 GROUP BY c.seq, c.kind

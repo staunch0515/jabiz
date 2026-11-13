@@ -71,9 +71,29 @@ public final class ReconChecks {
     /** F-M6: publications ended {@code qb.distribution.final-missing-after-hours} ago without a final settlement. */
     public static final String DISTRIBUTION_FINAL_MISSING = "DISTRIBUTION_FINAL_MISSING";
     /** F-M6: operators' prices outside the headquarters' range as it is now (sponsorId holds the operator). */
+    public static final String DISTRIBUTION_PRICE_RANGE = "DISTRIBUTION_PRICE_RANGE";
+    /**
+     * Retired (never reported): the first name of {@link #DISTRIBUTION_PRICE_RANGE}. Its 31 characters did not fit
+     * {@code qb_recon_item_version.check_code} (30): the template's cast cut it short and the run dropped it. Runs
+     * written before the rename hold it in their sealed summaries ({@code ":0"}), so the dictionary keeps it, disabled.
+     */
     public static final String DISTRIBUTION_PRICE_OUT_OF_RANGE = "DISTRIBUTION_PRICE_OUT_OF_RANGE";
     /** F-M6: publications whose price per start is the operator's floor: a note for the operators, not a difference. */
     public static final String DISTRIBUTION_AT_FLOOR = "DISTRIBUTION_AT_FLOOR";
+    /** F-M7 (N9): audience fees not decided {@code qb.audience.refund.missing-after-hours} after the end; how many. */
+    public static final String AUDIENCE_REFUND_MISSING = "AUDIENCE_REFUND_MISSING";
+    /** F-M7 (N5): audience fees decided without a period to count the days by (finance decides on a note by hand). */
+    public static final String AUDIENCE_REFUND_NO_PERIOD = "AUDIENCE_REFUND_NO_PERIOD";
+    /** F-M7: audience fees whose publication never went on. */
+    public static final String AUDIENCE_FEE_NOT_LIVE = "AUDIENCE_FEE_NOT_LIVE";
+    /** F-M7: a credit note that gave back and paid more than its total (by note). */
+    public static final String CREDIT_NOTE_USES = "CREDIT_NOTE_USES";
+    /** F-M7 (N7): a fee whose notes come to more than its amount or tax (by fee). */
+    public static final String CREDIT_NOTE_LIMITS = "CREDIT_NOTE_LIMITS";
+    /** F-M7: a note's credit used on a voided invoice. */
+    public static final String CREDIT_NOTE_USE_VOID = "CREDIT_NOTE_USE_VOID";
+    /** F-M7 (N4): credit left while an invoice is unpaid. */
+    public static final String CREDIT_UNUSED_WITH_DUE = "CREDIT_UNUSED_WITH_DUE";
     /** Account 2110 in all against all sponsors' cached balances. */
     public static final String TOTAL_2110 = "TOTAL_2110";
     /** Every posted line's debit less credit: 0. */
@@ -108,7 +128,12 @@ public final class ReconChecks {
         FEES_RECEIVABLE, ENTRY_FEES_UNSETTLED, FEE_CREDIT, CASH_LOTS, FEE_PAYMENTS, FEE_CREDIT_PROMOTION,
         LIGHT_GRANTS, LIGHT_VOIDS, CERTIFIED_GRANTS, OPERATOR_ACCOUNT, PREPAYMENTS, PREPAYMENT_STALE,
         PREPAYMENT_PARTS, PREPAYMENT_UNCHARGED, DISTRIBUTION_DEPOSITS, DISTRIBUTION_UNSETTLED,
-        DISTRIBUTION_FINAL_MISSING, DISTRIBUTION_PRICE_OUT_OF_RANGE, DISTRIBUTION_AT_FLOOR);
+        DISTRIBUTION_FINAL_MISSING, DISTRIBUTION_PRICE_RANGE, DISTRIBUTION_AT_FLOOR, AUDIENCE_REFUND_MISSING,
+        AUDIENCE_REFUND_NO_PERIOD, AUDIENCE_FEE_NOT_LIVE, CREDIT_NOTE_USES, CREDIT_NOTE_LIMITS, CREDIT_NOTE_USE_VOID,
+        CREDIT_UNUSED_WITH_DUE);
+
+    /** Codes no longer reported that runs written before may still name: readable, never written. */
+    public static final List<String> RETIRED = List.of(DISTRIBUTION_PRICE_OUT_OF_RANGE);
 
     /** The checks that only note something: a run with notes alone is {@code OK}. */
     public static final Set<String> NOTES = Set.of(TAKER_WALLET_LAG, DISTRIBUTION_AT_FLOOR);
@@ -215,18 +240,23 @@ public final class ReconChecks {
     /**
      * Rows {@code checkCode, expected, actual} of the totals, {@code topUpId, sponsorId, …} of the top-ups or
      * {@code transferId, userId, …} of the transfers.
+     *
+     * @throws IllegalStateException for a code that is not one of {@link #ALL} (one cut short by its column, a typo in
+     *     a template): the run fails rather than leave the check out unseen, and qb-reconcile-missing reports it
      */
     public static List<Item> coded(List<Map<String, Object>> rows) {
         List<Item> items = new ArrayList<>();
         for (Map<String, Object> row : rows) {
             String check = text(row.get("checkCode"));
-            if (check != null && ALL.contains(check)) {
-                String party = row.containsKey("userId") ? text(row.get("userId")) : text(row.get("sponsorId"));
-                // F-M6 (review M2, M4): the fee account's template names a publication or a month as its reference.
-                String reference = row.containsKey("transferId") ? text(row.get("transferId"))
-                    : row.containsKey("reference") ? text(row.get("reference")) : text(row.get("topUpId"));
-                add(items, check, party, reference, row.get("expected"), row.get("actual"));
+            if (check == null || !ALL.contains(check)) {
+                throw new IllegalStateException("A reconciliation template returned the check code '" + check
+                    + "', which is not one of ReconChecks.ALL");
             }
+            String party = row.containsKey("userId") ? text(row.get("userId")) : text(row.get("sponsorId"));
+            // F-M6 (review M2, M4): the fee account's template names a publication or a month as its reference.
+            String reference = row.containsKey("transferId") ? text(row.get("transferId"))
+                : row.containsKey("reference") ? text(row.get("reference")) : text(row.get("topUpId"));
+            add(items, check, party, reference, row.get("expected"), row.get("actual"));
         }
         return items;
     }
