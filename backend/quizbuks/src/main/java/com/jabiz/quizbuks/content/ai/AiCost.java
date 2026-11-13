@@ -8,7 +8,8 @@ import java.util.Map;
  * What a job's tokens cost, in US dollars, for the administrators' page (docs/quizbuks/plans/Q8-ai.md, A-8: an
  * estimate only, nothing is billed to sponsors). Each token is priced at the model that used it: the requested model's
  * tokens at its price, the provider's fallback model's (A-10) at that model's. The prices of the models QuizBuks knows
- * are here (Anthropic's list prices per million tokens, without cache discounts, so the estimate errs high); a model
+ * are here (Anthropic's list prices per million tokens, without cache discounts, so the estimate errs high; the AI
+ * help takes the cache reads' discount off, {@link #cacheReadDiscount}); a model
  * it does not know is priced at the parameters {@code qb.ai.price.input-per-mtok-usd} and
  * {@code qb.ai.price.output-per-mtok-usd}, and nothing is estimated while those are not set.
  */
@@ -105,6 +106,26 @@ public final class AiCost {
         }
         return price.input().multiply(CACHE_WRITE_PREMIUM).multiply(BigDecimal.valueOf(Math.max(0, tokens)))
             .divide(MILLION, 6, RoundingMode.HALF_UP);
+    }
+
+    /** What a token read from the provider's prompt cache costs, as a fraction of the input price (the provider's price). */
+    static final BigDecimal CACHE_READ_FRACTION = new BigDecimal("0.10");
+
+    /**
+     * F-M10: how much less than {@link #of} (which prices every input token at the list price) {@code tokens} read from
+     * the prompt cache cost: nine tenths of the input price, in dollars to six places; null for a model QuizBuks does
+     * not know. The fraction is the provider's price, not the parameter {@code qb.help.cache-read-weight} (which only
+     * says how the monthly tokens are counted). The discount is at the requested model's ordinary input price, so a job
+     * that fell back to a dearer model or went over the long-prompt line still errs high, never low. A negative count is
+     * none.
+     */
+    public static BigDecimal cacheReadDiscount(String model, long tokens) {
+        Price price = known(model);
+        if (price == null) {
+            return null;
+        }
+        return price.input().multiply(BigDecimal.ONE.subtract(CACHE_READ_FRACTION))
+            .multiply(BigDecimal.valueOf(Math.max(0, tokens))).divide(MILLION, 6, RoundingMode.HALF_UP);
     }
 
     private AiCost() {}
