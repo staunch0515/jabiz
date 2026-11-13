@@ -285,6 +285,9 @@ class AdminFinanceIT extends PayoutItSupport {
             row("DISTRIBUTION_RELEASED", 0, 0),
             row("FEE_CREDIT_NOTE", 0, 0),
             row("FEE_CREDIT_RECOVERED", 0, 0),
+            row("EXPOSURE_CHARGED", 0, 0),
+            row("EXPOSURE_DEPOSIT", 0, 0),
+            row("EXPOSURE_RELEASED", 0, 0),
             row("OTHER", 4, 3_870, "1110", 3_730, "1120", 70, "2110", -300, "2120", -3_500));
         // As recorded at the month's end: the late posting is not in it.
         List<Map<String, Object>> monthly = report(MONTHLY, from, to, to);
@@ -356,7 +359,7 @@ class AdminFinanceIT extends PayoutItSupport {
         // the archive reproduces it.
         Map<String, Object> issued = run("REPORT_ISSUE", finance(), body("templateId", MONTHLY, "params",
             period(from, to)));
-        assertThat(issued).containsEntry("rowCount", 41).containsEntry("recomputable", true);
+        assertThat(issued).containsEntry("rowCount", 44).containsEntry("recomputable", true);
         advance(Duration.ofMinutes(5));
         credit(sponsor, 25);
         Map<String, Object> again = run("REPORT_ISSUE", finance(), body("templateId", MONTHLY, "params",
@@ -378,7 +381,7 @@ class AdminFinanceIT extends PayoutItSupport {
         // The export is the platform's, of the same rows; as known at the month's end, without the late posting,
         // and so is the run issued as known then (its archived rows, not run again).
         String csv = exportCsv(MONTHLY, period(from, to));
-        assertThat(csv.lines().count()).isEqualTo(42);
+        assertThat(csv.lines().count()).isEqualTo(45);
         assertThat(csv).contains("TRANSFER_REVERSED");
         String known = exportCsv(MONTHLY, period(from, to, to));
         assertThat(line(known, "OTHER")).isNotEqualTo(line(csv, "OTHER")).contains(",4,");

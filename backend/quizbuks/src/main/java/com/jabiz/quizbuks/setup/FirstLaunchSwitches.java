@@ -85,13 +85,13 @@ public final class FirstLaunchSwitches {
         active(QbParams.AUDIENCE_BILLING_ENABLED, "audience", true,
             "publications pay for the audience rules they use at the launch (declared off: the tests rely on it)"),
         keep(QbParams.AUDIENCE_REFUND_UNUSED_DAYS, "audience"),
-        // F-M8: the key exists (declared off, controlled) and so do the prices and the purchase, but exposures are only
-        // billed once the settlements are there: it stays off at the launch and its row turns ACTIVE with the pull
-        // request that adds them (F-M8c). The requester then confirms the placeholders: the range of the operators'
-        // prices qb.exposure.unit.min / .max, the fewest exposures bought qb.exposure.min-purchase and the most a
-        // top-up buys qb.exposure.top-up.max; an operator without a price charges nothing, so each operator sets its
-        // own price before the first publication that uses another's video.
-        waiting(QbParams.EXPOSURE_BILLING_ENABLED, "exposure", true, "F-M8"),
+        // F-M8: on at the launch once the requester has confirmed the placeholders: the range of the operators' prices
+        // qb.exposure.unit.min / .max, the fewest exposures bought qb.exposure.min-purchase and the most a top-up buys
+        // qb.exposure.top-up.max. An operator without a price charges nothing, so each operator sets its own price
+        // before the first publication that uses another's video (launch checklist).
+        active(QbParams.EXPOSURE_BILLING_ENABLED, "exposure", true,
+            "publications that use another's video pay for their exposures at the launch (declared off: the tests rely "
+                + "on it); the requester confirms the range of the prices, the fewest bought and the biggest top-up first"),
         keep(QbParams.EXPOSURE_UNIT_MIN, "exposure"),
         keep(QbParams.EXPOSURE_UNIT_MAX, "exposure"),
         keep(QbParams.EXPOSURE_MIN_PURCHASE, "exposure"),
@@ -108,8 +108,7 @@ public final class FirstLaunchSwitches {
      * The keys that are already in {@link QbParams#ALL} while their row still {@link Status#WAITING}: the key exists,
      * what it means does not do yet. Any other waiting key found in {@code ALL} is a feature that forgot its row.
      */
-    public static final Set<String> KEY_BEFORE_MEANING = Set.of(QbParams.EXPOSURE_BILLING_ENABLED,
-        QbParams.SITE_PROFILE_ENABLED);
+    public static final Set<String> KEY_BEFORE_MEANING = Set.of(QbParams.SITE_PROFILE_ENABLED);
 
     /** Whether a system of this {@code jabiz.web.environment} proposes the first launch's values. */
     public static boolean appliesTo(String environment) {

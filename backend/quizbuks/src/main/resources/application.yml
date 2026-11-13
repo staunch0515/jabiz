@@ -539,6 +539,14 @@ quizbuks:
   distribution:
     monthly-cron: ${QB_DISTRIBUTION_MONTHLY_CRON:0 37 0 2 * *}
     final-cron: ${QB_DISTRIBUTION_FINAL_CRON:0 7 3 * * *}
+  # F-M8: the exposure fee's settlements, six-field crons in jabiz.fiscal-year-zone: the month that ended on the 2nd at
+  # 00:47 (after the distribution fee's 00:37, before the postpaid invoices at 01:17), the ended publications' final
+  # ones at 03:12 (after the distribution fee's 03:07, before the prepayments' release at 03:23); and the reminder that
+  # what is left of the exposures bought is low, every ten minutes.
+  exposure:
+    monthly-cron: ${QB_EXPOSURE_MONTHLY_CRON:0 47 0 2 * *}
+    final-cron: ${QB_EXPOSURE_FINAL_CRON:0 12 3 * * *}
+    low-cron: ${QB_EXPOSURE_LOW_CRON:0 */10 * * * *}
   # F-M7: the daily job deciding the audience fees of ended publications (the unused days given back), a six-field
   # cron in jabiz.fiscal-year-zone after the final settlements (03:07) and the prepayments' release (03:23); and how
   # many fees one run decides (the rest: the next run).

@@ -74,10 +74,11 @@ class MailValuesTest {
     }
 
     @Test
-    void onlyTheSponsorsThreeNotificationsMayBeTurnedOffAndOnlyAtTheSponsorConsole() {
-        assertThat(NotificationMails.ALL).hasSize(14);
+    void onlyTheSponsorsFourNotificationsMayBeTurnedOffAndOnlyAtTheSponsorConsole() {
+        assertThat(NotificationMails.ALL).hasSize(15);
         assertThat(NotificationMails.ALL).filteredOn(MailTemplate::unsubscribable).extracting(MailTemplate::name)
-            .containsExactly("qb.fee-credit.expiring", "qb.publication.funds-short", "qb.publication.ended");
+            .containsExactly("qb.fee-credit.expiring", "qb.publication.funds-short", "qb.publication.ended",
+                "qb.publication.exposure-low");
         assertThat(NotificationMails.ALL).filteredOn(MailTemplate::unsubscribable).allSatisfy(template -> {
             assertThat(template.appliesTo("sponsor")).isTrue();
             assertThat(template.appliesTo("app")).isFalse();

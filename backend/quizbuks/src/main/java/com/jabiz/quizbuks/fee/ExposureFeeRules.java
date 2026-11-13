@@ -140,6 +140,9 @@ public final class ExposureFeeRules {
         return laterRowExists ? highestToCount : Math.max(highestToCount, wanted);
     }
 
+    /** The largest value of qb.exposure.low-ratio (the job's candidates are chosen with it; the item decides). */
+    public static final BigDecimal MAX_LOW_RATIO = new BigDecimal("0.5");
+
     /** The share left: whether the exposures left are at or below {@code ratio} of what was bought (0: never). */
     public static boolean running(long purchased, long used, BigDecimal ratio) {
         if (purchased <= 0 || ratio == null || ratio.signum() <= 0) {

@@ -34,14 +34,16 @@ final class MonthlyKinds {
         source("QbOperatorTransfer", "OPERATOR_TRANSFER_TO_DIRECT");
         source("QbKudosExchange", "KUDOS_BOUGHT", "KUDOS_SOLD");
         // The platform's fees: charged, paid (from the cash, the credit, a prepayment), voided, the distribution fee.
-        source("QbFeeCharge", "DISTRIBUTION_CHARGED", "FEE_CHARGED", "FEE_PAID", "FEE_VOIDED", "PREPAYMENT_USED");
+        source("QbFeeCharge", "DISTRIBUTION_CHARGED", "EXPOSURE_CHARGED", "FEE_CHARGED", "FEE_PAID", "FEE_VOIDED",
+            "PREPAYMENT_USED");
         source("QbFeeInvoice", "FEE_PAID", "FEE_VOIDED");
         source("QbFeeCreditNote", "FEE_CREDIT_NOTE", "FEE_PAID");
         // The entry fees settled into the sponsor's cash account are posted from the cash wallet row.
         source("QbWallet", "ENTRY_FEE_SETTLED");
         source("QbFeeCreditGrant", "FEE_CREDIT_GRANTED", "FEE_CREDIT_VOIDED");
-        source("QbPrepayment", "PREPAYMENT_FROZEN", "PREPAYMENT_RELEASED", "DISTRIBUTION_DEPOSIT",
-            "DISTRIBUTION_RELEASED");
+        // F-M8c: the exposure fee's deposit (set aside and topped up) and its release have kinds of their own.
+        source("QbPrepayment", "PREPAYMENT_FROZEN", "PREPAYMENT_RELEASED", "EXPOSURE_DEPOSIT", "EXPOSURE_RELEASED",
+            "DISTRIBUTION_DEPOSIT", "DISTRIBUTION_RELEASED");
     }
 
     private static void source(String entity, String... categories) {

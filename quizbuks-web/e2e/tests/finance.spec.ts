@@ -37,11 +37,10 @@ test('finance reviews a large transfer and issues the monthly report', async ({ 
   const fromServer = (await query(request, await adminToken(request), 'qb.admin.first-launch-switches', {})).length
   await expect(page.getByTestId('fund-switches')).toBeVisible()
   await expect(page.getByTestId('fund-switch')).toHaveCount(fromServer + CARD_ONLY_ROWS)
-  // F-M8: the exposure fee's key exists (the template reads its value) but its settlements come with F-M8c, so the row
-  // shows its value like an active one and says that it waits.
+  // F-M8c: the exposure fee's switch is an ordinary one, read against its launch value like the audience fee's.
   const exposure = page.locator('[data-testid="fund-switch"][data-key="qb.exposure.billing.enabled"]')
   await expect(exposure).toHaveAttribute('data-state', /^(match|differs|proposed|proposedDiffers|missing)$/)
-  await expect(exposure.getByTestId('fund-switch-note').filter({ hasText: 'F-M8' })).toHaveCount(1)
+  await expect(exposure.getByTestId('fund-switch-note').filter({ hasText: 'F-M8' })).toHaveCount(0)
   // F-M7 delivered the audience fee: its switch is an ordinary one, read against its launch value.
   const audience = page.locator('[data-testid="fund-switch"][data-key="qb.audience.billing.enabled"]')
   await expect(audience).toHaveAttribute('data-state', /^(match|differs|proposed|proposedDiffers|missing)$/)

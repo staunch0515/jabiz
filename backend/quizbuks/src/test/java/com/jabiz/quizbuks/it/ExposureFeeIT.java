@@ -1,22 +1,13 @@
 package com.jabiz.quizbuks.it;
 
-import com.jabiz.quizbuks.QbPermissions;
-import com.jabiz.quizbuks.fee.ExposurePrices;
 import com.jabiz.quizbuks.fee.FeeCodes;
 import com.jabiz.quizbuks.fee.Prepayments;
 import com.jabiz.quizbuks.publishing.PublicationExposureTopUp;
-import com.jabiz.quizbuks.publishing.PublicationSharedVideos;
 import com.jabiz.quizbuks.setup.QbParams;
-import com.jabiz.quizbuks.topic.TopicProcesses;
-import com.jabiz.quizbuks.asset.AssetProcesses;
-import com.jabiz.quizbuks.sharedvideo.SharedVideoProcesses;
-import com.jabiz.runtime.test.TestTokens;
-import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;
 import java.time.Duration;
-import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 

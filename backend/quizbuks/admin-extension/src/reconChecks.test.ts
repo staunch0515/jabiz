@@ -25,8 +25,8 @@ function constants(declaration: string): string[] {
 describe('ReconChecks.java', () => {
   const all = constants('List<String> ALL =')
 
-  it('lists the checks the page knows (43 at the time of writing: more is fine, none may be lost)', () => {
-    expect(all.length).toBeGreaterThanOrEqual(43)
+  it('lists the checks the page knows (52 at the time of writing: more is fine, none may be lost)', () => {
+    expect(all.length).toBeGreaterThanOrEqual(52)
     expect(new Set(all).size).toBe(all.length)
   })
 

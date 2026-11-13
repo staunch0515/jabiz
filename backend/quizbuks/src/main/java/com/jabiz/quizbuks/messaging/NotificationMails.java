@@ -121,9 +121,19 @@ public final class NotificationMails {
             .sample("reason", "The period ended.")
             .sample("completions", "120"));
 
+    /** F-M8: what is left of the exposures bought for a sponsor's publication is low. */
+    public static final MailTemplate PUBLICATION_EXPOSURE_LOW = MailTemplate.define("qb.publication.exposure-low", t -> t
+        .category(MailCategory.NOTIFICATION).entries("sponsor").param("name", "left", "purchased")
+            .sample("name", "Spring quiz")
+            .sample("left", "9,000")
+            .sample("purchased", "100,000")
+            // It asks the recipient to pay more (to buy more exposures): a notice that makes a recipient pay is a
+            // text another administrator publishes (F-M8c review L5).
+            .protectedText());
+
     public static final List<MailTemplate> ALL = List.of(TRANSFER_SENT, TRANSFER_FAILED, PAYOUT_ACTION_NEEDED,
         TOPUP_PAID, TOPUP_PAID_CASH, TOPUP_GRANTED, FEE_INVOICE_ISSUED, FEE_INVOICE_OVERDUE, FEE_CREDIT_EXPIRING, PUBLICATION_APPROVED, PUBLICATION_REJECTED, PUBLICATION_TAKEN_DOWN, PUBLICATION_FUNDS_SHORT,
-        PUBLICATION_ENDED);
+        PUBLICATION_ENDED, PUBLICATION_EXPOSURE_LOW);
 
     /**
      * At most one throttled notice per user and kind in this time: a sponsor's "short of funds" (a wallet may run dry
