@@ -85,6 +85,7 @@
 - [ ] 打开曝光费的开关（`qb.exposure.billing.enabled`）之前，各运营商都已设好曝光价格：没设价格的运营商下面，用别人视频的发布完全免费且不限次数（F-M8 问题 6）
       确认人： ／ 日期： ／ 依据：
 - [ ] **曝光的最少购买次数**（F-M8 问题 3）：提交发布时最少购买的曝光次数（`qb.exposure.min-purchase`）现为占位的 100 次；上线前由需求方定数并以受控变更设好（追加购买不设最少）
+- [ ] **曝光价格范围与单次追加上限**（F-M8）：运营商可设的单价范围（`qb.exposure.unit.min` 现为占位 1、`qb.exposure.unit.max` 现为占位 100，日元 / 次）与一次追加购买的上限（`qb.exposure.top-up.max` 现为占位 1,000,000）上线前由需求方定数并以受控变更设好；**开关 `qb.exposure.billing.enabled` 在曝光费的结算（F-M8c）合并之前不要打开**（它在首次上线登记表里为“等待”，F-M8c 才改为生效）
       确认人： ／ 日期： ／ 依据：
 - [ ] **运营商分成的 8 个设置**（F-M12 a）：部署后，`QB_SETUP` 提出的 `qb.operator.share.kinds`、`qb.operator.share.ai-cost-in-base`、`qb.operator.credit-recovery.rate`、`qb.operator.gift.treatment.*`（4 个）、`qb.operator.gift.recover-outside-base` 已由另一位管理员发布（四眼）；未发布时结算任务对每个运营商都 422 `QB_OPERATOR_NO_SHARE_SETTING`。**必须在部署后的第一次结算任务之前完成**（staging：12 月的第一次任务之前）
       确认人： ／ 日期： ／ 依据：

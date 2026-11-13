@@ -249,6 +249,58 @@ public class FeeConfig {
         return DistributionPrices.operatorSet();
     }
 
+    /** F-M8: the operators' exposure prices, the publications' settlements and the reminders. */
+    @Bean
+    EntityDefinition qbExposurePriceEntity() {
+        return QbExposureFees.PRICE_ENTITY;
+    }
+
+    @Bean
+    DatasetDefinition qbExposurePriceDataset() {
+        return processOnly(QbExposureFees.PRICE);
+    }
+
+    @Bean
+    EntityDefinition qbExposureSettlementEntity() {
+        return QbExposureFees.SETTLEMENT_ENTITY;
+    }
+
+    @Bean
+    DatasetDefinition qbExposureSettlementDataset() {
+        return processOnly(QbExposureFees.SETTLEMENT);
+    }
+
+    @Bean
+    DatasetDefinition qbSponsorExposureSettlementDataset() {
+        return own(QbExposureFees.SPONSOR_SETTLEMENTS, QbExposureFees.SETTLEMENT);
+    }
+
+    @Bean
+    EntityDefinition qbExposureNoticeEntity() {
+        return QbExposureFees.NOTICE_ENTITY;
+    }
+
+    @Bean
+    DatasetDefinition qbExposureNoticeDataset() {
+        return processOnly(QbExposureFees.NOTICE);
+    }
+
+    @Bean
+    ProcessDefinition<ExposurePrices.PriceInput, ExposurePrices.PriceOutput, ProcessContext> qbExposurePriceSet() {
+        return ExposurePrices.set();
+    }
+
+    @Bean
+    ProcessDefinition<ExposurePrices.PriceInput, ExposurePrices.PriceOutput, ProcessContext>
+        qbOperatorExposurePriceSet() {
+        return ExposurePrices.operatorSet();
+    }
+
+    @Bean
+    RetentionPolicy qbExposureSettlementRetention() {
+        return RetentionPolicy.of(QbExposureFees.SETTLEMENT).keep(RETENTION).from("settledAt").afterFiscalYearEnd();
+    }
+
     @Bean
     RetentionPolicy qbDistributionSettlementRetention() {
         return RetentionPolicy.of(QbDistributions.SETTLEMENT).keep(RETENTION).from("settledAt").afterFiscalYearEnd();
@@ -423,7 +475,8 @@ public class FeeConfig {
             .item(FeeRules.MONTHLY, "en", "Monthly fee", "zh", "月费", "ja", "月額料金")
             .item(FeeRules.MANUAL, "en", "Fee charged by hand", "zh", "手工记费", "ja", "手動の料金")
             .item(FeeRules.AUDIENCE, "en", "Audience rules", "zh", "受众规则费", "ja", "対象者ルール料")
-            .item(FeeRules.DISTRIBUTION, "en", "Distribution fee", "zh", "配送费", "ja", "配信料"));
+            .item(FeeRules.DISTRIBUTION, "en", "Distribution fee", "zh", "配送费", "ja", "配信料")
+            .item(FeeRules.EXPOSURE, "en", "Exposure fee", "zh", "曝光费", "ja", "露出料"));
     }
 
     @Bean

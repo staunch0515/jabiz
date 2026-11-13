@@ -196,4 +196,32 @@ class JournalLinesTest {
         assertThat(JournalMappingCheck.problems(accounts, Set.of(), Set.of(), QbParams.JOURNAL_ACCOUNTS))
             .hasSize(2 * accounts.size());
     }
+    /**
+     * The templates group by sponsor exactly the accounts the voucher keeps per sponsor: an account in one list and not
+     * the other gives voucher lines without their sponsor, or detail rows numbered to another sponsor's line.
+     */
+    @Test
+    void theTemplatesKeepTheSponsorOfTheAccountsKeptPerSponsor() throws java.io.IOException {
+        java.util.regex.Pattern list = java.util.regex.Pattern.compile(
+            "CASE WHEN a\\.\\{\\{LedgerAccount\\.accountCode}} IN \\(([^)]*)\\) THEN e\\.\\{\\{LedgerEntry\\.dimension1}}");
+        // Where each template writes the sponsor: the summary in its select and its group by, the detail likewise,
+        // the parts once.
+        Map<String, Integer> places = Map.of("journal-summary", 2, "journal-detail", 2, "journal-parts", 1);
+        for (String template : places.keySet()) {
+            String sql;
+            try (var in = JournalLinesTest.class.getResourceAsStream("/queries/qb/system/" + template + ".sql")) {
+                sql = new String(in.readAllBytes(), StandardCharsets.UTF_8);
+            }
+            var matcher = list.matcher(sql);
+            int found = 0;
+            while (matcher.find()) {
+                found++;
+                Set<String> accounts = java.util.Arrays.stream(matcher.group(1).split(","))
+                    .map(a -> a.strip().replace("'", "")).collect(Collectors.toSet());
+                assertThat(accounts).as(template).isEqualTo(JournalLines.PER_SPONSOR);
+            }
+            assertThat(found).as(template).isEqualTo(places.get(template));
+        }
+        assertThat(JournalLines.PER_SPONSOR).contains(QbLedger.FEES_RECEIVABLE, QbLedger.FEE_PREPAYMENTS);
+    }
 }
