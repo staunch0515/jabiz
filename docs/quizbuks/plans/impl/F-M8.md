@@ -108,7 +108,7 @@
 | 争议更正（依赖 F-M7） | `QbFeeCreditNote` | 4120、2150 | 1130，再按 F-M7 的规则退回或抵欠款 |
 | 作废整张账单 | 冲正，`LEDGER_REVERSE` | 同 F-M5 | 同 F-M5 |
 
-- 运营商的分成（F-M12）：费用的 `operatorId` 为提交时冻结的运营商，`qb.system.operator-fees` 按费用求和，种类 `EXPOSURE` 自然计入，不需改（`OperatorSettlementsIT` 加一例确认）。
+- 运营商的分成：**曝光费进运营商的分成基数**（与 F-M12 计划的种类清单一致，审查 F-M12 L5）。费用的 `operatorId` 为提交时冻结的运营商。现在的 `qb.system.operator-fees` 按费用求和，`EXPOSURE` 随之计入（`OperatorSettlementsIT` 加一例确认）；F-M12 改为按费用的期间与逐笔明细之后，曝光费照它的规则计入，本项不另做。
 - 提供方与使用方之间的钱不在账本里（线下）。
 
 ## 5. 参数（都在 `QbParams`，缺省由 `QB_SETUP` 提出；金额、免审开关列入 `CONTROLLED`）
