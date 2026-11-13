@@ -2,7 +2,7 @@
 id: qb.system.recon-tasks-to-close
 description: >-
   F-M14 (docs/quizbuks/plans/impl/F-M14.md §3.1b): the reconciliation's open tasks that the latest run within a day
-  before :at settles (the items of the job qb.recon-attention; none when the reconciliation did not run). A
+  before :at (if no later one exists) settles (the items of the job qb.recon-tasks-close; none when the reconciliation did not run). A
   difference's task is done once a run has no difference, and cancelled when a later day's replaces it; a task for
   attention is done once its check and object are no longer found, unless the run kept only part of its items.
 entities: [QbReconRun, QbReconItem, SysTask]
@@ -29,6 +29,9 @@ WITH latest AS (
     FROM {{QbReconRun}} r
     WHERE r.{{QbReconRun.scheduledTime}} <= CAST(:at AS timestamptz)
       AND r.{{QbReconRun.scheduledTime}} > CAST(:at AS timestamptz) - interval '1 day'
+      -- A run of an earlier time made up later (JOB_RUN_REQUEST): nothing, while a later run stands.
+      AND NOT EXISTS (SELECT 1 FROM {{QbReconRun}} n
+                      WHERE n.{{QbReconRun.scheduledTime}} > r.{{QbReconRun.scheduledTime}})
     ORDER BY r.{{QbReconRun.scheduledTime}} DESC
     LIMIT 1),
 kept AS (

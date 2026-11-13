@@ -277,7 +277,8 @@ public final class Reconciliation {
     private static TaskSpec task(ProcessContext ctx) {
         String day = ctx.get(INPUT, ReconcileInput.class).scheduledTime().atOffset(ZoneOffset.UTC).toLocalDate()
             .toString();
-        // F-M14: with how many checks differ; one a day to finance (every difference's owner, ReconChecks.owner).
+        // F-M14: with how many checks differ; one a day to qb.reconcile, whose every check today's differences are
+        // (ReconChecks.owner: a check owned by another permission is asked about in its own task, F-M10).
         return TaskSpec.forPermission("qb.recon-diff", "task.qb.recon-diff", Map.of("date", day,
                 "differences", String.valueOf(result(ctx).differences()),
                 "checks", String.valueOf(result(ctx).checksDiffering())), QbPermissions.RECONCILE)

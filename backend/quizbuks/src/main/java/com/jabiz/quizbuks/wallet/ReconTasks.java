@@ -39,7 +39,10 @@ public final class ReconTasks {
     public static final String ATTENTION_DUE_TEMPLATE = "qb.system.recon-attention-due";
     public static final String CLOSE_DUE_TEMPLATE = "qb.system.recon-tasks-to-close";
     public static final String ATTENTION_TASK = "qb.recon-attention";
+    /** The title's message: this followed by {@code .<check>}, one for each check for attention. */
     public static final String ATTENTION_TITLE = "task.qb.recon-attention";
+    /** The administration's reconciliation page, where the task leads. */
+    public static final String RECONCILIATION_PAGE = "/qb/finance/reconciliation";
     /** At most this many items a run of either job; the rest the next day. */
     public static final int MAX_ITEMS = 200;
     /** The source key's prefix of a task for attention. */
@@ -101,8 +104,11 @@ public final class ReconTasks {
             : input.partyId() != null ? input.partyId() : "-");
         params.put("expected", plain(input.expected()));
         params.put("actual", plain(input.actual()));
-        return TaskSpec.forPermission(ATTENTION_TASK, ATTENTION_TITLE, params, ReconChecks.owner(input.check()))
-            .source(input.sourceKey());
+        // F-M14 review L6: the title names the check in words (one message per check for attention), and the task
+        // leads to the reconciliation page.
+        return TaskSpec.forPermission(ATTENTION_TASK, ATTENTION_TITLE + "." + input.check(), params,
+                ReconChecks.owner(input.check()))
+            .link(RECONCILIATION_PAGE).source(input.sourceKey());
     }
 
     public static ProcessDefinition<CloseInput, ItemOutput, ProcessContext> closeItem() {
