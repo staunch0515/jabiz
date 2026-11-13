@@ -5615,6 +5615,26 @@ QuizBuks 的 #545、#546、#547 用了 43.5–45 分钟，#545 到点被取消�
 
 **17zz21 状态**：✅ 已合并（#650）。
 
+### 17zz22 注销提示的预读：个数、合计与固定条件（2026-11-13，QuizBuks 发现）
+
+**缘由**：应用以 `PersonalDataEraser.loads()` 为"申请注销前的提示"读数据，原来只能读"用户字段 = 本人"的整行，至多 100 行、超出即整个申请失败（`ErasureNotices`）。QuizBuks 的学者兑换券、发起方的发布与现金奖励都可能超过 100 行，这些人因此申请不了注销；而提示只需要个数（按状态）或合计。
+
+| # | 内容 |
+|---|---|
+| 17zz22-1 | core `ErasureLoad`：读法 `ROWS`（`of`，照旧）、`COUNT`（`count`）、`SUM`（`sum(…, 字段)`）；`.where(字段, 值…)` 加固定条件（一个值为等于，几个为 `IN`，几个条件都要成立；值是代码中的常量）。原来的三参数构造与 `of` 不变 |
+| 17zz22-2 | core `ErasureSubject`：加 `counts`、`sums`，以 `count(名)`（long）、`sum(名)`（BigDecimal）取用；名字没有声明或读法不对时抛错，不给 0；以 `rows(名)` 读个数或合计的预读也抛错（改成 `count` 后残留的 `rows` 不会让提示悄悄消失）。原来的两参数构造保留 |
+| 17zz22-3 | runtime：`ErasureNotices` 按读法读：整行照旧至多 100 行（多取一行发现超限）、个数用 `DatasetEntityManager.count`、合计用新的 `DatasetEntityManager.sum` → `StorageEngine.sum`（`SELECT coalesce(sum(列), 0) …`，列名来自元数据并经 `SqlIdentifiers.require`，值都参数绑定）；都在数据视图的范围内、时态实体读当前版本；`sum` 自己也拒绝敏感、遮蔽与非数值的字段（纵深防御） |
+| 17zz22-4 | 启动检查（`AccountDeletionChecks`，类别 `ERASURE`）：条件或合计的字段不存在、是敏感或遮蔽的字段、条件要用的运算（一个值为等于、几个为 `IN`）字段不允许、条件的值字段保存不了（字典外的码、不是 UUID 的引用或主键：以查询编译器的转换检查，与读取时相同）、合计的字段不是数值或金额、同名的预读读法或条件不同 → 错误 |
+| 17zz22-5 | 语句数：每个预读一条语句（与原来相同），个数与合计只返回一行、与行数无关；示范应用 `CustomerPersonalData` 改用 `count` |
+| 17zz22-6 | 测试：core `ErasureLoadTest`；`ErasureLoadTotalsIT`（测试夹具 `ItErasureFixtures`、测试迁移 V1021：一人 150 行，个数、按状态的个数、合计、两个条件、没有行的合计为 0，五个预读五条语句；数据视图的固定范围照旧；读整行 150 行照旧报错，加条件后读得到 30 行；时态实体的个数；启动检查的十二种错误（含不能做等于比较的用户字段、不是 UUID 的引用）；同名的预读条件顺序不同或 `10` 与 `10L` 视为相同；时态实体两个版本加一个墓碑时个数为 1、合计取当前版本）；`AccountDeletionIT`、`ErasureIT` 照旧 |
+| 17zz22-7 | 文档：设计 10 §17.3（示例、预读、启动检查、测试）、21 §2.5、决策 D62 后加一行带日期的说明（不改变 D62 的规则）、`CLAUDE.md` 第 4 节"账号删除" |
+
+不做：`SignInLoad`（登录与注册守卫的预读）的 100 行上限与按参数的条件不变；几个预读不合成一条语句。
+
+**验收**：`:core:test`、`:runtime:check`、`ErasureLoadTotalsIT`、`AccountDeletionIT`、`ErasureIT` 绿；`/code-review` 与 `/security-review` 的结果写在 PR 中。
+
+**17zz22 状态**：进行中。
+
 ### 线 1.3 的候选（未排期，2026-11-08 总控：首次上线前不做）
 
 | 候选 | 缘由 | 粗估 |
