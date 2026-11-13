@@ -57,7 +57,7 @@
 ### 3.2 代码
 
 - `DistributionPricing`（纯 Java）：单价（比例 × 最高奖励、上下限）、预付款（`maxWinners` 或最低预付款、含税）、月费用（最低配送费、取整）、总部范围的检查与原因。
-- 价目表：实体 `QbDistributionPrice`（`processOnlyWrites`，经 `OperatorScopes` 限定）；流程 `QB_OPERATOR_DISTRIBUTION_PRICES_SET`（运营商负责人，`RequireScope`，理由必填）与 `QB_DISTRIBUTION_PRICES_SET`（总部财务，任何运营商），都检查总部范围（422 `QB_DISTRIBUTION_PRICE_OUT_OF_RANGE`）。
+- 价目表：实体 `QbDistributionPrice`（`processOnlyWrites`，经 `OperatorScopes` 限定）；流程 `QB_OPERATOR_DISTRIBUTION_PRICES_SET`（运营商负责人，`RequireScope`，理由必填）与 `QB_DISTRIBUTION_PRICES_SET`（总部财务，任何运营商），都检查总部范围（422 `QB_DISTRIBUTION_PRICE_OFF_RANGE`）。
 - 提交：`PublicationLifecycle.submit` 加一步——读价目表与现有 `FeeGate` 的读取合并成一条 `QueryEntities.all`；冻结条件、预付或检查信用额。驳回、撤回、审核过期三处释放预付款。`StatementBudgetIT` 的提交预算随之改，并说明原因。
 - 结算：逐项任务 `qb.distribution-fee`（`JobDefinition.forEach`，每月 2 日 01:12，在 `qb.fee-invoice` 01:17 之前），每项流程 `QB_DISTRIBUTION_SETTLE_ITEM`（`internal()`）：取 `qb.wallet:SPONSOR:<发起方>` 锁，数上个月的开始人数，写结算记录并经 `QB_FEE_CHARGE` 记费；发布已结束的同时释放剩余预付款并 `closed_at`。月份与平台费同一时区。
 - 对账：每日核对加 `DISTRIBUTION_DEPOSITS`（2180 按发起方 = 未关闭行的 `deposit − deposit_used − deposit_released`）；月报 `qb.admin.monthly` 加 `DISTRIBUTION_DEPOSIT`、`DISTRIBUTION_CHARGED`、`DISTRIBUTION_RELEASED` 与 2180 一列。

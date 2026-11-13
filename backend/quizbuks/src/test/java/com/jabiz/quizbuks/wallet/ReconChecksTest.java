@@ -2,10 +2,17 @@ package com.jabiz.quizbuks.wallet;
 
 import org.junit.jupiter.api.Test;
 
+import java.io.IOException;
 import java.math.BigDecimal;
+import java.net.URISyntaxException;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -96,7 +103,7 @@ class ReconChecksTest {
         // Every check by name, the F-M6 notes (DISTRIBUTION_AT_FLOOR) among them.
         assertThat(result.summary()).startsWith("{\"CASH_ACCOUNT\":0,\"CASH_LOTS\":0,\"CERTIFIED_GRANTS\":0,"
             + "\"DISTRIBUTION_AT_FLOOR\":0,\"DISTRIBUTION_DEPOSITS\":0,\"DISTRIBUTION_FINAL_MISSING\":0,"
-            + "\"DISTRIBUTION_PRICE_OUT_OF_RANGE\":0,\"DISTRIBUTION_UNSETTLED\":0,\"ENTRY_FEES_UNSETTLED\":0,"
+            + "\"DISTRIBUTION_PRICE_OFF_RANGE\":0,\"DISTRIBUTION_UNSETTLED\":0,\"ENTRY_FEES_UNSETTLED\":0,"
             + "\"FEES_RECEIVABLE\":0,\"FEE_CREDIT\":0,\"FEE_CREDIT_PROMOTION\":0,\"FEE_PAYMENTS\":0,")
             .contains("\"LEDGER_ZERO\":0").contains("\"TOPUP_FEE\":0");
     }
@@ -132,5 +139,45 @@ class ReconChecksTest {
             ReconChecks.TAKER_WALLET_LAG, ReconChecks.TAKER_WALLET, ReconChecks.SPONSOR_WALLET);
         assertThat(result.total()).isEqualTo(5);
         assertThat(result.differences()).isEqualTo(4);
+    }
+
+    /**
+     * A code longer than the column it is stored in is cut short by the templates' CAST, and {@link
+     * ReconChecks#coded} drops a code it does not know: the check would never be reported. Every code fits the
+     * column {@code qb_recon_item_version.check_code}, read from its migration.
+     */
+    @Test
+    void everyCodeFitsTheColumnItIsStoredIn() throws IOException, URISyntaxException {
+        Matcher column = Pattern.compile("check_code\\s+varchar\\((\\d+)\\)")
+            .matcher(Files.readString(resource("db/migration/V7__quizbuks_topups.sql")));
+        assertThat(column.find()).as("check_code's width in V7").isTrue();
+        int width = Integer.parseInt(column.group(1));
+        assertThat(ReconChecks.ALL).allSatisfy(code -> assertThat(code).as(code).hasSizeLessThanOrEqualTo(width));
+    }
+
+    /** Every code a reconciliation template writes is a known one, and fits the width it is cast to there. */
+    @Test
+    void everyCodeTheTemplatesWriteIsKnownAndFitsItsCast() throws IOException, URISyntaxException {
+        Pattern cast = Pattern.compile("CAST\\('([A-Z0-9_]+)' AS varchar\\((\\d+)\\)\\)");
+        List<String> found = new ArrayList<>();
+        try (Stream<Path> templates = Files.list(resource("queries/qb/system"))) {
+            for (Path template : templates.filter(p -> p.getFileName().toString().startsWith("recon-")).toList()) {
+                Matcher m = cast.matcher(Files.readString(template));
+                while (m.find()) {
+                    String code = m.group(1);
+                    found.add(code);
+                    assertThat(code).as(template.getFileName() + ": " + code)
+                        .hasSizeLessThanOrEqualTo(Integer.parseInt(m.group(2)));
+                    assertThat(ReconChecks.ALL).as(template.getFileName().toString()).contains(code);
+                }
+            }
+        }
+        assertThat(found).as("codes found in the templates").isNotEmpty();
+    }
+
+    private static Path resource(String name) throws URISyntaxException {
+        var url = ReconChecksTest.class.getClassLoader().getResource(name);
+        assertThat(url).as(name).isNotNull();
+        return Path.of(url.toURI());
     }
 }
