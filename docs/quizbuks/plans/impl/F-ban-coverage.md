@@ -87,6 +87,7 @@
 
 - 新增 `it/BanOperatorActsIT`（仿 #671 的 `BanMoneyIT.aBannedLeadMovesNoMoney`：`newOperatorWithLead`、`memberSession(...)`、总部 `QB_USER_BAN`、`refused(...)`、`codes(...)`，解封后同一调用成功）。一个测试方法一组：奖品作废与电子奖品裁决、奖励方式、潜在客户的七个、区域例外三个、共享视频下架、帮助回复、AI 翻译检查、运营商的发布 / 页面 / 商品 / 举报 / 封禁各流程、树的三个。每个"拒绝后什么也没写"都用数据库断言。
 - `BanProcesses.operatorBan` / `operatorUnban`、`PublicationAdmin.define`、`SponsorPageProcesses`、`SponsorProductProcesses`、`ReportProcesses` 等共用定义，**只在 `operator` 为真时**加（总部变体不加，也不能被封禁）。
+- **`QB_SPONSOR_REWARD_METHODS_SET` 另加成员检查**（总控 2026-11-13）：`RewardMethodProcesses.java:52-73` 不调用 `OperatorChecks.member`，运营商成员被移出团队或运营商被暂停后，令牌到期前仍可调用，只靠数据视图限定范围（`OperatorScopes.java:59`）。加 `OperatorChecks.member`（放在封禁检查之后），先写修前失败的测试：被移出团队的成员持未到期的令牌调用，期望被拒。
 - 位置：在 `OperatorChecks.member` / `memberWhenScoped` **之前**，如 `TreeRevocations.java:98-99`。
 - 不采用"在 `OperatorChecks.member` 里统一加"：它漏掉不调用 `member` 的（潜在客户、帮助回复、奖励方式、AI 检查、成员移除），对发起方的树流程无效（`memberWhenScoped` 在非运营商会话是空操作），并且会让已有 `refuseBanned` 的流程读两次封禁。
 - 泛化后的 `BanCoverageTest` 在所有修补之后必须通过；`CLOSED` 集合并入本计划新增的流程名。
@@ -95,7 +96,7 @@
 
 ### (a) `QbTopUp.bankReference` 是否登记为抹除对象
 
-**建议：不登记。**理由：
+**决定：不登记**（总控 2026-11-13 同意，理由如下；汇款人姓名在 `payerName`，#671 已登记）。理由：
 1. 前提需更正：该列不是 NOT NULL，是 `varchar(64)` 可空（`V20__quizbuks_bank_topups.sql:15`）。`ErasureValues.replacement` 对可空列写 NULL，不是 `***`（`runtime/erasure/ErasureValues.java`，可空即 `NULL`）。问题出在检查约束：V20（`:29`、`:37`）与 V23（`:30` 的 `qb_topup_manual_kind`、`:38` 的 `qb_topup_paid_posted`、`:46` 的 `qb_topup_review`）要求已入账、审核中的银行与手工入账（外部收款）的 `bank_reference IS NOT NULL`。清空会违反约束，抹除整个失败——这与 V120 是同一类问题（V120：V23 的 `qb_topup_method` 要求手工入账的 `manual_reason` 非空，抹除把它置 NULL 而失败，V120 放宽了该约束，见 `FM15a0` 分支的 `V120__quizbuks_topup_manual_reason_erasable.sql`）。
 2. 即使放宽约束，唯一索引 `uk_qb_topup_bank_reference (received_on, bank_reference)`（`V20:45`）是"银行流水的一笔只记一次"的数据库保障，清空后这一保障对已抹除的行消失，旧流水可再被记到另一笔充值上（重复入账的风险）。写 `***` 也不行：同一天两笔被抹除的行会撞唯一索引。
 3. 审批内容的哈希：`bankReference` 在银行入账审批的内容里（`wallet/BankTopUps.java:467`，手工入账 `ManualCredits.java:263`），批准绑定内容哈希。登记抹除后，处于审核中的充值（状态 `REVIEW`）的行被改，哈希不再相符，待批准的审批作废。这一条另外要求：即使将来要登记，也必须像 F-M15 a0 对手工入账那样，先结束或等待在途的审核（计划 §5.2 第 0 步）。
@@ -105,22 +106,23 @@
 
 ### (b) `QB_TOPUP_BANK_CANCEL`
 
-**无害，列入豁免表，理由"撤回自己的、尚无资金的申请"。**`wallet/BankTopUps.java:278-297`：只改自己的一笔，`loadOwn` 经发起方自己的数据视图（别人的 404，`:304-309`），`waiting` 要求方式为银行且状态是 `AWAITING` 或 `REPORTED`（`:314-320`，`TopUpStatus.BANK_WAITING`），只把状态写成 `CANCELLED`、关掉财务的任务；不过账、不动余额。总部之后仍可对 `CANCELLED` 记账（`BANK_RECORDABLE` 含 `CANCELLED`，`TopUpStatus.java:32`），所以不会丢钱。不加检查，也不会让被封禁者做出任何新的事。
+**无害，列入豁免表，理由"撤回自己的、尚无资金的申请"（总控 2026-11-13 同意）。**`wallet/BankTopUps.java:278-297`：只改自己的一笔，`loadOwn` 经发起方自己的数据视图（别人的 404，`:304-309`），`waiting` 要求方式为银行且状态是 `AWAITING` 或 `REPORTED`（`:314-320`，`TopUpStatus.BANK_WAITING`），只把状态写成 `CANCELLED`、关掉财务的任务；不过账、不动余额。总部之后仍可对 `CANCELLED` 记账（`BANK_RECORDABLE` 含 `CANCELLED`，`TopUpStatus.java:32`），所以不会丢钱。不加检查，也不会让被封禁者做出任何新的事。
 
 ## 6. 风险
 
-- **`APPROVAL_DECIDE` 不能带应用层的封禁检查。**运营商持有 `approval.decide`（`QbRoles.java:111`）与 `REVIEW_SPONSOR` / `REVIEW_PUBLICATION`，被封禁的成员持有效令牌仍可批准或驳回发起方入驻与发布的评审。缓解：(1) 窗口有限，是访问令牌的剩余寿命，缺省 15 分钟（`runtime/security/SecurityConfig.java:131`，`jabiz.security.jwt.access-token-ttl`，`SessionChecks.java:36` 对过长告警；`application.yml` 未改）；(2) 评审是两人的（运营商另一位成员，`CLAUDE.md:292`），单个被封禁者批不通过，只能多一次驳回；(3) 运营商入口每次动作要二次验证（`QbRoles.java` 的运营商 `requireMfa = true`，且封禁后无法重新验证）。仍留的风险写进 `operations.md`；真正的修补需要平台的"决定者检查"钩子，作为平台请求提给总控，不在本工作里做。（另一种应用侧办法——在结果流程 `*_APPROVAL_RESULT` 里再核对决定者是否被封禁——会改变审批结果的含义，不建议在这里做。）
+- **`APPROVAL_DECIDE` 不能带应用层的封禁检查。**（总控 2026-11-13：照写为风险；平台的"审批人检查接入点"作为 ROADMAP 候选，由 S1 以后在平台上做，本项不做，也不改平台文件。）运营商持有 `approval.decide`（`QbRoles.java:111`）与 `REVIEW_SPONSOR` / `REVIEW_PUBLICATION`，被封禁的成员持有效令牌仍可批准或驳回发起方入驻与发布的评审。缓解：(1) 窗口有限，是访问令牌的剩余寿命，缺省 15 分钟（`runtime/security/SecurityConfig.java:131`，`jabiz.security.jwt.access-token-ttl`，`SessionChecks.java:36` 对过长告警；`application.yml` 未改）；(2) 评审是两人的（运营商另一位成员，`CLAUDE.md:292`），单个被封禁者批不通过，只能多一次驳回；(3) 运营商入口每次动作要二次验证（`QbRoles.java` 的运营商 `requireMfa = true`，且封禁后无法重新验证）。仍留的风险写进 `operations.md`；真正的修补需要平台的"决定者检查"钩子，作为平台请求提给总控，不在本工作里做。（另一种应用侧办法——在结果流程 `*_APPROVAL_RESULT` 里再核对决定者是否被封禁——会改变审批结果的含义，不建议在这里做。）
 - **封禁不吊销会话。**`QB_USER_BAN` 不调用 `SEC_USER_SESSIONS_REVOKE`（`BanProcesses` 全文无此调用）；刷新令牌在下一次刷新时被 `QbSignInGuard` 拒绝（`:33-35`），所以刷新令牌（运营商入口会话另配，`application.yml:57`）不是缺口；吊销会话也缩短不了已签发的访问令牌（`docs/design/10-security.md:788`）。结论：窗口由访问令牌寿命决定，本工作不改；把令牌寿命单独缩短（平台全局设置）是平台请求，不在这里。
 - **新增流程忘加检查**：由泛化后的测试防住，但"只读"与"本人偏好"这类豁免要靠评审把关；每条豁免要有理由。
 - **静态清点会漏**：条件装配或测试里注册的流程，见 §2 第 3 点。
-- 另见（不属于封禁，顺带记下）：`RewardMethodProcesses.java:52-73` 不调用 `OperatorChecks.member`，运营商成员被移除或运营商被暂停后，令牌到期前仍可调用；范围由数据视图（`OperatorScopes.java:59`）限制。建议另开一条跟进。
+- 奖励方式的成员检查：已移到 §4 一并修（总控 2026-11-13）。
 - 与 #671 的冲突：同改 `BanCoverageTest` 与 `backend/quizbuks/CLAUDE.md:232` 附近；本工作等 #671 合并后在其上做。
 
 ## 7. 测试、估算、依赖
 
 - 测试：泛化的 `BanCoverageTest`（含 `getFirst` 规则、`BLOCKED_BY_HELPER`、`EXEMPT`、由 `QbRoles` 推出的总部豁免）；`BanOperatorActsIT`（§4）；学者 `QB_EXPOSURE_REPORT` 一条；助手中 `refuseBanned` 提前后原有 IT 全绿；场景快照若有流程步骤顺序变化则更新（`-Dscenario.update-snapshots=true`，逐个核对差异）。
 - 文档：`backend/quizbuks/CLAUDE.md:232` 附近改写成"由角色推出范围、第一步规则、豁免表与理由"；`docs/quizbuks/operations.md` 的封禁一节写明令牌窗口与 `approval.decide` 的残留风险。
-- 估算：1.5 天（测试泛化 0.5 天，修补约 30 个定义多为一行、IT 0.7 天，文档与回归 0.3 天）。
+- 估算：1.5 天（测试泛化 0.5 天，修补约 30 个定义多为一行，另加奖励方式的成员检查，IT 0.7 天，文档与回归 0.3 天）。
 - 依赖：#671 合并（`BanCoverageTest` 来自它）。不是钱的部分，由 S3 实施。
+- 实施（总控 2026-11-13 批准本计划）：#671 合并后在分支 `1.3/quizbuks-ban-coverage` 实施，先开草稿；涉及权限，实施 PR 请 Fable 审。
 
 删除的功能：无
