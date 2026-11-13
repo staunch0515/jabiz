@@ -164,6 +164,7 @@ class ProcessAccessIT extends QbItSupport {
         Map.entry("QB_PREPAYMENT_RELEASE_ITEM", ProcessAccess.INTERNAL),
         // F-M6: the distribution fee's settlement (the item of the monthly and the final job).
         Map.entry("QB_DISTRIBUTION_SETTLE", ProcessAccess.INTERNAL),
+        Map.entry("QB_EXPOSURE_LOW_NOTICE_ITEM", ProcessAccess.INTERNAL),
         Map.entry("QB_EXPOSURE_SETTLE", ProcessAccess.INTERNAL),
         Map.entry("QB_FEE_REFUND", ProcessAccess.SUB_PROCESS_ONLY),
         // F-M7: the credit note (under its caller's wallet lock), the reminders it closes, and the refund job's item.

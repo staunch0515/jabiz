@@ -119,6 +119,7 @@
 | `QB_TRANSFER_RUN_CRON`、`QB_RECONCILE_RUN_CRON` | e2e 与 Stripe 测试模式：每分钟转账、每分钟核对 | `TransferScheduleCheck` |
 | `QB_ANALYTICS_RUN_CRON` | e2e：每分钟运行发起方分析（Q9e2）。**隐私控制**：概览是任务的快照，频率决定能把一个学者的作答定位到多细；缺省（每 10 分钟）以外的值**任何环境**都要同时设 `QB_E2E_ENABLED=true`，否则启动失败；**比每分钟更频繁的值一律拒绝**（评审 M1） | `TransferScheduleCheck` |
 | `QB_DISTRIBUTION_MONTHLY_CRON` / `QB_DISTRIBUTION_FINAL_CRON` | 配送费的月度结算（缺省每月 2 日 00:37）与结束结算（缺省每天 03:07），按 `jabiz.fiscal-year-zone`（F-M6，§7.48）。e2e 把结束结算设为每分钟（`'45 * * * * *'`）；项都可重复运行，更频繁只是多读几次 | — |
+| `QB_EXPOSURE_MONTHLY_CRON` / `QB_EXPOSURE_FINAL_CRON` / `QB_EXPOSURE_LOW_CRON` | 曝光费的月度结算（缺省每月 2 日 00:47）、结束结算（缺省每天 03:12）与"即将用完"的提醒（缺省每 10 分钟），月度与结束按 `jabiz.fiscal-year-zone`（F-M8，§7.54）；项都可重复运行 | — |
 | `QB_E2E_ENABLED`（`quizbuks.e2e.enabled`） | e2e 的开关（Q9e2 评审 M1）：允许改分析任务的时间；正式模式或正式密钥下设了即启动失败 | `TransferScheduleCheck` |
 | `QB_ADMIN_ROLES` 中的 `QB_E2E_*` | e2e 的无二次验证的测试角色 | `TransferScheduleCheck` |
 | 开发入账 `quizbuks.wallet.dev-credit.enabled`（`dev` 配置开启） | 不付款给发起方钱包入账 | `StripeModeCheck` |
@@ -324,7 +325,7 @@ FROM pg_stat_statements ORDER BY total_exec_time DESC LIMIT 20;
      - 法务相关的不打开：`qb.transfer.enabled`、`qb.withdrawal.bank.enabled` 保持 `false`（§1.3b、§1.3c）；`qb.kudos.buy.enabled`、`qb.kudos.sell.enabled`、`qb.reward.kudos.enabled`、`qb.play.entry-fee.enabled` 的首次上线的值也是 `false`（学分只显示、不使用，学分的帮助见 `help/fee-account.md`）；
      - `qb.fee.monthly`、`qb.creator-fee-rate`（与 `qb.transfer.fee-rate`）的提案值是 0，**必须先发布**（与其他提案一起，不等价目表）：首次上线不收这些费用，发布后参数才存在、卡片才显示"一致"，以后改声明值也不会改到已上线的系统；价目表设好、收费开始前再由受控变更改为实际金额；赠送额度的开关 `qb.fee-credit.grant.enabled` 在价目表与赠送额度（`qb.fee-credit.grant.*`）设好之后发布；
      - AI 使用说明发布、**且 AI 使用手册（`manual-sponsor.*.md`、`manual-app.*.md`）已按首次上线的状态（学分只显示、不使用，无报名费）改好并由内容管理员重新载入、发布**之后，才发布 `qb.ai.enabled` 与 `qb.help.enabled`（两条提案的值都是 `true`）；
-     - 收费组尚未上线的行：已经存在的两个键 `qb.audience.billing.enabled`（F-M7）、`qb.ai.site-profile.enabled`（F-M9）由 `QB_SETUP` 提出 `false`，**照常发布**，卡片比较它们的现值（为开即"不同"，启动检查警告）；其余四个键（配送费 `qb.distribution.billing.enabled`、曝光费 `qb.exposure.billing.enabled`、AI 费 `qb.ai.fee.enabled`、自动付账单 `qb.fee.auto-pay.enabled`）尚不存在，卡片显示"等 F-Mx 上线"，不提案、不用管；它们的上线顺序见 `plans/impl/F-M.md` §4；
+     - 收费组尚未上线的行：已经存在的两个键 `qb.audience.billing.enabled`（F-M7）、`qb.ai.site-profile.enabled`（F-M9）由 `QB_SETUP` 提出 `false`，**照常发布**，卡片比较它们的现值（为开即"不同"，启动检查警告）；其余的键（AI 费 `qb.ai.fee.enabled`、自动付账单 `qb.fee.auto-pay.enabled`；配送费 `qb.distribution.billing.enabled` 与曝光费 `qb.exposure.billing.enabled`（F-M8c）已是普通的生效行）尚不存在，卡片显示"等 F-Mx 上线"，不提案、不用管；它们的上线顺序见 `plans/impl/F-M.md` §4；
   3. 财务页卡片中可比较的行全部显示"一致"（金额类的行显示"金额，不比较"）。新建的测试系统（`staging`）同样应全部一致；只有此前已经建过参数的测试系统，以及本地环境（不是 `production` / `staging`，提出声明值），才会显示"不同"；
   4. 启动日志没有 `FirstLaunchSwitchesCheck` 的警告（`production` 上：学分买卖、转账、提现、学分奖励、报名费的开关为开，受众规则费 `qb.audience.billing.enabled` 或网站资料的 AI `qb.ai.site-profile.enabled` 为开，或学分奖励的开关从未发布；Stripe 正式模式而环境不是 `production`）。
   运营商自己的提现（`qb.operator.withdrawal.*`）没有开关：那是运营商的收入，不是学分，不由本项挡住。
@@ -1430,3 +1431,29 @@ S0（`shopify/S0-publisher.md`）给发布、档位、卡片、会话、分析�
 6. 不需要再执行 `QB_SETUP`（没有新参数、新权限、新科目）。
 
 回滚：恢复升级前的备份（§2.3）并启动旧 jar；没有反向迁移。
+
+### 7.54 曝光费（F-M8）
+
+用了**他人共享视频**（卡片的提供方不是发布方）的发布，按计入的曝光向平台付曝光费：提交时先买一个次数、冻结含税的预付，用多少收多少，超出已购的不收，结束后退回未用的（`docs/quizbuks/plans/impl/F-M8.md`）。学者读到的内容、曝光的计数（§7.31，F-S13）不变；用自己的视频、挑战与店面的发布不收，直营发起方照付。
+
+- **价目与范围**：每个运营商一行单价（日元 / 次，`QbExposurePrice`），在总部定的范围（`qb.exposure.unit.min` / `.max`，受控，**现为占位 1 与 100，上线前由需求方定**）之内；运营商负责人在运营商管理系统的"曝光费价目"页、总部在平台管理系统的价目页保存，理由必填。**没有价目的运营商不收费也不限次数**：打开开关之前先让各运营商设好价（上线检查清单）。每个运营商的价目只管之后提交的发布：单价在提交时冻结到发布。
+- **开关**：`qb.exposure.billing.enabled`（受控；声明值关，首次上线值开，§2.4 的首次上线开关核对）**只在提交时读**，关掉不追溯：已冻结单价的发布照常结算到结束。
+- **购买**：发布向导的"资金"一步显示曝光行（购买次数 ≥ `qb.exposure.min-purchase`，受控，**现为占位 100**，否则 422 `QB_EXPOSURE_PURCHASE_REQUIRED`）；预付 = ⌈次数 × 单价⌉ + 税（税向下取整），超过一笔费用的上限即 422 `QB_EXPOSURE_DEPOSIT_RANGE`；资金不足走提交时的资金检查（§7.47）。预付是 F-M5 的预付款，用途 `EXPOSURE`，后付的发起方不冻结，按月记应收。审核中或被驳回、撤回、审核过期，全额退回，已购与单价清空。
+- **追加购买**（`QB_EXPOSURE_TOP_UP`，发布页的"追加购买"，进行中的发布；审核中的先撤回）：每次至多 `qb.exposure.top-up.max`（受控，占位 100 万），不设最少；`expectedPurchased` 与当前不符即拒绝（重发同一请求只买一次）；追加的预付按累计计（新总额的预付减此前各次冻结之和），加到**同一笔**预付款上，所以分摊（一笔预付款至多 1000 段）有上限，超过即 `QB_EXPOSURE_PARTS_LIMIT`，请发起方结束后另发新发布。每人每小时至多 30 次（`application.yml` 的限流）。
+- **结算**（`QB_EXPOSURE_SETTLE`，逐项任务，每项一个事务，只取发起方的钱包锁）：
+  - 月度 `qb.exposure-fee`：每月 2 日 00:47（`jabiz.fiscal-year-zone`，部署设置 `QB_EXPOSURE_MONTHLY_CRON`）。
+  - 结束 `qb.exposure-final`：每天 03:12（`QB_EXPOSURE_FINAL_CRON`），在配送费的 03:07 之后、预付款退回的 03:23 之前；结束超过宽限 `qb.exposure.final.end-grace-sec`（受控，缺省 3600 秒）而没有 `final` 行的发布写 `final` 并退回未用。
+  - **月份的边界按计入时刻（`counted_at`）**：月度结算数的是"月末之前计入的"，补跑得多晚结果都相同；这与配送费不同（配送费记运行那一刻的计数器）。
+  - 每行记累计的次数与金额，本次 = ⌈累计次数 × 单价⌉ − 此前已收，另加税；**计入的次数不超过已购**（成功 3 次、已购 2 次只收 2 次）；0 次不记费。记费是 `QB_FEE_CHARGE` 种类 `EXPOSURE`，归提交时冻结的运营商：预付的先从该发布的预付款扣（赠送先、现金后），不够从平台费账户扣，再不够成未付；后付的记应收。
+  - **先后靠数据条件，不靠时刻**：每个任务都先读自己的条件再动（月度与结束两个任务、配送费与曝光费、账单任务），时刻只是把它们排开。后付发起方某月的账单要等该月应结算的曝光结算都有该月或 `final` 的行才开（`qb.fee-invoice` 每天 01:17，每月 1 日除外）；账单开出之后补跑的费用进入记费当月。
+  - 一次运行至多 10000 项；余下的由每日核对报出，用 `JOB_RUN_REQUEST` 补跑该计划时刻（同一时刻幂等）。月度补跑：`EXPOSURE_UNSETTLED` 的月份 M 补跑 `qb.exposure-fee` 在 M 次月 2 日 00:47；几个月都缺时从最早的月份起逐月补。
+- **释放**：预付款的释放（每天 03:23，§7.47）在曝光费里要等该发布有 `final` 结算行之后才退回（另一个用途的预付款还开着时也不提前释放）；提前结束的各种原因都退回未用，赠送额度退回原笔、已到期的作废。
+- **提醒**：任务 `qb.exposure-low`（每 10 分钟，`QB_EXPOSURE_LOW_CRON`，逐项）给剩余 ≤ 已购 × `qb.exposure.low-ratio`（受控外的普通参数，缺省 0.1；0 即不提醒）的进行中发布的发起方发站内信与邮件（模板 `qb.publication.exposure-low`，通知类、可退订；文字可在"邮件文字"页改）；同一个已购数只提醒一次，追加购买后再提醒。
+- **核对**（每日对账，级别见 §7.52）：
+  - **差异**：`EXPOSURE_DEPOSITS`（2180 用途 `EXPOSURE` 按发布 = 未关闭的预付款剩余；多半是预付款被手工改过或某次冻结 / 追加没有写全）；`EXPOSURE_SETTLED_OVER`（某发布各结算行的次数之和超过已购：看是否有人改了已购或重复结算）；`EXPOSURE_UNSETTLED`（按发起方与月份，月末之后过了 `qb.exposure.unsettled-after-hours` 小时仍没有该月或 `final` 的行）；`EXPOSURE_FINAL_MISSING`（结束超过 `qb.exposure.final-missing-after-hours` 小时没有 `final` 行）；`EXPOSURE_UNIT_MISMATCH`（只有已购没有单价，或只有单价没有已购：两者是一起写的，出现即查最近的提交或回到草稿的记录）。前两个多半是任务没有运行或该项失败：看任务的运行与失败的项，修好后补跑。
+  - **需关注**：`EXPOSURE_PRICE_RANGE`（运营商价目超出总部现在的范围：总部改了范围之后会出现；由财务（`qb.reconcile`）决定是让运营商重设价，还是放宽范围）。
+  - **提示**：`EXPOSURE_UNPURCHASED`（进行中、用他人视频却没有已购的发布：开关打开之前提交的，或运营商没有价目的；供运营商与总部查看，不建待办）。
+  - F-S13 的 `qb.exposure-check`（成功 ≤ 已购 + 容差）不变。
+- **月报**（`qb.admin.monthly`）：`EXPOSURE_DEPOSIT`（冻结与追加）、`EXPOSURE_RELEASED`、`EXPOSURE_CHARGED` 三个类别，`PREPAYMENT_FROZEN / RELEASED` 不再含这些。
+- **争议**：发起方问"为什么收了这么多"——发布页的"共享视频的曝光"写明已购、已用、剩余、单价与历次结算（计入的次数与金额）；计入的次数的争议先看曝光计数页（可疑刷量，§7.31）。已收的曝光费只经贷项凭证或平台费账户的人工调整更正（§7.50），不改结算行。
+- **升级**：迁移 V121；部署后运行一次 `QB_SETUP`（新参数、新权限），再按上线检查清单设好运营商价目、范围、最少购买次数与追加上限，最后经受控变更打开 `qb.exposure.billing.enabled`。没有新的环境变量。回滚：恢复备份（§2.3）并启动旧 jar；没有反向迁移。
