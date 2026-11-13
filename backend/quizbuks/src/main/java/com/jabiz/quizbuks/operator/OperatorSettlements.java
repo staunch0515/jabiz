@@ -443,7 +443,8 @@ public final class OperatorSettlements {
             line.put("noShare", false);
             line.put("shareRate", share);
             line.put("recoveryRate", recoveryRate);
-            line.put("shareExcludedInput", money(row.get("shareExcluded")));
+            line.put("recoverBase", OperatorShareRules.recoverBase(kind, amount, money(row.get("shareExcluded")),
+                terms));
             lines.add(line);
             byId.put(chargeId, line);
             countedNow.add(chargeId);
@@ -512,6 +513,7 @@ public final class OperatorSettlements {
             line.put("inBase", BigDecimal.ZERO);
             line.put("recoverGross", BigDecimal.ZERO);
             line.put("noShare", false);
+            line.put("recoverBase", BigDecimal.ZERO);
             line.put("shareRate", rate);
             line.put("recoveryRate", money(row.get("recoveryRate")));
             voidLines.add(line);
@@ -524,21 +526,44 @@ public final class OperatorSettlements {
         // The base: ⌊net base × (1 − platform share)⌋, net of the same-batch credit the platform bears.
         BigDecimal netBase = inBaseSum.subtract(gift.sameBatchNoShareInBase);
         BigDecimal operatorShare = operatorShare(netBase, share);
-        // A net base below 0 (more given back than used, same batch) returns the operator's share of the negative
-        // part as a negative cost, so nothing is lost.
-        BigDecimal negativeBase = netBase.signum() < 0
-            ? OperatorShareRules.floor(OperatorShareRules.exactShare(netBase, share)) : BigDecimal.ZERO;
+        // A net base below 0 (more of the credit the platform bears than fees, same batch): the operator's share of
+        // the negative part is a cost (F-M12 review M1: positive).
+        BigDecimal negativeBase = OperatorShareRules.negativeBaseCost(netBase, share);
 
-        BigDecimal creditNotes = rows(ctx, CREDIT_NOTES).isEmpty() ? BigDecimal.ZERO
-            : money(rows(ctx, CREDIT_NOTES).getFirst().get("creditNotes"));
-        BigDecimal creditNoteDeduction = creditNoteDeduction(creditNotes, share);
+        // F-M7 (C3) as F-M12 §3.5 has it: a note takes back only the part of its fee that entered the base, at the
+        // rate of that fee's CHARGE line (a fee without one: as the fee is counted now).
+        BigDecimal creditNotes = BigDecimal.ZERO;
+        BigDecimal noteExact = BigDecimal.ZERO;
+        for (Map<String, Object> row : rows(ctx, CREDIT_NOTES)) {
+            BigDecimal amount = money(row.get("amount"));
+            creditNotes = creditNotes.add(amount);
+            BigDecimal feeAmount;
+            BigDecimal excluded;
+            BigDecimal rate;
+            if (row.get("lineAmount") != null) {
+                feeAmount = money(row.get("lineAmount"));
+                excluded = money(row.get("lineExcluded"));
+                rate = money(row.get("lineShareRate"));
+            } else {
+                feeAmount = money(row.get("chargeAmount"));
+                excluded = OperatorShareRules.excluded(String.valueOf(row.get("feeKind")), feeAmount,
+                    money(row.get("chargeShareExcluded")), terms);
+                rate = share;
+            }
+            noteExact = noteExact.add(OperatorShareRules.exactShare(OperatorShareRules.noteInBase(amount, feeAmount,
+                excluded), rate));
+        }
+        BigDecimal creditNoteDeduction = OperatorShareRules.floor(noteExact);
 
         BigDecimal cost0 = cost.add(fixedFee).add(creditNoteDeduction).add(gift.giftShareDeduction)
             .add(voidDeduction).add(negativeBase);
         BigDecimal[] payable = payable(operatorShare, cost0, carriedIn);
-        // What is left of the share pays the credit taken back; the rest is carried (its own column).
-        OperatorShareRules.Recovery recovery = OperatorShareRules.recover(gift.giftDue, giftCarriedIn, payable[0]);
-        BigDecimal finalPayable = payable[0].subtract(recovery.recovered());
+        // What is left of the share pays the credit taken back; the rest is carried (its own column). A refund first
+        // pays the cost carried, then what is left is payable.
+        OperatorShareRules.Recovery recovery = OperatorShareRules.recover(gift.giftDue, giftCarriedIn, payable[0],
+            payable[1]);
+        BigDecimal finalPayable = payable[0].subtract(recovery.recovered()).subtract(recovery.costOffset());
+        BigDecimal costCarriedOut = payable[1].subtract(recovery.costOffset());
 
         Map<String, Object> values = new LinkedHashMap<>();
         values.put("operatorId", input.operatorId());
@@ -556,7 +581,7 @@ public final class OperatorSettlements {
         values.put("creditNoteDeduction", creditNoteDeduction);
         values.put("carriedIn", carriedIn);
         values.put("payable", finalPayable);
-        values.put("carriedOut", payable[1]);
+        values.put("carriedOut", costCarriedOut);
         values.put("coveredFrom", ctx.get(COVERED_FROM));
         values.put("giftPaid", gift.giftPaid);
         values.put("giftShareDeduction", gift.giftShareDeduction);
@@ -584,12 +609,11 @@ public final class OperatorSettlements {
         }
 
         sharePosting(ctx, id, operatorShare, payable[0]);
-        giftPosting(ctx, id, recovery.recovered());
+        giftPosting(ctx, id, recovery.recovered(), recovery.costOffset());
     }
 
     private static void insertLine(ProcessContext ctx, String settlementId, Map<String, Object> line) {
         Map<String, Object> values = new LinkedHashMap<>(line);
-        values.remove("shareExcludedInput");
         values.put("settlementId", settlementId);
         ctx.changes().insert(QbSettlementLines.LINE, values);
     }
@@ -616,18 +640,32 @@ public final class OperatorSettlements {
             reference(runInput(ctx).operatorId(), runInput(ctx).month()), List.copyOf(lines), SETTLEMENT, id));
     }
 
-    /** The gift recovery posting (F-M12 §4): debit 2140 / credit 5140 what is taken back; the reverse when given back. */
-    private static void giftPosting(ProcessContext ctx, String id, BigDecimal recovered) {
+    /**
+     * The gift recovery posting (F-M12 §4): debit 2140 / credit 5140 what is taken back; when given back, the reverse:
+     * debit 5140, credit 2140 what is paid out, and credit 4110 what paid the cost carried instead (it is recovered as
+     * a share would have recovered it).
+     */
+    private static void giftPosting(ProcessContext ctx, String id, BigDecimal recovered, BigDecimal costOffset) {
         if (recovered.signum() == 0) {
             return;
         }
-        Direction fromAccount = recovered.signum() > 0 ? Direction.DEBIT : Direction.CREDIT;
-        Direction toPromotion = recovered.signum() > 0 ? Direction.CREDIT : Direction.DEBIT;
+        List<LedgerProcesses.Line> lines = new ArrayList<>();
         BigDecimal magnitude = recovered.abs();
+        if (recovered.signum() > 0) {
+            lines.add(new LedgerProcesses.Line(QbLedger.OPERATOR_SHARES_PAYABLE, Direction.DEBIT, magnitude));
+            lines.add(new LedgerProcesses.Line(QbLedger.FEE_CREDIT_PROMOTION, Direction.CREDIT, magnitude));
+        } else {
+            lines.add(new LedgerProcesses.Line(QbLedger.FEE_CREDIT_PROMOTION, Direction.DEBIT, magnitude));
+            BigDecimal paidOut = magnitude.subtract(costOffset);
+            if (paidOut.signum() > 0) {
+                lines.add(new LedgerProcesses.Line(QbLedger.OPERATOR_SHARES_PAYABLE, Direction.CREDIT, paidOut));
+            }
+            if (costOffset.signum() > 0) {
+                lines.add(new LedgerProcesses.Line(QbLedger.SERVICE_REVENUE, Direction.CREDIT, costOffset));
+            }
+        }
         ctx.put(POST_INPUT_GIFT, new LedgerProcesses.PostInput(ctx.opTime(), GIFT_DESCRIPTION,
-            giftReference(runInput(ctx).operatorId(), runInput(ctx).month()), List.of(
-                new LedgerProcesses.Line(QbLedger.OPERATOR_SHARES_PAYABLE, fromAccount, magnitude),
-                new LedgerProcesses.Line(QbLedger.FEE_CREDIT_PROMOTION, toPromotion, magnitude)), SETTLEMENT, id));
+            giftReference(runInput(ctx).operatorId(), runInput(ctx).month()), List.copyOf(lines), SETTLEMENT, id));
     }
 
     /** The outcome of cutting the credit used into the fees it paid: the lines and the month's totals. */
@@ -636,30 +674,32 @@ public final class OperatorSettlements {
 
     /** One contribution of the credit used to a fee, before the cumulative rounding. */
     private record Contribution(String chargeId, String paymentId, Instant paidAt, BigDecimal gross,
-        String grantSource, String grantId, boolean sameBatch) {}
+        String grantSource, String grantId, Boolean priorNoShare) {}
 
     @SuppressWarnings("unchecked")
     private static GiftResult gifts(ProcessContext ctx, OperatorShareRules.Terms terms,
         Map<String, Map<String, Object>> chargeById, Set<String> countedNow, RunInput input) {
         List<Map<String, Object>> rows = rows(ctx, GIFTS);
-        // An invoice's part is split across its charges by their totals; a charge's or a note's part is whole.
-        Map<String, List<Map<String, Object>>> invoiceGroups = new LinkedHashMap<>();
-        List<Contribution> contributions = new ArrayList<>();
+        // A payment's part is cut over ALL the fees it paid (an invoice's fees, of every operator and counted or not, by
+        // their totals, the yen left by the largest remainder), and only then are this operator's counted fees that
+        // have no GIFT line yet kept: cutting what is left would give them what other fees were paid with.
+        Map<String, List<Map<String, Object>>> payments = new LinkedHashMap<>();
         for (Map<String, Object> row : rows) {
-            if ("INVOICE".equals(row.get("targetKind"))) {
-                invoiceGroups.computeIfAbsent(String.valueOf(row.get("paymentId")), k -> new ArrayList<>()).add(row);
-            } else {
-                contributions.add(contribution(row, money(row.get("paymentAmount"))));
-            }
+            payments.computeIfAbsent(String.valueOf(row.get("paymentId")), k -> new ArrayList<>()).add(row);
         }
-        for (List<Map<String, Object>> group : invoiceGroups.values()) {
+        List<Contribution> contributions = new ArrayList<>();
+        for (List<Map<String, Object>> group : payments.values()) {
             group.sort(Comparator.comparing(r -> String.valueOf(r.get("chargeId"))));
             List<BigDecimal> weights = group.stream().map(r -> money(r.get("chargeTotal"))).toList();
             List<String> order = group.stream().map(r -> String.valueOf(r.get("chargeId"))).toList();
             List<BigDecimal> parts = OperatorShareRules.split(money(group.getFirst().get("paymentAmount")), weights,
                 order);
             for (int i = 0; i < group.size(); i++) {
-                contributions.add(contribution(group.get(i), parts.get(i)));
+                Map<String, Object> row = group.get(i);
+                if (input.operatorId().equals(String.valueOf(row.get("chargeOperatorId")))
+                    && Boolean.TRUE.equals(row.get("counted")) && !Boolean.TRUE.equals(row.get("done"))) {
+                    contributions.add(contribution(row, parts.get(i)));
+                }
             }
         }
         // Each fee's contributions, in the order they were paid, fed to the cumulative rounding seeded with its prior
@@ -672,6 +712,7 @@ public final class OperatorSettlements {
         for (Contribution c : contributions) {
             byCharge.computeIfAbsent(c.chargeId(), k -> new ArrayList<>()).add(c);
         }
+        Map<String, Boolean> treatedAs = new LinkedHashMap<>();
         List<Map<String, Object>> lines = new ArrayList<>();
         BigDecimal giftPaid = BigDecimal.ZERO;
         BigDecimal sameBatchNoShareInBase = BigDecimal.ZERO;
@@ -687,8 +728,8 @@ public final class OperatorSettlements {
             BigDecimal total = money(row.get("chargeTotal"));
             BigDecimal excluded = sameBatch ? money(charge.get("excluded")) : money(row.get("lineExcluded"));
             BigDecimal inBaseAmount = amount.subtract(excluded);
-            BigDecimal recoverBase = excluded.compareTo(amount) < 0 ? inBaseAmount
-                : terms.recoverOutsideBase() ? amount.subtract(money(row.get("chargeShareExcluded"))) : BigDecimal.ZERO;
+            // Decided when the fee was counted (its CHARGE line), whatever the settings are now.
+            BigDecimal recoverBase = sameBatch ? money(charge.get("recoverBase")) : money(row.get("lineRecoverBase"));
             BigDecimal shareRate = sameBatch ? money(charge.get("shareRate")) : money(row.get("lineShareRate"));
             BigDecimal recoveryRate = sameBatch ? money(charge.get("recoveryRate"))
                 : money(row.get("lineRecoveryRate"));
@@ -698,9 +739,15 @@ public final class OperatorSettlements {
             List<Contribution> list = entry.getValue();
             list.sort(Comparator.comparing(Contribution::paidAt).thenComparing(Contribution::paymentId));
             for (Contribution c : list) {
-                String treatment = terms.treatmentOf(c.grantSource());
-                boolean operatorBears = OperatorShareRules.OPERATOR.equals(treatment);
-                boolean noShare = !operatorBears;
+                // A grant's credit on a fee is treated as the first of it was (a refund reverses exactly), whatever
+                // the settings are now; the first of it takes the settings of today.
+                String key = chargeId + "|" + c.grantId();
+                if (!treatedAs.containsKey(key)) {
+                    treatedAs.put(key, c.priorNoShare() != null ? c.priorNoShare()
+                        : !OperatorShareRules.OPERATOR.equals(terms.treatmentOf(c.grantSource())));
+                }
+                boolean noShare = treatedAs.get(key);
+                boolean operatorBears = !noShare;
                 OperatorShareRules.Gift value = cumulative.next(c.gross(), operatorBears);
                 Map<String, Object> line = new LinkedHashMap<>();
                 line.put("operatorId", input.operatorId());
@@ -721,6 +768,7 @@ public final class OperatorSettlements {
                 line.put("inBase", value.inBase());
                 line.put("recoverGross", value.recoverGross());
                 line.put("noShare", noShare);
+                line.put("recoverBase", BigDecimal.ZERO);
                 line.put("shareRate", shareRate);
                 line.put("recoveryRate", recoveryRate);
                 lines.add(line);
@@ -745,7 +793,8 @@ public final class OperatorSettlements {
         return new Contribution(String.valueOf(row.get("chargeId")), String.valueOf(row.get("paymentId")),
             time(row.get("paidAt")), gross, row.get("grantSource") == null ? null
                 : String.valueOf(row.get("grantSource")), row.get("grantId") == null ? null
-                : String.valueOf(row.get("grantId")), false);
+                : String.valueOf(row.get("grantId")), row.get("priorNoShare") == null ? null
+                : Boolean.valueOf(String.valueOf(row.get("priorNoShare"))));
     }
 
     @SuppressWarnings("unchecked")
@@ -769,35 +818,63 @@ public final class OperatorSettlements {
         return planTerms(ctx).platformShare();
     }
 
-    /** F-M12 §5: the fraction of the credit used taken back, 0 to 1 (the declared value when not set). */
-    static BigDecimal recoveryRate(ProcessContext ctx) {
-        Object value = param(ctx, QbParams.OPERATOR_CREDIT_RECOVERY_RATE);
-        BigDecimal rate = value == null || value.toString().isBlank() ? new BigDecimal(QbParams.defaultOf(
-            QbParams.OPERATOR_CREDIT_RECOVERY_RATE)) : new BigDecimal(value.toString());
-        return rate.max(BigDecimal.ZERO).min(BigDecimal.ONE);
+    /** A share setting that is not published (or empty) refuses the settlement: no default is assumed. */
+    private static String setting(ProcessContext ctx, String key) {
+        Object value = param(ctx, key);
+        if (value == null || value.toString().isBlank()) {
+            throw new BusinessRuleViolationException(new Violation(null, OperatorCodes.NO_SHARE_SETTING,
+                "A setting of the operators' share is not published", Map.of("param", key)));
+        }
+        return value.toString().strip();
     }
 
-    /** F-M12 §5: the terms the settlement reads of the share parameters. */
+    private static BusinessRuleViolationException invalid(String key, String value) {
+        return new BusinessRuleViolationException(new Violation(null, OperatorCodes.SHARE_SETTING_INVALID,
+            "A setting of the operators' share is not valid", Map.of("param", key, "value", value)));
+    }
+
+    private static boolean flag(ProcessContext ctx, String key) {
+        String value = setting(ctx, key);
+        if (!"true".equals(value) && !"false".equals(value)) {
+            throw invalid(key, value);
+        }
+        return Boolean.parseBoolean(value);
+    }
+
+    /** F-M12 §5: the fraction of the credit used taken back, 0 to 1; not published or not a fraction: refused. */
+    static BigDecimal recoveryRate(ProcessContext ctx) {
+        String value = setting(ctx, QbParams.OPERATOR_CREDIT_RECOVERY_RATE);
+        BigDecimal rate;
+        try {
+            rate = new BigDecimal(value);
+        } catch (NumberFormatException e) {
+            throw invalid(QbParams.OPERATOR_CREDIT_RECOVERY_RATE, value);
+        }
+        if (rate.signum() < 0 || rate.compareTo(BigDecimal.ONE) > 0) {
+            throw invalid(QbParams.OPERATOR_CREDIT_RECOVERY_RATE, value);
+        }
+        return rate;
+    }
+
+    /** F-M12 §5: the terms the settlement reads of the share parameters; none is assumed, a bad one refuses. */
     static OperatorShareRules.Terms terms(ProcessContext ctx) {
-        Set<String> kinds = OperatorShareRules.parseKinds(text(ctx, QbParams.OPERATOR_SHARE_KINDS));
-        boolean aiCost = truth(param(ctx, QbParams.OPERATOR_SHARE_AI_COST_IN_BASE));
-        boolean recoverOutside = truth(param(ctx, QbParams.OPERATOR_GIFT_RECOVER_OUTSIDE_BASE));
+        String kindsText = setting(ctx, QbParams.OPERATOR_SHARE_KINDS);
+        if (!OperatorShareRules.validKinds(kindsText)) {
+            throw invalid(QbParams.OPERATOR_SHARE_KINDS, kindsText);
+        }
+        Set<String> kinds = OperatorShareRules.parseKinds(kindsText);
+        boolean aiCost = flag(ctx, QbParams.OPERATOR_SHARE_AI_COST_IN_BASE);
+        boolean recoverOutside = flag(ctx, QbParams.OPERATOR_GIFT_RECOVER_OUTSIDE_BASE);
         Map<String, String> treatments = new LinkedHashMap<>();
         for (String source : new String[] {"ONBOARDING", "LIGHT", "MANUAL", "CERTIFIED_TOP_UP"}) {
-            String value = text(ctx, QbParams.operatorGiftTreatment(source));
-            treatments.put(source, OperatorShareRules.OPERATOR.equals(value) ? OperatorShareRules.OPERATOR
-                : OperatorShareRules.PLATFORM);
+            String key = QbParams.operatorGiftTreatment(source);
+            String value = setting(ctx, key);
+            if (!OperatorShareRules.treatment(value)) {
+                throw invalid(key, value);
+            }
+            treatments.put(source, value);
         }
         return new OperatorShareRules.Terms(kinds, aiCost, recoverOutside, recoveryRate(ctx), treatments);
-    }
-
-    private static String text(ProcessContext ctx, String key) {
-        Object value = param(ctx, key);
-        return value == null || value.toString().isBlank() ? QbParams.defaultOf(key) : value.toString();
-    }
-
-    private static boolean truth(Object value) {
-        return value != null && Boolean.parseBoolean(value.toString());
     }
 
     /** F-M12 §4: the gift recovery posting's reference: {@code opg_<month>_<operator's first eight>}. */

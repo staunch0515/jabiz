@@ -165,18 +165,20 @@ class OperatorSettlementMoreIT extends CreditNoteItSupport {
         assertThat(n(april, "platform_fees")).isEqualByComparingTo("0");
         assertThat(n(april, "operator_share")).isEqualByComparingTo("0");
         assertThat(n(april, "void_deduction")).isEqualByComparingTo("500");
-        // Nothing earned in April: the cost is not lost but carried.
-        assertThat(n(april, "carried_out")).isEqualByComparingTo("500");
+        // Nothing earned in April: the cost is carried, and the credit given back pays it (net within the month).
         // The credit given back reverses the take-back: -1,100 due, 600 carried in, 500 paid back.
         assertThat(sum(linesOf(aprilId, "GIFT"), "recover_gross")).isEqualByComparingTo("-1100");
         assertThat(n(april, "gift_due")).isEqualByComparingTo("-1100");
         assertThat(n(april, "gift_recovered")).isEqualByComparingTo("-500");
         assertThat(n(april, "gift_carried_out")).isEqualByComparingTo("0");
-        assertThat(n(april, "payable")).isEqualByComparingTo("500");
+        // The 500 given back first pays the 500 of cost carried: nothing is payable and nothing is carried on.
+        assertThat(n(april, "carried_out")).isEqualByComparingTo("0");
+        assertThat(n(april, "payable")).isEqualByComparingTo("0");
         // Over both months the operator was taken 500 + 0 and given back 500: the fee never happened.
         assertThat(n(march, "gift_recovered").add(n(april, "gift_recovered"))).isEqualByComparingTo("0");
-        assertThat(postings(aprilId, "opg_", "2027-04", paid.operatorId())).containsExactly("2140 CREDIT 500",
-            "5140 DEBIT 500");
+        // 5140 returned 500; none of it is paid out (it paid the cost): recovered as 4110.
+        assertThat(postings(aprilId, "opg_", "2027-04", paid.operatorId())).containsExactly("5140 DEBIT 500",
+            "4110 CREDIT 500");
         assertBooksBalance();
 
         // Counted once: a later run (May) writes no second VOID line.
@@ -246,8 +248,9 @@ class OperatorSettlementMoreIT extends CreditNoteItSupport {
         // paid back (500) and nothing else.
         assertThat(n(april, "credit_note_deduction")).isEqualByComparingTo("500");
         assertThat(n(april, "gift_recovered")).isEqualByComparingTo("-500");
-        assertThat(n(april, "payable")).isEqualByComparingTo("500");
-        assertThat(n(april, "carried_out")).isEqualByComparingTo("500");
+        // The refund pays the note's cost first: nothing payable, nothing carried.
+        assertThat(n(april, "payable")).isEqualByComparingTo("0");
+        assertThat(n(april, "carried_out")).isEqualByComparingTo("0");
         assertThat(n(march, "gift_recovered").add(n(april, "gift_recovered"))).isEqualByComparingTo("0");
         assertThat(linesOf(aprilId, "VOID")).isEmpty();
 
@@ -342,10 +345,11 @@ class OperatorSettlementMoreIT extends CreditNoteItSupport {
         assertThat(n(april, "gift_recovered")).isNegative();
         assertThat(n(april, "gift_carried_out")).isEqualByComparingTo("0");
         // Returned to the operator's account: more than the month's use, and posted although the share is 0.
-        assertThat(postings(id, "opg_", "2027-04", paid.operatorId())).containsExactly("2140 CREDIT 500",
-            "5140 DEBIT 500");
+        assertThat(postings(id, "opg_", "2027-04", paid.operatorId())).containsExactly("5140 DEBIT 500",
+            "4110 CREDIT 500");
         assertThat(postings(id, "op_", "2027-04", paid.operatorId())).isEmpty();
-        assertThat(n(april, "payable")).isEqualByComparingTo("500");
+        assertThat(n(april, "payable")).isEqualByComparingTo("0");
+        assertThat(n(april, "carried_out")).isEqualByComparingTo("0");
         assertThat(n(april, "fixed_fee")).isEqualByComparingTo("0");
     }
 

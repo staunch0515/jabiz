@@ -75,6 +75,19 @@ public final class OperatorShareRules {
         return kinds;
     }
 
+    /** Whether a kinds list is usable: at least one kind, each of capital letters and underscores, comma-separated. */
+    public static boolean validKinds(String text) {
+        if (text == null || text.isBlank()) {
+            return false;
+        }
+        for (String kind : text.split(",", -1)) {
+            if (!kind.strip().matches("[A-Za-z][A-Za-z_]*")) {
+                return false;
+            }
+        }
+        return true;
+    }
+
     /** Whether a parameter value is one of the two treatments. */
     public static boolean treatment(String value) {
         return TREATMENTS.contains(value);
@@ -259,21 +272,46 @@ public final class OperatorShareRules {
     /**
      * @param recovered  taken from what is payable this month; negative: given back to the operator
      * @param carriedOut what remains to take next month
+     * @param costOffset of a refund (negative {@code recovered}), what pays the cost carried instead of being paid
+     *                   out: the refund first reduces what the operator owes, and only the rest is payable
      */
-    public record Recovery(BigDecimal recovered, BigDecimal carriedOut) {}
+    public record Recovery(BigDecimal recovered, BigDecimal carriedOut, BigDecimal costOffset) {}
 
     /**
      * Takes back what is due and what was carried in, from what is left of the share after its other costs
      * ({@code available}, never below 0); what does not fit is carried. A negative total (more given back than used)
-     * is not carried but paid back: {@code recovered} is negative and adds to what is payable. A settlement never
-     * makes what is payable negative.
+     * is not carried but returned to the operator: {@code recovered} is negative, and the refund first pays the cost
+     * carried ({@code costCarry}, F-M12 §3.5: net within the month), only what is left adds to what is payable. A
+     * settlement never makes what is payable negative.
      */
-    public static Recovery recover(BigDecimal due, BigDecimal carriedIn, BigDecimal available) {
+    public static Recovery recover(BigDecimal due, BigDecimal carriedIn, BigDecimal available, BigDecimal costCarry) {
         BigDecimal owed = due.add(carriedIn);
         if (owed.signum() < 0) {
-            return new Recovery(owed, BigDecimal.ZERO);
+            return new Recovery(owed, BigDecimal.ZERO, owed.negate().min(costCarry.max(BigDecimal.ZERO)));
         }
         BigDecimal recovered = owed.min(available.max(BigDecimal.ZERO));
-        return new Recovery(recovered, owed.subtract(recovered));
+        return new Recovery(recovered, owed.subtract(recovered), BigDecimal.ZERO);
+    }
+
+    /**
+     * What a base below 0 costs the operator: its share of the negative part, taken as a cost (positive), rounded
+     * down; 0 for a base that is not negative.
+     */
+    public static BigDecimal negativeBaseCost(BigDecimal netBase, BigDecimal platformShare) {
+        if (netBase.signum() >= 0) {
+            return BigDecimal.ZERO;
+        }
+        return floor(exactShare(netBase.negate(), platformShare));
+    }
+
+    /**
+     * The part of a credit note (before tax) that entered the base: the note's amount in the proportion the fee's
+     * CHARGE line had in the base; not rounded (sums are rounded down once).
+     */
+    public static BigDecimal noteInBase(BigDecimal noteAmount, BigDecimal feeAmount, BigDecimal excluded) {
+        if (feeAmount.signum() == 0) {
+            return BigDecimal.ZERO;
+        }
+        return noteAmount.multiply(feeAmount.subtract(excluded)).divide(feeAmount, 8, RoundingMode.FLOOR);
     }
 }

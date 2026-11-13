@@ -70,6 +70,9 @@ public final class QbSettlementLines {
         eb.field("recoverGross", f -> f.physicalColumn("recover_gross").immutable(true).required(true)
             .asMonetary("JPY", 0));
         eb.field("noShare", f -> f.physicalColumn("no_share").immutable(true).required(true).asBool());
+        // CHARGE only: the part of the fee (before tax) whose credit used is taken back, decided when it was counted.
+        eb.field("recoverBase", f -> f.physicalColumn("recover_base").immutable(true).required(true)
+            .asMonetary("JPY", 0));
         eb.field("shareRate", f -> f.physicalColumn("share_rate").immutable(true).required(true).asNumeric(5, 4));
         eb.field("recoveryRate", f -> f.physicalColumn("recovery_rate").immutable(true).required(true)
             .asNumeric(5, 4));

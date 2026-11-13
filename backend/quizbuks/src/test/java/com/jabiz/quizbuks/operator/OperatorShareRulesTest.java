@@ -226,30 +226,30 @@ class OperatorShareRulesTest {
     @Test
     void whatIsDueIsTakenFromWhatIsLeftAndTheRestIsCarried() {
         // Nothing carried in, enough left: all taken.
-        OperatorShareRules.Recovery all = OperatorShareRules.recover(n("1000"), n("0"), n("1500"));
+        OperatorShareRules.Recovery all = OperatorShareRules.recover(n("1000"), n("0"), n("1500"), n("0"));
         assertThat(all.recovered()).isEqualByComparingTo("1000");
         assertThat(all.carriedOut()).isEqualByComparingTo("0");
         // 400 left (the example of 3,000 due against 1,500 left, scaled): 400 taken, the rest carried.
-        OperatorShareRules.Recovery part = OperatorShareRules.recover(n("1000"), n("200"), n("400"));
+        OperatorShareRules.Recovery part = OperatorShareRules.recover(n("1000"), n("200"), n("400"), n("0"));
         assertThat(part.recovered()).isEqualByComparingTo("400");
         assertThat(part.carriedOut()).isEqualByComparingTo("800");
         // Exactly enough.
-        OperatorShareRules.Recovery exact = OperatorShareRules.recover(n("300"), n("100"), n("400"));
+        OperatorShareRules.Recovery exact = OperatorShareRules.recover(n("300"), n("100"), n("400"), n("0"));
         assertThat(exact.recovered()).isEqualByComparingTo("400");
         assertThat(exact.carriedOut()).isEqualByComparingTo("0");
         // Nothing left: all carried, never a negative payment.
-        OperatorShareRules.Recovery none = OperatorShareRules.recover(n("300"), n("0"), n("0"));
+        OperatorShareRules.Recovery none = OperatorShareRules.recover(n("300"), n("0"), n("0"), n("0"));
         assertThat(none.recovered()).isEqualByComparingTo("0");
         assertThat(none.carriedOut()).isEqualByComparingTo("300");
     }
 
     @Test
     void moreGivenBackThanUsedIsPaidBackToTheOperatorAndNotCarried() {
-        OperatorShareRules.Recovery back = OperatorShareRules.recover(n("-700"), n("0"), n("0"));
+        OperatorShareRules.Recovery back = OperatorShareRules.recover(n("-700"), n("0"), n("0"), n("0"));
         assertThat(back.recovered()).isEqualByComparingTo("-700");
         assertThat(back.carriedOut()).isEqualByComparingTo("0");
         // What was carried in is set against it first: 300 carried in, 1000 given back: 700 back.
-        OperatorShareRules.Recovery net = OperatorShareRules.recover(n("-1000"), n("300"), n("50"));
+        OperatorShareRules.Recovery net = OperatorShareRules.recover(n("-1000"), n("300"), n("50"), n("0"));
         assertThat(net.recovered()).isEqualByComparingTo("-700");
         assertThat(net.carriedOut()).isEqualByComparingTo("0");
     }
@@ -258,15 +258,61 @@ class OperatorShareRulesTest {
     void theExampleOfBorneByTheOperatorCarriesAndThenGivesBackToZero() {
         // Fee 1000 paid by credit (borne by the operator, plan share 0.3): share 700, taken back 1100 -> carried 400.
         BigDecimal share = OperatorShareRules.floor(OperatorShareRules.exactShare(n("1000"), n("0.3")));
-        OperatorShareRules.Recovery month = OperatorShareRules.recover(n("1100"), n("0"), share);
+        OperatorShareRules.Recovery month = OperatorShareRules.recover(n("1100"), n("0"), share, n("0"));
         assertThat(share).isEqualByComparingTo("700");
         assertThat(month.recovered()).isEqualByComparingTo("700");
         assertThat(month.carriedOut()).isEqualByComparingTo("400");
         // The credit is given back the next month: -1100 due, 400 carried in: 700 paid back, nothing carried.
-        OperatorShareRules.Recovery back = OperatorShareRules.recover(n("-1100"), month.carriedOut(), n("0"));
+        OperatorShareRules.Recovery back = OperatorShareRules.recover(n("-1100"), month.carriedOut(), n("0"), n("0"));
         assertThat(back.recovered()).isEqualByComparingTo("-700");
         assertThat(back.carriedOut()).isEqualByComparingTo("0");
         // Altogether the operator was taken 700 and paid back 700.
         assertThat(month.recovered().add(back.recovered())).isEqualByComparingTo("0");
+    }
+
+    @Test
+    void aRefundFirstPaysTheCostCarriedAndOnlyWhatIsLeftIsPayable() {
+        // 500 given back, 500 of cost carried: all of it pays the cost, nothing is paid out.
+        OperatorShareRules.Recovery all = OperatorShareRules.recover(n("-500"), n("0"), n("0"), n("500"));
+        assertThat(all.recovered()).isEqualByComparingTo("-500");
+        assertThat(all.costOffset()).isEqualByComparingTo("500");
+        assertThat(all.carriedOut()).isEqualByComparingTo("0");
+        // 500 given back, 200 of cost carried: 200 pays it, 300 is paid out (500 - 200).
+        OperatorShareRules.Recovery some = OperatorShareRules.recover(n("-500"), n("0"), n("0"), n("200"));
+        assertThat(some.costOffset()).isEqualByComparingTo("200");
+        // More cost than refund: the refund is all spent on it.
+        OperatorShareRules.Recovery more = OperatorShareRules.recover(n("-500"), n("0"), n("0"), n("800"));
+        assertThat(more.costOffset()).isEqualByComparingTo("500");
+        // A take-back (not a refund) leaves the cost alone.
+        OperatorShareRules.Recovery taken = OperatorShareRules.recover(n("300"), n("0"), n("1000"), n("800"));
+        assertThat(taken.costOffset()).isEqualByComparingTo("0");
+    }
+
+    @Test
+    void aNegativeBaseIsAPositiveCostOfTheOperatorsShareOfItRoundedDown() {
+        assertThat(OperatorShareRules.negativeBaseCost(n("-1000"), n("0.3"))).isEqualByComparingTo("700");
+        assertThat(OperatorShareRules.negativeBaseCost(n("-1"), n("0.3"))).isEqualByComparingTo("0");
+        assertThat(OperatorShareRules.negativeBaseCost(n("0"), n("0.3"))).isEqualByComparingTo("0");
+        assertThat(OperatorShareRules.negativeBaseCost(n("500"), n("0.3"))).isEqualByComparingTo("0");
+    }
+
+    @Test
+    void aNoteTakesBackOnlyThePartOfItsFeeThatEnteredTheBase() {
+        // A fee of 1,500 of which 1,000 was kept out: a note of 1,500 has 500 in the base; of 750, 250.
+        assertThat(OperatorShareRules.noteInBase(n("1500"), n("1500"), n("1000"))).isEqualByComparingTo("500");
+        assertThat(OperatorShareRules.noteInBase(n("750"), n("1500"), n("1000"))).isEqualByComparingTo("250");
+        // A fee wholly outside the base (a kind outside the list): nothing.
+        assertThat(OperatorShareRules.noteInBase(n("1000"), n("1000"), n("1000"))).isEqualByComparingTo("0");
+        assertThat(OperatorShareRules.noteInBase(n("400"), n("1000"), n("0"))).isEqualByComparingTo("400");
+    }
+
+    @Test
+    void aKindsListIsValidOnlyWithNamesOfLettersAndUnderscores() {
+        assertThat(OperatorShareRules.validKinds("MONTHLY,MANUAL, AUDIENCE")).isTrue();
+        assertThat(OperatorShareRules.validKinds("MONTHLY;MANUAL")).isFalse();
+        assertThat(OperatorShareRules.validKinds(" , ")).isFalse();
+        assertThat(OperatorShareRules.validKinds("")).isFalse();
+        assertThat(OperatorShareRules.validKinds(null)).isFalse();
+        assertThat(OperatorShareRules.validKinds("MONTHLY,")).isFalse();
     }
 }

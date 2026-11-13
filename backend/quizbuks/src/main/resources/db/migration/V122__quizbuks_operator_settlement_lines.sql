@@ -28,7 +28,8 @@ END $$;
 -- granted credit (negative when given back). For CHARGE and VOID the charge_id is the source_id: a unique index does
 -- not hold for a null, so none is left empty. For GIFT the source_id is the payment's part (QbFeePayment) and the
 -- charge_id the fee it paid (or gave back). share_rate and recovery_rate are those of the settlement that counted the
--- fee: a later void or giving back is taken at the same rates.
+-- fee: a later void or giving back is taken at the same rates. recover_base (CHARGE only) is the part of the fee
+-- (before tax) whose credit used is taken back, decided when the fee was counted.
 SELECT quizbuks_create_temporal_table('qb_operator_settlement_line_version', 'line_id', '
     settlement_id  varchar(36)    NOT NULL REFERENCES qb_operator_settlement (settlement_id),
     operator_id    varchar(36)    NOT NULL,
@@ -49,6 +50,7 @@ SELECT quizbuks_create_temporal_table('qb_operator_settlement_line_version', 'li
     in_base        numeric(19, 0) NOT NULL DEFAULT 0,
     recover_gross  numeric(19, 0) NOT NULL DEFAULT 0,
     no_share       boolean        NOT NULL DEFAULT false,
+    recover_base   numeric(19, 0) NOT NULL DEFAULT 0,
     share_rate     numeric(5, 4)  NOT NULL,
     recovery_rate  numeric(5, 4)  NOT NULL,
     CONSTRAINT qb_operator_settlement_line_source CHECK (line_kind = ''GIFT'' OR source_id = charge_id)');
