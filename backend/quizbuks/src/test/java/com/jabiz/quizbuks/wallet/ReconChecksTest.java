@@ -15,6 +15,7 @@ import java.util.regex.Pattern;
 import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class ReconChecksTest {
 
@@ -38,15 +39,46 @@ class ReconChecksTest {
     }
 
     @Test
-    void readsCodedRowsAndIgnoresUnknownChecks() {
+    void readsCodedRows() {
         List<ReconChecks.Item> items = ReconChecks.coded(List.of(
             Map.of("checkCode", "TOTAL_2110", "expected", 10, "actual", 0),
-            Map.of("checkCode", "TOPUP_FEE", "topUpId", "t1", "sponsorId", "s1", "expected", 180, "actual", 0),
-            Map.of("checkCode", "SOMETHING_ELSE", "expected", 1, "actual", 0)));
+            Map.of("checkCode", "TOPUP_FEE", "topUpId", "t1", "sponsorId", "s1", "expected", 180, "actual", 0)));
         assertThat(items).extracting(ReconChecks.Item::check).containsExactly(ReconChecks.TOTAL_2110,
             ReconChecks.TOPUP_FEE);
         assertThat(items.get(1).reference()).isEqualTo("t1");
         assertThat(items.get(1).partyId()).isEqualTo("s1");
+    }
+
+    /**
+     * A code the run does not know fails the run (and qb-reconcile-missing reports it) instead of the check being left
+     * out unseen: a typo, a code cut short by its column (as DISTRIBUTION_PRICE_OUT_OF_RANGE was) or a retired one.
+     */
+    @Test
+    void anUnknownCodeFailsTheRun() {
+        for (String code : List.of("SOMETHING_ELSE", "DISTRIBUTION_PRICE_OUT_OF_RANG",
+            ReconChecks.DISTRIBUTION_PRICE_OUT_OF_RANGE)) {
+            assertThatThrownBy(() -> ReconChecks.coded(List.of(
+                Map.of("checkCode", "TOTAL_2110", "expected", 10, "actual", 0),
+                Map.of("checkCode", code, "expected", 1, "actual", 0))))
+                .as(code).isInstanceOf(IllegalStateException.class).hasMessageContaining("'" + code + "'");
+        }
+        Map<String, Object> noCode = new java.util.HashMap<>(Map.of("expected", 1, "actual", 0));
+        assertThatThrownBy(() -> ReconChecks.coded(List.of(noCode))).isInstanceOf(IllegalStateException.class);
+    }
+
+    /** A retired code is no longer a check (never written) but stays readable: the sealed summaries name it. */
+    @Test
+    void aRetiredCodeIsReadableButNotACheck() {
+        assertThat(ReconChecks.RETIRED).contains(ReconChecks.DISTRIBUTION_PRICE_OUT_OF_RANGE)
+            .doesNotContainAnyElementsOf(ReconChecks.ALL);
+        var entries = new TopUpConfig("default").qbReconCheckDictionary().entries();
+        assertThat(entries).filteredOn(e -> ReconChecks.RETIRED.contains(e.code())).hasSize(ReconChecks.RETIRED.size())
+            .allSatisfy(e -> {
+                assertThat(e.enabled()).isFalse();
+                assertThat(e.labels()).hasSize(3);
+            });
+        assertThat(entries).filteredOn(e -> ReconChecks.ALL.contains(e.code())).hasSize(ReconChecks.ALL.size())
+            .allSatisfy(e -> assertThat(e.enabled()).isTrue());
     }
 
     static Map<String, Object> taker(String party, long balance, long cached, long out, long cachedOut) {

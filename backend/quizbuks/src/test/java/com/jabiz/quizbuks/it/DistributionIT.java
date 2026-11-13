@@ -410,10 +410,26 @@ class DistributionIT extends PrepaymentItSupport {
             .filter(item -> operator.equals(item.partyId()))).isEmpty();
         // The range narrowed after the price was set (here: the price set in the table, beyond the rate at most 1):
         // the price stays and the daily check reports it, under its whole code, so ReconChecks keeps it.
+        assertThat(offRangeBeforeDeploying()).doesNotContain(operator);
         execute("UPDATE qb_distribution_price SET rate = 2 WHERE operator_id = ?", operator);
         assertThat(ReconChecks.coded(items("qb.system.recon-fee-account", system, Map.of())).stream()
             .filter(item -> operator.equals(item.partyId())))
             .extracting(ReconChecks.Item::check).containsExactly(ReconChecks.DISTRIBUTION_PRICE_OFF_RANGE);
+        // The query run before deploying (operations.md, launch-checklist.md) finds the same operator.
+        assertThat(offRangeBeforeDeploying()).contains(operator);
+    }
+
+    /** The operators tools/quizbuks/sql/distribution-prices-off-range.sql lists, at the test's clock. */
+    List<String> offRangeBeforeDeploying() {
+        try {
+            String sql = java.nio.file.Files.readString(java.nio.file.Path.of(
+                "../../tools/quizbuks/sql/distribution-prices-off-range.sql"));
+            assertThat(sql).contains("now()");
+            return query(sql.replace("now()", "CAST('" + clock.instant() + "' AS timestamptz)").replace(";", ""))
+                .stream().map(row -> String.valueOf(row.get("operator_id"))).toList();
+        } catch (java.io.IOException e) {
+            throw new java.io.UncheckedIOException(e);
+        }
     }
 
     @Test
