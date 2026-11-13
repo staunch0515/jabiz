@@ -92,6 +92,8 @@ public final class OperatorCodes {
     public static final String WITHDRAWAL_AMOUNT = "QB_OPERATOR_WITHDRAWAL_AMOUNT";
     /** Q48e-2: a withdrawal is open already. */
     public static final String WITHDRAWAL_OPEN = "QB_OPERATOR_WITHDRAWAL_OPEN";
+    /** F-M12 (question 6): the platform operator (the default one, {@code defaultForNew}) does not withdraw. */
+    public static final String WITHDRAWAL_PLATFORM = "QB_OPERATOR_WITHDRAWAL_PLATFORM";
     /** Q48e-2: the withdrawal is not in a state for this (param {@code status}). */
     public static final String WITHDRAWAL_STATE = "QB_OPERATOR_WITHDRAWAL_STATE";
     /** F-M4: the amount is not whole yen from 1 to the account's balance (param {@code balance}). */

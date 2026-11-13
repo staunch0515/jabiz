@@ -31,7 +31,7 @@ mkdir -p "$work/src" "$work/out"
 cp "$platform"/*.yaml "$platform/render.sh" "$rules" "$work/src/"
 settings=(JABIZ_ALERT_EMAIL=oncall@quizbuks.test JABIZ_ALERT_SERVICE=quizbuks JABIZ_ALERT_DISK_PERCENT=80
   JABIZ_ALERT_REFRESH_GRANTED_MIN=10 JABIZ_ALERT_REFRESH_GRANTED_RATIO=0.02 JABIZ_ALERT_REFRESH_REVOKED_MAX=20
-  JABIZ_ALERT_QB_AI_HELD_MAX=1 JABIZ_ALERT_QB_HELP_USAGE_PERCENT=80)
+  JABIZ_ALERT_QB_AI_HELD_MAX=1 JABIZ_ALERT_QB_HELP_USAGE_PERCENT=80 JABIZ_ALERT_QB_HELP_COST_PERCENT=100)
 status=0
 env -i PATH="$PATH" JABIZ_ALERT_RULES_SOURCE="$work/src" JABIZ_ALERT_RULES_TARGET="$work/out" \
   JABIZ_ALERT_RENDER_ONLY=true "${settings[@]}" bash "$work/src/render.sh" 2>"$work/err" || status=$?

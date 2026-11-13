@@ -122,7 +122,7 @@ class OperatorTransferIT extends PlayItSupport {
     /** What the daily check finds about the operator or its Sponsor (none: they agree). */
     List<Map<String, Object>> differences(String... owners) {
         List<String> them = List.of(owners);
-        return items("qb.system.recon-fee-account", TestTokens.bearer(tokens, "fm4-recon", QbPermissions.WALLET_SYSTEM),
+        return feeAccountItems(TestTokens.bearer(tokens, "fm4-recon", QbPermissions.WALLET_SYSTEM),
             Map.of()).stream().filter(row -> them.contains(String.valueOf(row.get("sponsorId")))).toList();
     }
 

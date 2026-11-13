@@ -120,7 +120,7 @@ class TreeGrantIT extends TreeItSupport {
 
     /** The codes the daily check of the fee account finds, for the Sponsor (or every Sponsor). */
     private List<Object> differences(String sponsor) {
-        return items("qb.system.recon-fee-account", TestTokens.bearer(tokens, "fs4b-recon",
+        return feeAccountItems(TestTokens.bearer(tokens, "fs4b-recon",
             QbPermissions.WALLET_SYSTEM), Map.of()).stream()
             .filter(row -> sponsor == null || sponsor.equals(row.get("sponsorId")))
             .map(row -> row.get("checkCode")).toList();

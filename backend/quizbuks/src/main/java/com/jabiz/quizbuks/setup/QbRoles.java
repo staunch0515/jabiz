@@ -168,7 +168,10 @@ public final class QbRoles {
         QbPermissions.AUDIENCE_PRICES_WRITE,
         // Q87: the platform's fees (charged by hand and voided with another administrator's approval) and the
         // sponsors' billing mode.
-        QbPermissions.FEE_MANAGE, QbPermissions.FEE_BILLING);
+        QbPermissions.FEE_MANAGE, QbPermissions.FEE_BILLING,
+        // F-M10: the AI page (the help's usage and the estimated dollars): the task that says a month's AI dollars have
+        // reached the alert is finance's, and it links there. The super administrator's role is built from this list.
+        QbPermissions.ADMIN_AI_READ);
 
     /**
      * What the super administrator holds beyond the other two: bans, reading parameters, proposing controlled changes,

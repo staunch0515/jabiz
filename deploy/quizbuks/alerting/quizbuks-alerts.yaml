@@ -254,3 +254,30 @@ groups:
         annotations:
           summary: 'The AI help used at least $JABIZ_ALERT_QB_HELP_USAGE_PERCENT% of qb.help.global-monthly-tokens this month (the gauge qb.help.usage.percent; at 100% questions are refused until the month ends or the limit is raised with four eyes).'
           runbook: docs/quizbuks/operations.md section 7.34
+      - uid: qb-help-cost-high
+        title: AI costs near the dollar alert
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange: { from: 3600, to: 0 }
+            datasourceUid: prometheus
+            model:
+              refId: A
+              expr: 'max(qb_help_cost_percent{job="$JABIZ_ALERT_SERVICE"}) >= $JABIZ_ALERT_QB_HELP_COST_PERCENT'
+              instant: true
+              range: false
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              refId: C
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator: { type: gt, params: [0] }
+        for: 0s
+        noDataState: OK
+        execErrState: Error
+        labels: { severity: warning, area: ai }
+        annotations:
+          summary: 'The estimated dollars of the AI help and the reviewers translation checks reached $JABIZ_ALERT_QB_HELP_COST_PERCENT% of qb.help.global-monthly-usd-alert this month (the gauge qb.help.cost.percent). Look at the AI page and the provider bill; finance gets a task at the next daily check. Nothing is stopped by dollars.'
+          runbook: docs/quizbuks/operations.md section 7.53
