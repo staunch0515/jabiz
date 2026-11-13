@@ -162,6 +162,34 @@ abstract class ContentItSupport extends QbItSupport {
         return (List<Map<String, Object>>) template(id, token, request).get("items");
     }
 
+    /** The four templates of the daily check of the fee account (F-M14 G10) and the parameters each declares. */
+    static final Map<String, List<String>> FEE_ACCOUNT_TEMPLATES = Map.of(
+        "qb.system.recon-fee-credit", List.of(),
+        "qb.system.recon-operator-account", List.of(),
+        "qb.system.recon-prepayments", List.of("at", "zone", "unsettledHours", "missingHours"),
+        "qb.system.recon-credit-notes", List.of("at", "refundHours"));
+
+    /**
+     * What the daily check of the fee account finds: the rows of its four templates together, each given the
+     * parameters it declares out of {@code request}'s {@code params}.
+     */
+    @SuppressWarnings("unchecked")
+    List<Map<String, Object>> feeAccountItems(String token, Map<String, Object> request) {
+        Map<String, Object> given = (Map<String, Object>) request.getOrDefault("params", Map.of());
+        List<Map<String, Object>> rows = new java.util.ArrayList<>();
+        for (String id : List.of("qb.system.recon-fee-credit", "qb.system.recon-operator-account",
+            "qb.system.recon-prepayments", "qb.system.recon-credit-notes")) {
+            Map<String, Object> params = new java.util.HashMap<>();
+            FEE_ACCOUNT_TEMPLATES.get(id).forEach(name -> {
+                if (given.containsKey(name)) {
+                    params.put(name, given.get(name));
+                }
+            });
+            rows.addAll(items(id, token, params.isEmpty() ? Map.of() : Map.of("params", params)));
+        }
+        return rows;
+    }
+
     static final String BOUNDARY = "quizbuks-it-boundary-3c9e";
 
     /**

@@ -299,6 +299,9 @@ class BroadcastIT extends InboxItSupport {
         assertThat(refusalCode(refused("QB_BROADCAST_SAVE", console(live.sponsor()), body("title", body("en", "X"),
             "body", body("en", "Y"), "publicationId", live.publicationId(), "regions", List.of("JP")), 422)))
             .isEqualTo("QB_USER_BANNED");
+        // Nor sends one (F-ban-coverage: BanCoverageTest lists both as blocked by SponsorChecks).
+        assertThat(refusalCode(refused("QB_BROADCAST_SEND", console(live.sponsor()), body("broadcastId", sent,
+            "baseRevision", 1), 422))).isEqualTo("QB_USER_BANNED");
         // The ban's own reason stays internal.
         assertThat(String.valueOf(sponsorRow(live.sponsor(), sent))).doesNotContain("Fraud");
     }
