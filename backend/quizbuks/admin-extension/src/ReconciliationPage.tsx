@@ -18,7 +18,7 @@ import {
   UserName,
   type ColumnDef,
 } from '@jabiz/admin'
-import { byCheck } from './finance'
+import { byCheck, levelCounts } from './finance'
 import { attentionKey, readAttentionDays, readReconItems, readReconRuns, type ReconItem, type ReconRun } from './finance-api'
 import { EmptyState, LoadFailed, Section } from './components'
 import { money, useLabels, usePaged, when } from './hooks'
@@ -174,8 +174,21 @@ export default function ReconciliationPage() {
         </Badge>
       ),
     },
+    // F-M14 (review L10): the differences only; what needs attention beside them (notes are not counted here).
     { id: 'items', header: t('finance.recon.itemCount'), meta: { className: 'text-right tabular-nums' },
-      cell: ({ row }) => row.original.itemCount.toLocaleString() },
+      cell: ({ row }) => {
+        const counts = levelCounts(row.original.summary)
+        return (
+          <span data-testid="recon-run-counts">
+            {counts.differences.toLocaleString()}
+            {counts.attention > 0 && (
+              <span className="text-muted-foreground ml-2 text-xs">
+                {t('finance.recon.attentionCount', { count: counts.attention })}
+              </span>
+            )}
+          </span>
+        )
+      } },
     { id: 'checkedAt', header: t('finance.recon.checkedAt'), cell: ({ row }) => when(row.original.checkedAt) },
   ], [t, runId])
   return (

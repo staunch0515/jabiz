@@ -91,7 +91,8 @@ beforeEach(() => {
     [TEMPLATE.feeAccountTotals, [
       { subAccount: 'FEE_CREDIT', balance: 900, lotsRemaining: 900, openLots: 1, sponsors: 1, paidFees: 800 },
       { subAccount: 'CASH', balance: 1700, lotsRemaining: 1700, openLots: 3, sponsors: 2, paidFees: 300 }]],
-    [TEMPLATE.reconRuns, [{ runId: RUN, scheduledTime: '2026-10-15T18:37:00Z', status: 'DIFF', itemCount: 3 }]],
+    [TEMPLATE.reconRuns, [{ runId: RUN, scheduledTime: '2026-10-15T18:37:00Z', status: 'DIFF', itemCount: 5,
+      summary: '{"DISTRIBUTION_AT_FLOOR":1,"DISTRIBUTION_PRICE_RANGE":1,"TOPUP_REFUNDS":2,"TRANSFER_LEDGER":1}' }]],
     [TEMPLATE.reconItems, [
       { itemId: 'i1', checkCode: 'TOPUP_REFUNDS', partyId: TAKER, reference: TOPUP, expected: 100, actual: 150,
         difference: 50 },
@@ -342,6 +343,8 @@ describe('ReconciliationPage', () => {
   it("groups a run's differences by check, each leading to what it is about", async () => {
     renderAt(`/qb/finance/reconciliation?run=${RUN}`, '/qb/finance/reconciliation', <ReconciliationPage />)
     const groups = await screen.findAllByTestId('recon-group')
+    // F-M14 (review L10): the runs' column counts the differences, with what needs attention beside them.
+    expect(screen.getByTestId('recon-run-counts')).toHaveTextContent(/^3\+1 needs attention$/)
     expect(groups.map((group) => group.dataset.check)).toEqual(['TOPUP_REFUNDS', 'TRANSFER_LEDGER', 'LEDGER_ZERO'])
     expect(within(groups[0]).getAllByTestId('recon-item')).toHaveLength(2)
     expect(within(groups[0]).getAllByTestId('recon-reference')[0])

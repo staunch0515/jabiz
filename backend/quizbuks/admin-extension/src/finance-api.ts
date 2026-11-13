@@ -289,6 +289,8 @@ export interface ReconRun {
   status: string
   itemCount: number
   checkedAt: string | null
+  /** Every check's count as JSON (the run's summary), for the counts by level. */
+  summary: string | null
 }
 
 export async function readReconRuns(offset: number, limit: number, sorts?: SortSpec[], more?: Filter[]): Promise<Page<ReconRun>> {
@@ -296,7 +298,8 @@ export async function readReconRuns(offset: number, limit: number, sorts?: SortS
   return {
     total: page.total,
     items: page.items.map((row) => ({ runId: String(row.runId), scheduledTime: str(row.scheduledTime),
-      status: String(row.status ?? ''), itemCount: num(row.itemCount), checkedAt: str(row.checkedAt) })),
+      status: String(row.status ?? ''), itemCount: num(row.itemCount), checkedAt: str(row.checkedAt),
+      summary: str(row.summary) })),
   }
 }
 
