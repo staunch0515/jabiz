@@ -166,9 +166,11 @@ describe('FundSwitches', () => {
     renderCard()
     await screen.findByTestId('fund-switches')
     await screen.findAllByTestId('fund-switch-proposal')
-    // F-M9a-2b: the AI fee and the website draft are active rows now (on at the launch), with no waiting note.
+    // F-M9a-2b: the AI fee and the website draft are active rows now (off at the launch, #702 review M1), with no
+    // waiting note; on here, so they differ from the launch's value.
     expect(KEY_BEFORE_MEANING_ROWS).toEqual([])
     expect(within(stateOfRow('qb.ai.fee.enabled') as HTMLElement).queryByText(/Waits for/)).toBeNull()
+    expect(stateOfRow('qb.ai.fee.enabled')).toHaveAttribute('data-state', 'differs')
     expect(within(stateOfRow('qb.ai.site-profile.enabled') as HTMLElement).queryByText(/Waits for/)).toBeNull()
     // F-M8c: the exposure fee's switch is an ordinary active row now (on at the launch), with no waiting note.
     expect(stateOfRow('qb.exposure.billing.enabled')).toHaveAttribute('data-state', 'match')

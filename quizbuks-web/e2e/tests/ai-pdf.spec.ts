@@ -1,4 +1,4 @@
-import { aiReady, quizForAi } from './ai'
+import { aiCredit, aiReady, quizForAi } from './ai'
 import { PDF, POLICY, upload } from './content'
 import { approvedSponsor } from './publishing'
 import { expect, expectAccessible, prepareQuizbuks, run, signIn, test, unique, setAppearance } from './support'
@@ -20,6 +20,7 @@ for (const appearance of ['light', 'dark'] as const) {
     test.setTimeout(240_000)
     await setAppearance(page, appearance)
     const sponsor = await approvedSponsor(request, 'Cora')
+    await aiCredit(request, sponsor.token)
     const title = unique('PDF quiz ')
     const quizId = await quizForAi(request, sponsor.token, title)
     const pdf = await upload(request, sponsor.token, POLICY.pdf, 'material.pdf', 'application/pdf', PDF)

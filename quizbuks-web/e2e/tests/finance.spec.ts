@@ -46,7 +46,7 @@ test('finance reviews a large transfer and issues the monthly report', async ({ 
   await expect(exposure).toHaveAttribute('data-state', /^(match|differs|proposed|proposedDiffers|missing)$/)
   await expect(exposure.getByTestId('fund-switch-note').filter({ hasText: 'F-M8' })).toHaveCount(0)
   // F-M7 delivered the audience fee: its switch is an ordinary one, read against its launch value.
-  // F-M9a-2b: the AI fee's switch is an ordinary active row now (on at the launch), no longer waiting for F-M9.
+  // F-M9a-2b: the AI fee's switch is an ordinary active row now (off at the launch), no longer waiting for F-M9.
   const aiFee = page.locator('[data-testid="fund-switch"][data-key="qb.ai.fee.enabled"]')
   await expect(aiFee).toHaveAttribute('data-state', /^(match|differs|proposed|proposedDiffers|missing)$/)
   await expect(aiFee.getByTestId('fund-switch-note').filter({ hasText: 'F-M9' })).toHaveCount(0)

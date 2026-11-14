@@ -96,18 +96,17 @@ public final class FirstLaunchSwitches {
         keep(QbParams.EXPOSURE_UNIT_MAX, "exposure"),
         keep(QbParams.EXPOSURE_MIN_PURCHASE, "exposure"),
         keep(QbParams.EXPOSURE_TOP_UP_MAX, "exposure"),
-        // F-M9a-2b: the AI credit is bought, charged by the month, given back and voided by expiry, and checked daily:
-        // sponsors' AI requests are charged at the launch. Before its proposal is published the requester confirms the
-        // markup and the rate, whether the AI fee is in the operators' share (qb.operator.share.kinds), and the website
-        // draft's reservation limits (launch checklist, operations.md 7.56).
-        active(QbParams.AI_FEE_ENABLED, "aifee", true,
-            "sponsors' AI requests are charged to their AI credit at the launch (declared off: the tests rely on it); "
-                + "the requester confirms the markup, the rate, the share and the website draft's limits first"),
-        // F-C7a: drafting from a website is charged to the AI credit (F-M9), so it opens with the AI fee; its proposal is
-        // published after the AI fee's and after the timing test on staging (operations.md, the website draft).
-        active(QbParams.SITE_PROFILE_ENABLED, "aifee", true,
-            "drafting a quiz from a website is open at the launch, charged to the AI credit (declared off: the tests "
-                + "rely on it); published after qb.ai.fee.enabled and the timing test on staging"),
+        // F-M9a-2b: the AI credit is bought, charged by the month, given back and voided by expiry, and checked daily,
+        // but the AI fee is off at the launch (#702 review M1, the coordinator's decision as at the #692 re-review): the
+        // reservation's limits come from the P95 of real jobs on staging first (launch checklist, operations.md §7.56).
+        active(QbParams.AI_FEE_ENABLED, "aifee", false,
+            "off at the launch; turned on only after the website draft's three reservation limits "
+                + "(qb.ai.fee.site-profile.calls/.pages/.output-tokens) are published from the P95 of real jobs on "
+                + "staging and the markup and the rate are confirmed"),
+        // F-C7a: drafting from a website is charged to the AI credit (F-M9), so it opens after the AI fee.
+        active(QbParams.SITE_PROFILE_ENABLED, "aifee", false,
+            "off at the launch; turned on after qb.ai.fee.enabled, once the website draft's three reservation limits "
+                + "are published and the markup and the rate are confirmed"),
         waiting("qb.fee.auto-pay.enabled", "autopay", true, "F-M13"),
         manual(QbParams.FEE_CREDIT_MANUAL_MAX, "grant"),
         manual(QbParams.TREE_GRANT_MAX_PER_NODE, "grant"));

@@ -114,12 +114,13 @@
 
 | 键 | 类型 / 缺省 / 范围 | 受控 |
 |---|---|---|
-| `qb.ai.fee.enabled` | 布尔，false（`FirstLaunchSwitches` 首次上线值 true；**打开的前提见 `launch-checklist.md`**） | 是 |
+| `qb.ai.fee.enabled` | 布尔，false（`FirstLaunchSwitches` 首次上线值 **false**：#702 审查 M1，总控沿用 #692 复核时的决定——预留的三个参数要先在 staging 以真实作业的 P95 定下；**打开的前提与顺序见 `launch-checklist.md`**） | 是 |
 | `qb.ai.fee.markup` | 数，1.5，1 至 10，两位小数 | 是 |
 | `qb.ai.fee.usd-jpy` | 数，150，50 至 500，两位小数 | 是 |
 | `qb.ai.credit.min-purchase` | 日元整数，**未设置即不限**（同 `qb.fee-credit.manual.max`，不由 `QB_SETUP` 建立），设时 100 至 1 000 000 | 是 |
 | `qb.ai.credit.low-amount` | 日元整数，500，0 至 100 000（0 = 不提示） | 否 |
-| `qb.ai.fee.unbilled-after-hours` | 整数，30，1 至 720（核对：以 `feePeriod` 的下月初起算，月度记费晚于此仍有未记费；`feePeriod` 是结果被记录时所在的月，月末前后结束的作业可能归下个月，晚一个月记费、不算未记费） | 是 |
+| `qb.ai.fee.unbilled-after-hours` | 整数，48，核对按 48 至 720 取（#702 审查 L3：平台的参数没有范围，提案可以超出，核对取到范围内；少于 48 时 1 日的月度任务稍晚就成差异，多于 720 漏跑会藏一个月）（核对：以 `feePeriod` 的下月初起算，月度记费晚于此仍有未记费；`feePeriod` 是结果被记录时所在的月，月末前后结束的作业可能归下个月，晚一个月记费、不算未记费） | 是 |
+| `qb.ai.credit.expired-held-after-hours` | 整数，48，核对按 48 至 720 取（到期或作废的赠送超出仍占着额度的作业所占的部分，这么多小时后仍在额度中即差异） | 是 |
 | `qb.ai.fee.absorbed-alert-yen` | 日元整数，1 000，0 至 10 000 000（一个月内平台承担的合计超过即给财务待办；**合计 = `absorbedYen` + `unrecordedUsd` 按冻结汇率折成日元**，两者口径不同——前者含倍数、后者是成本，页面分开列） | 否 |
 
 沿用：`qb.fee.tax-rate`、`qb.ai.price.*`（不认识的模型）、`qb.ai.sponsor.*`、`qb.ai.global.monthly-tokens`、`qb.ai.enabled`。倍数、汇率的改动只影响此后的请求（冻结在作业上）；税率在记费时才读（§4 第 3 条的再核保证不会超出额度）。
@@ -240,8 +241,10 @@
 **a-2b 的实施（2026-11-14）**：
 - 每日核对加五项（模板 `qb.system.recon-ai-credit`，每日核对多一条语句）：`AI_CREDIT`（额度剩余 = 2180 用途 AI = 变动之和；累计购入 = `BUY` 之和）、`AI_FEE_MONTH`（#699 审查 L3：按每笔 AI 费，比较它与收进它的作业记费后的 `fee_yen` 之和；只看近 40 天）、`AI_FEE_UNBILLED`、`AI_FEE_RESERVED`、`AI_CREDIT_EXPIRED_HELD`（占用按税率向上取整，税率未设按 100%，只会少报、不会误报）。§8 的 `AI_FEE_ABSORBED` 由已有的提示 `AI_RESERVATION_SHORT` 承担，不另设；`FEE_CREDIT_PROMOTION` 已包含 AI 额度中的作废（完整一轮的 IT 无差异）。
 - 两个受控参数（进 setup，缺省 48）：`qb.ai.fee.unbilled-after-hours`、`qb.ai.credit.expired-held-after-hours`。
-- `qb.ai.fee.enabled` 与 `qb.ai.site-profile.enabled` 由 WAITING 改为 ACTIVE（首次上线提议为开），`KEY_BEFORE_MEANING` 清空。
-- 问题 6：AI 收费关时从官网生成的请求被拒（`QB_AI_UNAVAILABLE`）；`FirstLaunchSwitchesCheck` 在正式环境对"官网生成开而 AI 收费关"警告，并在两者都开时对三个预留参数没有设置或不可用的警告（#692 复核 L-b）。
+- `qb.ai.fee.enabled` 与 `qb.ai.site-profile.enabled` 由 WAITING 改为 ACTIVE，`KEY_BEFORE_MEANING` 清空；首次上线的值是**关**（#702 审查 M1），资金开关卡片不把它们列为"应为开"，正式环境开着时启动检查照其他"首发为关"的开关警告。
+- 问题 6：AI 收费关时从官网生成的请求被拒（`QB_AI_UNAVAILABLE`）；`FirstLaunchSwitchesCheck` 在正式环境与 staging 对"官网生成开而 AI 收费关"警告，并在 AI 收费开着时（不论官网生成开否，#702 审查 M2）对三个预留参数没有设置或不可用的警告（#692 复核 L-b）。
+- **待办（后续项，#702 审查 M2）**：AI 收费开而三个预留参数未设时，目前只是启动警告；改成硬拦截（拒绝发布 `qb.ai.fee.enabled = true` 的受控变更，或启动失败）另做。
+- `AI_FEE_MONTH` 除最近 40 天的费用外，还看上一次运行报出的费用（#702 审查 M4），差异不会因过窗而消失。
 - a-1 延后的测试：审核人的翻译核对与 AI 帮助在 AI 收费开着时不收费、不预留、不需要额度；作业结局只取 AI 锁、不取钱包锁。
 
 **#692 审查（Fable，2026-11-14）后的修订**：

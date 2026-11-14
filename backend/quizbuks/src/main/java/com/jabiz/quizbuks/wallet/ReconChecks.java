@@ -169,8 +169,8 @@ public final class ReconChecks {
     /** F-M9a-2b: finished charged jobs still holding a reservation. */
     public static final String AI_FEE_RESERVED = "AI_FEE_RESERVED";
     /**
-     * F-M9a-2b: expired (or voided) fee credit still in an AI credit {@code qb.ai.credit.expired-held-after-hours} after
-     * it expired, beyond what the open jobs hold (the daily expiry did not void it).
+     * F-M9a-2b: expired (or voided) granted credit still in an AI credit {@code qb.ai.credit.expired-held-after-hours}
+     * after it expired, beyond what the jobs still holding credit hold (#702 review L1; the daily expiry did not void it).
      */
     public static final String AI_CREDIT_EXPIRED_HELD = "AI_CREDIT_EXPIRED_HELD";
     /** Account 2110 in all against all sponsors' cached balances. */
