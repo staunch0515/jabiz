@@ -48,6 +48,8 @@ import java.util.UUID;
 public final class PublicationExposureTopUp {
 
     public static final String TOP_UP = "QB_EXPOSURE_TOP_UP";
+    /** The price of a top-up, read only (F-M8d review M2): the page works out no figure of its own. */
+    public static final String QUOTE = "QB_EXPOSURE_TOP_UP_QUOTE";
 
     private static final String TOP_UP_INPUT = "topUp.input";
     private static final String PREPAYMENT = "topUp.prepayment";
@@ -78,38 +80,9 @@ public final class PublicationExposureTopUp {
     public static ProcessDefinition<TopUpInput, TopUpOutput, ProcessContext> topUp() {
         return ProcessDefinition.define(TOP_UP, 1, TopUpInput.class, TopUpOutput.class, ProcessContext.class, pb -> {
             pb.description("Buys more exposures for the caller's publication that bought some, setting their fee aside.")
-                .permissions(QbPermissions.PUBLICATION_WRITE)
-                .requiresVerifiedEmail()
-                .actsOn(QbPublications.PUBLICATION, "publicationId")
-                .contextFactory((start, input) -> PublicationEditing.start(start, input, input.publicationId()))
                 .outputMapper(ctx -> ctx.get(OUTPUT, TopUpOutput.class));
-            CallerChecks.refuseBanned(pb);
-            pb.steps(ConsentChecks.sponsor())
-                .steps(PublicationEditing::lockAndLoad)
-                .step("Load the fee parameters", LoadParams.<ProcessContext>optional(ProcessContext::opTime,
-                    PublicationLifecycle.FEE_PARAMS, QbParams.FEE_TAX_RATE, QbParams.FEE_DEFAULT_BILLING_MODE,
-                    QbParams.FEE_OVERDUE_BLOCK, QbParams.EXPOSURE_TOP_UP_MAX))
-                // Fees overdue beyond what the sponsor's billing allows stop a top-up as they stop a submission.
-                .steps(b -> FeeGate.load(b, ctx -> ctx.request().actorId()))
-                .step("Lock the sponsor's wallets", HoldLock.<ProcessContext>exclusive(ctx -> QbWallets.lockName(
-                    QbWallets.SPONSOR, PublicationPrepayments.sponsorOf(PublicationEditing.publication(ctx)))))
-                .step("Read the account and the exposures' prepayment", QueryEntities.<ProcessContext>all(
-                    reads()))
-                // Its parts so far: every top-up adds some, and a prepayment of more parts than MAX_PARTS cannot be given back.
-                .step("Count its parts", QueryEntities.<ProcessContext>of(QbFeeAccount.defaultDataset(QbFeeAccount.PAYMENT),
-                    ctx -> {
-                        EntityInstance prepayment = PublicationEditing.first(ctx, PREPAYMENT);
-                        return EntityQuery.builder().where(new QueryPredicate.In("targetId", prepayment == null
-                            ? List.of() : List.of(String.valueOf(prepayment.id())))).limit(Prepayments.MAX_PARTS + 1)
-                            .build();
-                    }, PARTS))
-                .compute("Work out the top-up", (metadata, ctx) -> work(ctx))
-                .step("Read what a postpaid sponsor owes", RunTemplate.<ProcessContext>when(
-                    ctx -> !ctx.hasViolations() && ctx.contains(PublicationPrepayments.ITEMS)
-                        && FeeRules.POSTPAID.equals(ctx.get(MODE)) && PublicationPrepayments.total(ctx).signum() > 0,
-                    "qb.system.fee-receivable", ctx -> Map.of("sponsorId",
-                        PublicationPrepayments.sponsorOf(PublicationEditing.publication(ctx))), PublicationPrepayments.OWED))
-                .compute("Check the funds", (metadata, ctx) -> checkFunds(ctx))
+            prefix(pb, true);
+            pb.compute("Check the funds", (metadata, ctx) -> checkFunds(ctx))
                 .step("Add to the prepayment", CallProcess.<ProcessContext>when(
                     ctx -> !ctx.hasViolations() && ctx.contains(DEPOSIT) && deposit(ctx).signum() > 0,
                     Prepayments.TOP_UP, 1, ctx -> new Prepayments.TopUpInput(
@@ -128,6 +101,79 @@ public final class PublicationExposureTopUp {
                     }
                 });
         });
+    }
+
+    /**
+     * @param purchased the total after the top-up
+     * @param deposit   what the top-up sets aside more, with its tax, as the server works it out (the cumulative
+     *                  difference, not the additional exposures times the unit)
+     * @param available what the account may spend now (postpaid: what is left of the credit limit)
+     * @param shortfall what is missing (0: the account covers it)
+     */
+    public record QuoteOutput(UUID publicationId, long purchased, BigDecimal deposit, BigDecimal available,
+        BigDecimal shortfall) {}
+
+    /**
+     * The price of a top-up, read only: the same checks and the same figures as {@value #TOP_UP}, nothing written. The
+     * page shows these numbers and works out none of its own (the deposit is the difference of two totals' deposits,
+     * not the additional exposures times the price). A top-up refused for what is wrong with the publication (not
+     * running, not bought, over the range) is refused here as it would be; a short account is not a refusal: the
+     * shortfall is the answer.
+     */
+    public static ProcessDefinition<TopUpInput, QuoteOutput, ProcessContext> quote() {
+        return ProcessDefinition.define(QUOTE, 1, TopUpInput.class, QuoteOutput.class, ProcessContext.class, pb -> {
+            pb.description("Prices a top-up of the exposures bought, as the top-up would set it aside, writing nothing.")
+                .outputMapper(ctx -> ctx.get(OUTPUT, QuoteOutput.class));
+            prefix(pb, false);
+            pb.compute("Answer", (metadata, ctx) -> {
+                if (ctx.hasViolations() || !ctx.contains(DEPOSIT)) {
+                    return;
+                }
+                BigDecimal deposit = deposit(ctx);
+                // The account's own figure even when nothing more is set aside (a unit below 1 yen), not a 0.
+                PrepaymentRules.Funds funds = PublicationPrepayments.funds(ctx, ctx.get(MODE, String.class));
+                ctx.put(OUTPUT, new QuoteOutput(UUID.fromString(String.valueOf(PublicationEditing.publication(ctx).id())),
+                    bought(ctx), deposit, funds.available(), funds.shortfall()));
+            });
+        });
+    }
+
+    /** What the top-up and its quote share: who may, the lock, the reads and the figures. */
+    private static <O> void prefix(com.jabiz.process.ProcessDefinitionBuilder<TopUpInput, O, ProcessContext> pb,
+        boolean locked) {
+        pb.permissions(QbPermissions.PUBLICATION_WRITE)
+            .requiresVerifiedEmail()
+            .actsOn(QbPublications.PUBLICATION, "publicationId")
+            .contextFactory((start, input) -> PublicationEditing.start(start, input, input.publicationId()));
+        CallerChecks.refuseBanned(pb);
+        pb.steps(ConsentChecks.sponsor())
+            // The quote reads without the locks, as the funds check does: what it says is read, and the top-up works the
+            // same figures out again under the locks, so a quote that went stale is the top-up's refusal, not a wrong charge.
+            .steps(locked ? PublicationEditing::lockAndLoad : PublicationEditing::load)
+            .step("Load the fee parameters", LoadParams.<ProcessContext>optional(ProcessContext::opTime,
+                PublicationLifecycle.FEE_PARAMS, QbParams.FEE_TAX_RATE, QbParams.FEE_DEFAULT_BILLING_MODE,
+                QbParams.FEE_OVERDUE_BLOCK, QbParams.EXPOSURE_TOP_UP_MAX))
+            // Fees overdue beyond what the sponsor's billing allows stop a top-up as they stop a submission.
+            .steps(b -> FeeGate.load(b, ctx -> ctx.request().actorId()))
+            .step("Lock the sponsor's wallets", HoldLock.<ProcessContext>exclusive(ctx -> !locked ? null
+                : QbWallets.lockName(QbWallets.SPONSOR,
+                    PublicationPrepayments.sponsorOf(PublicationEditing.publication(ctx)))))
+            .step("Read the account and the exposures' prepayment", QueryEntities.<ProcessContext>all(
+                reads()))
+            // Its parts so far: every top-up adds some, and a prepayment of more parts than MAX_PARTS cannot be given back.
+            .step("Count its parts", QueryEntities.<ProcessContext>of(QbFeeAccount.defaultDataset(QbFeeAccount.PAYMENT),
+                ctx -> {
+                    EntityInstance prepayment = PublicationEditing.first(ctx, PREPAYMENT);
+                    return EntityQuery.builder().where(new QueryPredicate.In("targetId", prepayment == null
+                        ? List.of() : List.of(String.valueOf(prepayment.id())))).limit(Prepayments.MAX_PARTS + 1)
+                        .build();
+                }, PARTS))
+            .compute("Work out the top-up", (metadata, ctx) -> work(ctx))
+            .step("Read what a postpaid sponsor owes", RunTemplate.<ProcessContext>when(
+                ctx -> !ctx.hasViolations() && ctx.contains(PublicationPrepayments.ITEMS)
+                    && FeeRules.POSTPAID.equals(ctx.get(MODE)) && PublicationPrepayments.total(ctx).signum() > 0,
+                "qb.system.fee-receivable", ctx -> Map.of("sponsorId",
+                    PublicationPrepayments.sponsorOf(PublicationEditing.publication(ctx))), PublicationPrepayments.OWED));
     }
 
     @SuppressWarnings("unchecked")

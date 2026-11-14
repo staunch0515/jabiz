@@ -5,7 +5,7 @@ description: >-
   confirm, digital prizes to send or disputed, publications short of budget, rewards waiting for a top-up, overdue
   platform fee invoices, open ones the fee account cannot cover, items in review (publications, the public page, shared videos), the uses of the sponsor's
   shared videos waiting for the sponsor as provider, and platform fee Kudos about to expire
-entities: [QbRedemption, QbDigitalPrize, QbPublicationCard, QbPublication, QbWallet, QbFeeInvoice, QbSponsorPage, QbSharedVideo, QbVideoUse, QbFeeCreditGrant, SysParam]
+entities: [QbRedemption, QbDigitalPrize, QbPublicationCard, QbPublication, QbWallet, QbFeeInvoice, QbSponsorPage, QbSharedVideo, QbVideoUse, QbFeeCreditGrant, QbExposure, SysParam]
 datasets:
   QbRedemption: urn:jabiz:dataset:sponsor:QbRedemption
   QbDigitalPrize: urn:jabiz:dataset:sponsor:QbDigitalPrize
@@ -17,6 +17,7 @@ datasets:
   QbSharedVideo: urn:jabiz:dataset:me:QbSharedVideo
   QbVideoUse: urn:jabiz:dataset:provider:QbVideoUse
   QbFeeCreditGrant: urn:jabiz:dataset:sponsor:QbFeeCreditGrant
+  QbExposure: urn:jabiz:dataset:default:QbExposure
   SysParam: urn:jabiz:dataset:now:SysParam
 params:
   at: { kind: { type: temporal, role: EVENT_TIME }, required: true, description: "The client's now: the lots of fee credit that expire within the notice from it are counted" }
@@ -32,6 +33,7 @@ results:
   videoUsesToConfirm:   { kind: { type: numeric, precision: 9, scale: 0 } }
   feeInvoicesUncovered: { kind: { type: numeric, precision: 9, scale: 0 } }
   creditsExpiring:      { kind: { type: numeric, precision: 9, scale: 0 } }
+  exposureLow:          { kind: { type: numeric, precision: 9, scale: 0 } }
 permissions: [qb.publication.write]
 ---*/
 -- One row of counts, every dataset the caller's own (the sponsor datasets hold their rows; the provider's uses are
@@ -44,6 +46,8 @@ permissions: [qb.publication.write]
 -- feeInvoicesUncovered: the open invoices (OPEN, PARTIAL, OVERDUE, as qb.sponsor.wallet's unpaid ones) whose owed
 -- amount (total less paid) is more than the fee account holds, as the wallet page works it out (feeAccountAvailable):
 -- the fee credit's balance plus the cash account's balance less what is held.
+-- exposureLow (F-M8): the sponsor's running publications that bought exposures and have at most the share
+-- qb.exposure.low-ratio (never above a half; none or malformed: none counted) of them left, as the reminder mail reads it.
 WITH account AS (
     SELECT coalesce(sum(greatest(0, w.{{QbWallet.balance}})) FILTER (WHERE w.{{QbWallet.kind}} = 'FEE_CREDIT'), 0)
          + coalesce(sum(greatest(0, w.{{QbWallet.balance}} - w.{{QbWallet.held}}))
@@ -77,4 +81,16 @@ SELECT
         AND g.{{QbFeeCreditGrant.expiresAt}} <= CAST(:at AS timestamptz) + make_interval(days => (
             SELECT CAST(n.{{SysParam.value}} AS int) FROM {{SysParam}} n
              WHERE n.{{SysParam.paramKey}} = 'qb.fee-credit.expiry-notice-days'
-               AND n.{{SysParam.value}} ~ '^[0-9]{1,9}$'))) AS creditsExpiring
+               AND n.{{SysParam.value}} ~ '^[0-9]{1,9}$'))) AS creditsExpiring,
+    (SELECT count(*) FROM {{QbPublicationCard}} c
+      CROSS JOIN LATERAL (SELECT count(*) AS n FROM {{QbExposure}} e
+                          WHERE e.{{QbExposure.publicationId}} = CAST(c.{{QbPublicationCard.publicationId}} AS text)
+                            AND e.{{QbExposure.countedAt}} IS NOT NULL) x
+      CROSS JOIN LATERAL (SELECT least(CAST(r.{{SysParam.value}} AS numeric), 0.5) AS ratio FROM {{SysParam}} r
+                          WHERE r.{{SysParam.paramKey}} = 'qb.exposure.low-ratio'
+                            AND r.{{SysParam.value}} ~ '^[0-9]+(\.[0-9]+)?$') q
+      WHERE c.{{QbPublicationCard.exposurePurchased}} IS NOT NULL
+        AND c.{{QbPublicationCard.status}} IN ('SCHEDULED', 'LIVE', 'PAUSED', 'FUNDS_SHORT')
+        AND q.ratio > 0
+        AND x.n < c.{{QbPublicationCard.exposurePurchased}}
+        AND c.{{QbPublicationCard.exposurePurchased}} - x.n <= c.{{QbPublicationCard.exposurePurchased}} * q.ratio) AS exposureLow

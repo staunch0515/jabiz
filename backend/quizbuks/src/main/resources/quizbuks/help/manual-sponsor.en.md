@@ -80,7 +80,7 @@ Once verified, the onboarding granted credit you received is topped up to the ve
 
 - Page statistics (/sponsor/stats): how your shop page is visited.
 - Messages (/sponsor/messages): conversations with Takers about your quizzes and prizes, and notices you send to Takers.
-- Account (/sponsor/account): sign-in, two-step verification, notifications, language, and deleting the account.
+- Account (/sponsor/account): sign-in, two-step verification, notifications, language, and deleting the account. Before you ask to delete it, the page lists what you confirm one by one (running publications, unpaid platform fee invoices, prepayments, the Granted credit being voided, the cash of the Platform fee account not being refunded to a bank, top-ups not arrived yet and so on); the figures are those of the moment you ask, what is in the account when it is deleted counts.
 
 ## Help and terms
 

@@ -67,6 +67,7 @@
 - 锁序：发布锁 `qb.pub:<发布>` → 钱包锁 `qb.wallet:SPONSOR:<发起方>`（钱包锁之后不再取锁）。不取开始锁（不改状态）。
 - 步骤：钱包锁内一条 `QueryEntities.all` 读账户与该发布 `EXPOSURE` 的预付款；预付款已经不是 `OPEN`（已结清或已释放）即明确的 422 `QB_EXPOSURE_PREPAYMENT_CLOSED`（新码，审查 M6）；资金检查（预付的：可用额 ≥ 追加预付；后付的：未付 + 已预留 + 本次 ≤ 信用额，同 `PrepaymentRules.check`，不足 422 `QB_PUBLICATION_FUNDS`）；子流程 **`QB_PREPAYMENT_TOP_UP`**（新，`subProcessOnly`，`FEE_SYSTEM`，与 `QB_PREPAYMENT_FREEZE` 共用分摊与过账代码）把钱按账户顺序（赠送先、现金后）转入 2180 并**加到已有的那笔预付款**（`amount`、`remaining` 按 H1 的本次冻结增加，新增的分摊 `QbFeePayment` 指向同一笔）；再 `QB_EXPOSURE_PURCHASED_SET` 把总数设为旧值 + `additional`。
 - 为什么加到已有那笔，而不是新开一笔：V116 有部分唯一索引 `qb_prepayment_open_purpose_idx (publication_id, purpose) WHERE status = 'OPEN'`，同一发布同一用途至多一笔未关闭的预付款；加到原笔也让结算与释放不用改。
+- **报价 `QB_EXPOSURE_TOP_UP_QUOTE`**（F-M8d 审查 M2，只读）：同样的输入，同一组检查与同一个 `topUpDeposit`，返回 `{purchased, deposit, available, shortfall}`；**不取锁**（照 `QB_PUBLICATION_FUNDS_CHECK`，数字由追加在锁内重算，过时的报价只会是追加的拒绝，不会多收），不写任何东西；资金不足不是拒绝而是答案（差额）。每人每小时 300 次（`jabiz.process.rate-limits`）；页面输入时防抖并缓存，只显示服务端的数字，不自己算。
 - 追加的预付在下一次结算时与原来的预付一起用；追加购买之前已超出旧已购次数的成功（并发时照记不收的那几次）此后落在新购买的次数内、按 min 一并收（问题 9）。
 
 ### 3.5 结算 `QB_EXPOSURE_SETTLE`（新，`internal()`；与配送费"同一结算流程"= 同一套步骤与规则，另立流程与表，理由见第 7 节风险 1）
@@ -266,3 +267,9 @@ F-M12 b（S3）的就绪模板 `qb.system.operator-settlement-readiness`（每�
 - **低**：L1–L5 全部采纳（§3.4、§3.6、§5、§6、§7）。
 - **问需求方**：问 4 直说是改规格，问 6 写出后果并加清单项，问 9 用 Fable 的说法，问 11 不出现 F-M7；Fable 的新问题中第 2 条（追加后的零头）已由总控定为按累计算，不问，只告诉需求方"用完时会恰好扣光"；其余 5 条为问 12–16。
 - **其余原文要点**：M1 第 3 点（输出的 revision）、L1（两个宽限参数的区别与下界 60）、L3（邮件模板的四项与覆盖测试）、L5（作废后预付款剩余不变，写进 `operations.md`）都已写进上文。
+
+## 留后（F-M8d 审查，按先后）
+
+1. 发起方编号在页面上显示为名字（`UserName`，按 F-M6 先例）——最先补；
+2. 运营商模板 `qb.operator.exposure-settlements` 登记 `OperatorScopes`（现在与配送费模板一样以运营商成员联接限定）；
+3. 首页待办 `exposureLow` 链到带筛选的列表（或列表加低余量标记）。

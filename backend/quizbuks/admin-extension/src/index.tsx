@@ -49,6 +49,7 @@ import ManualCreditsPage from './ManualCreditsPage'
 import BroadcastsPage from './BroadcastsPage'
 import { AudiencePricesPage, AudienceRulesPage, OperatorAudiencePricesPage } from './AudiencePricingPages'
 import { DistributionPricesPage, DistributionSettlementsPage, OperatorDistributionPricePage } from './DistributionPages'
+import { ExposurePricesPage, ExposureSettlementsPage, OperatorExposurePricePage } from './ExposureFeePages'
 import ReferralsPage from './ReferralsPage'
 import RegionPage from './RegionPage'
 import SharedVideosPage from './SharedVideosPage'
@@ -218,6 +219,10 @@ export default defineExtension({
     { path: PATH.distributionPrices, element: <DistributionPricesPage /> },
     { path: PATH.operatorDistributionPrice, element: <OperatorDistributionPricePage /> },
     { path: PATH.distributionSettlements, element: <DistributionSettlementsPage /> },
+    // F-M8: the exposure fee's prices (headquarters; an operator's own) and settlements (finance).
+    { path: PATH.exposurePrices, element: <ExposurePricesPage /> },
+    { path: PATH.operatorExposurePrice, element: <OperatorExposurePricePage /> },
+    { path: PATH.exposureSettlements, element: <ExposureSettlementsPage /> },
   ],
   menu: [
     // F-S1b: the operator's own pages (only its members hold qb.operator.use): what an operator runs for its sponsors
@@ -248,6 +253,9 @@ export default defineExtension({
           icon: Tags, permission: PERMISSION.operatorUse },
         // F-M6: the operator's own distribution price (its lead changes it).
         { key: 'qb-operator-distribution-price', label: 'menu.distributionPrices', path: PATH.operatorDistributionPrice,
+          icon: Tags, permission: PERMISSION.operatorUse },
+        // F-M8: the operator's own exposure price (its lead changes it).
+        { key: 'qb-operator-exposure-price', label: 'menu.exposurePrices', path: PATH.operatorExposurePrice,
           icon: Tags, permission: PERMISSION.operatorUse },
         // F-S2b3a: the operator's and its Sponsors' knowledge maps, and their reviews.
         { key: 'qb-operator-trees', label: 'menu.operatorTrees', path: PATH.trees, icon: Network,
@@ -357,6 +365,11 @@ export default defineExtension({
         { key: 'qb-distribution-prices', label: 'menu.distributionPrices', path: PATH.distributionPrices, icon: Tags,
           permission: PERMISSION.feeManage },
         { key: 'qb-distribution-settlements', label: 'menu.distributionSettlements', path: PATH.distributionSettlements,
+          icon: Tags, permission: PERMISSION.financeRead },
+        // F-M8: every operator's exposure price and the settlements (finance).
+        { key: 'qb-exposure-prices', label: 'menu.exposurePrices', path: PATH.exposurePrices, icon: Tags,
+          permission: PERMISSION.feeManage },
+        { key: 'qb-exposure-settlements', label: 'menu.exposureSettlements', path: PATH.exposureSettlements,
           icon: Tags, permission: PERMISSION.financeRead },
         // F-S2b3a: every knowledge map, its versions' reviews and its lit nodes.
         { key: 'qb-trees', label: 'menu.trees', path: PATH.trees, icon: Network, permission: PERMISSION.treesRead },

@@ -614,10 +614,12 @@ public final class PublicationPrepayments {
 
     /**
      * One fee the publication would set aside: what for, with its tax, and the fee before tax; F-M6: the distribution
-     * fee's price per start and whether it is the operator's floor (none for the other purposes).
+     * fee's price per start and whether it is the operator's floor (none for the other purposes); F-M8: the exposure
+     * fee's price per exposure ({@code unit}), the exposures bought and the fewest a submission buys
+     * ({@code qb.exposure.min-purchase}; none for the other purposes).
      */
     public record CheckItem(String purpose, BigDecimal amount, BigDecimal chargeAmount, BigDecimal unit,
-        Boolean atFloor) {}
+        Boolean atFloor, Long purchased, Long least) {}
 
     /**
      * @param total     what submitting now would set aside
@@ -677,10 +679,13 @@ public final class PublicationPrepayments {
                     ctx.put(CHECKED, new CheckOutput(funds.items().stream()
                         .map(item -> QbPrepayments.DISTRIBUTION.equals(item.purpose()) && distribution != null
                             ? new CheckItem(item.purpose(), item.amount(), item.chargeAmount(), distribution.unit(),
-                                distribution.atFloor())
+                                distribution.atFloor(), null, null)
                             : QbPrepayments.EXPOSURE.equals(item.purpose()) && exposure != null
-                            ? new CheckItem(item.purpose(), item.amount(), item.chargeAmount(), exposure.unit(), null)
-                            : new CheckItem(item.purpose(), item.amount(), item.chargeAmount(), null, null)).toList(),
+                            ? new CheckItem(item.purpose(), item.amount(), item.chargeAmount(), exposure.unit(), null,
+                                exposure.purchased(), params(ctx).find(QbParams.EXPOSURE_MIN_PURCHASE, BigDecimal.class)
+                                    .map(BigDecimal::longValue).orElse(null))
+                            : new CheckItem(item.purpose(), item.amount(), item.chargeAmount(), null, null, null,
+                                null)).toList(),
                         funds.total(), funds.available(), funds.shortfall(), funds.billingMode(), funds.enough()));
                 });
             });

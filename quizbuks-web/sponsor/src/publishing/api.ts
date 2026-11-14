@@ -88,6 +88,8 @@ export interface Publication {
   entryFee: number
   budgetCap: string | null
   maxWinners: number | null
+  /** F-M8: the exposures of another's shared video the draft asks to buy (none: not asked). */
+  exposureRequested: number | null
   /** How the reward reaches the taker (Q22); a prize at the sponsor's place is described. */
   rewardMethod: RewardMethod
   redeemDescription: string | null
@@ -236,6 +238,8 @@ export interface SaveInput {
   entryFee: number
   budgetCap: number | null
   maxWinners: number | null
+  /** F-M8: the exposures to buy with another's shared video (none: not asked); the server checks the least. */
+  exposureRequested?: number | null
   /** The whole list in its order. */
   tiers: TierInput[]
   baseRevision: number | null
@@ -424,6 +428,7 @@ export function toPublication(row: Row): Publication {
     entryFee: numOrNull(row.entryFee) ?? 0,
     budgetCap: str(row.budgetCap),
     maxWinners: numOrNull(row.maxWinners),
+    exposureRequested: numOrNull(row.exposureRequested),
     rewardMethod: methodOf(row.rewardMethod),
     redeemDescription: str(row.redeemDescription),
     benefitPurchaseId: str(row.benefitPurchaseId),
@@ -997,6 +1002,8 @@ export interface PublicationForm {
   entryFee: string
   budgetCap: string
   maxWinners: string
+  /** F-M8: the exposures to buy with another's shared video, as typed; empty is none. */
+  exposureRequested: string
   tiers: TierDraft[]
   rewardMethod: RewardMethod
   redeemDescription: string
@@ -1059,6 +1066,7 @@ export function formOf(detail: PublicationDetail | null): PublicationForm {
     entryFee: p?.entryFee ? String(p.entryFee) : '',
     budgetCap: text(p?.budgetCap),
     maxWinners: text(p?.maxWinners),
+    exposureRequested: text(p?.exposureRequested),
     rewardMethod: p?.rewardMethod ?? 'PLATFORM',
     redeemDescription: p?.redeemDescription ?? '',
     benefitPurchaseId: p?.benefitPurchaseId ?? '',
@@ -1138,6 +1146,7 @@ export function inputOf(form: PublicationForm, publicationId: string | null, bas
   const entryFee = read('entryFee', form.entryFee) ?? 0
   const budgetCap = read('budgetCap', form.budgetCap)
   const maxWinners = read('maxWinners', form.maxWinners)
+  const exposureRequested = read('exposureRequested', form.exposureRequested)
   const digital = form.rewardMethod === 'DIGITAL_PRIZE'
   const digitalSendDays = digital && form.digitalDelivery === 'SPONSOR_SENT'
     ? read('digitalSendDays', form.digitalSendDays) : null
@@ -1178,6 +1187,7 @@ export function inputOf(form: PublicationForm, publicationId: string | null, bas
       entryFee,
       budgetCap,
       maxWinners,
+      exposureRequested,
       tiers,
       baseRevision,
       rewardMethod: form.rewardMethod,
@@ -1242,7 +1252,7 @@ export function asSurvey(form: PublicationForm, fullScore: number, reward: strin
 export function asChallenge(form: PublicationForm, fullScore: number): PublicationForm {
   const tier: TierDraft = { key: form.tiers[0]?.key ?? tierKey(), tierId: form.tiers[0]?.tierId ?? null,
     fromScore: '0', toScore: String(fullScore), reward: '0' }
-  return { ...form, tiers: [tier], entryFee: '', budgetCap: '', maxWinners: '', referralEnabled: false,
+  return { ...form, tiers: [tier], entryFee: '', budgetCap: '', maxWinners: '', exposureRequested: '', referralEnabled: false,
     audience: 'PUBLIC' }
 }
 
@@ -1715,6 +1725,9 @@ export interface FundsItem {
   chargeAmount: number
   unit: number | null
   atFloor: boolean | null
+  /** F-M8: the exposure fee's exposures bought and the fewest a submission buys (null for the other purposes). */
+  purchased: number | null
+  least: number | null
 }
 
 /** `QB_PUBLICATION_FUNDS_CHECK`'s answer: what submitting would set aside and whether the account holds it. */
@@ -1737,7 +1750,9 @@ export async function readFundsCheck(publicationId: string): Promise<FundsCheck>
     items: ((out.items as Row[] | undefined) ?? []).map((item) => ({ purpose: purposeOf(item.purpose),
       amount: Number(item.amount ?? 0), chargeAmount: Number(item.chargeAmount ?? 0),
       unit: item.unit == null ? null : Number(item.unit),
-      atFloor: item.atFloor == null ? null : item.atFloor === true })),
+      atFloor: item.atFloor == null ? null : item.atFloor === true,
+      purchased: item.purchased == null ? null : Number(item.purchased),
+      least: item.least == null ? null : Number(item.least) })),
     total: Number(out.total ?? 0),
     available: Number(out.available ?? 0),
     shortfall: Number(out.shortfall ?? 0),

@@ -394,7 +394,7 @@ export function referenceKind(check: string): 'topUp' | 'transfer' | null {
 export const ATTENTION_CHECKS: ReadonlySet<string> = new Set(['DISTRIBUTION_PRICE_RANGE', 'AUDIENCE_REFUND_NO_PERIOD',
   'CREDIT_UNUSED_WITH_DUE', 'HELP_USAGE_TOTAL', 'EXPOSURE_PRICE_RANGE'])
 export const NOTE_CHECKS: ReadonlySet<string> = new Set(['TAKER_WALLET_LAG', 'DISTRIBUTION_AT_FLOOR',
-  'EXPOSURE_UNPURCHASED', 'AI_RESERVATION_SHORT'])
+  'EXPOSURE_UNPURCHASED', 'OPERATOR_GIFT_CARRY_OPEN', 'AI_RESERVATION_SHORT'])
 
 export type ReconLevel = 'DIFFERENCE' | 'ATTENTION' | 'NOTE'
 
@@ -796,6 +796,10 @@ export const PATH = {
   distributionPrices: '/qb/distribution/prices',
   operatorDistributionPrice: '/qb/operator/distribution-price',
   distributionSettlements: '/qb/finance/distribution-settlements',
+  /** F-M8: every operator's exposure price (headquarters), the operator's own, and the settlements (finance). */
+  exposurePrices: '/qb/exposure-fee/prices',
+  operatorExposurePrice: '/qb/operator/exposure-price',
+  exposureSettlements: '/qb/finance/exposure-settlements',
   /** The platform's own pages. */
   tasks: '/tasks',
   /** F-C10c: the AI help's conversations handed to a person (headquarters every one, an operator its own). */
@@ -835,6 +839,16 @@ export const DISTRIBUTION = {
   settlementsTemplate: 'qb.admin.distribution-settlements',
   /** Review L5: the caller operator's own settlements (its frozen fees), through its membership. */
   operatorSettlementsTemplate: 'qb.operator.distribution-settlements',
+} as const
+
+/** F-M8 (backend `fee.ExposurePrices`, `qb.admin.exposure-*`): the exposure fee's prices and settlements. */
+export const EXPOSURE_FEE = {
+  priceSet: 'QB_EXPOSURE_PRICE_SET',
+  operatorPriceSet: 'QB_OPERATOR_EXPOSURE_PRICE_SET',
+  pricesTemplate: 'qb.admin.exposure-prices',
+  operatorPriceTemplate: 'qb.operator.exposure-price',
+  settlementsTemplate: 'qb.admin.exposure-settlements',
+  operatorSettlementsTemplate: 'qb.operator.exposure-settlements',
 } as const
 
 /**
