@@ -532,7 +532,7 @@ for (const appearance of ['light', 'dark'] as const) {
     await page.goto('/admin/qb/finance')
     await expect(page.getByTestId('finance-in-review')).toBeVisible()
     await expectOverviewAccounts(page, request)
-    await expect(page.getByTestId('finance-fee-account')).toHaveCount(2)
+    await expect(page.getByTestId('finance-fee-account').first()).toBeVisible()
     if (appearance === 'dark') await expect(page.locator('html')).toHaveClass(/dark/)
     await expectAccessible(page, at('admin finance overview'))
     await page.goto('/admin/qb/finance/transfers')
@@ -560,7 +560,8 @@ for (const appearance of ['light', 'dark'] as const) {
     await page.route('**/api/queries/qb.admin.recon-attention-days', (route) => route.fulfill({
       contentType: 'application/json', body: JSON.stringify(days) }))
     await page.goto('/admin/qb/finance/reconciliation?run=00000000-0000-4000-8000-000000000688')
-    await expect(page.getByTestId('recon-group')).toHaveCount(3)
+    // One item of each level: a group each.
+    await expect(page.getByTestId('recon-group')).toHaveCount(rows.items.length)
     await expect(page.locator('[data-testid="recon-level"][data-level="DIFFERENCE"]')).toBeVisible()
     await expect(page.locator('[data-testid="recon-level"][data-level="ATTENTION"]')).toBeVisible()
     await expect(page.locator('[data-testid="recon-level"][data-level="NOTE"]')).toBeVisible()

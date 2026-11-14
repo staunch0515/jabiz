@@ -82,11 +82,11 @@ for (const appearance of ['light', 'dark'] as const) {
     // granted platform fee Kudos expiring; F-M8 the exposures nearly used up).
     await page.goto('/sponsor/account')
     const preferences = page.getByTestId('account-mail')
-    await expect(preferences.getByTestId('mail-preference')).toHaveCount(4)
-    await expect(preferences).toContainText('Publications short of funds')
-    await expect(preferences).toContainText('Publication ended')
-    await expect(preferences).toContainText('Platform fee Kudos expiring')
-    await expect(preferences).toContainText('Exposures nearly used up')
+    // Each of them once, by name (a notification added later adds a row, not a failure here).
+    for (const name of ['Publications short of funds', 'Publication ended', 'Platform fee Kudos expiring',
+      'Exposures nearly used up']) {
+      await expect(preferences.getByTestId('mail-preference').filter({ hasText: name })).toHaveCount(1)
+    }
     await expectAccessible(page, at('sponsor account with mail preferences'))
   })
 }

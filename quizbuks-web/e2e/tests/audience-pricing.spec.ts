@@ -1,4 +1,6 @@
 import { signInAdmin } from './admin'
+import { query } from './content'
+import { contentToken } from './help'
 import { contentAdmin } from './legal'
 import { ensureDefaultOperator } from './operators'
 import { fundedSponsor } from './play'
@@ -21,10 +23,14 @@ test('headquarters manage the rules and their prices; the wizard stays free whil
 
   // The rule catalog: every kind, saved as it is (other runs may have saved it before).
   await page.goto('/admin/qb/audience/rules')
-  await expect(page.getByTestId('audience-rule-row')).toHaveCount(4)
+  await expect(page.getByTestId('audience-rule-row').first()).toBeVisible()
   await expectAccessible(page, 'admin audience rules')
   await page.getByTestId('audience-rules-save').click()
   await expect(page.getByText('The rules are saved.')).toBeVisible()
+  // Saved as shown: a row for every rule the server now keeps.
+  const kept = await query(request, (await contentToken(request)).token, 'qb.admin.audience-rules', {})
+  expect(kept.length).toBeGreaterThan(0)
+  await expect(page.getByTestId('audience-rule-row')).toHaveCount(kept.length)
 
   // An operator's price list, set by headquarters (F-M5 removed headquarters' own `direct` list): nothing is shown
   // until an operator is chosen; a reason is required; the list is saved with it.
