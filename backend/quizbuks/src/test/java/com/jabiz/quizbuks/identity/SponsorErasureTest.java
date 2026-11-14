@@ -37,7 +37,8 @@ class SponsorErasureTest {
         Map<String, Long> sums) {
         Map<String, Long> allCounts = new HashMap<>();
         for (String load : List.of(SponsorErasure.PUBLICATIONS, SponsorErasure.CASH, SponsorErasure.UNPAID,
-            SponsorErasure.POSTPAID, SponsorErasure.DEPOSITS, SponsorErasure.FROZEN, SponsorErasure.TOPUPS)) {
+            SponsorErasure.POSTPAID, SponsorErasure.POSTPAID_OPEN, SponsorErasure.POSTPAID_CHARGES,
+            SponsorErasure.DEPOSITS, SponsorErasure.FROZEN, SponsorErasure.TOPUPS)) {
             allCounts.put(load, 0L);
         }
         allCounts.putAll(counts);
@@ -104,13 +105,28 @@ class SponsorErasureTest {
             .containsEntry("short", "600");
     }
 
+    /**
+     * Review M1, L7: a sponsor who may have postpaid fees not invoiced yet, without unpaid invoices, is told so in words
+     * of its own (no "0 invoices, 0 yen"): postpaid on the onboarding row; no mode on the row (the default) but an open
+     * postpaid prepayment; switched to prepaid this month with postpaid fees charged before.
+     */
     @Test
     void aPostpaidSponsorIsToldOfFeesNotYetInvoicedAndEnoughIsNoShortfall() {
-        Map<String, ErasureNotice> notices = byCode(notices(List.of(wallet(QbWallets.CASH, 1000, 0)),
-            Map.of(SponsorErasure.POSTPAID, 1L), Map.of()));
-        assertThat(notices.get(SponsorErasure.NOTICE_FEE_UNPAID).params()).containsEntry("count", 0L)
-            .containsEntry("amount", "0");
-        assertThat(notices).doesNotContainKey(SponsorErasure.NOTICE_FEE_SHORTFALL);
+        for (String load : List.of(SponsorErasure.POSTPAID, SponsorErasure.POSTPAID_OPEN,
+            SponsorErasure.POSTPAID_CHARGES)) {
+            Map<String, ErasureNotice> notices = byCode(notices(List.of(wallet(QbWallets.CASH, 1000, 0)),
+                Map.of(load, 1L), Map.of()));
+            assertThat(notices).as(load).containsKey(SponsorErasure.NOTICE_FEE_UNBILLED)
+                .doesNotContainKeys(SponsorErasure.NOTICE_FEE_UNPAID, SponsorErasure.NOTICE_FEE_SHORTFALL);
+            assertThat(notices.get(SponsorErasure.NOTICE_FEE_UNBILLED).params()).isEmpty();
+        }
+        // With unpaid invoices, the one notice with the figures (it says fees not invoiced are not in them).
+        Map<String, ErasureNotice> both = byCode(notices(List.of(), Map.of(SponsorErasure.POSTPAID_CHARGES, 4L,
+            SponsorErasure.UNPAID, 1L), Map.of(SponsorErasure.UNPAID_TOTAL, 500L)));
+        assertThat(both).containsKey(SponsorErasure.NOTICE_FEE_UNPAID)
+            .doesNotContainKey(SponsorErasure.NOTICE_FEE_UNBILLED);
+        // A prepaid sponsor never postpaid is told nothing of fees.
+        assertThat(notices(List.of(), Map.of(), Map.of())).isEmpty();
         Map<String, ErasureNotice> covered = byCode(notices(List.of(wallet(QbWallets.FEE_CREDIT, 1000, 0)),
             Map.of(SponsorErasure.UNPAID, 1L), Map.of(SponsorErasure.UNPAID_TOTAL, 1000L)));
         assertThat(covered).containsKey(SponsorErasure.NOTICE_FEE_UNPAID)
@@ -124,12 +140,17 @@ class SponsorErasureTest {
             Map.of(SponsorErasure.DEPOSITS_LEFT, 3000L)));
         assertThat(notices.get(SponsorErasure.NOTICE_DEPOSITS).params()).containsEntry("count", 2L)
             .containsEntry("amount", "3000");
-        // Nothing in the wallet of granted credit, but some may be frozen: told, without a figure for it.
-        assertThat(notices.get(SponsorErasure.NOTICE_GIFT_VOID).params()).containsEntry("amount", "0");
+        // Nothing in the wallet of granted credit, but some may be frozen: told in words of its own (review L6).
+        assertThat(notices).containsKey(SponsorErasure.NOTICE_GIFT_FROZEN)
+            .doesNotContainKey(SponsorErasure.NOTICE_GIFT_VOID);
         assertThat(notices.get(SponsorErasure.NOTICE_TOPUPS).params()).containsEntry("count", 1L);
         // An AI credit alone holds no publication's prepayment, but may hold granted credit.
         Map<String, ErasureNotice> ai = byCode(notices(List.of(), Map.of(SponsorErasure.FROZEN, 1L), Map.of()));
-        assertThat(ai).containsOnlyKeys(SponsorErasure.NOTICE_GIFT_VOID);
+        assertThat(ai).containsOnlyKeys(SponsorErasure.NOTICE_GIFT_FROZEN);
+        // Granted credit in the account: its figure; frozen besides, the same notice (it says so).
+        Map<String, ErasureNotice> gift = byCode(notices(List.of(wallet(QbWallets.FEE_CREDIT, 700, 0)),
+            Map.of(SponsorErasure.FROZEN, 1L), Map.of()));
+        assertThat(gift).containsOnlyKeys(SponsorErasure.NOTICE_GIFT_VOID);
     }
 
     @Test
@@ -142,6 +163,11 @@ class SponsorErasureTest {
         }
         assertThat(loads.get(SponsorErasure.UNPAID_TOTAL).field()).isEqualTo("total");
         assertThat(values(loads.get(SponsorErasure.POSTPAID), "billingMode")).containsExactly(FeeRules.POSTPAID);
+        assertThat(values(loads.get(SponsorErasure.POSTPAID_OPEN), "mode")).containsExactly(QbPrepayments.POSTPAID);
+        assertThat(values(loads.get(SponsorErasure.POSTPAID_OPEN), "status")).containsExactly(QbPrepayments.OPEN);
+        assertThat(loads.get(SponsorErasure.POSTPAID_CHARGES).dataset()).isEqualTo(QbFees.defaultDataset(QbFees.CHARGE));
+        assertThat(values(loads.get(SponsorErasure.POSTPAID_CHARGES), "billingMode"))
+            .containsExactly(FeeRules.POSTPAID);
         for (String name : List.of(SponsorErasure.DEPOSITS, SponsorErasure.DEPOSITS_LEFT, SponsorErasure.FROZEN)) {
             assertThat(values(loads.get(name), "status")).containsExactly(QbPrepayments.OPEN);
             assertThat(values(loads.get(name), "mode")).containsExactly(QbPrepayments.PREPAID);
@@ -156,8 +182,9 @@ class SponsorErasureTest {
     }
 
     /**
-     * The postpaid notice reads only a billing mode written on the onboarding row: right only while the platform's
-     * default is PREPAID. Changing the default must change the load (SponsorErasure.POSTPAID) too.
+     * The postpaid notice cannot read the default billing mode: a sponsor postpaid by it alone is caught only once
+     * charged or holding a postpaid prepayment. Right while the default is PREPAID; changing the default must revisit
+     * the loads (SponsorErasure.POSTPAID).
      */
     @Test
     void theDefaultBillingModeIsPrepaidAsThePostpaidLoadAssumes() {

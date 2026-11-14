@@ -76,11 +76,17 @@ public class SponsorErasure {
     static final String UNPAID_CREDITED = "feeUnpaidCredited";
     static final String UNPAID_PAID = "feeUnpaidPaid";
     /**
-     * Whether the sponsor pays afterwards: only their own billing mode written on the onboarding row (a load cannot read
-     * the parameter {@code qb.fee.default-billing-mode}). Nothing is missed while that default is PREPAID (pinned by
-     * SponsorErasureTest); if it ever becomes POSTPAID, a sponsor without a mode of their own must be counted here too.
+     * Whether the sponsor may have postpaid fees not invoiced yet (which have no figure: nothing marks a fee "not
+     * invoiced"): their own billing mode written on the onboarding row is POSTPAID ({@value #POSTPAID}), or an open
+     * postpaid prepayment counts against their credit limit ({@value #POSTPAID_OPEN}), or a postpaid fee was ever charged
+     * to them ({@value #POSTPAID_CHARGES}: one who switched to prepaid this month still has last fees to be invoiced).
+     * A load cannot read the parameter {@code qb.fee.default-billing-mode}: a sponsor postpaid by that default is caught
+     * by the other two once charged. That default is PREPAID (pinned by SponsorErasureTest); before it is changed to
+     * POSTPAID, revisit these loads (operations.md §7.51).
      */
     static final String POSTPAID = "feePostpaid";
+    static final String POSTPAID_OPEN = "feePostpaidOpen";
+    static final String POSTPAID_CHARGES = "feePostpaidCharges";
     /** The open prepayments of their publications that hold money: how many, and what is left of them. */
     static final String DEPOSITS = "feeDeposits";
     static final String DEPOSITS_LEFT = "feeDepositsLeft";
@@ -94,9 +100,13 @@ public class SponsorErasure {
     static final String NOTICE_BALANCE = "qb.wallet-balance";
     static final String NOTICE_CASH = "qb.cash-rewards-open";
     static final String NOTICE_FEE_UNPAID = "qb.fee-unpaid";
+    /** A postpaid sponsor without unpaid invoices: fees not invoiced yet, without a figure. */
+    static final String NOTICE_FEE_UNBILLED = "qb.fee-unbilled";
     static final String NOTICE_FEE_SHORTFALL = "qb.fee-shortfall";
     static final String NOTICE_DEPOSITS = "qb.deposits-held";
     static final String NOTICE_GIFT_VOID = "qb.gift-void";
+    /** No granted credit in the account, but some may be frozen in prepayments: without a figure. */
+    static final String NOTICE_GIFT_FROZEN = "qb.gift-frozen";
     static final String NOTICE_CASH_LEFT = "qb.cash-left";
     static final String NOTICE_TOPUPS = "qb.topup-pending";
 
@@ -212,6 +222,10 @@ public class SponsorErasure {
                     unpaid(ErasureLoad.sum(UNPAID_PAID, INVOICES, "sponsorId", "paidAmount")),
                     ErasureLoad.count(POSTPAID, QbAccounts.defaultDataset(QbAccounts.SPONSOR), "userId")
                         .where("billingMode", FeeRules.POSTPAID),
+                    ErasureLoad.count(POSTPAID_OPEN, PREPAYMENTS, "sponsorId").where("status", QbPrepayments.OPEN)
+                        .where("mode", QbPrepayments.POSTPAID),
+                    ErasureLoad.count(POSTPAID_CHARGES, QbFees.defaultDataset(QbFees.CHARGE), "sponsorId")
+                        .where("billingMode", FeeRules.POSTPAID),
                     held(ErasureLoad.count(DEPOSITS, PREPAYMENTS, "sponsorId"))
                         .where("purpose", PUBLICATION_PURPOSES.stream().sorted().toArray()),
                     held(ErasureLoad.sum(DEPOSITS_LEFT, PREPAYMENTS, "sponsorId", "remaining"))
@@ -271,11 +285,17 @@ public class SponsorErasure {
         BigDecimal cashHeld = wallets.stream().filter(row -> QbWallets.CASH.equals(row.get("kind")))
             .map(row -> amount(row.get("held"))).reduce(BigDecimal.ZERO, BigDecimal::add);
         long invoices = subject.count(UNPAID);
-        // What the invoices still owe, as QbFees.owed: their totals less the credit applied and what was paid.
+        // What the invoices still owe: QbFees.owed (total less credit applied less paid) added up, but subtracted on the
+        // three totals. QbFees.owed floors each invoice at 0; the table's check (paid + credit applied <= total) keeps
+        // every invoice's difference at 0 or more, so the sum of the differences is the sum of what each owes. The
+        // floor below only guards the total.
         BigDecimal owed = subject.sum(UNPAID_TOTAL).subtract(subject.sum(UNPAID_CREDITED))
             .subtract(subject.sum(UNPAID_PAID)).max(BigDecimal.ZERO);
-        if (invoices > 0 || subject.count(POSTPAID) > 0) {
+        if (invoices > 0) {
             notices.add(ErasureNotice.of(NOTICE_FEE_UNPAID, Map.of("count", invoices, "amount", owed.toPlainString())));
+        } else if (subject.count(POSTPAID) > 0 || subject.count(POSTPAID_OPEN) > 0
+            || subject.count(POSTPAID_CHARGES) > 0) {
+            notices.add(ErasureNotice.of(NOTICE_FEE_UNBILLED, Map.of()));
         }
         // What pays them now: the granted credit, then the cash not held by a dispute (FeeAllocation's order).
         BigDecimal available = gift.max(BigDecimal.ZERO).add(cash.subtract(cashHeld).max(BigDecimal.ZERO));
@@ -288,8 +308,10 @@ public class SponsorErasure {
             notices.add(ErasureNotice.of(NOTICE_DEPOSITS, Map.of("count", deposits,
                 "amount", subject.sum(DEPOSITS_LEFT).toPlainString())));
         }
-        if (gift.signum() > 0 || subject.count(FROZEN) > 0) {
-            notices.add(ErasureNotice.of(NOTICE_GIFT_VOID, Map.of("amount", gift.max(BigDecimal.ZERO).toPlainString())));
+        if (gift.signum() > 0) {
+            notices.add(ErasureNotice.of(NOTICE_GIFT_VOID, Map.of("amount", gift.toPlainString())));
+        } else if (subject.count(FROZEN) > 0) {
+            notices.add(ErasureNotice.of(NOTICE_GIFT_FROZEN, Map.of()));
         }
         if (cash.signum() > 0) {
             notices.add(ErasureNotice.of(NOTICE_CASH_LEFT, Map.of("amount", cash.toPlainString())));
