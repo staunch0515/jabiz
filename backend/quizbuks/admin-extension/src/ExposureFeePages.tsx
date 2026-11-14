@@ -233,7 +233,14 @@ function SettlementsList({ own }: { own: boolean }) {
   const id = useId()
   // F-M14b: the reconciliation page links a month here (`?period=2026-11`).
   const [search] = useSearchParams()
-  const [periodText, setPeriodText] = useState(() => search.get('period') ?? '')
+  const linked = search.get('period') ?? ''
+  const [periodText, setPeriodText] = useState(linked)
+  // Another link to this page (or back and forward) brings another month: the field follows it.
+  const [seen, setSeen] = useState(linked)
+  if (linked !== seen) {
+    setSeen(linked)
+    setPeriodText(linked)
+  }
   const filter: ExposureSettlementFilter = { period: PERIOD.test(periodText.trim()) ? periodText.trim() : null }
   const list = usePaged([...EXPOSURE_FEE_KEY, own ? 'own-settlements' : 'settlements', filter.period],
     (offset, limit) => readExposureSettlements(filter, offset, limit, own).then((page) => ({

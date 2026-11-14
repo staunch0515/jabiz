@@ -70,8 +70,9 @@ const REFERENCE_TARGET: Record<ReferenceKind, (reference: string) => { path: str
   publication: (ref) => ({ path: PATH.publication(ref), permission: PERMISSION.publicationRead }),
   distributionMonth: (ref) => ({ path: PATH.distributionSettlementsOf(ref), permission: PERMISSION.financeRead }),
   exposureMonth: (ref) => ({ path: PATH.exposureSettlementsOf(ref), permission: PERMISSION.financeRead }),
-  invoice: () => ({ path: PATH.feesWhere({ tab: 'invoices' }), permission: PERMISSION.financeRead }),
-  creditNote: () => ({ path: PATH.feesWhere({ tab: 'creditNotes' }), permission: PERMISSION.financeRead }),
+  invoice: (ref) => ({ path: PATH.feesWhere({ tab: 'invoices', invoiceNo: ref }), permission: PERMISSION.financeRead }),
+  creditNote: (ref) => ({ path: PATH.feesWhere({ tab: 'creditNotes', creditNoteNo: ref }),
+    permission: PERMISSION.financeRead }),
 }
 
 /** The badge variant of a level: a difference warns, the others are quieter (nothing is an error here). */
@@ -86,15 +87,15 @@ function Items({ runId, level }: { runId: string; level: ReconLevel | null }) {
   const { t, i18n } = useTranslation(EXTENSION_NAMESPACE)
   const checkLabel = useLabels(DICTIONARY.reconCheck)
   const levelLabel = useLabels(DICTIONARY.reconLevel)
-  const query = useQuery({ queryKey: ['qb-ext', 'finance', 'recon-items', runId],
-    queryFn: () => readReconItems(runId, 0, PAGE_LIMIT) })
+  const query = useQuery({ queryKey: ['qb-ext', 'finance', 'recon-items', runId, level],
+    queryFn: () => readReconItems(runId, 0, PAGE_LIMIT, level) })
   // Asked for only when the run has an item for attention; a failure only leaves the days out.
   const attention = query.data?.items.some((item) => reconLevel(item.checkCode) === 'ATTENTION') ?? false
   const days = useQuery({ queryKey: ['qb-ext', 'finance', 'recon-attention-days', runId], enabled: attention,
     queryFn: () => readAttentionDays(runId) })
   if (query.isError) return <LoadFailed error={query.error} onRetry={() => void query.refetch()} />
   if (query.isPending) return <PageState kind="loading" />
-  const groups = byCheck(query.data.items).filter(([check]) => level === null || reconLevel(check) === level)
+  const groups = byCheck(query.data.items)
   const total = query.data.total ?? query.data.items.length
   return (
     <div className="flex flex-col gap-4" data-testid="recon-items">

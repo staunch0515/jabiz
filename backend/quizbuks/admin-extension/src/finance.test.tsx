@@ -11,7 +11,7 @@ import { expectAccessible } from '@jabiz/admin/testing'
 import FinanceOverviewPage from './FinanceOverviewPage'
 import { byCheck, levelCounts, transferFilterOf } from './finance'
 import { monthPeriod, monthRange, previousMonth, type ReconItem } from './finance-api'
-import { DICTIONARY, TEMPLATE } from './ids'
+import { ATTENTION_CHECKS, DICTIONARY, NOTE_CHECKS, TEMPLATE } from './ids'
 import { messages } from './messages'
 import ReconciliationPage from './ReconciliationPage'
 import ReportsPage from './ReportsPage'
@@ -122,10 +122,13 @@ beforeEach(() => {
   ])
   server.datasets = new Map([['urn:jabiz:dataset:default:QbUserBan', []]])
   server.runQuery.mockReset().mockImplementation(async (id: string, options: { offset?: number; limit?: number;
-    count?: boolean } = {}) => {
+    count?: boolean; filters?: { field: string; op: string; values?: unknown[] }[] } = {}) => {
     const rows = server.templates.get(id)
     if (rows instanceof Error) throw rows
-    const all = rows ?? []
+    // The list filters `in` and `notIn` as the server applies them (F-M14b: the reconciliation's levels).
+    const all = (rows ?? []).filter((row: Record<string, unknown>) => (options.filters ?? []).every((filter) =>
+      filter.op === 'in' ? filter.values!.includes(row[filter.field])
+        : filter.op === 'notIn' ? !filter.values!.includes(row[filter.field]) : true))
     const offset = options.offset ?? 0
     const limit = options.limit ?? 100
     return { items: all.slice(offset, offset + limit), offset, limit, ...(options.count ? { total: all.length } : {}) }
@@ -392,11 +395,24 @@ describe('ReconciliationPage by level (F-M14)', () => {
       expect.arrayContaining(['DISTRIBUTION_PRICE_RANGE', 'CREDIT_UNUSED_WITH_DUE']))
     expect(groups.every((group) => within(group).getByTestId('recon-level').dataset.level === 'ATTENTION')).toBe(true)
     expect(screen.getByTestId('recon-level-filter')).toHaveTextContent('Showing only: Needs attention')
+    // Asked of the server: a page holds at most 100 items, so a level is not picked out of the first page.
+    expect(calledWith(TEMPLATE.reconItems).at(-1)![1].filters).toEqual([{ field: 'checkCode', op: 'in',
+      values: [...ATTENTION_CHECKS] }])
     expect(screen.getByTestId('recon-show-all')).toHaveAttribute('href', `/qb/finance/reconciliation?run=${RUN}`)
     await userEvent.setup().click(screen.getByTestId('recon-show-all'))
     await waitFor(() => expect(screen.queryByTestId('recon-level-filter')).not.toBeInTheDocument())
     expect((await screen.findAllByTestId('recon-group')).map((group) => group.dataset.check))
       .toEqual(expect.arrayContaining(['LEDGER_ZERO', 'TAKER_WALLET_LAG']))
+  })
+
+  it('asks for the differences as every check that is neither for attention nor a note', async () => {
+    server.templates.set(TEMPLATE.reconItems, items())
+    renderAt(`/qb/finance/reconciliation?run=${RUN}&level=DIFFERENCE`, '/qb/finance/reconciliation',
+      <ReconciliationPage />)
+    const groups = await screen.findAllByTestId('recon-group')
+    expect(groups.every((group) => within(group).getByTestId('recon-level').dataset.level === 'DIFFERENCE')).toBe(true)
+    expect(calledWith(TEMPLATE.reconItems).at(-1)![1].filters).toEqual([{ field: 'checkCode', op: 'notIn',
+      values: [...ATTENTION_CHECKS, ...NOTE_CHECKS] }])
   })
 
   it('shows the whole run for a level it does not know', async () => {
@@ -450,9 +466,9 @@ describe('ReconciliationPage by level (F-M14)', () => {
       '/qb/finance/distribution-settlements?period=2031-03')
     expect(reference('DISTRIBUTION_UNSETTLED')).toHaveTextContent('Distribution fee settlements of 2031-03')
     expect(reference('EXPOSURE_UNSETTLED')).toHaveAttribute('href', '/qb/finance/exposure-settlements?period=2031-04')
-    expect(reference('CREDIT_NOTE_USE_VOID')).toHaveAttribute('href', '/qb/finance/fees?tab=invoices')
+    expect(reference('CREDIT_NOTE_USE_VOID')).toHaveAttribute('href', '/qb/finance/fees?tab=invoices&invoiceNo=QBF-2031-00007')
     expect(reference('CREDIT_NOTE_USE_VOID')).toHaveTextContent('Invoice QBF-2031-00007')
-    expect(reference('CREDIT_NOTE_USES')).toHaveAttribute('href', '/qb/finance/fees?tab=creditNotes')
+    expect(reference('CREDIT_NOTE_USES')).toHaveAttribute('href', '/qb/finance/fees?tab=creditNotes&creditNoteNo=QBC-2031-00002')
     cleanup()
     // Without finance's and the publications' reading: the same words, no link.
     server.permissions = new Set(['qb.reconcile', 'task.read'])

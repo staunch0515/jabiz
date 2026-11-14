@@ -91,12 +91,17 @@ class MonthlyKindsSourcesTest {
     @Test
     void everyCategoryHasItsLabelInTheThreeLanguages() throws IOException {
         String sql = Files.readString(MONTHLY);
-        String messages = Files.readString(MESSAGES);
+        // Only the monthly categories' own blocks (`category: { ... }`, one per language): the same name elsewhere in
+        // the file is another dictionary's.
+        List<String> blocks = Pattern.compile("\\n {4}category: \\{(.*?)\\n {4}}", Pattern.DOTALL)
+            .matcher(Files.readString(MESSAGES)).results().map(found -> found.group(1)).toList();
+        assertThat(blocks).as("the category blocks of finance-messages.ts (en, zh, ja)").hasSize(3);
         Matcher value = VALUE.matcher(sql.substring(sql.indexOf("FROM (VALUES")));
         while (value.find()) {
             String category = value.group(2);
-            assertThat(Pattern.compile("\\n\\s+" + category + ": ['\"]").matcher(messages).results().count())
-                .as("labels of " + category + " in finance-messages.ts (en, zh, ja)").isEqualTo(3);
+            Pattern label = Pattern.compile("\\n\\s+" + category + ": ['\"]");
+            assertThat(blocks).as("labels of " + category + " in finance-messages.ts (en, zh, ja)")
+                .allSatisfy(block -> assertThat(label.matcher(block).find()).isTrue());
         }
     }
 }

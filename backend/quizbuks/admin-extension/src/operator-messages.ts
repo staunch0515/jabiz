@@ -124,7 +124,7 @@ export const operatorMessages = {
       notes: {
         title: 'Notes from the daily check',
         description: 'What the platform’s daily reconciliation noticed about your Sponsors. Nothing is wrong and nothing has to be done; it is for you to decide whether to look.',
-        none: 'The latest check noted nothing about your Sponsors.',
+        none: 'No notes about your Sponsors from the daily check.',
         asOf: 'Latest check: {{when}}',
         publications_one: '{{count}} publication',
         publications_other: '{{count}} publications',
@@ -133,7 +133,7 @@ export const operatorMessages = {
           EXPOSURE_UNPURCHASED: 'Another Sponsor’s video, no exposures bought',
         },
         help: {
-          DISTRIBUTION_AT_FLOOR: 'These running publications pay your least distribution price a start: their top reward is too small to reach it. Consider whether your floor suits them.',
+          DISTRIBUTION_AT_FLOOR: 'These publications, not ended yet, pay your least distribution price a start: their top reward is too small to reach it. Consider whether your floor suits them.',
           EXPOSURE_UNPURCHASED: 'These running publications use another Sponsor’s video but bought no exposures: they were submitted before exposure billing was on, or you had no exposure price then.',
         },
       },
@@ -324,7 +324,7 @@ export const operatorMessages = {
       notes: {
         title: '每日核对的提示',
         description: '平台每日核对注意到的关于你的发起方的情况。这不是错误，也不需要处理；是否查看由你决定。',
-        none: '最近一次核对没有关于你的发起方的提示。',
+        none: '每日核对没有关于你的发起方的提示。',
         asOf: '最近一次核对：{{when}}',
         publications_one: '{{count}} 个发布',
         publications_other: '{{count}} 个发布',
@@ -333,7 +333,7 @@ export const operatorMessages = {
           EXPOSURE_UNPURCHASED: '使用其他发起方的视频、未购买曝光',
         },
         help: {
-          DISTRIBUTION_AT_FLOOR: '这些进行中的发布按你的每次开始最低分发价收费：其最高奖励小到达不到它。可考虑你的最低价是否合适。',
+          DISTRIBUTION_AT_FLOOR: '这些尚未结束的发布按你的每次开始最低分发价收费：其最高奖励小到达不到它。可考虑你的最低价是否合适。',
           EXPOSURE_UNPURCHASED: '这些进行中的发布使用其他发起方的视频，但没有购买曝光：提交时曝光计费尚未开启，或当时你没有曝光价格。',
         },
       },
@@ -524,7 +524,7 @@ export const operatorMessages = {
       notes: {
         title: '日次照合の注記',
         description: 'プラットフォームの日次照合が担当の主催者について気づいたことです。誤りではなく、対応も必要ありません。確認するかどうかはご判断ください。',
-        none: '最新の照合では担当の主催者について注記はありません。',
+        none: '日次照合による担当の主催者についての注記はありません。',
         asOf: '最新の照合：{{when}}',
         publications_one: '公開 {{count}} 件',
         publications_other: '公開 {{count}} 件',
@@ -533,7 +533,7 @@ export const operatorMessages = {
           EXPOSURE_UNPURCHASED: '他の主催者の動画、露出未購入',
         },
         help: {
-          DISTRIBUTION_AT_FLOOR: 'これらの公開中のクイズは、開始1回あたりの配信価格の下限で課金されています：最上位の報酬が小さく下限に届かないためです。下限価格が適切か検討してください。',
+          DISTRIBUTION_AT_FLOOR: 'これらの終了していないクイズは、開始1回あたりの配信価格の下限で課金されています：最上位の報酬が小さく下限に届かないためです。下限価格が適切か検討してください。',
           EXPOSURE_UNPURCHASED: 'これらの公開中のクイズは他の主催者の動画を使っていますが、露出を購入していません：露出課金が有効になる前に提出されたか、当時露出価格がありませんでした。',
         },
       },

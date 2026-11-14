@@ -437,7 +437,7 @@ describe('the operator', () => {
     })
     const empty = renderAt('/qb/operator/billing', '/qb/operator/billing', <OperatorBillingPage />)
     const none = await within(await screen.findByTestId('operator-recon-notes')).findByTestId('operator-recon-notes-none')
-    expect(none).toHaveTextContent('The latest check noted nothing about your Sponsors.')
+    expect(none).toHaveTextContent('No notes about your Sponsors from the daily check.')
     expect(server.runQuery).toHaveBeenCalledWith(TEMPLATE.operatorReconNotes, expect.anything())
     empty.unmount()
     server.reconNotes = [

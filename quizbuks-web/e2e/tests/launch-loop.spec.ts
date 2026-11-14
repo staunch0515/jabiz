@@ -770,14 +770,16 @@ test.describe.serial('the first launch\'s loop', () => {
   test('9. F-M14: after the loop\'s money, the daily check finds no difference', async ({ page, request }) => {
     test.setTimeout(STEP_TIMEOUT_MS)
     // A run checked after everything above (the server reconciles every minute here; asked once more so as not to
-    // wait for it). A difference blocks the month's journal export: the loop must leave none.
-    const since = Date.now()
-    await runJobNow(request, 'qb.reconcile')
+    // wait for it), told by the server's own times: later than the latest run checked before this step. A difference
+    // blocks the month's journal export: the loop must leave none.
     const admin = await adminToken(request)
+    const checked = (rows: Record<string, unknown>[]) => rows.map((row) => Date.parse(String(row.checkedAt)))
+    const before = Math.max(0, ...checked(await query(request, admin, 'qb.admin.recon-runs', {})))
+    await runJobNow(request, 'qb.reconcile')
     let latest: Record<string, unknown> | undefined
     await expect.poll(async () => {
       latest = (await query(request, admin, 'qb.admin.recon-runs', {}))
-        .find((row) => Date.parse(String(row.checkedAt)) >= since)
+        .find((row) => Date.parse(String(row.checkedAt)) > before)
       return latest !== undefined
     }, { message: 'a reconciliation checked after the loop', timeout: 120_000, intervals: [5_000] }).toBe(true)
     expect(latest!.status, `the run's summary: ${String(latest!.summary)}`).toBe('OK')

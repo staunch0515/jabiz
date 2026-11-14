@@ -2,7 +2,6 @@ package com.jabiz.quizbuks.operator;
 
 import com.jabiz.context.RequestContext;
 import com.jabiz.dataset.DatasetDefinition;
-import com.jabiz.dataset.EntryScopeVia;
 import com.jabiz.approval.ApprovalSubject;
 import com.jabiz.dictionary.StaticDictionary;
 import com.jabiz.document.DocumentLayout;
@@ -332,8 +331,7 @@ public class OperatorConfig {
             .targetEntityType(Reconciliation.ITEM_ENTITY_NAME)
             .permissions(QbPermissions.RECONCILE, QbPermissions.SPONSOR_VIEW_WRITE)
             .policy(p -> p.readOnly(true).allowTimeTravel(false))
-            .scope(s -> s.withinEntryScope(QbOperators.SCOPE, "partyId",
-                EntryScopeVia.of(QbOperators.ASSIGNMENT, "userId", "operatorId")))
+            .scope(OperatorScopes.of(Reconciliation.ITEM_ENTITY_NAME))
             .storage(s -> s.driver("r2dbc-postgresql").connectionPoolRef(poolRef)));
     }
 

@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { render, screen, waitFor, within } from '@testing-library/react'
+import { cleanup, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import i18next from 'i18next'
 import type { ReactNode } from 'react'
@@ -235,6 +235,18 @@ describe('FeesPage', () => {
     expect(within(row).getByTestId('fee-invoice-credit-applied')).toHaveTextContent('500')
     // 1,100 less 500 by credit notes and 300 paid.
     expect(within(row).getByTestId('fee-invoice-owed')).toHaveTextContent('300')
+  })
+
+  it('opens on the invoice or the credit note the reconciliation page links, by its number (F-M14b)', async () => {
+    renderAt('/qb/finance/fees?tab=invoices&invoiceNo=QBF-2031-00007', '/qb/finance/fees', <FeesPage />)
+    await screen.findByTestId('fee-invoice-row')
+    const filtersOf = (template: string) => server.runQuery.mock.calls.filter(([id]) => id === template)
+      .at(-1)![1].filters
+    expect(filtersOf(TEMPLATE.feeInvoices)).toContainEqual({ field: 'invoiceNo', op: 'eq', value: 'QBF-2031-00007' })
+    cleanup()
+    renderAt('/qb/finance/fees?tab=creditNotes&creditNoteNo=QBC-2031-00002', '/qb/finance/fees', <FeesPage />)
+    await waitFor(() => expect(filtersOf(TEMPLATE.feeCreditNotes)).toContainEqual({ field: 'creditNoteNo', op: 'eq',
+      value: 'QBC-2031-00002' }))
   })
 
   it('opens an invoice under its row to show what it was paid with (F-M13)', async () => {
