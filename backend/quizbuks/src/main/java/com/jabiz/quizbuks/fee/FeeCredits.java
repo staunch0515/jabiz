@@ -180,7 +180,11 @@ public final class FeeCredits {
             // Written first: the posting names it as its source.
             .step("Save the lot", SaveChanges.now())
             .step("Post the grant", CallProcess.<ProcessContext>when(ctx -> ctx.contains(POST_INPUT),
-                LedgerProcesses.POST, 1, ctx -> ctx.get(POST_INPUT), POSTING)));
+                LedgerProcesses.POST, 1, ctx -> ctx.get(POST_INPUT), POSTING))
+            // Granted credit can pay unpaid invoices (F-M13b): the event is only for speed.
+            .step("Ask for the unpaid invoices to be paid", PublishEvent.<ProcessContext>when(
+                ctx -> ctx.contains(POST_INPUT), FeeAutoPay.FUNDED_EVENT,
+                ctx -> Map.of("sponsorId", grantInput(ctx).sponsorId()))));
     }
 
     static void recordGrant(ProcessContext ctx) {

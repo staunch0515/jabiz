@@ -158,7 +158,11 @@ public final class OperatorTransfers {
                     .step("Save the transfer", SaveChanges.now())
                     .step("Post the transfer", CallProcess.<ProcessContext>of(LedgerProcesses.POST, 1,
                         OperatorTransfers::posting, POSTING))
-                    .compute("Credit the Sponsor's cash account", (metadata, ctx) -> credit(ctx));
+                    .compute("Credit the Sponsor's cash account", (metadata, ctx) -> credit(ctx))
+                    // The transferred cash can pay the Sponsor's unpaid platform invoices (F-M13b).
+                    .step("Ask for the unpaid invoices to be paid", com.jabiz.runtime.process.steps.PublishEvent
+                        .<ProcessContext>of(com.jabiz.quizbuks.fee.FeeAutoPay.FUNDED_EVENT,
+                            ctx -> Map.of("sponsorId", ctx.get(SPONSOR_ID))));
             });
     }
 

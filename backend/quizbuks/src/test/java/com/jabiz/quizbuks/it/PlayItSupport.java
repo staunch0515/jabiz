@@ -394,6 +394,35 @@ abstract class PlayItSupport extends AccountItSupport {
             + "WHERE t.source_entity = 'QbAttempt' AND t.source_id = ? ORDER BY e.line_no", attemptId);
     }
 
+    /** F-M13b: the automatic payment of unpaid invoices switched on (published, four eyes). */
+    void autoPayOn() {
+        Map<String, Object> change = run("CONTROL_CHANGE_PROPOSE", proposer(), body("targetEntity", "SysParam",
+            "values", Map.of("paramKey", QbParams.FEE_AUTO_PAY_ENABLED, "value", "true"), "reason", "F-M13b test"));
+        run("CONTROL_CHANGE_PUBLISH", financeAdmin(), body("changeId", change.get("changeId")));
+    }
+
+    private static int unpaidInvoiceSeq;
+
+    /** F-M13b: an unpaid postpaid invoice of {@code total} (a eleventh of it tax) issued 40 days ago; its id. */
+    String unpaidInvoice(String sponsor, long total) {
+        String id = java.util.UUID.randomUUID().toString();
+        java.time.Instant issued = clock.instant().minus(java.time.Duration.ofDays(40));
+        int n = ++unpaidInvoiceSeq;
+        execute("INSERT INTO qb_fee_invoice (invoice_id, invoice_no, sponsor_id, billing_mode, period, amount, tax, "
+            + "total, paid_amount, status, issued_at, issued_on, due_on) VALUES (?, ?, ?, 'POSTPAID', ?, ?, ?, ?, 0, "
+            + "'OPEN', ?, ?::date, ?::date)", id, "UP-" + n + "-" + id.substring(0, 4), sponsor,
+            (1900 + n / 12) + "-" + String.format("%02d", n % 12 + 1), total - total / 11, total / 11, total,
+            java.sql.Timestamp.from(issued), issued.toString().substring(0, 10),
+            issued.plus(java.time.Duration.ofDays(30)).toString().substring(0, 10));
+        return id;
+    }
+
+    /** F-M13b: the status of an invoice row. */
+    static String invoiceStatus(String invoiceId) {
+        return String.valueOf(query("SELECT status FROM qb_fee_invoice WHERE invoice_id = ?", invoiceId).getFirst()
+            .get("status"));
+    }
+
     /** Sets the controlled commission rate (four eyes). */
     void feeRate(String rate) {
         Map<String, Object> change = run("CONTROL_CHANGE_PROPOSE", proposer(), body("targetEntity", "SysParam",

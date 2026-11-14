@@ -56,8 +56,10 @@ WITH wanted (k, grp, expected, seq) AS (
         ('qb.exposure.unit.max', 'exposure', CAST(NULL AS text), 27),
         ('qb.exposure.min-purchase', 'exposure', CAST(NULL AS text), 28),
         ('qb.exposure.top-up.max', 'exposure', CAST(NULL AS text), 29),
-        ('qb.ai.fee.enabled', 'aifee', 'false', 30),
-        ('qb.ai.site-profile.enabled', 'aifee', 'false', 31))
+        ('qb.fee.auto-pay.max-invoices', 'autopay', CAST(NULL AS text), 30),
+        ('qb.ai.fee.enabled', 'aifee', 'false', 31),
+        ('qb.ai.site-profile.enabled', 'aifee', 'false', 32),
+        ('qb.fee.auto-pay.enabled', 'autopay', 'false', 33))
 SELECT
     CAST(w.k AS varchar(200))        AS paramKey,
     CAST(w.grp AS varchar(30))       AS grp,
