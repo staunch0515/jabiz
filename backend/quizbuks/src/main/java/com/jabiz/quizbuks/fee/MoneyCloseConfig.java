@@ -58,6 +58,11 @@ public class MoneyCloseConfig {
         return MoneyClose.register();
     }
 
+    @Bean
+    ProcessDefinition<MoneyClose.VoidLotInput, MoneyClose.VoidLotOutput, ProcessContext> qbFeeCreditVoidLot() {
+        return MoneyClose.voidLot();
+    }
+
     /** A subscription of its own to the platform's event: retried apart from QB_SPONSOR_ERASED's (plan M1). */
     @Bean
     EventSubscription<MoneyClose.RegisterInput> qbSponsorClosureRegisterSubscription(

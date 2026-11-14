@@ -42,6 +42,7 @@ export const fundSwitchMessages = {
       exposure: 'Exposure fee',
       aifee: 'AI fee',
       autopay: 'Automatic bill payment',
+      erasure: 'Money of deleted accounts',
     },
     names: {
       qb_fee_credit_grant_enabled: 'Granted credit is given when a Sponsor is onboarded',
@@ -69,6 +70,7 @@ export const fundSwitchMessages = {
       qb_audience_billing_enabled: 'Audience rule fee is charged',
       qb_audience_fee_refund_unused_days: 'Unused days are given back when a publication ends early',
       qb_exposure_billing_enabled: 'Exposure fee is charged',
+      qb_erasure_close_enabled: 'A deleted Sponsor\'s platform fee account is wound up',
       qb_exposure_unit_min: 'Lowest price per exposure an operator may set',
       qb_exposure_unit_max: 'Highest price per exposure an operator may set',
       qb_exposure_min_purchase: 'Fewest exposures a publication buys',
@@ -117,6 +119,7 @@ export const fundSwitchMessages = {
       exposure: '曝光费',
       aifee: 'AI 费',
       autopay: '自动付账单',
+      erasure: '已删除账户的钱',
     },
     names: {
       qb_fee_credit_grant_enabled: '发起方入驻时赠送额度',
@@ -144,6 +147,7 @@ export const fundSwitchMessages = {
       qb_audience_billing_enabled: '收取受众规则费',
       qb_audience_fee_refund_unused_days: '发布提前结束时退回未用天数',
       qb_exposure_billing_enabled: '收取曝光费',
+      qb_erasure_close_enabled: '删除账户的发起方的平台费账户自动收尾',
       qb_exposure_unit_min: '运营商可设的每次曝光单价的最小值',
       qb_exposure_unit_max: '运营商可设的每次曝光单价的最大值',
       qb_exposure_min_purchase: '一个发布最少购买的曝光次数',
@@ -192,6 +196,7 @@ export const fundSwitchMessages = {
       exposure: '露出料',
       aifee: 'AI 利用料',
       autopay: '請求書の自動支払い',
+      erasure: '削除されたアカウントのお金',
     },
     names: {
       qb_fee_credit_grant_enabled: '主催者の登録時に付与クレジットを付与',
@@ -219,6 +224,7 @@ export const fundSwitchMessages = {
       qb_audience_billing_enabled: '対象条件の料金を請求',
       qb_audience_fee_refund_unused_days: '公開が早く終了したとき未使用日数を返金',
       qb_exposure_billing_enabled: '露出料を請求',
+      qb_erasure_close_enabled: '削除された主催者のプラットフォーム利用料アカウントを精算',
       qb_exposure_unit_min: '運営パートナーが設定できる1回あたり露出単価の最小値',
       qb_exposure_unit_max: '運営パートナーが設定できる1回あたり露出単価の最大値',
       qb_exposure_min_purchase: '1件の公開が最低限購入する露出回数',

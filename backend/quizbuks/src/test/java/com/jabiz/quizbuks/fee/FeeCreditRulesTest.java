@@ -117,4 +117,22 @@ class FeeCreditRulesTest {
         assertThat(FeeCreditRules.certifiedTopUp(true, true, false, true, basic, null, false, raised))
             .contains(new BigDecimal("14000"));
     }
+
+    /** F-M15 b (§5.3): the wind-up marks lots not voided before and not expired, even with nothing left. */
+    @org.junit.jupiter.api.Test
+    void theWindUpVoidsWhatIsLeftOfLotsNotVoidedNorExpired() {
+        Instant later = NOW.plusSeconds(86_400);
+        org.assertj.core.api.Assertions.assertThat(FeeCreditRules.voidableOnErase(later, null, NOW)).isTrue();
+        // Nothing left is marked too: what comes back to it later is voided on arrival.
+        org.assertj.core.api.Assertions.assertThat(FeeCreditRules.voidedOnErase(java.math.BigDecimal.ZERO))
+            .isEqualByComparingTo("0");
+        org.assertj.core.api.Assertions.assertThat(FeeCreditRules.voidedOnErase(new java.math.BigDecimal("700")))
+            .isEqualByComparingTo("700");
+        // Voided before, expired (the expiry's), or expiring right now: not the wind-up's.
+        org.assertj.core.api.Assertions.assertThat(FeeCreditRules.voidableOnErase(later, NOW, NOW)).isFalse();
+        org.assertj.core.api.Assertions.assertThat(FeeCreditRules.voidableOnErase(NOW.minusSeconds(1), null, NOW))
+            .isFalse();
+        org.assertj.core.api.Assertions.assertThat(FeeCreditRules.voidableOnErase(NOW, null, NOW)).isFalse();
+        org.assertj.core.api.Assertions.assertThat(FeeCreditRules.voidableOnErase(null, null, NOW)).isFalse();
+    }
 }

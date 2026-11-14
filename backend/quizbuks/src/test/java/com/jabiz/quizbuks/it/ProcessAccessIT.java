@@ -54,6 +54,7 @@ class ProcessAccessIT extends QbItSupport {
         Map.entry("QB_PUBLICATION_ERASED_END", ProcessAccess.SUB_PROCESS_ONLY),
         // F-M15 b: the wind-up of an erased sponsor's money.
         Map.entry("QB_SPONSOR_CLOSURE_REGISTER", ProcessAccess.INTERNAL),
+        Map.entry("QB_FEE_CREDIT_VOID_LOT", ProcessAccess.SUB_PROCESS_ONLY),
         Map.entry("QB_PUBLICATION_COMPLETION_MOVE", ProcessAccess.SUB_PROCESS_ONLY),
         Map.entry("QB_PUBLICATION_ADVANCE", ProcessAccess.INTERNAL),
         Map.entry("QB_QUIZ_RELEASE_FILES", ProcessAccess.SUB_PROCESS_ONLY),

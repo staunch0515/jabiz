@@ -101,6 +101,11 @@ public final class FirstLaunchSwitches {
         // charge the AI credit: it stays off at the launch and its row turns ACTIVE with F-M9's pull request.
         waiting(QbParams.SITE_PROFILE_ENABLED, "aifee", true, "F-M9"),
         waiting("qb.fee.auto-pay.enabled", "autopay", true, "F-M13"),
+        // F-M15 b: an erased sponsor's platform fee account is wound up at the launch (declared off: the tests rely on
+        // it); published after the automatic payment's switch (launch checklist).
+        active(QbParams.ERASURE_CLOSE_ENABLED, "erasure", true,
+            "an erased sponsor's platform fee account is invoiced, paid as far as it goes and its granted credit voided "
+                + "at the launch (declared off: the tests rely on it)"),
         manual(QbParams.FEE_CREDIT_MANUAL_MAX, "grant"),
         manual(QbParams.TREE_GRANT_MAX_PER_NODE, "grant"));
 

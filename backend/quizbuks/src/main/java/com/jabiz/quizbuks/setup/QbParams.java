@@ -633,6 +633,15 @@ public final class QbParams {
     public static final String REWARD_KUDOS_ENABLED = "qb.reward.kudos.enabled";
     /** F-F10a: the Kudos reward switch (controlled, the last of {@link #CONTROLLED}). */
     public static final List<String> REWARD_KUDOS = List.of(REWARD_KUDOS_ENABLED);
+    /**
+     * F-M15 b (docs/quizbuks/plans/impl/F-M15.md §7): whether an erased sponsor's platform fee account is wound up
+     * (invoiced, paid as far as it goes, the granted credit voided; off: the wind-up only records SWITCH_OFF and the
+     * daily job does it once turned on), controlled; after how many days a wind-up not done gives finance a task (only
+     * says when to remind: not controlled).
+     */
+    public static final String ERASURE_CLOSE_ENABLED = "qb.erasure.close.enabled";
+    public static final String ERASURE_CLOSE_ALERT_DAYS = "qb.erasure.close.alert-days";
+    public static final List<String> ERASURE_CLOSE_CONTROLLED = List.of(ERASURE_CLOSE_ENABLED);
 
     /**
      * The parameters that change only through controlled changes (proposed by one administrator, published by
@@ -645,7 +654,8 @@ public final class QbParams {
         OPERATOR_PLANS, OPERATOR_WITHDRAWAL, List.of(TOPUP_BANK_MIN, TOPUP_BANK_MAX), BANK_RECEIVING, WITHDRAWAL_BANK, AUDIENCE_BILLING_PARAMS,
         CASH_ACCOUNT_PARAMS, FEE_PARAMS,
         List.of(ENTRY_FEE_ENABLED), List.of(USAGE_FREE_BYTES), List.of(VIDEO_MAINLAND_SITES), HELP_CONTROLLED, FEE_CREDIT_PARAMS,
-        SITE_PROFILE_CONTROLLED, DISTRIBUTION_CONTROLLED, EXPOSURE_CONTROLLED, REWARD_KUDOS, RECON_THRESHOLDS,
+        SITE_PROFILE_CONTROLLED, DISTRIBUTION_CONTROLLED, EXPOSURE_CONTROLLED, ERASURE_CLOSE_CONTROLLED, REWARD_KUDOS,
+        RECON_THRESHOLDS,
         HELP_USER_LIMITS,
         OPERATOR_SHARE, OPERATOR_SETTLEMENT)
         .flatMap(List::stream).toList();
@@ -1072,6 +1082,12 @@ public final class QbParams {
                 + "what it can be shared into)"),
         // F-F10a: the Kudos reward switch (controlled, after the F-C7, F-M6 and F-M8 ones; the F-M14 thresholds and the help's
         // daily limit come after it, in the order of CONTROLLED, which QB_SETUP's proposals follow).
+        // F-M15 b: the wind-up of an erased sponsor's money (controlled, before the Kudos reward switch).
+        new Param(ERASURE_CLOSE_ENABLED, BOOL, false,
+            "Whether an erased sponsor's platform fee account is wound up: invoiced, paid as far as it goes, the granted "
+                + "credit voided (off: only recorded; the daily job winds up once it is turned on)"),
+        new Param(ERASURE_CLOSE_ALERT_DAYS, Map.of("type", "numeric", "precision", 2, "scale", 0), "3",
+            "After how many days a wind-up of an erased sponsor's money not done gives finance a task (1 to 60)"),
         new Param(REWARD_KUDOS_ENABLED, BOOL, true,
             "Whether a publication may offer the reward method PLATFORM (Kudos paid by QuizBuks); off at the first "
                 + "launch (F-F10a)"),
