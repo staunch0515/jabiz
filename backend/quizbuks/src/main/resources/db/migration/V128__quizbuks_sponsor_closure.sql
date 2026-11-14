@@ -21,5 +21,6 @@ CREATE INDEX qb_sponsor_closure_status_idx ON qb_sponsor_closure (status, reason
 
 -- §5.2 step 0 (Fable M1): a manual credit or a platform fee request still under review when its sponsor was erased is
 -- withdrawn by the wind-up (the erasure overwrote the reason its approval was bound to): why it ended, as a code.
+-- Both are ordinary tables (V7, V68; not append-only): a nullable column, no backfill.
 ALTER TABLE qb_topup ADD COLUMN ended_code varchar(20) CHECK (ended_code IN ('ERASED'));
 ALTER TABLE qb_fee_request ADD COLUMN ended_code varchar(20) CHECK (ended_code IN ('ERASED'));
