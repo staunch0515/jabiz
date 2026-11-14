@@ -472,7 +472,7 @@
 
 ### 3.8 AI 费与官网生成
 
-`qb.ai.fee.enabled` 在首次上线登记表里仍是"等待"（F-M9），F-M9 合并之前首次上线必须关着（启动检查 `FirstLaunchSwitchesCheck`）；官网生成 `qb.ai.site-profile.enabled` 需要收费才能用，同样等 F-M9。前提：F-M9 已合并；3.1 已完成（F-M12 已合并）或财务已书面确认分成比例；F-M15c 已合并；P95 预留已发布；3.5 的 `qb.ai.enabled` 已开。不要用关这个开关来止损（会让 AI 对所有人免费），事故时照 §7.8。
+`qb.ai.fee.enabled` 在首次上线登记表里仍是"等待"（F-M9），F-M9 合并之前首次上线必须关着（启动检查 `FirstLaunchSwitchesCheck`）；官网生成 `qb.ai.site-profile.enabled` 需要收费才能用，同样等 F-M9。前提：F-M9 已合并；3.1 已完成（F-M12 已合并）或财务已书面确认分成比例；F-M15c 已合并；P95 预留已发布（上面一项的①②）；3.5 的 `qb.ai.enabled` 已开。不要用关这个开关来止损（会让 AI 对所有人免费），事故时照 §7.8。
 
 - [ ] **AI 费的分成**（F-M9、F-M12）：打开 `qb.ai.fee.enabled`（AI 收费开关）之前，F-M12 已完成（AI 费中属于成本的部分不进运营商分成基数），或财务已书面确认运营商对 AI 费的分成比例（AI 费是成本的 150%，其中 100% 是平台付给 AI 提供方的成本，整笔分给运营商，分成超过费用的三分之一时平台就亏；F-M9 先把 AI 种类排除在分成基数之外，所以这一项没有完成时运营商分不到 AI 费）
       谁：开发（F-M12 已合并）或财务（书面确认）；在哪里：进度表 F-M12 行；受控参数 `qb.operator.share.kinds`（3.1）；怎么确认：F-M12 为已合并，或财务的确认写在"依据"
@@ -480,8 +480,8 @@
 - [ ] **AI 额度与注销收尾**（F-M15 b，复核 M2）：有 AI 额度（用途 `AI` 的预付款）的发起方注销后，收尾停在 `DEPOSIT_OPEN`，直到 F-M15c 关闭那笔预付款，属预期；F-M15c 合并之前不打开 `qb.ai.fee.enabled`（首次上线本来就关着）
       谁：开发（F-M15c 已合并）；在哪里：进度表 F-M15 行；§7.59"慢了"；怎么确认：F-M15c 为已合并之后才打开
       确认人： ／ 日期： ／ 依据：
-- [ ] **官网生成的 AI 费预留**（F-M9，#692 复核）：打开 AI 收费开关（`qb.ai.fee.enabled`）之前，用 staging 或生产上真实 `SITE_PROFILE` 作业的用量（`operations.md` §7.56 的 SQL）定出 P95，经受控变更发布 `qb.ai.fee.site-profile.calls` / `.pages` / `.output-tokens`。未设置时预留按作业自身的上限（最坏情况），请求会因为预留过大而常被拒；作业超出预留的部分由平台承担，每日核对以提示 `AI_RESERVATION_SHORT` 列出
-      谁：能连库的人（运维）执行 SQL 定数，一位管理员提出、另一位发布；在哪里：§7.56 的 SQL；受控变更；怎么确认：三个参数为 P95 的结果（SQL 输出写在"依据"）并已发布
+- [ ] **AI 收费与官网生成的打开顺序**（F-M9，#692 复核、#702 审查 M3）：首次上线时两者都关。① 在 **staging** 打开 AI 收费（`qb.ai.fee.enabled`）与官网生成（`qb.ai.site-profile.enabled`），用测试发起方购买 AI 额度，跑若干真实网站的 `SITE_PROFILE` 作业，用 `operations.md` §7.56 的 SQL 取每次尝试的调用次数、页数与输出的 P95（数据来源：staging 上这些作业的 `qb_ai_job`）；② 在**正式环境**先经受控变更发布 `qb.ai.fee.site-profile.calls` / `.pages` / `.output-tokens`（取上一步的 P95），并确认加价 `qb.ai.fee.markup`、汇率 `qb.ai.fee.usd-jpy`；③ 再发布 `qb.ai.fee.enabled = true`；④ 最后发布 `qb.ai.site-profile.enabled = true`。三个参数未设时预留按作业自身的上限（最坏情况），请求会因为预留过大而常被拒（AI 收费开着时启动检查警告）；作业超出预留的部分由平台承担，每日核对以提示 `AI_RESERVATION_SHORT` 列出
+      谁：能连库的人（运维）执行 SQL 定数，一位管理员提出、另一位发布；在哪里：staging 与正式环境；§7.56 的 SQL；受控变更；怎么确认：三个参数为 P95 的结果（SQL 输出写在"依据"）并已发布，之后两个开关按③④的顺序发布，财务页卡片中 `aifee` 两行"一致"，启动检查没有警告
       确认人： ／ 日期： ／ 依据：
 - [ ] **官网生成的上线前实测**（新增：§7.46"上线前必须做"）：`qb.ai.site-profile.enabled` 保持关闭，直到（1）在 staging 用一个真实网站测一次耗时（平台对一次外部调用封顶 2 分钟、没有流式；超过时需要平台支持流式或降低页数、输出上限，配置 `quizbuks.ai.site-profile.request-timeout`）；（2）核对输入 Token 是否按轮累计、预留是否够，不够就提高预留。结果记在 `plans/impl/F-C7.md`「待核实」
       谁：开发或运维；在哪里：测试系统；`plans/impl/F-C7.md`；怎么确认：「待核实」中两项都有结果；之后两个开关（`qb.ai.fee.enabled`、`qb.ai.site-profile.enabled`）一起发布，卡片中 `aifee` 两行"一致"
