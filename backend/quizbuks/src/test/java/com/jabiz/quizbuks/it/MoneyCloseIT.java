@@ -24,9 +24,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 /**
  * F-M15 b (docs/quizbuks/plans/impl/F-M15.md §5.2, §5.3, §5.6, §10 MoneyCloseIT): the wind-up of an erased sponsor's
- * platform fee account. Paying the invoices is F-M13's automatic payment (#696): until it is merged, a run with fees
- * owed and money to pay them waits ({@code TO_PAY}), which this class asserts as the order the plan wants (H2: the
- * granted credit is voided only after the last payment).
+ * platform fee account. The invoices are paid through F-M13's automatic payment item, the earliest first, the granted
+ * credit before the cash; the granted credit left is voided only after the last payment (H2). E1–E3 are the plan's §2.
  */
 class MoneyCloseIT extends CreditNoteItSupport {
 
@@ -153,11 +152,19 @@ class MoneyCloseIT extends CreditNoteItSupport {
             .containsEntry("reason_code", QbSponsorClosures.FEE_OWED);
         assertThat(due()).contains(sponsor);
         param(QbParams.ERASURE_CLOSE_ENABLED, "true");
-        // Until F-M13's payment: something to pay with, so it waits to pay, still FEE_OWED and still taken.
-        assertThat(close(sponsor).outcome()).isEqualTo(MoneyClose.TO_PAY);
+        // The cash pays what it can of the invoice; still owed and nothing left to pay with: done again, FEE_OWED.
+        MoneyClose.CloseOutput paid = close(sponsor);
+        assertThat(paid.outcome()).isEqualTo(MoneyClose.CLOSED);
+        assertThat(paid.invoicesPaid()).isEqualTo(1);
+        assertThat(paid.owed()).isPositive();
+        assertThat(query("SELECT paid_amount, status FROM qb_fee_invoice WHERE sponsor_id = ?", sponsor))
+            .singleElement().satisfies(row -> {
+                assertThat(new BigDecimal(String.valueOf(row.get("paid_amount")))).isEqualByComparingTo("200");
+                assertThat(row).containsEntry("status", QbFees.PARTIAL);
+            });
         assertThat(closure(sponsor)).containsEntry("status", QbSponsorClosures.CLOSED)
             .containsEntry("reason_code", QbSponsorClosures.FEE_OWED);
-        assertThat(due()).contains(sponsor);
+        assertThat(due()).doesNotContain(sponsor);
     }
 
     @Test
@@ -206,7 +213,7 @@ class MoneyCloseIT extends CreditNoteItSupport {
     }
 
     @Test
-    void feesOwedWithMoneyToPayThemWaitAndNothingIsVoidedBeforeThePayment() {
+    void theInvoiceIsPaidFromTheGrantedCreditBeforeWhatIsLeftIsVoided() {
         String sponsor = newSponsor(unique("s-fm15b-topay"));
         billing(sponsor, "POSTPAID", 50_000);
         manualFee(sponsor, 300);
@@ -215,10 +222,169 @@ class MoneyCloseIT extends CreditNoteItSupport {
 
         MoneyClose.CloseOutput run = close(sponsor);
         assertThat(run.invoicesIssued()).isEqualTo(1);
-        assertThat(run.outcome()).isEqualTo(MoneyClose.TO_PAY);
-        assertThat(closure(sponsor)).containsEntry("status", QbSponsorClosures.WAITING);
-        assertThat(lotOf(lot)).containsEntry("voided_at", null);
-        assertThat(remainingOf(lot)).isEqualByComparingTo("1000");
+        assertThat(run.invoicesPaid()).isEqualTo(1);
+        assertThat(run.outcome()).isEqualTo(MoneyClose.CLOSED);
+        assertThat(run.owed()).isZero();
+        Map<String, Object> invoice = query("SELECT * FROM qb_fee_invoice WHERE sponsor_id = ?", sponsor).getFirst();
+        assertThat(invoice).containsEntry("status", QbFees.PAID);
+        BigDecimal total = new BigDecimal(String.valueOf(invoice.get("total")));
+        // Paid first, then the rest voided: the lot's void is what was left after the payment.
+        assertThat(new BigDecimal(String.valueOf(lotOf(lot).get("voided_amount"))))
+            .isEqualByComparingTo(new BigDecimal("1000").subtract(total));
+        assertThat(remainingOf(lot)).isZero();
+        assertThat(closure(sponsor)).containsEntry("status", QbSponsorClosures.CLOSED).containsEntry("reason_code", null);
+        assertBooksBalance();
+        assertThat(differences(sponsor)).isEmpty();
+    }
+
+    @Test
+    void e1FeesOwedBeyondTheAccountArePaidEarliestFirstAsFarAsItGoes() {
+        // Plan §2 E1: grants A 1,500 and B 2,000, cash 3,000 then 1,000 (7,500); invoices of two past months and the
+        // current month's fees not invoiced yet; the three owe more than the account. The earliest are paid in full,
+        // the last in part; the account is empty; done with fees owed; the granted credit (nothing left) marked.
+        String sponsor = newSponsor(unique("s-fm15b-e1"));
+        billing(sponsor, "POSTPAID", 50_000);
+        cash(sponsor, 3_000);
+        cash(sponsor, 1_000);
+        manualFee(sponsor, 3_600);
+        clock.set(clock.instant().plus(Duration.ofDays(32)));
+        invoicePeriod(sponsor, clock.instant().minus(Duration.ofDays(32)));
+        manualFee(sponsor, 2_700);
+        clock.set(clock.instant().plus(Duration.ofDays(32)));
+        invoicePeriod(sponsor, clock.instant().minus(Duration.ofDays(32)));
+        manualFee(sponsor, 2_000);
+        String a = grant(sponsor, 1_500, clock.instant().plus(Duration.ofDays(30)));
+        String b = grant(sponsor, 2_000, clock.instant().plus(Duration.ofDays(60)));
+        erase(sponsor);
+
+        MoneyClose.CloseOutput run = close(sponsor);
+        assertThat(run.invoicesIssued()).isEqualTo(1);
+        assertThat(run.invoicesPaid()).isEqualTo(3);
+        assertThat(run.outcome()).isEqualTo(MoneyClose.CLOSED);
+        List<Map<String, Object>> invoices = query("SELECT * FROM qb_fee_invoice WHERE sponsor_id = ? ORDER BY period",
+            sponsor);
+        assertThat(invoices).extracting(row -> row.get("status"))
+            .containsExactly(QbFees.PAID, QbFees.PAID, QbFees.PARTIAL);
+        BigDecimal first = money(invoices.get(0).get("total"));
+        BigDecimal second = money(invoices.get(1).get("total"));
+        BigDecimal third = money(invoices.get(2).get("total"));
+        BigDecimal lastPaid = new BigDecimal("7500").subtract(first).subtract(second);
+        assertThat(money(invoices.get(2).get("paid_amount"))).isEqualByComparingTo(lastPaid);
+        assertThat(run.owed()).isEqualByComparingTo(third.subtract(lastPaid));
+        // The account is empty: both lots and the cash used up; the lots marked so what comes back is voided at once.
+        assertThat(remainingOf(a)).isZero();
+        assertThat(remainingOf(b)).isZero();
+        assertThat(lotOf(a).get("voided_at")).isNotNull();
+        assertThat(money(lotOf(b).get("voided_amount"))).isZero();
+        assertThat(balance(sponsor, "CASH")).isZero();
+        assertThat(closure(sponsor)).containsEntry("status", QbSponsorClosures.CLOSED)
+            .containsEntry("reason_code", QbSponsorClosures.FEE_OWED);
+        assertBooksBalance();
+        assertThat(differences(sponsor)).isEmpty();
+        // A replay pays nothing more.
+        MoneyClose.CloseOutput again = close(sponsor);
+        assertThat(again.invoicesPaid()).isZero();
+        assertThat(again.outcome()).isEqualTo(MoneyClose.CLOSED);
+    }
+
+    @Test
+    void e2TheGrantedCreditLeftAfterThePaymentIsVoidedAndTheCashStays() {
+        // Plan §2 E2: grants A 1,500 + B 3,500, one invoice, cash 4,000: paid A then B; B's rest voided; the cash stays.
+        String sponsor = newSponsor(unique("s-fm15b-e2"));
+        billing(sponsor, "POSTPAID", 50_000);
+        cash(sponsor, 4_000);
+        manualFee(sponsor, 1_800);
+        String a = grant(sponsor, 1_500, clock.instant().plus(Duration.ofDays(30)));
+        String b = grant(sponsor, 3_500, clock.instant().plus(Duration.ofDays(60)));
+        erase(sponsor);
+
+        MoneyClose.CloseOutput run = close(sponsor);
+        assertThat(run.outcome()).isEqualTo(MoneyClose.CLOSED);
+        assertThat(run.invoicesPaid()).isEqualTo(1);
+        BigDecimal total = money(query("SELECT total FROM qb_fee_invoice WHERE sponsor_id = ?", sponsor).getFirst()
+            .get("total"));
+        assertThat(money(lotOf(a).get("voided_amount"))).isZero();
+        assertThat(money(lotOf(b).get("voided_amount")))
+            .isEqualByComparingTo(new BigDecimal("5000").subtract(total));
+        assertThat(balance(sponsor, "CASH")).isEqualByComparingTo("4000");
+        assertThat(balance(sponsor, "FEE_CREDIT")).isZero();
+        assertThat(closure(sponsor)).containsEntry("reason_code", null);
+        assertBooksBalance();
+        assertThat(differences(sponsor)).isEmpty();
+    }
+
+    @Test
+    void e3TheGrantedCreditFrozenInAPrepaymentPaysTheInvoiceBeforeAnythingIsVoided() {
+        // Plan §2 E3 (the prepayment's part; the AI credit's is F-M15 c): lot Y partly frozen in a prepayment, lot X in
+        // the account, an old invoice. The first run waits for the deposit; Y is not voided then; after the release Y
+        // pays first (it expires first), X the rest, and only X's remainder is voided.
+        autoApprove(true);
+        String sponsor = pricedSponsor("fm15b-e3");
+        String y = grant(sponsor, 1_000, clock.instant().plus(Duration.ofDays(30)));
+        String publicationId = audienceDraft(sponsor, "FM15b E3");
+        submit(sponsorToken(sponsor), publicationId);
+        assertThat(remainingOf(y)).isLessThan(new BigDecimal("1000"));
+        String x = grant(sponsor, 500, clock.instant().plus(Duration.ofDays(90)));
+        billing(sponsor, "POSTPAID", 50_000);
+        manualFee(sponsor, 1_000);
+        erase(sponsor);
+
+        assertThat(close(sponsor).outcome()).isEqualTo(MoneyClose.WAITING_DEPOSITS);
+        assertThat(lotOf(y)).containsEntry("voided_at", null);
+        assertThat(lotOf(x)).containsEntry("voided_at", null);
+        if (!"ENDED".equals(status(publicationId))) {
+            run("QB_PUBLICATION_ADMIN_END", com.jabiz.runtime.test.TestTokens.bearer(tokens, "fm15b-content",
+                com.jabiz.quizbuks.QbPermissions.ADMIN_CONTENT_WRITE), Map.of("publicationId", publicationId,
+                "reason", "F-M15 b test"));
+        }
+        systemRun(com.jabiz.quizbuks.fee.Prepayments.RELEASE_ITEM, Map.of("publicationId", publicationId,
+            "sponsorId", sponsor, "purpose", "AUDIENCE"));
+        BigDecimal yBack = remainingOf(y);
+
+        MoneyClose.CloseOutput run = close(sponsor);
+        assertThat(run.outcome()).isEqualTo(MoneyClose.CLOSED);
+        BigDecimal total = money(query("SELECT total FROM qb_fee_invoice WHERE sponsor_id = ?", sponsor).getFirst()
+            .get("total"));
+        assertThat(total).isGreaterThan(yBack);
+        // Y used up by the invoice (nothing of it voided), X paid the rest and only its remainder is voided.
+        assertThat(remainingOf(y)).isZero();
+        assertThat(money(lotOf(y).get("voided_amount"))).isZero();
+        assertThat(money(lotOf(x).get("voided_amount")))
+            .isEqualByComparingTo(new BigDecimal("500").subtract(total.subtract(yBack)));
+        assertThat(query("SELECT status FROM qb_fee_invoice WHERE sponsor_id = ?", sponsor).getFirst())
+            .containsEntry("status", QbFees.PAID);
+        assertBooksBalance();
+        assertThat(differences(sponsor)).isEmpty();
+    }
+
+    @Test
+    void moreInvoicesThanARunPaysWaitForTheNextRun() {
+        String sponsor = newSponsor(unique("s-fm15b-max"));
+        billing(sponsor, "POSTPAID", 50_000);
+        cash(sponsor, 5_000);
+        manualFee(sponsor, 500);
+        clock.set(clock.instant().plus(Duration.ofDays(32)));
+        invoicePeriod(sponsor, clock.instant().minus(Duration.ofDays(32)));
+        manualFee(sponsor, 500);
+        clock.set(clock.instant().plus(Duration.ofDays(32)));
+        invoicePeriod(sponsor, clock.instant().minus(Duration.ofDays(32)));
+        manualFee(sponsor, 500);
+        erase(sponsor);
+        run("PARAM_SET", admin(), body("key", QbParams.FEE_AUTO_PAY_MAX_INVOICES, "value", "2"));
+        try {
+            MoneyClose.CloseOutput first = close(sponsor);
+            assertThat(first.invoicesPaid()).isEqualTo(2);
+            assertThat(first.outcome()).isEqualTo(MoneyClose.TO_PAY);
+            assertThat(closure(sponsor)).containsEntry("status", QbSponsorClosures.WAITING);
+            assertThat(due()).contains(sponsor);
+            MoneyClose.CloseOutput second = close(sponsor);
+            assertThat(second.invoicesPaid()).isEqualTo(1);
+            assertThat(second.outcome()).isEqualTo(MoneyClose.CLOSED);
+            assertThat(query("SELECT status FROM qb_fee_invoice WHERE sponsor_id = ?", sponsor))
+                .extracting(row -> row.get("status")).containsOnly(QbFees.PAID).hasSize(3);
+        } finally {
+            run("PARAM_SET", admin(), body("key", QbParams.FEE_AUTO_PAY_MAX_INVOICES, "value", "20"));
+        }
     }
 
     @Test
@@ -381,6 +547,16 @@ class MoneyCloseIT extends CreditNoteItSupport {
         assertThat(query("SELECT status, reminders_sent FROM qb_fee_invoice WHERE invoice_id = ?", invoiceId)
             .getFirst()).containsEntry("status", QbFees.OPEN);
         assertThat(openTasks(QbFees.overdueTaskSource(invoiceId))).isEmpty();
+    }
+
+    /** The postpaid invoice of the month {@code in} falls in, as the monthly job's item issues it. */
+    private void invoicePeriod(String sponsor, java.time.Instant in) {
+        systemRun(com.jabiz.quizbuks.fee.FeeProcesses.INVOICE_ITEM, body("sponsorId", sponsor, "period",
+            com.jabiz.quizbuks.fee.FeeRules.period(in, ZoneId.of("Asia/Tokyo"))));
+    }
+
+    private static BigDecimal money(Object value) {
+        return new BigDecimal(String.valueOf(value));
     }
 
     /** Finance's list of wind-ups, filtered as the page does, at the clock's time. */

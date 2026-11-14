@@ -104,6 +104,8 @@ public final class MoneyClose {
     static final String ROW = "row";
     static final String ALERT = "alert";
     static final String REGISTERED_CLOSURE = "registeredClosure";
+    static final String TO_PAY_INVOICES = "toPayInvoices";
+    static final String PAID = "paid";
 
     /** What one run of the wind-up did. */
     public static final String NONE = "NONE";
@@ -152,11 +154,12 @@ public final class MoneyClose {
 
     /**
      * @param outcome {@code NONE} (no closure, or nothing to do), {@code SWITCH_OFF}, {@code DEPOSIT_OPEN},
-     *                {@code TO_PAY} or {@code CLOSED}
+     *                {@code TO_PAY}, {@code MORE} or {@code CLOSED}
+     * @param invoicesPaid the invoices this run paid something of
      * @param owed    what the unpaid invoices still owe after the run
      */
-    public record CloseOutput(String sponsorId, String outcome, int invoicesIssued, int lotsVoided, int withdrawn,
-        BigDecimal owed) {}
+    public record CloseOutput(String sponsorId, String outcome, int invoicesIssued, int invoicesPaid, int lotsVoided,
+        int withdrawn, BigDecimal owed) {}
 
     /** @param kind {@value #TOPUP} or {@value #REQUEST}; @param id its record */
     public record WithdrawInput(@NotBlank @Size(max = 10) String kind, @NotBlank @Size(max = 36) String id) {}
@@ -246,8 +249,9 @@ public final class MoneyClose {
      *   <li>the switch {@code qb.erasure.close.enabled} off: only {@code SWITCH_OFF} is recorded;
      *   <li>a prepayment still held: {@code DEPOSIT_OPEN}, nothing else (it is released a day after its end);
      *   <li>every month with postpaid fees not invoiced yet is invoiced (the month's own item, re-entering the lock);
-     *   <li>the unpaid invoices are paid as far as the account goes, earliest first (F-M13's automatic payment, after
-     *       #696; until then a run with something to pay records {@code TO_PAY});
+     *   <li>the unpaid invoices are paid as far as the account goes, earliest first, through F-M13's
+     *       {@value FeeAutoPay#AUTO_PAY_ITEM} (at most {@code qb.fee.auto-pay.max-invoices} a run; fees still owed while
+     *       the account can pay record {@code TO_PAY} and the next run goes on);
      *   <li>last, what is left of every lot of granted credit not voided and not expired is voided
      *       ({@value #VOID_LOT}), and the closure is {@code CLOSED} ({@code FEE_OWED} when fees are still owed).
      * </ol>
@@ -263,7 +267,8 @@ public final class MoneyClose {
             .contextFactory(FeeProcesses::context)
             .outputMapper(MoneyClose::closeOutput)
             .step("Load the switch and the alert days", LoadParams.<ProcessContext>optional(ProcessContext::opTime,
-                PARAMS, QbParams.ERASURE_CLOSE_ENABLED, QbParams.ERASURE_CLOSE_ALERT_DAYS))
+                PARAMS, QbParams.ERASURE_CLOSE_ENABLED, QbParams.ERASURE_CLOSE_ALERT_DAYS,
+                QbParams.FEE_AUTO_PAY_MAX_INVOICES))
             // Step 0, whatever the switch: what is under review is withdrawn before anything else (its approval's lock
             // comes before the wallet's).
             .step("Read what is under review", QueryEntities.<ProcessContext>all(
@@ -294,7 +299,13 @@ public final class MoneyClose {
                 UNINVOICED_TEMPLATE, ctx -> Map.of("sponsorId", sponsorId(ctx)), UNINVOICED))
             .step("Invoice them", CallProcess.forEach(FeeProcesses.INVOICE_ITEM, 1, MoneyClose::invoiceInputs,
                 ISSUED))
-            // Step 7 (F-M13's automatic payment, after #696) goes here.
+            // Step 7: F-M13's automatic payment, one invoice an item under the wallet lock this run holds, the
+            // earliest first, at most qb.fee.auto-pay.max-invoices a run (the rest next run: TO_PAY). It is the
+            // wind-up's own switch that decides, not qb.fee.auto-pay.enabled (plan §5.2 step 7).
+            .step("Read the invoices to pay", QueryEntities.<ProcessContext>all(
+                QueryEntities.query(QbFees.defaultDataset(QbFees.INVOICE), ctx -> goingOn(ctx)
+                    ? CreditNotes.unpaid(sponsorId(ctx)) : nothing("invoiceId"), TO_PAY_INVOICES)))
+            .step("Pay them", CallProcess.forEach(FeeAutoPay.AUTO_PAY_ITEM, 1, MoneyClose::payInputs, PAID))
             .step("Read the account and the invoices again", QueryEntities.<ProcessContext>all(
                 QueryEntities.query(QbFees.defaultDataset(QbFees.INVOICE), ctx -> goingOn(ctx)
                     ? CreditNotes.unpaid(sponsorId(ctx)) : nothing("invoiceId"), UNPAID),
@@ -369,6 +380,15 @@ public final class MoneyClose {
             .map(period -> new FeeProcesses.InvoiceInput(sponsorId(ctx), period)).toList();
     }
 
+    /** The invoices to pay this run: those owing, the earliest issued first, at most the automatic payment's maximum. */
+    static List<FeeAutoPay.ItemInput> payInputs(ProcessContext ctx) {
+        if (!goingOn(ctx)) {
+            return List.of();
+        }
+        return FeeAutoPay.choose(FeeGate.list(ctx, TO_PAY_INVOICES), FeeAutoPay.max(ctx.get(PARAMS, ParamValues.class)))
+            .invoices().stream().map(invoice -> new FeeAutoPay.ItemInput(String.valueOf(invoice.id()))).toList();
+    }
+
     /** What the invoices still owe after the payments (each as {@link QbFees#owed}). */
     static BigDecimal owed(ProcessContext ctx) {
         return FeeGate.list(ctx, UNPAID).stream().map(QbFees::owed).reduce(BigDecimal.ZERO, BigDecimal::add);
@@ -440,11 +460,13 @@ public final class MoneyClose {
     @SuppressWarnings("unchecked")
     static CloseOutput closeOutput(ProcessContext ctx) {
         int issued = ctx.get(ISSUED) instanceof List<?> list ? list.size() : 0;
+        int paid = ctx.get(PAID) instanceof List<?> list
+            ? (int) ((List<Object>) list).stream().filter(o -> ((FeeAutoPay.ItemPaid) o).paid().signum() > 0).count() : 0;
         int voided = ctx.get(LOTS_VOIDED) instanceof List<?> list
             ? (int) ((List<Object>) list).stream().filter(o -> ((VoidLotOutput) o).marked()).count() : 0;
         int withdrawn = ctx.get(WITHDRAWN) instanceof List<?> list
             ? (int) ((List<Object>) list).stream().filter(o -> ((WithdrawOutput) o).withdrawn()).count() : 0;
-        return new CloseOutput(sponsorId(ctx), (String) ctx.get(OUTCOME), issued, voided, withdrawn,
+        return new CloseOutput(sponsorId(ctx), (String) ctx.get(OUTCOME), issued, paid, voided, withdrawn,
             goingOn(ctx) ? owed(ctx) : BigDecimal.ZERO);
     }
 
