@@ -43,6 +43,11 @@ class MoneyCloseStatementBudgetIT extends MoneyCloseItSupport {
     static final int ONE_INVOICE = 20;
     /** Three issued invoices paid from cash: one payment item each (about eight statements an invoice). */
     static final int THREE_INVOICES = 37;
+    /**
+     * One issued invoice and an empty account (re-review L1): as a deposit, and the months not invoiced, the account and
+     * the invoices in one read; no payment item, no second read (11 before L1).
+     */
+    static final int NOTHING_TO_PAY = 10;
     /** The current month not invoiced yet: invoiced by its item, then paid. */
     static final int UNINVOICED = 28;
 
@@ -80,6 +85,7 @@ class MoneyCloseStatementBudgetIT extends MoneyCloseItSupport {
         // A deposit to wait for.
         List<String> deposit = deposit("warm");
         deposit = deposit("measured");
+        List<String> depositLocks = SqlStatementLog.locks();
 
         // One, three issued invoices; a month not invoiced.
         countedClose(owing(1, false));
@@ -88,6 +94,10 @@ class MoneyCloseStatementBudgetIT extends MoneyCloseItSupport {
         List<String> three = countedClose(owing(3, false));
         countedClose(owing(0, true));
         List<String> uninvoiced = countedClose(owing(0, true));
+        List<String> uninvoicedLocks = SqlStatementLog.locks();
+        // Re-review L1: an invoice and nothing to pay it with: no payment item, no second read.
+        countedClose(broke());
+        List<String> nothingToPay = countedClose(broke());
 
         System.out.println("[statement-budget] wind-up, nothing: " + nothing.size() + "\n" + listing(nothing));
         System.out.println("[statement-budget] wind-up, a deposit: " + deposit.size() + "\n" + listing(deposit));
@@ -100,6 +110,14 @@ class MoneyCloseStatementBudgetIT extends MoneyCloseItSupport {
         assertThat(one).as("one:\n" + listing(one)).hasSize(ONE_INVOICE);
         assertThat(three).as("three:\n" + listing(three)).hasSize(THREE_INVOICES);
         assertThat(uninvoiced).as("uninvoiced:\n" + listing(uninvoiced)).hasSize(UNINVOICED);
+        System.out.println("[statement-budget] wind-up, nothing to pay with: " + nothingToPay.size() + "\n"
+            + listing(nothingToPay));
+        assertThat(nothingToPay).as("nothing to pay with:\n" + listing(nothingToPay)).hasSize(NOTHING_TO_PAY);
+        // Re-review L4: waiting on a deposit, and invoicing a month (its item re-enters it): the wallet's lock only.
+        for (List<String> locks : List.of(depositLocks, uninvoicedLocks)) {
+            assertThat(locks).isNotEmpty().allMatch(lock -> lock.startsWith("qb.wallet:SPONSOR:"));
+            assertThat(java.util.Set.copyOf(locks)).hasSize(1);
+        }
     }
 
     /** An erased-to-be postpaid sponsor with cash and {@code invoices} issued invoices (and the current month's fee). */
@@ -115,6 +133,16 @@ class MoneyCloseStatementBudgetIT extends MoneyCloseItSupport {
         if (thisMonth) {
             manualFee(sponsor, 300);
         }
+        return sponsor;
+    }
+
+    /** A postpaid sponsor with one issued invoice and nothing to pay it with. */
+    private String broke() {
+        String sponsor = newSponsor(unique("s-fm15b-budget-broke"));
+        billing(sponsor, "POSTPAID", 50_000);
+        manualFee(sponsor, 300);
+        clock.set(clock.instant().plus(Duration.ofDays(32)));
+        invoicePeriod(sponsor, clock.instant().minus(Duration.ofDays(32)));
         return sponsor;
     }
 

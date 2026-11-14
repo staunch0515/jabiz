@@ -104,7 +104,9 @@ public final class MoneyClose {
     static final String ROW = "row";
     static final String ALERT = "alert";
     static final String REGISTERED_CLOSURE = "registeredClosure";
-    static final String TO_PAY_INVOICES = "toPayInvoices";
+    static final String UNPAID_AFTER = "unpaidAfter";
+    static final String CREDITS_AFTER = "creditsAfter";
+    static final String CASH_WALLET_AFTER = "cashWalletAfter";
     static final String PAID = "paid";
 
     /** What one run of the wind-up did. */
@@ -303,12 +305,10 @@ public final class MoneyClose {
                 ISSUED))
             // Step 7: F-M13's automatic payment, one invoice an item under the wallet lock this run holds, the
             // earliest first, at most qb.fee.auto-pay.max-invoices a run (the rest next run: TO_PAY). It is the
-            // wind-up's own switch that decides, not qb.fee.auto-pay.enabled (plan §5.2 step 7).
-            .step("Read the invoices to pay", QueryEntities.<ProcessContext>all(
-                QueryEntities.query(QbFees.defaultDataset(QbFees.INVOICE), ctx -> goingOn(ctx)
-                    ? CreditNotes.unpaid(sponsorId(ctx)) : nothing("invoiceId"), TO_PAY_INVOICES)))
-            .step("Pay them", CallProcess.forEach(FeeAutoPay.AUTO_PAY_ITEM, 1, MoneyClose::payInputs, PAID))
-            .step("Read the account and the invoices again", QueryEntities.<ProcessContext>all(
+            // wind-up's own switch that decides, not qb.fee.auto-pay.enabled (plan §5.2 step 7). The invoices, the
+            // account and the lots to void are read in one statement; no item runs when the account has nothing to
+            // pay with (re-review L1), and only a run that paid something reads the invoices and the account again.
+            .step("Read the account and the invoices", QueryEntities.<ProcessContext>all(
                 QueryEntities.query(QbFees.defaultDataset(QbFees.INVOICE), ctx -> goingOn(ctx)
                     ? CreditNotes.unpaid(sponsorId(ctx)) : nothing("invoiceId"), UNPAID),
                 QueryEntities.query(QbFeeAccount.defaultDataset(QbFeeAccount.GRANT), ctx -> goingOn(ctx)
@@ -321,6 +321,15 @@ public final class MoneyClose {
                         new QueryPredicate.IsNull("voidedAt"),
                         new QueryPredicate.Gt("expiresAt", ctx.opTime()))))
                     .limit(FeeSettlement.MAX_CREDITS).build() : nothing("grantId"), TO_VOID)))
+            .step("Pay them", CallProcess.forEach(FeeAutoPay.AUTO_PAY_ITEM, 1, MoneyClose::payInputs, PAID))
+            // The lots to void are not read again: each item reads its lot (one used up by the payment is marked too).
+            .step("Read the account and the invoices again", QueryEntities.<ProcessContext>all(
+                QueryEntities.query(QbFees.defaultDataset(QbFees.INVOICE), ctx -> paidSomething(ctx)
+                    ? CreditNotes.unpaid(sponsorId(ctx)) : nothing("invoiceId"), UNPAID_AFTER),
+                QueryEntities.query(QbFeeAccount.defaultDataset(QbFeeAccount.GRANT), ctx -> paidSomething(ctx)
+                    ? FeeSettlement.credits(sponsorId(ctx), ctx.opTime()) : nothing("grantId"), CREDITS_AFTER),
+                QueryEntities.query(QbWallets.defaultDataset(QbWallets.WALLET), ctx -> QbWallets.query(QbWallets.CASH,
+                    paidSomething(ctx) ? sponsorId(ctx) : null), CASH_WALLET_AFTER)))
             .compute("Decide the end", (metadata, ctx) -> decideEnd(ctx))
             .step("Void the granted credit left", CallProcess.forEach(VOID_LOT, 1, MoneyClose::voidInputs,
                 LOTS_VOIDED))
@@ -394,18 +403,32 @@ public final class MoneyClose {
             .map(period -> new FeeProcesses.InvoiceInput(sponsorId(ctx), period)).toList();
     }
 
-    /** The invoices to pay this run: those owing, the earliest issued first, at most the automatic payment's maximum. */
+    /**
+     * The invoices to pay this run: those owing, the earliest issued first, at most the automatic payment's maximum;
+     * none when the account has nothing to pay with (re-review L1).
+     */
     static List<FeeAutoPay.ItemInput> payInputs(ProcessContext ctx) {
-        if (!goingOn(ctx)) {
+        if (!goingOn(ctx) || spendable(ctx, CREDITS, CASH_WALLET).signum() <= 0) {
             return List.of();
         }
-        return FeeAutoPay.choose(FeeGate.list(ctx, TO_PAY_INVOICES), FeeAutoPay.max(ctx.get(PARAMS, ParamValues.class)))
+        return FeeAutoPay.choose(FeeGate.list(ctx, UNPAID), FeeAutoPay.max(ctx.get(PARAMS, ParamValues.class)))
             .invoices().stream().map(invoice -> new FeeAutoPay.ItemInput(String.valueOf(invoice.id()))).toList();
+    }
+
+    /** Whether an item of this run paid something (the invoices and the account are read again then). */
+    static boolean paidSomething(ProcessContext ctx) {
+        return ctx.get(PAID) instanceof List<?> items
+            && items.stream().anyMatch(item -> ((FeeAutoPay.ItemPaid) item).paid().signum() > 0);
+    }
+
+    private static BigDecimal spendable(ProcessContext ctx, String credits, String cash) {
+        return FeeSettlement.spendable(FeeGate.list(ctx, credits), FeeGate.first(ctx, cash), ctx.opTime());
     }
 
     /** What the invoices still owe after the payments (each as {@link QbFees#owed}). */
     static BigDecimal owed(ProcessContext ctx) {
-        return FeeGate.list(ctx, UNPAID).stream().map(QbFees::owed).reduce(BigDecimal.ZERO, BigDecimal::add);
+        return FeeGate.list(ctx, paidSomething(ctx) ? UNPAID_AFTER : UNPAID).stream().map(QbFees::owed)
+            .reduce(BigDecimal.ZERO, BigDecimal::add);
     }
 
     /**
@@ -416,8 +439,8 @@ public final class MoneyClose {
         if (!goingOn(ctx)) {
             return;
         }
-        BigDecimal spendable = FeeSettlement.spendable(FeeGate.list(ctx, CREDITS), FeeGate.first(ctx, CASH_WALLET),
-            ctx.opTime());
+        BigDecimal spendable = paidSomething(ctx) ? spendable(ctx, CREDITS_AFTER, CASH_WALLET_AFTER)
+            : spendable(ctx, CREDITS, CASH_WALLET);
         String end = ErasureCloseRules.end(owed(ctx), spendable);
         ctx.put(OUTCOME, CLOSED.equals(end) && FeeGate.list(ctx, TO_VOID).size() >= FeeSettlement.MAX_CREDITS ? MORE : end);
     }

@@ -157,7 +157,13 @@ class MoneyCloseIT extends MoneyCloseItSupport {
             assertThat(done.invoicesIssued()).isEqualTo(1);
             Map<String, Object> invoice = query("SELECT * FROM qb_fee_invoice WHERE sponsor_id = ?", sponsor).getFirst();
             assertThat(invoice).containsEntry("period", fees.getFirst().get("period"));
-            assertThat(money(invoice.get("total"))).isPositive();
+            BigDecimal charged = money(query("SELECT DISTINCT ON (charge_id) total FROM qb_fee_charge_version "
+                + "WHERE sponsor_id = ? AND billing_mode = 'POSTPAID' ORDER BY charge_id, version_no DESC", sponsor)
+                .stream().map(row -> money(row.get("total"))).reduce(BigDecimal.ZERO, BigDecimal::add));
+            assertThat(money(invoice.get("total"))).isPositive().isEqualByComparingTo(charged);
+            // No cash and no credit: nothing paid, all of it owed.
+            assertThat(money(invoice.get("paid_amount"))).isZero();
+            assertThat(done.owed()).isEqualByComparingTo(charged);
             // No month with a postpaid fee left without its invoice, and the receivable agrees.
             assertThat(items(MoneyClose.UNINVOICED_TEMPLATE, com.jabiz.runtime.test.TestTokens.bearer(tokens,
                 "fm15b-job", "qb.fee.system"), Map.of("limit", 100, "params", Map.of("sponsorId", sponsor)))).isEmpty();
@@ -219,6 +225,87 @@ class MoneyCloseIT extends MoneyCloseItSupport {
             "fm15b-job", "qb.fee.system"), Map.of("limit", 100, "params", Map.of("sponsorId", sponsor)))).isEmpty();
         assertThat(erasedOwed(sponsor)).isEqualByComparingTo(firstOwed.add(lateTotal));
         assertThat(due()).doesNotContain(sponsor);
+    }
+
+    @org.springframework.beans.factory.annotation.Autowired
+    com.jabiz.job.JobDefinition<com.jabiz.quizbuks.fee.DistributionSettlements.SettleRef> qbDistributionFinalJob;
+
+    @Test
+    void erasedAtTheMonthsEndSettledByTheJobsOnTheFirstAndInvoicedWithEveryFee() {
+        // Re-review M3: erased in the last hour of a month; the distribution fee's final settlement and the audience
+        // deposit's release run as their daily jobs on the 1st. The wind-up waits until both are done, then invoices
+        // every postpaid fee (the invoices' totals are the fees'), pays what the cash covers and owes the rest.
+        autoApprove(true);
+        param(QbParams.DISTRIBUTION_BILLING_ENABLED, "true");
+        try {
+            String sponsor = pricedSponsor("fm15b-m3");
+            billing(sponsor, "POSTPAID", 50_000);
+            cash(sponsor, 10);
+            credit(sponsor, 5_000);
+            run(com.jabiz.quizbuks.fee.DistributionPrices.SET, com.jabiz.runtime.test.TestTokens.bearer(tokens,
+                "fm15b-hq", com.jabiz.quizbuks.QbPermissions.FEE_MANAGE), body("operatorId", String.valueOf(query(
+                "SELECT operator_id FROM qb_sponsor_operator WHERE user_id = ?", sponsor).getFirst().get("operator_id")),
+                "rate", "0.05", "unitFloor", "1", "unitCeiling", "20", "minimumDeposit", 500, "reason", "F-M15 b M3"));
+            String distributed = livePublication(sponsor, "FM15b M3 distribution", Map.of("maxWinners", 30,
+                "regions", List.of("GLOBAL")));
+            for (int i = 0; i < 3; i++) {
+                start(taker(newTaker(unique("t-fm15b-m3-" + i), null)), distributed);
+            }
+            String audience = audienceDraft(sponsor, "FM15b M3 audience");
+            submit(sponsorToken(sponsor), audience);
+
+            java.time.YearMonth month = java.time.YearMonth.from(clock.instant().atZone(ZoneId.of("Asia/Tokyo")));
+            clock.set(month.plusMonths(1).atDay(1).atStartOfDay(ZoneId.of("Asia/Tokyo")).toInstant()
+                .minus(Duration.ofMinutes(30)));
+            erase(sponsor);
+            for (String publicationId : List.of(distributed, audience)) {
+                if (!"ENDED".equals(status(publicationId))) {
+                    run("QB_PUBLICATION_ADMIN_END", com.jabiz.runtime.test.TestTokens.bearer(tokens, "fm15b-content",
+                        com.jabiz.quizbuks.QbPermissions.ADMIN_CONTENT_WRITE), Map.of("publicationId", publicationId,
+                        "reason", "F-M15 b M3"));
+                }
+            }
+            assertThat(close(sponsor).outcome()).isEqualTo(MoneyClose.WAITING_DEPOSITS);
+            assertThat(query("SELECT * FROM qb_fee_invoice WHERE sponsor_id = ?", sponsor)).isEmpty();
+
+            // The 1st: the two daily jobs.
+            clock.set(month.plusMonths(1).atDay(1).atTime(3, 12).atZone(ZoneId.of("Asia/Tokyo")).toInstant());
+            assertThat(jobRunner.execute(qbDistributionFinalJob, clock.instant()).outcome())
+                .isEqualTo(com.jabiz.runtime.job.JobRunner.Outcome.SUCCEEDED);
+            clock.set(clock.instant().plus(Duration.ofHours(1)));
+            assertThat(jobRunner.execute(qbPrepaymentReleaseJob, clock.instant()).outcome())
+                .isEqualTo(com.jabiz.runtime.job.JobRunner.Outcome.SUCCEEDED);
+            assertThat(query("SELECT purpose, status FROM qb_prepayment WHERE sponsor_id = ?", sponsor))
+                .hasSizeGreaterThanOrEqualTo(2).allSatisfy(row -> assertThat(row).containsEntry("status", "RELEASED"));
+
+            MoneyClose.CloseOutput done = close(sponsor);
+            assertThat(done.outcome()).isEqualTo(MoneyClose.CLOSED);
+            List<Map<String, Object>> fees = query("SELECT DISTINCT ON (charge_id) total, kind FROM "
+                + "qb_fee_charge_version WHERE sponsor_id = ? AND billing_mode = 'POSTPAID' ORDER BY charge_id, "
+                + "version_no DESC", sponsor);
+            // The audience draft's deposit was given back by the release job (it never went live: no audience fee).
+            assertThat(fees).extracting(row -> row.get("kind")).contains("DISTRIBUTION");
+            BigDecimal charged = fees.stream().map(row -> money(row.get("total"))).reduce(BigDecimal.ZERO,
+                BigDecimal::add);
+            List<Map<String, Object>> invoices = query("SELECT * FROM qb_fee_invoice WHERE sponsor_id = ?", sponsor);
+            BigDecimal invoiced = invoices.stream().map(row -> money(row.get("total"))).reduce(BigDecimal.ZERO,
+                BigDecimal::add);
+            BigDecimal paid = invoices.stream().map(row -> money(row.get("paid_amount"))).reduce(BigDecimal.ZERO,
+                BigDecimal::add);
+            assertThat(invoiced).isEqualByComparingTo(charged);
+            assertThat(charged).isGreaterThan(BigDecimal.TEN);
+            // The cash paid what it could, the rest is owed.
+            assertThat(paid).isEqualByComparingTo("10");
+            assertThat(done.owed()).isEqualByComparingTo(charged.subtract(paid));
+            assertThat(balance(sponsor, "CASH")).isZero();
+            assertThat(closure(sponsor)).containsEntry("reason_code", QbSponsorClosures.FEE_OWED);
+            assertThat(items(MoneyClose.UNINVOICED_TEMPLATE, com.jabiz.runtime.test.TestTokens.bearer(tokens,
+                "fm15b-job", "qb.fee.system"), Map.of("limit", 100, "params", Map.of("sponsorId", sponsor)))).isEmpty();
+            assertThat(differences(sponsor)).isEmpty();
+            assertBooksBalance();
+        } finally {
+            param(QbParams.DISTRIBUTION_BILLING_ENABLED, "false");
+        }
     }
 
     @Test
@@ -565,6 +652,33 @@ class MoneyCloseIT extends MoneyCloseItSupport {
         assertThat(openTasks("erasure-close:" + sponsor)).singleElement()
             .satisfies(task -> assertThat(String.valueOf(task.get("title_key")))
                 .isEqualTo(MoneyClose.SLOW_TASK_TITLE + ".DEPOSIT_OPEN_AI"));
+    }
+
+    @Test
+    void theAutomaticPaymentLeavesAnErasedSponsorsAccountToTheWindUp() {
+        // Re-review L3: with the wind-up's switch off it only records; F-M13's automatic payment (its own switch on)
+        // neither takes the erased sponsor's invoice as an item of its daily job nor pays it when an event asks.
+        String sponsor = newSponsor(unique("s-fm15b-l3"));
+        billing(sponsor, "POSTPAID", 50_000);
+        cash(sponsor, 1_000);
+        manualFee(sponsor, 300);
+        invoicePeriod(sponsor, clock.instant());
+        param(QbParams.ERASURE_CLOSE_ENABLED, "false");
+        erase(sponsor);
+        assertThat(close(sponsor).outcome()).isEqualTo(MoneyClose.SWITCHED_OFF);
+        param(QbParams.FEE_AUTO_PAY_ENABLED, "true");
+        try {
+            assertThat(items("qb.system.fee-auto-pay-due", com.jabiz.runtime.test.TestTokens.bearer(tokens,
+                "fm15b-job", "qb.fee.system"), Map.of("limit", 1000, "params", Map.of("at", clock.instant().toString()))))
+                .extracting(row -> row.get("sponsorId")).doesNotContain(sponsor);
+            com.jabiz.quizbuks.fee.FeeAutoPay.AutoPayOutput run = (com.jabiz.quizbuks.fee.FeeAutoPay.AutoPayOutput)
+                systemRun(com.jabiz.quizbuks.fee.FeeAutoPay.AUTO_PAY, body("sponsorId", sponsor));
+            assertThat(run.outcome()).isEqualTo("NONE");
+            assertThat(query("SELECT paid_amount FROM qb_fee_invoice WHERE sponsor_id = ?", sponsor)).singleElement()
+                .satisfies(row -> assertThat(money(row.get("paid_amount"))).isZero());
+        } finally {
+            param(QbParams.FEE_AUTO_PAY_ENABLED, "false");
+        }
     }
 
     @Test

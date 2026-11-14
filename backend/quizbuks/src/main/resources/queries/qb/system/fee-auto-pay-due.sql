@@ -1,8 +1,9 @@
 /*---
 id: qb.system.fee-auto-pay-due
 description: "F-M13: the unpaid platform fee invoices of the sponsors that have something to pay them with, the earliest first and at most qb.fee.auto-pay.max-invoices of a sponsor (the items of the daily job qb.fee-auto-pay; none while qb.fee.auto-pay.enabled is not true)"
-entities: [QbFeeInvoice, QbFeeCreditGrant, QbWallet, SysParam]
+entities: [QbFeeInvoice, QbFeeCreditGrant, QbWallet, SysParam, QbSponsorClosure]
 datasets:
+  QbSponsorClosure: urn:jabiz:dataset:default:QbSponsorClosure
   QbFeeInvoice: urn:jabiz:dataset:default:QbFeeInvoice
   QbFeeCreditGrant: urn:jabiz:dataset:default:QbFeeCreditGrant
   QbWallet: urn:jabiz:dataset:default:QbWallet
@@ -21,7 +22,8 @@ permissions: [qb.fee.system]
 -- Every way the account grows that sends no event (a prepayment given back, an invoice voided, a credit note's cash,
 -- a dispute released, an entry fee, Kudos sold back) is found here the next night: an unpaid invoice (OPEN, PARTIAL,
 -- OVERDUE) with something owed, and the fee credit not expired plus the cash not held. The switch is read as the
--- run reads it: only the value true is on. An item is one invoice and decides again under the sponsor's wallet lock; it is a transaction of its own.
+-- run reads it: only the value true is on. An erased sponsor's account is the wind-up's (F-M15 b, re-review L3: with
+-- its switch off a wind-up only records; nothing else pays or voids): a sponsor with a closure is not an item. An item is one invoice and decides again under the sponsor's wallet lock; it is a transaction of its own.
 SELECT sponsorId, invoiceId
 FROM (
   SELECT CAST(i.{{QbFeeInvoice.sponsorId}} AS varchar(128)) AS sponsorId,
@@ -31,6 +33,8 @@ FROM (
   FROM {{QbFeeInvoice}} i
   WHERE (SELECT max(p.{{SysParam.value}}) FROM {{SysParam}} p WHERE p.{{SysParam.paramKey}} = 'qb.fee.auto-pay.enabled') = 'true'
     AND i.{{QbFeeInvoice.status}} IN ('OPEN', 'PARTIAL', 'OVERDUE')
+    AND NOT EXISTS (SELECT 1 FROM {{QbSponsorClosure}} c
+                    WHERE c.{{QbSponsorClosure.sponsorId}} = i.{{QbFeeInvoice.sponsorId}})
     AND i.{{QbFeeInvoice.total}} - i.{{QbFeeInvoice.paidAmount}} - i.{{QbFeeInvoice.creditApplied}} > 0
     AND coalesce((SELECT sum(g.{{QbFeeCreditGrant.remaining}}) FROM {{QbFeeCreditGrant}} g
                   WHERE g.{{QbFeeCreditGrant.sponsorId}} = i.{{QbFeeInvoice.sponsorId}}
