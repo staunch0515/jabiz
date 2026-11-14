@@ -2,8 +2,8 @@ import type { APIRequestContext } from '@playwright/test'
 import { completeQuiz, query } from './content'
 import { decideReview, publicationOf } from './publishing'
 import { fundedSponsor, taker } from './play'
-import { expect, expectAccessible, prepareQuizbuks, run, runJobNow, setControlledParam, signIn, signOut, test,
-  unique } from './support'
+import { expect, expectAccessible, prepareQuizbuks, rememberParams, run, runJobNow, setControlledParam, signIn, signOut,
+  test, unique } from './support'
 
 /**
  * A quiz's entry fee (docs/quizbuks/plans/Q88-sponsor-certifications-entry-fee.md, Q88b): the sponsor sets it in the
@@ -13,6 +13,13 @@ import { expect, expectAccessible, prepareQuizbuks, run, runJobNow, setControlle
  */
 test.beforeEach(async ({ request }) => {
   await prepareQuizbuks(request)
+})
+
+/** What a test changed of the global parameters, put back after it (passed or not) for the tests after it. */
+let restore: (() => Promise<void>) | undefined
+test.afterEach(async () => {
+  await restore?.()
+  restore = undefined
 })
 
 /** Saves a draft of the quiz's newest version through the API, as the wizard does, without submitting it. */
@@ -36,7 +43,10 @@ async function goLive(request: APIRequestContext, token: string, publicationId: 
 test('a quiz charges an entry fee from transferable Kudos, settled into the Sponsor\'s cash (Q88b)', async ({ page,
   request }) => {
   test.setTimeout(300_000)
-  // Off by default (D-Q88-14); rewards are not held back, so one just won can pay (a test cannot wait 7 days).
+  // Off by default (D-Q88-14); rewards are not held back, so one just won can pay (a test cannot wait 7 days). The
+  // `absent` values are what QB_SETUP creates (backend QbParams).
+  restore = await rememberParams(request, [{ key: 'qb.play.entry-fee.enabled', absent: 'false' },
+    { key: 'qb.transfer.hold-days', absent: '7' }])
   await setControlledParam(request, 'qb.play.entry-fee.enabled', 'true')
   await setControlledParam(request, 'qb.transfer.hold-days', '0')
   const sponsor = await fundedSponsor(request)

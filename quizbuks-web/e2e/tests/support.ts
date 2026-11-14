@@ -171,7 +171,8 @@ async function publisherToken(request: APIRequestContext, admin: string): Promis
 
 /**
  * Sets a controlled business parameter with four eyes (decision D40): the administrator proposes, the tests' second
- * administrator publishes. The change stays (the tables only grow): only set what every later run may live with.
+ * administrator publishes. The change stays (the tables only grow): only set what every later run may live with, or
+ * remember what was there first and put it back after the test ({@link rememberParams}).
  */
 export async function setControlledParam(request: APIRequestContext, paramKey: string, value: string,
   valueKind?: Record<string, unknown>) {
@@ -180,6 +181,32 @@ export async function setControlledParam(request: APIRequestContext, paramKey: s
   const change = await run(request, admin, 'CONTROL_CHANGE_PROPOSE', { targetEntity: 'SysParam',
     values: { paramKey, value, ...(valueKind ? { valueKind } : {}) }, reason: 'End-to-end test' })
   await run(request, await publisherToken(request, admin), 'CONTROL_CHANGE_PUBLISH', { changeId: change.changeId })
+}
+
+/** A controlled parameter as it stands now: its value and kind, or none while nobody has set it. */
+async function paramNow(request: APIRequestContext, admin: string, key: string) {
+  const [found] = await rows(request, admin, 'urn:jabiz:dataset:platform:SysParam',
+    [{ field: 'paramKey', op: 'eq', value: key }], 1)
+  return found ? { value: String(found.attributes.value), kind: found.attributes.valueKind as Record<string, unknown> }
+    : null
+}
+
+/**
+ * Remembers controlled parameters a test has to change, and returns what puts them back (call it in a `finally` or an
+ * `afterEach`): the value they had, or `absent` where nobody had set them (the platform reads those as closed). The
+ * parameters are global, and the suite runs with one worker: no other test reads them meanwhile, and a test that
+ * puts them back leaves the next tests what they would have found without it, in whatever order they run.
+ */
+export async function rememberParams(request: APIRequestContext, keys: { key: string; absent: string }[]) {
+  // One after the other, with one session: the platform limits how many passwords it hashes at once.
+  const admin = await adminToken(request)
+  const before: { key: string; absent: string; was: Awaited<ReturnType<typeof paramNow>> }[] = []
+  for (const { key, absent } of keys) before.push({ key, absent, was: await paramNow(request, admin, key) })
+  return async () => {
+    for (const { key, absent, was } of before) {
+      await setControlledParam(request, key, was?.value ?? absent, was?.kind)
+    }
+  }
 }
 
 /**
