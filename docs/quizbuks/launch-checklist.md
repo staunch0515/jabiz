@@ -364,8 +364,8 @@
 - [ ] **运营商分成的 8 个设置**（F-M12 a）：部署后，`QB_SETUP` 提出的 `qb.operator.share.kinds`、`qb.operator.share.ai-cost-in-base`、`qb.operator.credit-recovery.rate`、`qb.operator.gift.treatment.*`（4 个）、`qb.operator.gift.recover-outside-base` 已由另一位管理员发布（四眼）；未发布时结算任务对每个运营商都 422 `QB_OPERATOR_NO_SHARE_SETTING`。**必须在部署后的第一次结算任务之前完成**（staging：12 月的第一次任务之前）
       谁：财务管理员发布（另一位管理员提出的 `QB_SETUP` 提案）；在哪里："数据 → SysControlChange"；§7.60；怎么确认：8 条都为已发布；第一次结算任务在"定时任务"页没有 `QB_OPERATOR_NO_SHARE_SETTING` 的失败项；平台管理系统「运营商结算」列出等待中的月份而不是错误
       确认人： ／ 日期： ／ 依据：
-- [ ] **运营商的结算说明交给运营商**（新增：`help/operator-settlement.md`、§7.60、进度表 F-M12 行）：帮助中心的 FAQ 现在只有发起方与学者两种对象，没有运营商的；底稿 `docs/quizbuks/help/operator-settlement.md` 由总部在签约与培训时交给运营商，"帮助中心加运营商对象后"由内容管理员照底稿发布
-      谁：需求方或总部（交给运营商）、内容管理员（以后发布）；在哪里：底稿 `help/operator-settlement.md`；怎么确认：每个已签约的运营商都收到了这份说明（写在"依据"）；帮助中心有运营商对象之后再勾一次"已发布"
+- [ ] **内容管理员发布运营商帮助问答**（F-M12、帮助中心 PR1 #710；`help/operator-settlement.md`、§7.60）：帮助中心的问答已有"运营商"这一对象（`OPERATOR`，只给登录后的运营商成员，运营商管理系统菜单"帮助"）；底稿 `docs/quizbuks/help/operator-settlement.md` 由内容管理员在平台管理系统"帮助中心问答"里按三种语言粘贴、对象选运营商、设为"公开中"
+      谁：内容管理员（发布）、需求方或总部（签约与培训时告知运营商有这一页）；在哪里：平台管理系统"帮助中心问答"，底稿 `help/operator-settlement.md`；怎么确认：以运营商成员登录运营商管理系统，菜单"帮助"中能看到月结算单的问答三种语言都在，发起方与未登录者看不到（写在"依据"）
       确认人： ／ 日期： ／ 依据：
 
 ### 3.2 价目表、配送费与受众规则费
