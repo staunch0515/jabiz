@@ -308,6 +308,8 @@ export interface ReconItem {
   itemId: string
   checkCode: string
   partyId: string | null
+  /** The name of the operator the item is about, when its party is an operator (none for a user). */
+  operatorName: string | null
   reference: string | null
   expected: string
   actual: string
@@ -321,7 +323,7 @@ export async function readReconItems(runId: string, offset: number, limit: numbe
   return {
     total: page.total,
     items: page.items.map((row) => ({ itemId: String(row.itemId), checkCode: String(row.checkCode ?? ''),
-      partyId: str(row.partyId), reference: str(row.reference), expected: amount(row.expected),
+      partyId: str(row.partyId), operatorName: str(row.operatorName), reference: str(row.reference), expected: amount(row.expected),
       actual: amount(row.actual), difference: amount(row.difference) })),
   }
 }

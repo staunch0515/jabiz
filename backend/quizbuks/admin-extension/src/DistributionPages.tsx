@@ -267,6 +267,9 @@ function SettlementsList({ own }: { own: boolean }) {
     { id: 'publication', header: t('distribution.publication'), cell: ({ row }) => row.original.publicationId },
     { id: 'sponsor', header: t('distribution.sponsor'), cell: ({ row }) => (own ? row.original.sponsorId
       : <UserName id={row.original.sponsorId} />) },
+    // Headquarters' list: the operator by its name (the template reads it); an operator's own list leaves it out.
+    ...(own ? [] : [{ id: 'operator', header: t('distribution.operator'), cell: ({ row }) =>
+      row.original.operatorName ?? row.original.operatorId ?? '' } satisfies ColumnDef<DistributionSettlementRow, unknown>]),
     { id: 'starts', header: t('distribution.starts'), meta: right, cell: ({ row }) => row.original.starts },
     { id: 'unit', header: t('distribution.unit'), meta: right, cell: ({ row }) => (row.original.atFloor
       ? t('distribution.atFloor', { unit: row.original.unit }) : String(row.original.unit)) },

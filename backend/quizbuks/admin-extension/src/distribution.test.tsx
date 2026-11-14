@@ -43,7 +43,7 @@ beforeEach(() => {
     minimumDeposit: null, reason: null, updatedAt: null, updatedBy: null }]
   server.own = []
   server.settlements = [{ settlementId: 's1', publicationId: 'pub1', sponsorId: 'sp1', operatorId: NORTH,
-    period: '2026-10', starts: 3, toStarts: 3, unit: 1, atFloor: true, amount: 3, tax: 0, total: 3, final: false,
+    operatorName: 'North Ops', period: '2026-10', starts: 3, toStarts: 3, unit: 1, atFloor: true, amount: 3, tax: 0, total: 3, final: false,
     settledAt: '2026-11-01T15:37:00Z' }]
   server.runProcess.mockReset().mockResolvedValue({})
   server.runQuery.mockReset().mockImplementation(async (template: string) => ({ items:
@@ -130,6 +130,8 @@ describe('the distribution fee pages (F-M6)', () => {
     const row = await screen.findByTestId('distribution-settlement-row')
     expect(row).toHaveAttribute('data-floor', 'true')
     expect(row).toHaveTextContent('sp1')
+    // Its own list: no operator column.
+    expect(screen.queryByRole('columnheader', { name: 'Operator' })).not.toBeInTheDocument()
     expect(server.runQuery).toHaveBeenCalledWith(DISTRIBUTION.operatorSettlementsTemplate,
       expect.objectContaining({ params: expect.not.objectContaining({ operatorId: null }) }))
     await expectAccessible(container)
@@ -140,6 +142,10 @@ describe('the distribution fee pages (F-M6)', () => {
     const row = await screen.findByTestId('distribution-settlement-row')
     expect(row).toHaveAttribute('data-floor', 'true')
     expect(row).toHaveTextContent('1 (least price)')
+    // The operator by its name, not its id.
+    expect(screen.getByRole('columnheader', { name: 'Operator' })).toBeInTheDocument()
+    expect(row).toHaveTextContent('North Ops')
+    expect(row).not.toHaveTextContent(NORTH)
     await expectAccessible(container)
     await userEvent.type(screen.getByTestId('distribution-period'), '2026-10')
     await userEvent.click(screen.getByTestId('distribution-floor-only'))
