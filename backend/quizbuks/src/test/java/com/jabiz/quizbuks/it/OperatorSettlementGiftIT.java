@@ -226,5 +226,31 @@ class OperatorSettlementGiftIT extends CreditNoteItSupport {
         assertThat(seen).isNotEmpty();
         assertThat(seen).allSatisfy(row -> assertThat(row).containsEntry("settlementId", settlementA));
         assertThat(seen).noneSatisfy(row -> assertThat(row).containsEntry("settlementId", settlementB));
+        // #701 review L8: the Sponsor by its company name; B's settlement asked for by its id is empty, read or exported.
+        Object companyA = query("SELECT company FROM qb_sponsor_version WHERE user_id = ? "
+            + "ORDER BY version_no DESC LIMIT 1", sponsorA).getFirst().get("company");
+        assertThat(seen).filteredOn(row -> sponsorA.equals(row.get("sponsorId")))
+            .isNotEmpty().allSatisfy(row -> assertThat(row).containsEntry("sponsorName", companyA));
+        assertThat(items("qb.operator.settlement-lines", memberSession(memberA, operatorA),
+            Map.of("params", Map.of("settlementId", settlementB), "limit", 100))).isEmpty();
+        String exported = exportCsv("qb.operator.settlement-lines", memberSession(memberA, operatorA),
+            Map.of("settlementId", settlementB));
+        assertThat(exported.strip().lines()).hasSize(1);
+
+        // #701 review L2: after sponsor A moves to B, A still reads the lines of its fees (they stay with A), but not
+        // the Sponsor's name any more: an operator reads its own Sponsors' only.
+        assign(sponsorA, operatorB);
+        assertThat(items("qb.operator.settlement-lines", memberSession(memberA, operatorA),
+            Map.of("params", Map.of("settlementId", settlementA), "limit", 100)))
+            .filteredOn(row -> sponsorA.equals(row.get("sponsorId"))).isNotEmpty()
+            .allSatisfy(row -> assertThat(row.get("sponsorName")).isNull());
+    }
+
+    private String exportCsv(String id, String token, Map<String, Object> params) {
+        return new String(client.post().uri("/api/queries/" + id + "/export?format=csv")
+            .contentType(org.springframework.http.MediaType.APPLICATION_JSON)
+            .header(org.springframework.http.HttpHeaders.AUTHORIZATION, token)
+            .bodyValue(Map.of("params", params)).exchange().expectStatus().isOk()
+            .expectBody(byte[].class).returnResult().getResponseBody(), java.nio.charset.StandardCharsets.UTF_8);
     }
 }

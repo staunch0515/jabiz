@@ -314,7 +314,8 @@ class CreditNoteIT extends CreditNoteItSupport {
         });
         assertThat(items("qb.admin.operator-settlements", finance(), Map.of("limit", 100))).filteredOn(row ->
             operatorId.equals(String.valueOf(row.get("operatorId"))) && "2027-07".equals(row.get("month")))
-            .singleElement().satisfies(row -> assertThat(row).containsEntry("creditNoteDeduction", 500));
+            .singleElement().satisfies(row -> assertThat(row).containsEntry("creditNoteDeduction", 500)
+                .containsKey("costExcluded"));
     }
 
     static Map<String, Object> settlementOf(String operatorId, String month) {

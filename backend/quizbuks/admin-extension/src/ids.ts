@@ -228,6 +228,9 @@ export const TEMPLATE = {
   ownSettlements: 'qb.operator.settlements',
   /** The help centre's questions for the operators (audience OPERATOR; `qb.operator.use`, signed in only). */
   operatorFaq: 'qb.operator.faq',
+  /** F-M12 d: a settlement's lines (by Sponsor and kind), finance's and the caller operator's own. */
+  adminSettlementLines: 'qb.admin.settlement-lines',
+  ownSettlementLines: 'qb.operator.settlement-lines',
   /** Q48e-2, the operator's own (`qb.operator.use`): its account (balance, bank account), withdrawals and plans. */
   operatorAccount: 'qb.operator.account',
   ownWithdrawals: 'qb.operator.withdrawals',
@@ -243,6 +246,8 @@ export const TEMPLATE = {
 export const SETTLEMENT_PROCESS = {
   pay: 'QB_OPERATOR_SETTLEMENT_PAY',
   statement: 'QB_OPERATOR_SETTLEMENT_STATEMENT',
+  /** F-M12 d (#701 review M2): the operators whose settlement waits, by the server's month and zone. */
+  waiting: 'QB_OPERATOR_SETTLEMENTS_WAITING',
 } as const
 
 /**
