@@ -15,6 +15,22 @@ import { adminToken, expect, PASSWORD, rows, run, setControlledParam, tokenOf, u
 /** Every step has this long (the whole file is about six minutes). */
 export const STEP_TIMEOUT_MS = 240_000
 
+/**
+ * The period of the settlement jobs the end-to-end run schedules every minute (app.env: QB_DISTRIBUTION_FINAL_CRON,
+ * QB_AUDIENCE_REFUND_CRON, QB_EXPOSURE_FINAL_CRON).
+ */
+export const MINUTE_JOB_MS = 60_000
+
+/**
+ * How long a step waits for a job of the minute to act on something: whatever has to pass first (the publication
+ * running, the grace after its end), then two of the job's runs (the first may have started just before it was due).
+ * The steps only wait: asking for a run by hand (D77) replays a time the schedule already ran, and while a scheduled
+ * run holds the job it is refused (409 JOB_BUSY).
+ */
+export function minuteJobWaitMs(firstMs = 0): number {
+  return firstMs + 2 * MINUTE_JOB_MS
+}
+
 /** The platform fee Kudos a lit node of the platform's template grants (step 6b), and the reward a prize quiz pays. */
 export const GRANT = 1000
 

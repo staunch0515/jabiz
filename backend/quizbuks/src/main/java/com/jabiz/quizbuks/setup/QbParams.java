@@ -224,6 +224,12 @@ public final class QbParams {
      */
     public static final Map<String, Object> AI_CREDIT_MIN_PURCHASE_KIND = Map.of("type", "monetary", "currency", "JPY",
         "scale", 0);
+    /**
+     * F-M9: the yen of a month's AI fees the platform took on (the overrun and credit that fell short, and the estimated
+     * calls with no answer at the frozen rate) from which finance gets a task (0: no alert). Ordinary, like the AI help's
+     * dollar alert: it decides when to be reminded, not what may be spent.
+     */
+    public static final String AI_FEE_ABSORBED_ALERT_YEN = "qb.ai.fee.absorbed-alert-yen";
     public static final String OPERATOR_SHARE_KINDS = "qb.operator.share.kinds";
     public static final String OPERATOR_SHARE_AI_COST_IN_BASE = "qb.operator.share.ai-cost-in-base";
     public static final String OPERATOR_CREDIT_RECOVERY_RATE = "qb.operator.credit-recovery.rate";
@@ -1242,6 +1248,10 @@ public final class QbParams {
             "The AI fee as a multiple of the provider's list price, from 1 to 10 (frozen on each job at its request)"),
         new Param(AI_FEE_USD_JPY, Map.of("type", "numeric", "precision", 5, "scale", 2), "150",
             "The yen of a US dollar for the AI fee, from 50 to 500 (frozen on each job at its request)"),
+        // F-M9: the alert on what the platform took on of a month's AI fees (ordinary).
+        new Param(AI_FEE_ABSORBED_ALERT_YEN, Map.of("type", "numeric", "precision", 8, "scale", 0), "1000",
+            "The yen of a month's AI fees the platform took on (with the estimated cost of calls with no answer) above which "
+                + "finance gets a task (0 to 10,000,000; 0: no alert)"),
         // F-M13: automatic payment of the unpaid invoices when money arrives (controlled, last: the order of ALL is the order of CONTROLLED).
         new Param(FEE_AUTO_PAY_ENABLED, BOOL, false,
             "Whether money arriving in the platform fee account (a top-up in cash, platform fee Kudos granted, a transfer "
