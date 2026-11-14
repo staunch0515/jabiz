@@ -31,6 +31,9 @@ export interface BoundOptions {
   audience?: { key: string; options: string[] }[]
   /** The cap on the winners (5 with a prize, 1,000 without, by default). */
   maxWinners?: number
+  /** F-M8: a shared video of another Sponsor's the publication uses, and the exposures bought with it. */
+  sharedVideoId?: string
+  exposureRequested?: number
 }
 
 /** A publication made live by {@link boundPublicationOf}: the quiz and its version are the Sponsor's to read. */
@@ -61,6 +64,7 @@ export async function boundPublicationOf(request: APIRequestContext, token: stri
     regions: ['GLOBAL'], startAt: new Date(now - 60_000).toISOString(),
     endAt: new Date(now + (options.endInMs ?? 7 * 86_400_000)).toISOString(), passScore: count, budgetCap: 500,
     maxWinners: options.maxWinners ?? (prize ? 5 : 1000), treeId, treeNodeId: nodeId,
+    ...(options.exposureRequested ? { exposureRequested: options.exposureRequested } : {}),
     ...(prize?.method === 'DIGITAL_PRIZE' ? { rewardMethod: 'DIGITAL_PRIZE', digitalDelivery: 'SHARED',
       digitalDescription: prize.description, digitalContent: prize.link } : {}),
     ...(prize?.method === 'OFFLINE_REDEEM' ? { rewardMethod: 'OFFLINE_REDEEM', redeemDescription: prize.description }
@@ -71,6 +75,9 @@ export async function boundPublicationOf(request: APIRequestContext, token: stri
   const publicationId = saved.publicationId as string
   if (options.audience) {
     await run(request, token, 'QB_PUBLICATION_AUDIENCE_SAVE', { publicationId, criteria: options.audience })
+  }
+  if (options.sharedVideoId) {
+    await run(request, token, 'QB_PUBLICATION_SHARED_VIDEO_SET', { publicationId, sharedVideoId: options.sharedVideoId })
   }
   await run(request, token, 'QB_PUBLICATION_SUBMIT', { publicationId })
   await decideReview(request, token, publicationId, 'APPROVE')

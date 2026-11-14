@@ -103,6 +103,12 @@ public class ExposureConfig {
     }
 
     @Bean
+    ProcessDefinition<com.jabiz.quizbuks.publishing.PublicationExposureTopUp.TopUpInput,
+        com.jabiz.quizbuks.publishing.PublicationExposureTopUp.QuoteOutput, ProcessContext> qbExposureTopUpQuote() {
+        return com.jabiz.quizbuks.publishing.PublicationExposureTopUp.quote();
+    }
+
+    @Bean
     ProcessDefinition<PublicationExposure.EndInput, PublicationOutput, ProcessContext> qbPublicationExposureEnd() {
         return END;
     }

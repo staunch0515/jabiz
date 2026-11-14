@@ -102,6 +102,37 @@ public final class ReconChecks {
      * account's row is erased and a deleted conversation adds only to everybody's.
      */
     public static final String HELP_USAGE_TOTAL = "HELP_USAGE_TOTAL";
+    /**
+     * F-M12 c (plan §3.1, §6, the controller's rule of 2026-11-13): an operator's earliest month without a settlement,
+     * reported {@code qb.operator.settlement.waiting-after-hours} after its start (the month's end, or when the month
+     * became ready if later, but at most the readiness wait's end); {@code reference} names the month and the steps it
+     * still waits for ({@code 2027-03:DISTRIBUTION,INVOICE,EXPOSURE}, or the month alone when none is pending);
+     * actual: how many months it is behind. {@code partyId} holds the operator. A difference on purpose, not for
+     * attention: a month unsettled this long past its deadline must hold the journal export back.
+     */
+    public static final String OPERATOR_SETTLEMENT_WAITING = "OPERATOR_SETTLEMENT_WAITING";
+    /**
+     * F-M12 c (plan §6): what a settlement of the new kind (from its switch point on) counted against its own row
+     * ({@code reference}: {@code <month>:<column>}: the lines' sum against the row's column), and the fees and parts
+     * of payments made with granted credit that two settlements that could have counted them still have not
+     * ({@code fee:<period>}, {@code gift:<month paid>}; expected: what is missing, actual 0). A fee a capped
+     * settlement left, after its watermark, is not missing. {@code partyId} holds the operator.
+     */
+    public static final String OPERATOR_SETTLEMENT_COVERAGE = "OPERATOR_SETTLEMENT_COVERAGE";
+    /**
+     * F-M12 c (plan §4, §6): the granted credit taken back from the operators. {@code reference} {@code recovered}: what
+     * the settlements say they took back against the net credit to 5140 of the postings made for them (not 2140: a
+     * refund that paid the cost carried posts that part to 4110); {@code <month>}: the flow of a month, what was due
+     * against what was taken back and carried, less what was carried in. {@code partyId} holds the operator.
+     */
+    public static final String GIFT_RECOVERY = "GIFT_RECOVERY";
+    /** F-M12 c (plan §3.2): fees with no operator, which no settlement counts ({@code reference}: the period; partyId: the sponsor). */
+    public static final String OPERATOR_CHARGE_NO_OPERATOR = "OPERATOR_CHARGE_NO_OPERATOR";
+    /**
+     * F-M12 c (plan §3.8, a note): an operator that is suspended and still has granted credit to take back, carried by
+     * its latest settlement; nobody is asked for it (it is not collected).
+     */
+    public static final String OPERATOR_GIFT_CARRY_OPEN = "OPERATOR_GIFT_CARRY_OPEN";
     /** F-M8: a sponsor's exposure fee deposits (2180, purpose EXPOSURE) against what they hold. */
     public static final String EXPOSURE_DEPOSITS = "EXPOSURE_DEPOSITS";
     /** F-M8: a publication whose settlements counted more exposures than were bought (a difference: it was overcharged). */
@@ -161,16 +192,18 @@ public final class ReconChecks {
         PREPAYMENT_PARTS, PREPAYMENT_UNCHARGED, DISTRIBUTION_DEPOSITS, DISTRIBUTION_UNSETTLED,
         DISTRIBUTION_FINAL_MISSING, DISTRIBUTION_PRICE_RANGE, DISTRIBUTION_AT_FLOOR, AUDIENCE_REFUND_MISSING,
         AUDIENCE_REFUND_NO_PERIOD, AUDIENCE_FEE_NOT_LIVE, CREDIT_NOTE_USES, CREDIT_NOTE_LIMITS, CREDIT_NOTE_USE_VOID,
-        CREDIT_UNUSED_WITH_DUE, HELP_USAGE_TOTAL, EXPOSURE_DEPOSITS, EXPOSURE_SETTLED_OVER, EXPOSURE_UNSETTLED,
-        EXPOSURE_FINAL_MISSING, EXPOSURE_PRICE_RANGE, EXPOSURE_UNIT_MISMATCH, EXPOSURE_UNPURCHASED,
-        EXPOSURE_SETTLED_SHORT, EXPOSURE_AMOUNT_MISMATCH, AI_RESERVATION_SHORT);
+        CREDIT_UNUSED_WITH_DUE, HELP_USAGE_TOTAL, OPERATOR_SETTLEMENT_WAITING, OPERATOR_SETTLEMENT_COVERAGE,
+        GIFT_RECOVERY, OPERATOR_CHARGE_NO_OPERATOR, OPERATOR_GIFT_CARRY_OPEN, EXPOSURE_DEPOSITS,
+        EXPOSURE_SETTLED_OVER, EXPOSURE_UNSETTLED, EXPOSURE_FINAL_MISSING, EXPOSURE_PRICE_RANGE,
+        EXPOSURE_UNIT_MISMATCH, EXPOSURE_UNPURCHASED, EXPOSURE_SETTLED_SHORT, EXPOSURE_AMOUNT_MISMATCH,
+        AI_RESERVATION_SHORT);
 
     /** Codes no longer reported that runs written before may still name: readable, never written. */
     public static final List<String> RETIRED = List.of(DISTRIBUTION_PRICE_OUT_OF_RANGE);
 
     /** The checks that only note something: a run with notes alone is {@code OK}, and nobody is asked. */
     public static final Set<String> NOTES = Set.of(TAKER_WALLET_LAG, DISTRIBUTION_AT_FLOOR, EXPOSURE_UNPURCHASED,
-        AI_RESERVATION_SHORT);
+        OPERATOR_GIFT_CARRY_OPEN, AI_RESERVATION_SHORT);
 
     /**
      * F-M14 (docs/quizbuks/plans/impl/F-M14.md §1.2): the checks that need someone to look or decide while the books

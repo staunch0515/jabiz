@@ -138,6 +138,13 @@ final class PublicationEditing {
         lockAndLoad(pb, false, QbPublications.defaultDataset(QbPublications.PUBLICATION));
     }
 
+    /** The caller's publication read without the lock, for a process that only reads (F-M8: a top-up's quote). */
+    static <I, O> void load(ProcessDefinitionBuilder<I, O, ProcessContext> pb) {
+        pb.step("Load the publication", LoadEntity.by(QbPublications.sponsorDataset(QbPublications.PUBLICATION), PUB_ID,
+            PUBLICATION));
+        loadSchedule(pb);
+    }
+
     private static <I, O> void lockAndLoad(ProcessDefinitionBuilder<I, O, ProcessContext> pb, boolean starts) {
         lockAndLoad(pb, starts, QbPublications.sponsorDataset(QbPublications.PUBLICATION));
     }
