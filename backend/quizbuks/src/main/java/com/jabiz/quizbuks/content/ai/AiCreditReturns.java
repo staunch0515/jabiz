@@ -37,8 +37,8 @@ import java.util.Optional;
  *
  * <ul>
  *   <li>{@value #RETURN}: the sponsor gives back part of their credit (an amount, or all that may be given back) to
- *       the account it was bought from. Allowed while the AI fee is off, refused while banned; no verified email
- *       needed. A request key used before is refused ({@link FeeCodes#AI_CREDIT_REPEATED}).</li>
+ *       the account it was bought from. Allowed while the AI fee is off, refused while banned; a verified email
+ *       is needed, as for every write of a sponsor (a buyer had one). A request key used before is refused ({@link FeeCodes#AI_CREDIT_REPEATED}).</li>
  *   <li>{@value #EXPIRE_ITEM}: an item of the daily job {@value #EXPIRE_JOB} (03:47 in the fiscal year's zone), for a
  *       sponsor whose credit holds expired fee credit ({@value #EXPIRE_DUE_TEMPLATE}): it is voided, but for what the
  *       open jobs hold (the month's charge spends it first; a later run voids what is left).</li>
@@ -80,6 +80,9 @@ public final class AiCreditReturns {
                 .description("The sponsor gives back AI credit to the account it was bought from (the cash first, "
                     + "then the fee credit); what requests still running and fees not charged yet hold stays.")
                 .permissions(QbPermissions.AI_USE)
+                // Every write of a sponsor needs a verified address (VerifiedEmailWritesIT); one who bought credit
+                // had one (QB_AI_CREDIT_BUY requires it).
+                .requiresVerifiedEmail()
                 .steps(CallerChecks::refuseBanned)
                 .contextFactory((start, input) -> {
                     ProcessContext ctx = new ProcessContext(start);
