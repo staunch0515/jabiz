@@ -154,6 +154,16 @@ class SponsorErasureTest {
     }
 
     @Test
+    void anAiCreditIsToldWhatItHoldsAndAnEmptyOneNothing() {
+        // F-M15c: the AI credit is given back and closed at the wind-up; its figure when it holds something.
+        Map<String, ErasureNotice> notices = byCode(notices(List.of(), Map.of(),
+            Map.of(SponsorErasure.AI_CREDIT_LEFT, 700L)));
+        assertThat(notices).containsOnlyKeys(SponsorErasure.NOTICE_AI_CREDIT);
+        assertThat(notices.get(SponsorErasure.NOTICE_AI_CREDIT).params()).containsEntry("amount", "700");
+        assertThat(notices(List.of(), Map.of(), Map.of(SponsorErasure.AI_CREDIT_LEFT, 0L))).isEmpty();
+    }
+
+    @Test
     void theFeeAccountsLoadsReadOnlyWhatIsOpen() {
         Map<String, ErasureLoad> loads = new SponsorErasure().qbSponsorPersonalData().loads().stream()
             .collect(Collectors.toMap(ErasureLoad::name, load -> load));

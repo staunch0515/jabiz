@@ -38,6 +38,7 @@ class SiteProfileHandler implements ExternalJobHandler<SiteProfileJob.Input, Sit
 
     @Override
     public ExternalJobResult<SiteProfileJob.Result> run(SiteProfileJob.Input input, ExternalJobContext ctx) {
+        ErasedAiJobs.refuseErased(input.model());
         ClaudeWebResearch.Answer answer;
         try {
             answer = ClaudeWebResearch.of(ctx, json).ask(ctx, new ClaudeWebResearch.Request(

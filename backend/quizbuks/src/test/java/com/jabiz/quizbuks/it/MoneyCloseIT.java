@@ -802,6 +802,81 @@ class MoneyCloseIT extends MoneyCloseItSupport {
     }
 
     @Test
+    void aNoteThatPaysPartOfItsCreditOnAnInvoiceGivesTheRestBackAndIsUsedUp() {
+        // F-M15c (总控 2026-11-14 ④): the wind-up paid the first month's invoice from the cash, the second stays owed;
+        // a note on the first fee pays the second invoice from its credit (F-M7's allocation) and the wind-up gives
+        // what is left back to the cash. The note is then used up, in the lists and in the checks.
+        String sponsor = newSponsor(unique("s-fm15c-part"));
+        billing(sponsor, "POSTPAID", 50_000);
+        Object first = manualFee(sponsor, 1_000);
+        invoicePeriod(sponsor, clock.instant());
+        clock.set(clock.instant().plus(Duration.ofDays(32)));
+        manualFee(sponsor, 300);
+        invoicePeriod(sponsor, clock.instant());
+        cash(sponsor, 1_100);
+        erase(sponsor);
+        deliverEvents();
+        assertThat(close(sponsor).outcome()).isEqualTo(MoneyClose.CLOSED);
+        assertThat(closure(sponsor)).containsEntry("reason_code", QbSponsorClosures.FEE_OWED);
+        assertThat(balance(sponsor, "CASH")).isZero();
+
+        clock.set(clock.instant().plus(Duration.ofMinutes(5)));
+        creditNote(first, 1_000);
+        Map<String, Object> note = notes(sponsor).getFirst();
+        assertThat(query("SELECT status FROM qb_fee_invoice WHERE sponsor_id = ? AND status <> 'PAID'", sponsor))
+            .isEmpty();
+        assertThat(close(sponsor).outcome()).isEqualTo(MoneyClose.CLOSED);
+        // 1,100 of credit: 330 paid the second invoice, 770 back to the cash.
+        assertThat(balance(sponsor, "CASH")).isEqualByComparingTo("770");
+        assertThat(closure(sponsor)).containsEntry("reason_code", null);
+        String financeToken = com.jabiz.runtime.test.TestTokens.bearer(tokens, "fm15c-finance",
+            "qb.admin.finance.read");
+        assertThat(items("qb.admin.fee-credit-notes", financeToken, Map.of("limit", 1000)).stream()
+            .filter(row -> note.get("credit_note_id").toString().equals(String.valueOf(row.get("creditNoteId"))))
+            .toList()).singleElement().satisfies(row -> {
+                assertThat(money(row.get("creditLeft"))).isZero();
+                assertThat(money(row.get("used"))).isEqualByComparingTo("1100");
+            });
+        assertThat(items(com.jabiz.quizbuks.fee.CreditNotes.LEFT_TEMPLATE, com.jabiz.runtime.test.TestTokens.bearer(
+            tokens, "fm15c-system", com.jabiz.quizbuks.QbPermissions.FEE_SYSTEM),
+            Map.of("params", Map.of("sponsorId", sponsor)))).isEmpty();
+        assertThat(due()).doesNotContain(sponsor);
+        assertBooksBalance();
+        assertThat(differences(sponsor)).isEmpty();
+    }
+
+    @Test
+    void moreAiJobsOpenThanARunReadsHoldTheWindUpAndTellFinance() {
+        // F-M15c (总控 2026-11-14): more of the erased sponsor's AI jobs may be open than a run reads (the platform's
+        // datasets read a thousand rows): the run cancels those it read and waits; the AI credit is not closed yet.
+        String sponsor = newSponsor(unique("s-fm15c-jobs"));
+        cash(sponsor, 300);
+        param(QbParams.AI_FEE_ENABLED, "true");
+        try {
+            run(com.jabiz.quizbuks.fee.AiCredits.BUY, sponsorToken(sponsor), body("amount", 300, "requestKey",
+                UUID.randomUUID().toString()));
+        } finally {
+            param(QbParams.AI_FEE_ENABLED, "false");
+        }
+        execute("INSERT INTO sys_external_job (job_id, job_type, input, requested_by, process_seq_id, created_time) "
+            + "SELECT gen_random_uuid()::text, 'qb.ai.questions', '{}', ?, (SELECT max(process_seq_id) FROM op_process), "
+            + "now() FROM generate_series(1, ?)", sponsor, com.jabiz.quizbuks.content.ai.ErasedAiJobs.MAX_JOBS + 1);
+        erase(sponsor);
+        clock.set(clock.instant().plus(Duration.ofDays(4)));
+
+        assertThat(close(sponsor).outcome()).isEqualTo(MoneyClose.WAITING_AI_JOBS);
+        assertThat(((Number) query("SELECT count(*) AS n FROM sys_external_job_cancel c JOIN sys_external_job j "
+            + "ON j.job_id = c.job_id WHERE j.requested_by = ?", sponsor).getFirst().get("n")).intValue())
+            .isEqualTo(com.jabiz.quizbuks.content.ai.ErasedAiJobs.MAX_JOBS);
+        assertThat(closure(sponsor)).containsEntry("reason_code", QbSponsorClosures.AI_JOBS_OPEN);
+        assertThat(query("SELECT status FROM qb_prepayment WHERE sponsor_id = ? AND purpose = 'AI'", sponsor)
+            .getFirst()).containsEntry("status", "OPEN");
+        assertThat(openTasks("erasure-close:" + sponsor)).singleElement()
+            .satisfies(task -> assertThat(String.valueOf(task.get("title_key")))
+                .isEqualTo(MoneyClose.SLOW_TASK_TITLE + ".AI_JOBS_OPEN"));
+    }
+
+    @Test
     void aCreditNotesCreditLeftPaysTheUnpaidInvoiceBeforeTheAccountDoes() {
         // F-M15c step 6: credit left beside an unpaid invoice (what the daily check calls CREDIT_UNUSED_WITH_DUE; made
         // here as a defect would leave it, a second note copied) pays the invoice first; the cash is not touched.

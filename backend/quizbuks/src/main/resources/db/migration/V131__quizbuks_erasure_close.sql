@@ -20,3 +20,8 @@ ALTER TABLE qb_fee_credit_note_use_version ADD COLUMN cash_lot_id varchar(36);
 ALTER TABLE qb_fee_credit_note_use_version ALTER COLUMN invoice_id DROP NOT NULL;
 ALTER TABLE qb_fee_credit_note_use_version ADD CONSTRAINT qb_fee_credit_note_use_target
     CHECK ((invoice_id IS NULL) <> (cash_lot_id IS NULL));
+
+-- A wind-up waits while more of the erased sponsor's AI jobs may be open than a run cancels.
+ALTER TABLE qb_sponsor_closure DROP CONSTRAINT qb_sponsor_closure_reason_code_check;
+ALTER TABLE qb_sponsor_closure ADD CONSTRAINT qb_sponsor_closure_reason_code_check
+    CHECK (reason_code IN ('SWITCH_OFF', 'DEPOSIT_OPEN', 'FEE_OWED', 'AI_JOBS_OPEN'));

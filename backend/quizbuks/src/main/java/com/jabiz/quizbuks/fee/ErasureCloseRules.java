@@ -40,6 +40,9 @@ public final class ErasureCloseRules {
         if (MoneyClose.WAITING_DEPOSITS.equals(outcome)) {
             return QbSponsorClosures.DEPOSIT_OPEN;
         }
+        if (MoneyClose.WAITING_AI_JOBS.equals(outcome)) {
+            return QbSponsorClosures.AI_JOBS_OPEN;
+        }
         if (MoneyClose.TO_PAY.equals(outcome)) {
             return QbSponsorClosures.FEE_OWED.equals(previous) ? previous : null;
         }
@@ -49,6 +52,7 @@ public final class ErasureCloseRules {
     /** Why a run that took long did not finish, as the key of the slow task's title: its outcome, or {@code OTHER}. */
     public static String slowReason(String outcome) {
         return MoneyClose.SWITCHED_OFF.equals(outcome) || MoneyClose.WAITING_DEPOSITS.equals(outcome)
+            || MoneyClose.WAITING_AI_JOBS.equals(outcome)
             || MoneyClose.TO_PAY.equals(outcome) || MoneyClose.MORE.equals(outcome) ? outcome : "OTHER";
     }
 

@@ -135,6 +135,17 @@ public class AiConfig {
         return AiCreditReturns.giveBack();
     }
 
+    /** F-M15c: an erased sponsor's AI jobs still open, cancelled. */
+    @Bean
+    ProcessDefinition<ErasedAiJobs.SponsorRef, ErasedAiJobs.CancelOutput, ProcessContext> qbAiJobsErasedCancel() {
+        return ErasedAiJobs.cancelAll();
+    }
+
+    @Bean
+    ProcessDefinition<ErasedAiJobs.JobRef, ErasedAiJobs.JobOutput, ProcessContext> qbAiJobErasedCancel() {
+        return ErasedAiJobs.cancelOne();
+    }
+
     /** F-M9a-2: a sponsor's expired fee credit in their AI credit, voided (an item of {@value AiCreditReturns#EXPIRE_JOB}). */
     @Bean
     ProcessDefinition<AiCreditReturns.ExpireRef, com.jabiz.quizbuks.fee.FeeProcesses.ItemOutput, ProcessContext>

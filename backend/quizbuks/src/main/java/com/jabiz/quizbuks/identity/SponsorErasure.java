@@ -90,6 +90,8 @@ public class SponsorErasure {
     /** The open prepayments of their publications that hold money: how many, and what is left of them. */
     static final String DEPOSITS = "feeDeposits";
     static final String DEPOSITS_LEFT = "feeDepositsLeft";
+    /** F-M15c: what the AI credit holds. */
+    static final String AI_CREDIT_LEFT = "aiCreditLeft";
     /** Every open prepayment that holds money, an AI credit's too: granted credit may be frozen in them. */
     static final String FROZEN = "feeFrozen";
     /** The top-ups whose money has not arrived yet. */
@@ -104,6 +106,8 @@ public class SponsorErasure {
     static final String NOTICE_FEE_UNBILLED = "qb.fee-unbilled";
     static final String NOTICE_FEE_SHORTFALL = "qb.fee-shortfall";
     static final String NOTICE_DEPOSITS = "qb.deposits-held";
+    /** F-M15c: the AI credit is given back and closed at the wind-up; its jobs still running are cancelled. */
+    static final String NOTICE_AI_CREDIT = "qb.ai-credit";
     static final String NOTICE_GIFT_VOID = "qb.gift-void";
     /** No granted credit in the account, but some may be frozen in prepayments: without a figure. */
     static final String NOTICE_GIFT_FROZEN = "qb.gift-frozen";
@@ -231,6 +235,9 @@ public class SponsorErasure {
                     held(ErasureLoad.sum(DEPOSITS_LEFT, PREPAYMENTS, "sponsorId", "remaining"))
                         .where("purpose", PUBLICATION_PURPOSES.stream().sorted().toArray()),
                     held(ErasureLoad.count(FROZEN, PREPAYMENTS, "sponsorId")),
+                    // F-M15c: the AI credit (one a sponsor), added up in the database.
+                    ErasureLoad.sum(AI_CREDIT_LEFT, PREPAYMENTS, "sponsorId", "remaining")
+                        .where("purpose", QbPrepayments.AI).where("status", QbPrepayments.OPEN),
                     ErasureLoad.count(TOPUPS, QbTopUps.defaultDataset(QbTopUps.TOPUP), "sponsorId")
                         .where("status", PENDING_TOPUPS.stream().sorted().toArray()));
             }
@@ -308,6 +315,10 @@ public class SponsorErasure {
             notices.add(ErasureNotice.of(NOTICE_DEPOSITS, Map.of("count", deposits,
                 "amount", subject.sum(DEPOSITS_LEFT).toPlainString())));
         }
+        BigDecimal aiCredit = subject.sum(AI_CREDIT_LEFT);
+        if (aiCredit.signum() > 0) {
+            notices.add(ErasureNotice.of(NOTICE_AI_CREDIT, Map.of("amount", aiCredit.toPlainString())));
+        }
         if (gift.signum() > 0) {
             notices.add(ErasureNotice.of(NOTICE_GIFT_VOID, Map.of("amount", gift.toPlainString())));
         } else if (subject.count(FROZEN) > 0) {
@@ -331,8 +342,8 @@ public class SponsorErasure {
     ProcessDefinition<ErasedInput, ErasedOutput, ProcessContext> qbSponsorErased() {
         return ProcessDefinition.define(ERASED, 1, ErasedInput.class, ErasedOutput.class, ProcessContext.class,
             pb -> {
-                pb.description("After a user's account was erased: ends their running publications and withdraws "
-                        + "their notices.")
+                pb.description("After a user's account was erased: ends their running publications, withdraws "
+                        + "their notices and shared videos, and cancels their AI jobs.")
                     .permissions(QbPermissions.PUBLICATION_SYSTEM)
                     .internal()
                     .contextFactory((start, input) -> AccountEditing.start(start, input,
@@ -365,6 +376,13 @@ public class SponsorErasure {
                 pb.step("Withdraw the videos they share", CallProcess.forEach(
                     com.jabiz.quizbuks.sharedvideo.SharedVideoProcesses.ERASED_WITHDRAW, 1,
                     SponsorErasure::sharedVideos, "sharedVideosWithdrawn"));
+                // F-M15c: their AI jobs still open are cancelled (their own rows were deleted with the account; the
+                // platform's are found by who asked for them). The wind-up of the fee account does it again while more
+                // are left than a run reads.
+                pb.step("Cancel their AI jobs", CallProcess.<ProcessContext>of(
+                    com.jabiz.quizbuks.content.ai.ErasedAiJobs.CANCEL_ALL, 1,
+                    ctx -> new com.jabiz.quizbuks.content.ai.ErasedAiJobs.SponsorRef(AccountEditing.userId(ctx)),
+                    "aiJobsCancelled"));
             });
     }
 

@@ -7,6 +7,7 @@ import com.jabiz.process.ProcessDefinition;
 import com.jabiz.query.EntityQuery;
 import com.jabiz.query.QueryPredicate;
 import com.jabiz.quizbuks.QbPermissions;
+import com.jabiz.quizbuks.content.ai.ErasedAiJobs;
 import com.jabiz.quizbuks.content.ai.QbAi;
 import com.jabiz.param.ParamValues;
 import com.jabiz.quizbuks.setup.QbParams;
@@ -115,6 +116,7 @@ public final class MoneyClose {
     static final String CASH_WALLET_AFTER = "cashWalletAfter";
     static final String PAID = "paid";
     static final String AI_CREDIT = "aiCredit";
+    static final String AI_JOBS = "aiJobs";
     static final String NOTES_LEFT = "notesLeft";
     static final String NOTES_UNUSED = "notesUnused";
     static final String CREDITED = "credited";
@@ -127,6 +129,8 @@ public final class MoneyClose {
     /** What one run of the wind-up did. */
     public static final String NONE = "NONE";
     public static final String WAITING_DEPOSITS = "DEPOSIT_OPEN";
+    /** F-M15c: more AI jobs may be open than this run cancelled; nothing else is done until they are. */
+    public static final String WAITING_AI_JOBS = "AI_JOBS_OPEN";
     public static final String SWITCHED_OFF = "SWITCH_OFF";
     /** Fees owed and something to pay them with after a run's payments (more invoices than a run pays): the next run. */
     public static final String TO_PAY = "TO_PAY";
@@ -312,6 +316,11 @@ public final class MoneyClose {
                 PURGED_TEMPLATE, ctx -> Map.of("userId", sponsorId(ctx)), PURGED))
             .step("Withdraw what is under review", CallProcess.forEach(WITHDRAW, 1, MoneyClose::withdrawInputs,
                 WITHDRAWN))
+            // F-M15c: the sponsor's AI jobs still open are cancelled (QB_SPONSOR_ERASED did it already; again here,
+            // whatever the switch, until none is left): a wind-up with more than one run reads waits for the next.
+            .step("Cancel the AI jobs still open", CallProcess.<ProcessContext>when(
+                ctx -> FeeGate.first(ctx, REGISTERED_CLOSURE) != null, ErasedAiJobs.CANCEL_ALL, 1,
+                ctx -> new ErasedAiJobs.SponsorRef(sponsorId(ctx)), AI_JOBS))
             // F-M15c: the AI lock before the wallet's (F-M9's order qb.ai:<sponsor> → qb.wallet), only when an AI
             // credit is to be closed; nothing this process calls takes qb.account or qb.quiz.
             .step("Lock the sponsor's AI", HoldLock.<ProcessContext>exclusive(
@@ -411,7 +420,12 @@ public final class MoneyClose {
     /** Whether this run closes the AI credit: a wind-up registered, the switch on and an AI credit open. */
     static boolean closesAiCredit(ProcessContext ctx) {
         return FeeGate.first(ctx, REGISTERED_CLOSURE) != null && FeeGate.first(ctx, AI_CREDIT) != null
-            && switchOn(ctx.get(PARAMS, ParamValues.class));
+            && switchOn(ctx.get(PARAMS, ParamValues.class)) && !aiJobsLeft(ctx);
+    }
+
+    /** Whether more of the sponsor's AI jobs may be open than this run cancelled. */
+    static boolean aiJobsLeft(ProcessContext ctx) {
+        return ctx.get(AI_JOBS) instanceof ErasedAiJobs.CancelOutput out && out.more();
     }
 
     static boolean somethingUnderReview(ProcessContext ctx) {
@@ -448,6 +462,10 @@ public final class MoneyClose {
         }
         if (!switchOn(ctx.get(PARAMS, ParamValues.class))) {
             ctx.put(OUTCOME, SWITCHED_OFF);
+            return;
+        }
+        if (aiJobsLeft(ctx)) {
+            ctx.put(OUTCOME, WAITING_AI_JOBS);
             return;
         }
         if (FeeGate.first(ctx, OPEN_DEPOSIT) != null) {

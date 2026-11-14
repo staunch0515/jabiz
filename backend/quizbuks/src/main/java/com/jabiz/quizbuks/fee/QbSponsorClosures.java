@@ -28,7 +28,9 @@ public final class QbSponsorClosures {
     public static final String SWITCH_OFF = "SWITCH_OFF";
     public static final String DEPOSIT_OPEN = "DEPOSIT_OPEN";
     public static final String FEE_OWED = "FEE_OWED";
-    public static final List<String> REASONS = List.of(SWITCH_OFF, DEPOSIT_OPEN, FEE_OWED);
+    /** F-M15c: more of the erased sponsor's AI jobs may be open than a run cancels; the next run goes on. */
+    public static final String AI_JOBS_OPEN = "AI_JOBS_OPEN";
+    public static final List<String> REASONS = List.of(SWITCH_OFF, DEPOSIT_OPEN, FEE_OWED, AI_JOBS_OPEN);
 
     /** Why a manual credit or a fee request under review ended without a decision: its sponsor was erased. */
     public static final String ENDED_ERASED = "ERASED";

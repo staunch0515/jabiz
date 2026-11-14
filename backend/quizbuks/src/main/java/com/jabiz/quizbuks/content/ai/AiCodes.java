@@ -73,6 +73,11 @@ public final class AiCodes {
     public static final String PDF_UNREADABLE = "QB_AI_PDF_UNREADABLE";
     /** Q98a: AI covers were withdrawn; a cover job queued before ends with this, nothing sent. */
     public static final String COVER_WITHDRAWN = "QB_AI_COVER_WITHDRAWN";
+    /**
+     * F-M15c: the job's input was overwritten by the purge of the sponsor's erased account; it ends without calling
+     * the provider.
+     */
+    public static final String INPUT_ERASED = "QB_AI_INPUT_ERASED";
     /** Q73d-1: every text of the language is translated and up to date (or the quiz has no text). */
     public static final String NOTHING_TO_TRANSLATE = "QB_AI_NOTHING_TO_TRANSLATE";
     /** Q73d-2: the publication has no translation into the language to compare. */
@@ -102,7 +107,7 @@ public final class AiCodes {
         MATERIAL_NOT_IN_QUIZ, QUIZ_BUSY, TOO_MANY_OPEN, DAILY_LIMIT, MONTHLY_LIMIT, GLOBAL_LIMIT, JOB_NOT_READY,
         JOB_EXPIRED, CANDIDATE_UNKNOWN, NOT_REVIEWED, TEXT_TOO_LONG, RATE_LIMITED, PROVIDER_UNAVAILABLE, AUTH,
         REQUEST_INVALID, BAD_RESPONSE, REFUSED, TRUNCATED, NO_CANDIDATES, COUNT_TOO_HIGH, STOPPED,
-        PDF_TOO_LARGE, WRONG_KIND, PDF_TOO_LONG, PDF_UNREADABLE, COVER_WITHDRAWN, SURVEY_UNSUPPORTED,
+        PDF_TOO_LARGE, WRONG_KIND, PDF_TOO_LONG, PDF_UNREADABLE, COVER_WITHDRAWN, INPUT_ERASED, SURVEY_UNSUPPORTED,
         // F-C7: drafting from a website.
         SITE_RIGHTS_REQUIRED, SITE_URL_INVALID, SITE_REQUEST_INVALID, SITE_BUSY,
         SITE_DAILY_LIMIT, SITE_MONTHLY_LIMIT, SITE_UNREACHABLE, SITE_ROBOTS, SITE_NO_TEXT, SITE_TIMEOUT, SITE_QUIZ_MADE, SITE_NO_QUIZ);

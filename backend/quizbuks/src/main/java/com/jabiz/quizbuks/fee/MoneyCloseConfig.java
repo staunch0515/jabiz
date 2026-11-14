@@ -62,7 +62,9 @@ public class MoneyCloseConfig {
             .item(QbSponsorClosures.SWITCH_OFF, "en", "Switched off", "zh", "开关关闭", "ja", "スイッチがオフ")
             .item(QbSponsorClosures.DEPOSIT_OPEN, "en", "Prepayments not given back yet", "zh", "预付款尚未退回",
                 "ja", "前払金が未返却")
-            .item(QbSponsorClosures.FEE_OWED, "en", "Fees still owed", "zh", "仍有欠费", "ja", "未払いの料金あり"));
+            .item(QbSponsorClosures.FEE_OWED, "en", "Fees still owed", "zh", "仍有欠费", "ja", "未払いの料金あり")
+            .item(QbSponsorClosures.AI_JOBS_OPEN, "en", "AI jobs still being cancelled", "zh", "AI 作业尚在取消",
+                "ja", "AI の処理を取り消し中"));
     }
 
     @Bean
