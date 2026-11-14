@@ -1,13 +1,14 @@
 package com.jabiz.quizbuks.it;
 
 import com.jabiz.quizbuks.fee.FeeAutoPay;
-import com.jabiz.quizbuks.fee.FeeProcesses;
-import com.jabiz.quizbuks.fee.FeeRules;
 import com.jabiz.quizbuks.fee.QbFees;
 import com.jabiz.quizbuks.setup.QbParams;
 import com.jabiz.quizbuks.wallet.KudosExchanges;
 import com.jabiz.quizbuks.wallet.QbWallets;
+import com.jabiz.job.JobDefinition;
+import com.jabiz.runtime.job.JobRunner;
 import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
 
 import java.math.BigDecimal;
 import java.time.ZoneId;
@@ -41,18 +42,21 @@ class AutoPayIT extends PlayItSupport {
         run(KudosExchanges.SELL, sponsorToken(sponsor), body("amount", amount));
     }
 
-    /** An unpaid monthly invoice of 1100 (1000 and 10 % tax): the sponsor has nothing yet to pay it with. */
-    String unpaidInvoice(String sponsor) {
-        param(QbParams.FEE_MONTHLY, "1000");
-        Object outcome = ((FeeProcesses.ItemOutput) systemRun(FeeProcesses.MONTHLY_ITEM,
-            body("sponsorId", sponsor, "period", FeeRules.period(clock.instant(), TOKYO)))).outcome();
-        assertThat(outcome).isEqualTo("CHARGED");
-        Map<String, Object> invoice = query("SELECT * FROM qb_fee_invoice WHERE sponsor_id = ?", sponsor).getFirst();
-        assertThat(QbFees.UNPAID).contains(String.valueOf(invoice.get("status")));
-        return String.valueOf(invoice.get("invoice_id"));
+    private static int seq;
+
+    /** An unpaid postpaid invoice of {@code total} (a tenth of it tax), issued {@code daysAgo} days ago. */
+    String invoice(String sponsor, long total, int daysAgo, long creditApplied) {
+        String id = java.util.UUID.randomUUID().toString();
+        java.time.Instant issued = clock.instant().minus(java.time.Duration.ofDays(daysAgo));
+        execute("INSERT INTO qb_fee_invoice (invoice_id, invoice_no, sponsor_id, billing_mode, period, amount, tax, "
+            + "total, paid_amount, credit_applied, status, issued_at, issued_on, due_on) VALUES (?, ?, ?, 'POSTPAID', ?, "
+            + "?, ?, ?, 0, ?, 'OPEN', ?, ?::date, ?::date)", id, "AP-" + (++seq) + "-" + id.substring(0, 4), sponsor,
+            (2000 + seq / 12) + "-" + String.format("%02d", seq % 12 + 1), total - total / 11, total / 11, total, creditApplied, java.sql.Timestamp.from(issued),
+            issued.toString().substring(0, 10), issued.plus(java.time.Duration.ofDays(30)).toString().substring(0, 10));
+        return id;
     }
 
-    Map<String, Object> invoice(String id) {
+    Map<String, Object> row(String id) {
         return query("SELECT * FROM qb_fee_invoice WHERE invoice_id = ?", id).getFirst();
     }
 
@@ -60,27 +64,31 @@ class AutoPayIT extends PlayItSupport {
         return (FeeAutoPay.AutoPayOutput) systemRun(FeeAutoPay.AUTO_PAY, body("sponsorId", sponsor));
     }
 
+    @Autowired
+    JobDefinition<FeeAutoPay.AutoPayInput> qbFeeAutoPayJob;
+
     @Test
-    void nothingIsPaidUntilTheSwitchIsPublishedThenTheAccountPaysAsFarAsItGoes() {
+    void nothingIsPaidUntilTheSwitchIsPublishedThenOneInvoiceIsPaidAsFarAsTheAccountGoes() {
         String sponsor = newSponsor(unique("s-fm13b-pay"));
-        String invoiceId = unpaidInvoice(sponsor);
+        String invoiceId = invoice(sponsor, 1100, 5, 0);
         cash(sponsor, 400);
 
         // Not published: a parameter nobody turned on has no value, nothing is paid.
+        param(QbParams.FEE_AUTO_PAY_ENABLED, "false");
         assertThat(autoPay(sponsor).outcome()).isEqualTo("OFF");
-        assertThat(invoice(invoiceId).get("paid_amount")).satisfies(n -> assertThat((BigDecimal) n).isEqualByComparingTo("0"));
+        assertThat((BigDecimal) row(invoiceId).get("paid_amount")).isEqualByComparingTo("0");
 
         param(QbParams.FEE_AUTO_PAY_ENABLED, "true");
         FeeAutoPay.AutoPayOutput first = autoPay(sponsor);
         assertThat(first.outcome()).isEqualTo("PAID");
-        assertThat(first.total()).isEqualByComparingTo("400");
-        assertThat(invoice(invoiceId)).containsEntry("status", QbFees.PARTIAL);
+        assertThat(first.paid()).isEqualByComparingTo("400");
+        assertThat(row(invoiceId)).containsEntry("status", QbFees.PARTIAL);
         // Nothing left to pay with: a second run does nothing.
         assertThat(autoPay(sponsor).outcome()).isEqualTo("NONE");
 
         cash(sponsor, 1000);
-        assertThat(autoPay(sponsor).total()).isEqualByComparingTo("700");
-        assertThat(invoice(invoiceId)).containsEntry("status", QbFees.PAID);
+        assertThat(autoPay(sponsor).paid()).isEqualByComparingTo("700");
+        assertThat(row(invoiceId)).containsEntry("status", QbFees.PAID);
         assertThat(balance(sponsor, QbWallets.CASH)).isEqualByComparingTo("300");
         // Paid in full: the invoice is not paid twice.
         assertThat(autoPay(sponsor).outcome()).isEqualTo("NONE");
@@ -88,16 +96,75 @@ class AutoPayIT extends PlayItSupport {
     }
 
     @Test
-    void theDailyJobsSponsorsAreThoseWithSomethingUnpaidAndSomethingToPayItWith() {
-        String sponsor = newSponsor(unique("s-fm13b-due"));
-        unpaidInvoice(sponsor);
+    void theEarliestIsPaidFirstAFurtherOneIsAskedForAndTheLimitStopsTheChain() {
+        String sponsor = newSponsor(unique("s-fm13b-order"));
+        String late = invoice(sponsor, 1100, 5, 0);
+        String early = invoice(sponsor, 1100, 20, 0);
+        String middle = invoice(sponsor, 1100, 10, 0);
         param(QbParams.FEE_AUTO_PAY_ENABLED, "true");
-        String system = com.jabiz.runtime.test.TestTokens.bearer(tokens, "fm13b-job", "qb.fee.system");
-        assertThat(items(FeeAutoPay.DUE_TEMPLATE, system, Map.of("params", Map.of("at", clock.instant().toString()))))
-            .noneMatch(row -> sponsor.equals(row.get("sponsorId")));
-        cash(sponsor, 100);
-        assertThat(items(FeeAutoPay.DUE_TEMPLATE, system, Map.of("params", Map.of("at", clock.instant().toString()))))
-            .anyMatch(row -> sponsor.equals(row.get("sponsorId")));
+        run("PARAM_SET", admin(), body("key", QbParams.FEE_AUTO_PAY_MAX_INVOICES, "value", "2"));
+        cash(sponsor, 2500);
+        FeeAutoPay.AutoPayOutput one = autoPay(sponsor);
+        assertThat(one.paid()).isEqualByComparingTo("1100");
+        assertThat(one.more()).isTrue();
+        assertThat(row(early)).containsEntry("status", QbFees.PAID);
+        assertThat(row(middle)).containsEntry("status", QbFees.OPEN);
+        // The chain: the event of the run asks for the next, which is the second of two the limit allows: 1,400 left, the
+        // middle one is paid in full and the late one stays (n = 2 is the limit).
+        deliverEvents();
+        deliverEvents();
+        assertThat(row(middle)).containsEntry("status", QbFees.PAID);
+        assertThat(row(late)).containsEntry("status", QbFees.OPEN);
+        assertThat(balance(sponsor, QbWallets.CASH)).isEqualByComparingTo("300");
+        run("PARAM_SET", admin(), body("key", QbParams.FEE_AUTO_PAY_MAX_INVOICES, "value", "20"));
+    }
+
+    @Test
+    void anInvoicePartlyCoveredByACreditNoteOwesOnlyTheRest() {
+        String sponsor = newSponsor(unique("s-fm13b-credit"));
+        String invoiceId = invoice(sponsor, 1100, 5, 300);
+        param(QbParams.FEE_AUTO_PAY_ENABLED, "true");
+        cash(sponsor, 5000);
+        assertThat(autoPay(sponsor).paid()).isEqualByComparingTo("800");
+        assertThat(row(invoiceId)).containsEntry("status", QbFees.PAID);
+        assertThat(balance(sponsor, QbWallets.CASH)).isEqualByComparingTo("4200");
+    }
+
+    @Test
+    void theDailyJobPaysTheOtherWaysTheAccountGrewOneInvoiceATransactionEach() {
+        String sponsor = newSponsor(unique("s-fm13b-job"));
+        String a = invoice(sponsor, 1100, 8, 0);
+        String b = invoice(sponsor, 1100, 4, 0);
+        String broke = newSponsor(unique("s-fm13b-job-broke"));
+        String unpaid = invoice(broke, 1100, 4, 0);
+        param(QbParams.FEE_AUTO_PAY_ENABLED, "true");
+        cash(sponsor, 2200);
+        execute("UPDATE jabiz_shedlock SET lock_until = locked_at");
+        JobRunner.JobRun run = jobRunner.execute(qbFeeAutoPayJob, clock.instant());
+        assertThat(run.outcome()).isEqualTo(JobRunner.Outcome.SUCCEEDED);
+        assertThat(row(a)).containsEntry("status", QbFees.PAID);
+        assertThat(row(b)).containsEntry("status", QbFees.PAID);
+        // Nothing to pay it with: not an item.
+        assertThat(row(unpaid)).containsEntry("status", "OPEN");
+    }
+
+    @Test
+    void theMailReadsThePaymentsAgainAndSaysWhatIsStillOwed() {
+        String sponsor = newSponsor(unique("s-fm13b-mail"));
+        String invoiceId = invoice(sponsor, 1100, 5, 0);
+        param(QbParams.FEE_AUTO_PAY_ENABLED, "true");
+        cash(sponsor, 400);
+        autoPay(sponsor);
+        String transaction = String.valueOf(query("SELECT transaction_id FROM qb_fee_payment_version WHERE sponsor_id = ?",
+            sponsor).getFirst().get("transaction_id"));
+        Object mailed = systemRun("QB_MAIL_FEE_AUTO_PAID", body("sponsorId", sponsor, "transactionIds", List.of(transaction),
+            "invoiceIds", List.of(invoiceId), "occurredAt", clock.instant().toString()));
+        assertThat(String.valueOf(mailed)).contains("qb.fee.auto-paid");
+        // Nothing of the sponsor's is named by a payment that is not theirs: nothing is mailed.
+        Object other = systemRun("QB_MAIL_FEE_AUTO_PAID", body("sponsorId", newSponsor(unique("s-fm13b-else")),
+            "transactionIds", List.of(transaction), "invoiceIds", List.of(invoiceId),
+            "occurredAt", clock.instant().toString()));
+        assertThat(String.valueOf(other)).doesNotContain("qb.fee.auto-paid");
     }
 
     BigDecimal balance(String sponsor, String kind) {

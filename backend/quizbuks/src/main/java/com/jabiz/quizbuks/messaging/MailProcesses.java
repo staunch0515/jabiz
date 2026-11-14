@@ -124,9 +124,12 @@ public final class MailProcesses {
     /** @param reminder which reminder of an overdue invoice (1 – 3); null for an invoice issued */
     public record FeeInvoiceMailInput(@NotBlank String invoiceId, @NotNull Instant occurredAt, Integer reminder) {}
 
-    /** @param invoiceNos the numbers of the invoices paid (decided under the sponsor's lock; the mail only says them) */
-    public record FeeAutoPaidMailInput(@NotBlank String sponsorId, @NotNull java.util.List<String> invoiceNos,
-        @NotNull Instant occurredAt) {}
+    /**
+     * @param transactionIds the payments the automatic payment made (what is said is read from them again)
+     * @param invoiceIds     the invoices they were of
+     */
+    public record FeeAutoPaidMailInput(@NotBlank String sponsorId, @NotNull java.util.List<String> transactionIds,
+        @NotNull java.util.List<String> invoiceIds, @NotNull Instant occurredAt) {}
 
     /**
      * The payload of {@code qb.fee-credit.expiring} (F-M2), and when it was published.
@@ -300,26 +303,76 @@ public final class MailProcesses {
 
     // ---- platform fee invoices paid by themselves (F-M13b) -------------------------------------------------------------
 
+    static final String PAID_PAYMENTS = "paidPayments";
+    static final String PAID_INVOICES = "paidInvoices";
+
     public static ProcessDefinition<FeeAutoPaidMailInput, MailOutput, ProcessContext> feeAutoPaid(
         MessageCatalog messages) {
-        return define(FEE_AUTO_PAID, "Mails a sponsor that unpaid platform fee invoices were paid from their account.",
+        return define(FEE_AUTO_PAID, "Mails a sponsor what was paid of their platform fee invoices from their account.",
             FeeAutoPaidMailInput.class, FeeAutoPaidMailInput::occurredAt, pb -> pb
-                .step("Load the sponsor", loadUser(ctx -> input(ctx, FeeAutoPaidMailInput.class).sponsorId())),
+                .step("Load the payments, the invoices and the ban", QueryEntities.<ProcessContext>all(
+                    QueryEntities.query(com.jabiz.quizbuks.fee.QbFeeAccount.defaultDataset(
+                        com.jabiz.quizbuks.fee.QbFeeAccount.PAYMENT), ctx -> EntityQuery.builder().where(
+                        new QueryPredicate.And(List.of(
+                            new QueryPredicate.In("transactionId",
+                                new ArrayList<Object>(input(ctx, FeeAutoPaidMailInput.class).transactionIds())),
+                            new QueryPredicate.Eq("sponsorId", input(ctx, FeeAutoPaidMailInput.class).sponsorId()))))
+                        .limit(PAYMENT_ROWS).build(), PAID_PAYMENTS),
+                    QueryEntities.query(com.jabiz.quizbuks.fee.QbFees.defaultDataset(
+                        com.jabiz.quizbuks.fee.QbFees.INVOICE), ctx -> EntityQuery.builder().where(
+                        new QueryPredicate.And(List.of(
+                            new QueryPredicate.In("invoiceId",
+                                new ArrayList<Object>(input(ctx, FeeAutoPaidMailInput.class).invoiceIds())),
+                            new QueryPredicate.Eq("sponsorId", input(ctx, FeeAutoPaidMailInput.class).sponsorId()))))
+                        .limit(INVOICE_ROWS).build(), PAID_INVOICES),
+                    QueryEntities.query(QbAccounts.defaultDataset(QbAccounts.BAN), ctx -> byId("userId",
+                        uuid(input(ctx, FeeAutoPaidMailInput.class).sponsorId())), BAN),
+                    QueryEntities.query(SecurityEntities.USER_DATASET, ctx -> byId("userId",
+                        uuid(input(ctx, FeeAutoPaidMailInput.class).sponsorId())), USER))),
             ctx -> {
-                FeeAutoPaidMailInput input = input(ctx, FeeAutoPaidMailInput.class);
-                if (!input.invoiceNos().isEmpty()) {
-                    decide(ctx, NotificationMails.FEE_AUTO_PAID, Map.of(
-                        "invoiceNos", String.join(", ", input.invoiceNos()),
-                        "count", MailValues.count(input.invoiceNos().size())));
+                EntityInstance ban = first(ctx, BAN);
+                if (ban != null && BanRules.banned(ban.attributes())) {
+                    return;
+                }
+                // Read again, not taken from the event: what these payments paid of each invoice, and what is owed now
+                // (a payment may be partial: the text then says what is still owed, never "paid").
+                java.util.Map<String, java.math.BigDecimal> paid = new java.util.LinkedHashMap<>();
+                for (EntityInstance payment : list(ctx, PAID_PAYMENTS)) {
+                    paid.merge(String.valueOf((Object) payment.get("targetId")),
+                        new java.math.BigDecimal(String.valueOf((Object) payment.get("amount"))),
+                        java.math.BigDecimal::add);
+                }
+                List<String> lines = new ArrayList<>();
+                java.math.BigDecimal total = java.math.BigDecimal.ZERO;
+                java.math.BigDecimal owed = java.math.BigDecimal.ZERO;
+                for (EntityInstance invoice : list(ctx, PAID_INVOICES)) {
+                    java.math.BigDecimal part = paid.getOrDefault(String.valueOf(invoice.id()), java.math.BigDecimal.ZERO);
+                    if (part.signum() <= 0) {
+                        continue;
+                    }
+                    java.math.BigDecimal left = com.jabiz.quizbuks.fee.QbFees.owed(invoice);
+                    lines.add("- " + invoice.get("invoiceNo") + ": " + MailValues.amount(part) + " / " + MailValues.amount(left));
+                    total = total.add(part);
+                    owed = owed.add(left);
+                }
+                if (!lines.isEmpty()) {
+                    decide(ctx, NotificationMails.FEE_AUTO_PAID, Map.of("lines", String.join("\n", lines),
+                        "count", MailValues.count(lines.size()), "paid", MailValues.amount(total),
+                        "owed", MailValues.amount(owed)));
                 }
             }, messages, NotificationMails.FEE_AUTO_PAID);
     }
 
+    private static final int PAYMENT_ROWS = 1_000;
+    private static final int INVOICE_ROWS = 50;
+
     static FeeAutoPaidMailInput feeAutoPaidInput(DomainEvent event) {
-        Object nos = event.payload().get("invoiceNos");
-        java.util.List<String> numbers = nos instanceof java.util.List<?> list
-            ? list.stream().map(String::valueOf).toList() : java.util.List.of();
-        return new FeeAutoPaidMailInput(text(event, "sponsorId"), numbers, event.createdTime());
+        return new FeeAutoPaidMailInput(text(event, "sponsorId"), strings(event, "transactionIds"),
+            strings(event, "invoiceIds"), event.createdTime());
+    }
+
+    private static List<String> strings(DomainEvent event, String key) {
+        return event.payload().get(key) instanceof List<?> list ? list.stream().map(String::valueOf).toList() : List.of();
     }
 
     // ---- platform fee Kudos (F-M2) -----------------------------------------------------------------------------------

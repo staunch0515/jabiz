@@ -652,9 +652,9 @@ public final class QbParams {
         OPERATOR_PLANS, OPERATOR_WITHDRAWAL, List.of(TOPUP_BANK_MIN, TOPUP_BANK_MAX), BANK_RECEIVING, WITHDRAWAL_BANK, AUDIENCE_BILLING_PARAMS,
         CASH_ACCOUNT_PARAMS, FEE_PARAMS,
         List.of(ENTRY_FEE_ENABLED), List.of(USAGE_FREE_BYTES), List.of(VIDEO_MAINLAND_SITES), HELP_CONTROLLED, FEE_CREDIT_PARAMS,
-        SITE_PROFILE_CONTROLLED, DISTRIBUTION_CONTROLLED, EXPOSURE_CONTROLLED, List.of(FEE_AUTO_PAY_ENABLED), REWARD_KUDOS, RECON_THRESHOLDS,
+        SITE_PROFILE_CONTROLLED, DISTRIBUTION_CONTROLLED, EXPOSURE_CONTROLLED, REWARD_KUDOS, RECON_THRESHOLDS,
         HELP_USER_LIMITS,
-        OPERATOR_SHARE, OPERATOR_SETTLEMENT)
+        OPERATOR_SHARE, OPERATOR_SETTLEMENT, List.of(FEE_AUTO_PAY_ENABLED))
         .flatMap(List::stream).toList();
 
     /** A parameter: its key, kind (as the platform writes kinds) and first value. */
@@ -1080,11 +1080,6 @@ public final class QbParams {
         new Param(EXPOSURE_TOP_UP_MAX, Map.of("type", "numeric", "precision", 9, "scale", 0), "1000000",
             "The most exposures one top-up buys (1 to 999,999,999; a placeholder; keeps the parts of a deposit within "
                 + "what it can be shared into)"),
-        // F-M13: automatic payment of the unpaid invoices when money arrives (controlled, after the exposure fee's).
-        new Param(FEE_AUTO_PAY_ENABLED, BOOL, false,
-            "Whether money arriving in the platform fee account (a top-up in cash, platform fee Kudos granted, a transfer "
-                + "from the operator) pays the sponsor's unpaid invoices by itself, the earliest first (declared off: the "
-                + "tests rely on it; a parameter that is not true means off)"),
         // F-F10a: the Kudos reward switch (controlled, after the F-C7, F-M6 and F-M8 ones; the F-M14 thresholds and the help's
         // daily limit come after it, in the order of CONTROLLED, which QB_SETUP's proposals follow).
         new Param(REWARD_KUDOS_ENABLED, BOOL, true,
@@ -1135,7 +1130,12 @@ public final class QbParams {
         // share settings so the proposals before it keep their places).
         new Param(OPERATOR_SETTLEMENT_READINESS_MAX_DAYS, Map.of("type", "numeric", "precision", 2, "scale", 0), "5",
             "How many days after a month's end an operator's settlement waits for its sponsors' distribution fees, "
-                + "exposure fees and monthly invoices before it settles anyway (0 to 31; 0: it does not wait)"));
+                + "exposure fees and monthly invoices before it settles anyway (0 to 31; 0: it does not wait)"),
+        // F-M13: automatic payment of the unpaid invoices when money arrives (controlled, last: the order of ALL is the order of CONTROLLED).
+        new Param(FEE_AUTO_PAY_ENABLED, BOOL, false,
+            "Whether money arriving in the platform fee account (a top-up in cash, platform fee Kudos granted, a transfer "
+                + "from the operator) pays the sponsor's unpaid invoices by itself, the earliest first (declared off: the "
+                + "tests rely on it; a parameter that is not true means off)"));
 
     /** The declared value of a parameter: what {@code QB_SETUP} writes. */
     public static String defaultOf(String key) {

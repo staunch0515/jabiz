@@ -1,8 +1,9 @@
 package com.jabiz.quizbuks.fee;
 
+import com.jabiz.event.DomainEvent;
+import com.jabiz.param.ParamValues;
 import com.jabiz.process.ProcessContext;
 import com.jabiz.process.ProcessDefinition;
-import com.jabiz.param.ParamValues;
 import com.jabiz.query.EntityQuery;
 import com.jabiz.query.QueryPredicate;
 import com.jabiz.quizbuks.QbPermissions;
@@ -16,10 +17,13 @@ import com.jabiz.runtime.process.steps.LoadParams;
 import com.jabiz.runtime.process.steps.PublishEvent;
 import com.jabiz.runtime.process.steps.QueryEntities;
 import com.jabiz.runtime.task.CloseTasks;
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
 
 import java.math.BigDecimal;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
@@ -30,13 +34,18 @@ import java.util.Map;
  * F-M13 (docs/quizbuks/plans/impl/F-M13.md §3.5): money arriving in the platform fee account pays the sponsor's unpaid
  * invoices by itself, the earliest first, as far as the account goes ({@value #AUTO_PAY}, {@code internal()}).
  *
- * <p>What starts it is an event, only to be quick ({@value #FUNDED_EVENT}, from a cash top-up, platform fee Kudos
- * granted and an operator's transfer); every other way the account grows (a prepayment given back, an invoice voided, a
- * credit note's cash) is left to the daily job {@value #JOB}, whose items are the sponsors with something unpaid and
- * something to pay it with. Both run the same process, which takes the sponsor's wallet lock first (as the invoice's own
- * payment does) and pays through the same sub-process {@code QB_FEE_SETTLE}, one invoice at a time in one transaction,
- * so that a hand's payment and the automatic one never pay an invoice twice. It pays no credit note and writes no use of
- * one: the owed of an invoice is its own figure ({@link QbFees#owed}).
+ * <p><b>One invoice, one transaction.</b> A run pays one invoice under the sponsor's wallet lock (as the invoice's own
+ * payment takes it) through the same sub-process {@code QB_FEE_SETTLE}, so that a hand's payment and the automatic one
+ * never pay an invoice twice and an invoice that fails never holds the others back. It pays no credit note and writes no
+ * use of one: the owed of an invoice is its own figure ({@link QbFees#owed}).
+ *
+ * <p>Two ways start it. An event, only to be quick ({@value #FUNDED_EVENT}, from a cash top-up, platform fee Kudos
+ * granted and an operator's transfer): no invoice is named, the earliest owing one is paid, and when something was paid
+ * and more are unpaid the run asks for the next one ({@code n} counts them, up to the limit
+ * {@value QbParams#FEE_AUTO_PAY_MAX_INVOICES}). The daily job {@value #JOB} takes every other way the account grows (a
+ * prepayment given back, an invoice voided, a credit note's cash, a lost event): its items are the unpaid invoices of
+ * the sponsors with something to pay them with, so each is a transaction of its own and a failing one is the only one
+ * that fails.
  *
  * <p>The switch {@value QbParams#FEE_AUTO_PAY_ENABLED} is read at each run; unless it is {@code true} (a parameter
  * nobody published has no value) nothing is paid.
@@ -46,11 +55,11 @@ public final class FeeAutoPay {
     public static final String AUTO_PAY = "QB_FEE_AUTO_PAY";
     public static final String AUTO_PAY_ITEM = "QB_FEE_AUTO_PAY_ITEM";
     public static final String JOB = "qb.fee-auto-pay";
-    /** The sponsors with an unpaid invoice and something to pay it with: the items of the daily job. */
+    /** The unpaid invoices of the sponsors with something to pay them with, the earliest first: the daily job's items. */
     public static final String DUE_TEMPLATE = "qb.system.fee-auto-pay-due";
     /** Money reached the sponsor's platform fee account (it carries the sponsor, no amount): {@value AUTO_PAY} runs. */
     public static final String FUNDED_EVENT = "qb.fee-account.funded";
-    /** Invoices were paid by it: the numbers and the payments, from which the mail tells and reads the figures again. */
+    /** An invoice was paid by it: the payments, from which the mail tells and reads the figures again. */
     public static final String PAID_EVENT = "qb.fee.auto-paid";
 
     static final int DEFAULT_MAX = 20;
@@ -61,21 +70,23 @@ public final class FeeAutoPay {
     private static final String UNPAID = "unpaid";
     private static final String CHOSEN = "chosen";
     private static final String MORE = "more";
-    private static final String PAID = "paid";
-    private static final String ITEM_PAID = "itemPaid";
     private static final String ITEM_ID = "itemId";
+    private static final String PAID = "paid";
 
-    /** @param sponsorId the sponsor whose unpaid invoices are paid */
-    public record AutoPayInput(@NotBlank @Size(max = 128) String sponsorId) {}
+    /**
+     * @param sponsorId the sponsor whose unpaid invoice is paid
+     * @param invoiceId the invoice (the daily job's item), or none: the earliest one owing
+     * @param n         how many this chain of events has paid already (the event path)
+     */
+    public record AutoPayInput(@NotBlank @Size(max = 128) String sponsorId, @Size(max = 36) String invoiceId,
+        @Min(0) @Max(1000) Integer n) {}
 
     /**
      * @param outcome {@code OFF} (the switch is not true), {@code NONE} (nothing unpaid, or nothing to pay with) or
      *                {@code PAID}
-     * @param count   the invoices paid in whole or in part
-     * @param total   what was paid
-     * @param more    whether unpaid invoices were left that this run did not reach (the run is asked again)
+     * @param paid    what was paid
      */
-    public record AutoPayOutput(String sponsorId, String outcome, int count, BigDecimal total, boolean more) {}
+    public record AutoPayOutput(String sponsorId, String outcome, String invoiceNo, BigDecimal paid, boolean more) {}
 
     public record ItemInput(@NotBlank @Size(max = 36) String invoiceId) {}
 
@@ -92,39 +103,54 @@ public final class FeeAutoPay {
             .orElse(null));
     }
 
-    /** How many invoices one run pays: the parameter when it is within 1 to 50, else the default. */
-    static int max(ParamValues params) {
+    /** How many invoices a chain of events pays: the parameter, held within 1 to 50 (the default when it has no value). */
+    public static int max(ParamValues params) {
         BigDecimal value = params == null ? null
             : params.find(QbParams.FEE_AUTO_PAY_MAX_INVOICES, BigDecimal.class).orElse(null);
-        return value == null || value.intValue() < 1 || value.intValue() > 50 ? DEFAULT_MAX : value.intValue();
+        return value == null ? DEFAULT_MAX : Math.max(1, Math.min(50, value.intValue()));
+    }
+
+    /** The invoices with something owed, the earliest issued first (the invoice number breaks a tie). */
+    static List<EntityInstance> owing(List<EntityInstance> unpaid) {
+        List<EntityInstance> owing = new ArrayList<>(unpaid.stream()
+            .filter(invoice -> QbFees.UNPAID.contains(String.valueOf((Object) invoice.get("status")))
+                && QbFees.owed(invoice).signum() > 0)
+            .toList());
+        owing.sort(Comparator.comparing((EntityInstance invoice) -> instant(invoice.get("issuedAt")))
+            .thenComparing(invoice -> String.valueOf((Object) invoice.get("invoiceNo"))));
+        return owing;
     }
 
     /**
      * The invoices a run pays: those with something owed, the earliest issued first (the invoice number breaks a tie),
      * at most {@code max}; and whether more were left.
      */
-    static Chosen choose(List<EntityInstance> unpaid, int max) {
-        List<EntityInstance> owing = new ArrayList<>(unpaid.stream()
-            .filter(invoice -> QbFees.UNPAID.contains(String.valueOf((Object) invoice.get("status")))
-                && QbFees.owed(invoice).signum() > 0)
-            .toList());
-        owing.sort(Comparator.comparing((EntityInstance invoice) -> String.valueOf((Object) invoice.get("issuedAt")))
-            .thenComparing(invoice -> String.valueOf((Object) invoice.get("invoiceNo"))));
+    public static Chosen choose(List<EntityInstance> unpaid, int max) {
+        List<EntityInstance> owing = owing(unpaid);
         return new Chosen(owing.stream().limit(max).toList(), owing.size() > max);
     }
 
-    record Chosen(List<EntityInstance> invoices, boolean more) {}
+    public record Chosen(List<EntityInstance> invoices, boolean more) {}
+
+    /** Compared as the moments they are, not as the text of them. */
+    private static Instant instant(Object value) {
+        return value instanceof Instant at ? at : Instant.parse(String.valueOf(value));
+    }
 
     // ---- the process -------------------------------------------------------------------------------------------------
 
     public static ProcessDefinition<AutoPayInput, AutoPayOutput, ProcessContext> autoPay() {
         return ProcessDefinition.define(AUTO_PAY, 1, AutoPayInput.class, AutoPayOutput.class, ProcessContext.class,
             pb -> pb
-                .description("Pays a sponsor's unpaid platform fee invoices, the earliest first, from the account that "
-                    + "pays the platform's fees as far as it goes, when the switch is on.")
+                .description("Pays one of a sponsor's unpaid platform fee invoices (the earliest, or the one named) from "
+                    + "the account that pays the platform's fees as far as it goes, when the switch is on.")
                 .permissions(QbPermissions.FEE_SYSTEM)
                 .internal()
-                .contextFactory(FeeProcesses::context)
+                .contextFactory((start, input) -> {
+                    ProcessContext ctx = FeeProcesses.context(start, input);
+                    ctx.put(INPUT, input);
+                    return ctx;
+                })
                 .outputMapper(FeeAutoPay::output)
                 // Read now, not at the start of the application: a parameter nobody published is off.
                 .step("Load the switch and the limit", LoadParams.<ProcessContext>optional(ProcessContext::opTime, PARAMS,
@@ -144,77 +170,81 @@ public final class FeeAutoPay {
                         ctx -> FeeSettlement.credits(sponsorId(ctx), ctx.opTime()), FeeProcesses.CREDITS),
                     QueryEntities.query(QbWallets.defaultDataset(QbWallets.WALLET),
                         ctx -> QbWallets.query(QbWallets.CASH, sponsorId(ctx)), FeeProcesses.CASH_WALLET)))
-                .compute("Choose the invoices", (metadata, ctx) -> chooseInvoices(ctx))
-                .step("Pay each", CallProcess.forEach(AUTO_PAY_ITEM, 1, FeeAutoPay::itemInputs, PAID))
-                .compute("Count what was paid", (metadata, ctx) -> count(ctx))
+                .compute("Choose the invoice", (metadata, ctx) -> chooseInvoice(ctx))
+                .step("Pay it", CallProcess.<ProcessContext>when(ctx -> ctx.get(CHOSEN) != null, AUTO_PAY_ITEM, 1,
+                    ctx -> new ItemInput(String.valueOf(chosen(ctx).id())), PAID))
                 .step("Ask the mail to tell the sponsor", PublishEvent.<ProcessContext>when(
-                    ctx -> ctx.get(ITEM_PAID) instanceof List<?> list && !list.isEmpty(), PAID_EVENT,
-                    FeeAutoPay::paidPayload))
-                // Left unpaid beyond what a run takes, and something was paid now: asked again (nothing paid: the day's job).
+                    FeeAutoPay::paidSomething, PAID_EVENT, FeeAutoPay::paidPayload))
+                // Paid one, more are owing, and the chain is within the limit: the next one (nothing paid: the day's job).
                 .step("Go on", PublishEvent.<ProcessContext>when(
-                    ctx -> Boolean.TRUE.equals(ctx.get(MORE)) && ctx.get(ITEM_PAID) instanceof List<?> list
-                        && !list.isEmpty(), FUNDED_EVENT, ctx -> Map.of("sponsorId", sponsorId(ctx)))));
+                    ctx -> paidSomething(ctx) && Boolean.TRUE.equals(ctx.get(MORE)) && ctx.get(INPUT,
+                        AutoPayInput.class).invoiceId() == null && next(ctx) < max(ctx.get(PARAMS, ParamValues.class)),
+                    FUNDED_EVENT, ctx -> {
+                        Map<String, Object> payload = new LinkedHashMap<>();
+                        payload.put("sponsorId", sponsorId(ctx));
+                        payload.put("n", next(ctx));
+                        return payload;
+                    })));
     }
 
     private static String sponsorId(ProcessContext ctx) {
         return ctx.get(INPUT, AutoPayInput.class).sponsorId();
     }
 
-    static void chooseInvoices(ProcessContext ctx) {
+    private static int next(ProcessContext ctx) {
+        Integer n = ctx.get(INPUT, AutoPayInput.class).n();
+        return (n == null ? 0 : n) + 1;
+    }
+
+    private static EntityInstance chosen(ProcessContext ctx) {
+        return (EntityInstance) ctx.get(CHOSEN);
+    }
+
+    /** The one invoice this run pays: the one named (when it is still owing), else the earliest owing; none when off. */
+    static void chooseInvoice(ProcessContext ctx) {
+        ctx.put(MORE, false);
         if (!Boolean.TRUE.equals(ctx.get(ON))) {
-            ctx.put(CHOSEN, List.of());
-            ctx.put(MORE, false);
             return;
         }
         BigDecimal available = FeeSettlement.spendable(FeeGate.list(ctx, FeeProcesses.CREDITS),
             FeeGate.first(ctx, FeeProcesses.CASH_WALLET), ctx.opTime());
         if (available.signum() <= 0) {
-            ctx.put(CHOSEN, List.of());
-            ctx.put(MORE, false);
             return;
         }
-        Chosen chosen = choose(FeeGate.list(ctx, UNPAID), max(ctx.get(PARAMS, ParamValues.class)));
-        ctx.put(CHOSEN, chosen.invoices());
-        ctx.put(MORE, chosen.more());
+        List<EntityInstance> owing = owing(FeeGate.list(ctx, UNPAID));
+        String named = ctx.get(INPUT, AutoPayInput.class).invoiceId();
+        List<EntityInstance> pick = named == null ? owing
+            : owing.stream().filter(invoice -> named.equals(String.valueOf(invoice.id()))).toList();
+        if (!pick.isEmpty()) {
+            ctx.put(CHOSEN, pick.getFirst());
+            ctx.put(MORE, owing.size() > 1);
+        }
     }
 
-    @SuppressWarnings("unchecked")
-    static List<ItemInput> itemInputs(ProcessContext ctx) {
-        List<EntityInstance> chosen = (List<EntityInstance>) ctx.get(CHOSEN);
-        return chosen == null ? List.of() : chosen.stream().map(invoice -> new ItemInput(String.valueOf(invoice.id())))
-            .toList();
+    private static boolean paidSomething(ProcessContext ctx) {
+        return ctx.get(PAID) instanceof ItemPaid item && item.paid().signum() > 0;
     }
 
-    /** The items that paid something, in their order. */
-    @SuppressWarnings("unchecked")
-    static void count(ProcessContext ctx) {
-        List<Object> outputs = (List<Object>) ctx.get(PAID);
-        List<ItemPaid> paid = outputs == null ? List.of() : outputs.stream().map(ItemPaid.class::cast)
-            .filter(item -> item.paid().signum() > 0).toList();
-        ctx.put(ITEM_PAID, paid);
-    }
-
-    @SuppressWarnings("unchecked")
+    /** The invoice, and the payment (the mail reads both again, and what is owed now, itself). */
     static Map<String, Object> paidPayload(ProcessContext ctx) {
-        List<ItemPaid> paid = (List<ItemPaid>) ctx.get(ITEM_PAID);
+        ItemPaid item = ctx.get(PAID, ItemPaid.class);
         Map<String, Object> payload = new LinkedHashMap<>();
         payload.put("sponsorId", sponsorId(ctx));
-        // The numbers and the payments, not the amounts: the mail reads the figures again (what was paid by these
-        // payments, what is still owed of these invoices) and does not trust a number in an event.
-        payload.put("invoiceNos", paid.stream().map(ItemPaid::invoiceNo).toList());
-        payload.put("transactionIds", paid.stream().map(ItemPaid::transactionId).toList());
+        payload.put("invoiceIds", List.of(String.valueOf(chosen(ctx).id())));
+        payload.put("transactionIds", List.of(item.transactionId()));
         return payload;
     }
 
-    @SuppressWarnings("unchecked")
     static AutoPayOutput output(ProcessContext ctx) {
         String sponsor = sponsorId(ctx);
         if (!Boolean.TRUE.equals(ctx.get(ON))) {
-            return new AutoPayOutput(sponsor, "OFF", 0, BigDecimal.ZERO, false);
+            return new AutoPayOutput(sponsor, "OFF", null, BigDecimal.ZERO, false);
         }
-        List<ItemPaid> paid = ctx.get(ITEM_PAID) instanceof List<?> list ? (List<ItemPaid>) list : List.of();
-        BigDecimal total = paid.stream().map(ItemPaid::paid).reduce(BigDecimal.ZERO, BigDecimal::add);
-        return new AutoPayOutput(sponsor, paid.isEmpty() ? "NONE" : "PAID", paid.size(), total,
+        if (!paidSomething(ctx)) {
+            return new AutoPayOutput(sponsor, "NONE", null, BigDecimal.ZERO, false);
+        }
+        return new AutoPayOutput(sponsor, "PAID", String.valueOf((Object) chosen(ctx).get("invoiceNo")),
+            ctx.get(PAID, ItemPaid.class).paid(),
             Boolean.TRUE.equals(ctx.get(MORE)));
     }
 
@@ -246,12 +276,12 @@ public final class FeeAutoPay {
                     QbFees.owed(FeeProcesses.invoice(ctx)), FeeProcesses.invoice(ctx).get("invoiceNo")),
                 FeeProcesses.SETTLEMENT))
             .compute("Record the payment", (metadata, ctx) -> {
-                if (paidSomething(ctx)) {
+                if (settledSomething(ctx)) {
                     FeeProcesses.recordPayment(ctx);
                 }
             })
             .step("Close the reminder", CloseTasks.<ProcessContext>done(
-                ctx -> paidSomething(ctx) && Boolean.TRUE.equals(ctx.get(FeeProcesses.PAID_NOW))
+                ctx -> settledSomething(ctx) && Boolean.TRUE.equals(ctx.get(FeeProcesses.PAID_NOW))
                     ? QbFees.overdueTaskSource(FeeProcesses.invoice(ctx).id()) : QbFees.overdueTaskSource("none"))));
     }
 
@@ -261,14 +291,14 @@ public final class FeeAutoPay {
             && QbFees.owed(invoice).signum() > 0;
     }
 
-    private static boolean paidSomething(ProcessContext ctx) {
+    private static boolean settledSomething(ProcessContext ctx) {
         return ctx.get(FeeProcesses.SETTLEMENT) instanceof FeeSettlement.SettleOutput settled
             && settled.paid().signum() > 0;
     }
 
     private static ItemPaid itemOutput(ProcessContext ctx) {
         EntityInstance invoice = FeeProcesses.invoice(ctx);
-        boolean paid = paidSomething(ctx);
+        boolean paid = settledSomething(ctx);
         FeeSettlement.SettleOutput settled = paid ? ctx.get(FeeProcesses.SETTLEMENT, FeeSettlement.SettleOutput.class)
             : null;
         return new ItemPaid(String.valueOf(invoice.id()), String.valueOf((Object) invoice.get("invoiceNo")),
@@ -277,8 +307,10 @@ public final class FeeAutoPay {
                 : String.valueOf((Object) invoice.get("status")));
     }
 
-    /** The input of the consumer: the sponsor the event names (the process re-reads everything else). */
-    static AutoPayInput input(com.jabiz.event.DomainEvent event) {
-        return new AutoPayInput(String.valueOf(event.payload().get("sponsorId")));
+    /** The input of the consumer: the sponsor the event names, and how many the chain has paid. */
+    static AutoPayInput input(DomainEvent event) {
+        Object n = event.payload().get("n");
+        return new AutoPayInput(String.valueOf(event.payload().get("sponsorId")), null,
+            n == null ? 0 : Integer.valueOf(String.valueOf(n)));
     }
 }

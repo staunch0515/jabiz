@@ -45,6 +45,8 @@ The Platform fee account has two parts: **Granted credit** (platform fee credit 
 
 在"资金 → 平台费账户"顶部看合计、赠送额度和现金；下面按使用顺序列出每一笔剩余（含到期日）和每一笔费用是怎样付的。
 
+自动付款开启期间，现金到账（刷卡、银行转账、运营商转入）或获得赠送额度后，您未付的账单会按开具先后自动支付，无需操作，每次付款都会邮件告知。账户有多少付多少，不够的部分仍然未付。
+
 ### 日本語 · アカウントの残高が足りないときは？ どこで確認できる？
 
 アカウントにある分だけが支払われ、残りは請求書に未払いとして残ります。未払い・期限超過の請求書があると、新しい公開を申請できないことがあります（画面に理由が表示されます）。「資金 → プラットフォーム利用料アカウント」で現金をチャージしてください（カード、または提供されている場合は銀行振込）。入金されたら、「資金 → 請求書」で未払いの請求書を支払ってください。
@@ -57,6 +59,8 @@ The account pays as far as it goes; the rest stays on the invoice as unpaid. Whi
 
 The top of "Money → Platform fee account" shows the total, the Granted credit and the cash; below it, every amount that is left in the order it is used (with its expiry), and how each fee was paid.
 
+自動支払いが有効になっている間は、現金の入金（カード・銀行振込・運営パートナーからの移動）や付与クレジットの付与があると、未払いの請求書が古いものから自動で支払われます。操作は不要で、支払いのたびにメールでお知らせします。アカウントにある分だけが支払われ、足りない分は未払いのまま残ります。
+
 ### 中文 · 贷项凭证是什么？发布提前结束会退钱吗？
 
 贷项凭证减少您应付的平台费，原来的费用和账单不变。它有两种来源：发布提前结束时退回受众规则费未用的天数（是否退回按平台的设置；被平台下架的不退）；平台的财务人员更正某笔费用（由另一位管理员批准）。凭证先抵这笔费用所在账单还欠的部分；预付的费用再把超出的部分退回原来付款的地方（现金或赠送的平台费 Kudos，已过期的赠送不再退回）；余下的成为贷项，先抵您以后的账单。在"资金 → 账单"的"贷项凭证"一栏可以看到每张凭证并下载 PDF；账单上写明已用凭证抵减的金额。
@@ -64,6 +68,8 @@ The top of "Money → Platform fee account" shows the total, the Granted credit 
 ### 日本語 · 返還インボイスとは？ 公開が早く終わると返金されますか？
 
 返還インボイスは、お支払いいただくプラットフォーム利用料を減らすものです。元の料金と請求書はそのままです。発行されるのは、公開が早く終了したときの対象条件の料金のうち未使用日数分（返金するかどうかはプラットフォームの設定によります。プラットフォームによる取り下げは対象外です）と、プラットフォームの経理担当が料金を訂正するとき（別の管理者が承認します）です。まずその料金の請求書の未払い分に充当し、前払いの料金は残りを支払元（現金または付与クレジット。期限切れの付与クレジットには戻りません）に返金します。それでも残る分は次回以降の請求書に先に充当します。「資金 → 請求書」の「返還インボイス」で一覧と PDF を確認でき、請求書には充当額が記されます。
+
+While automatic payment is on, when cash arrives (by card, by bank transfer, or moved from your Operator) or Granted credit is given, your unpaid invoices are paid by themselves, the oldest first. You do nothing, and each payment is told to you by mail. The account pays as far as it goes; what it cannot cover stays unpaid.
 
 ### English · What is a credit note? Do I get money back when a publication ends early?
 

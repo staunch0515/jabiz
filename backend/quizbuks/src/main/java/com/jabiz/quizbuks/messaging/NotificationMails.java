@@ -79,9 +79,11 @@ public final class NotificationMails {
      * and protected: it speaks of a payment, so its text is one another administrator publishes.
      */
     public static final MailTemplate FEE_AUTO_PAID = MailTemplate.define("qb.fee.auto-paid", t -> t
-        .category(MailCategory.TRANSACTIONAL).param("invoiceNos", "count")
-            .sample("invoiceNos", "INV-0001, INV-0002")
-            .sample("count", "2")
+        .category(MailCategory.TRANSACTIONAL).param("lines", "count", "paid", "owed")
+            .sample("lines", "- INV-0001: 1,100 / 0")
+            .sample("count", "1")
+            .sample("paid", "1,100")
+            .sample("owed", "0")
             .protectedText());
 
     /**
