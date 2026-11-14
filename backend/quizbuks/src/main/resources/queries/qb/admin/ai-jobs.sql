@@ -2,10 +2,13 @@
 id: qb.admin.ai-jobs
 description: >-
   AI jobs of every sponsor, newest first (Q8a; covers since Q8b): their kind, state, the model asked and the one that answered (another one
-  after a refusal, A-10), attempts, tokens and the failure's code and explanation; never the candidates
-entities: [QbAiJob]
+  after a refusal, A-10), attempts, tokens and the failure's code and explanation; never the candidates. F-M9: with
+  how it is charged (feeMode) and the operator the fee was frozen with; no amounts (the sponsors' money is the finance
+  administrators', qb.admin.ai-fees)
+entities: [QbAiJob, QbOperator]
 datasets:
   QbAiJob: urn:jabiz:dataset:default:QbAiJob
+  QbOperator: urn:jabiz:dataset:default:QbOperator
 params:
   failedOnly: { kind: { type: bool }, description: "If true, only the failed jobs" }
 results:
@@ -29,6 +32,9 @@ results:
   failureMessage: { from: QbAiJob.failureMessage }
   requestedAt:    { from: QbAiJob.requestedAt }
   finishedAt:     { from: QbAiJob.finishedAt }
+  feeMode:        { from: QbAiJob.feeMode }
+  feeOperatorId:  { from: QbAiJob.feeOperatorId }
+  feeOperatorName: { from: QbOperator.name }
 list:
   filters: [sponsorId, kind, status, failureCode, requestedAt]
   sorts:   [requestedAt, inputTokens, outputTokens]
@@ -56,6 +62,11 @@ SELECT
     j.{{QbAiJob.failureCode}}    AS failureCode,
     j.{{QbAiJob.failureMessage}} AS failureMessage,
     j.{{QbAiJob.requestedAt}}    AS requestedAt,
-    j.{{QbAiJob.finishedAt}}     AS finishedAt
+    j.{{QbAiJob.finishedAt}}     AS finishedAt,
+    j.{{QbAiJob.feeMode}}        AS feeMode,
+    j.{{QbAiJob.feeOperatorId}}  AS feeOperatorId,
+    o.{{QbOperator.name}}        AS feeOperatorName
 FROM {{QbAiJob}} j
+-- The operator the fee was frozen with, by name; the platform's own sponsors have none.
+LEFT JOIN {{QbOperator}} o ON CAST(o.{{QbOperator.operatorId}} AS text) = j.{{QbAiJob.feeOperatorId}}
 WHERE (CAST(:failedOnly AS boolean) IS NOT TRUE OR j.{{QbAiJob.status}} = 'FAILED')
