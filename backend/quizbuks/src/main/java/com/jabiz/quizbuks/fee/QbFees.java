@@ -229,6 +229,8 @@ public final class QbFees {
         eb.field("chargeId", f -> f.physicalColumn("charge_id").processOnly().asText(36));
         eb.field("grantId", f -> f.physicalColumn("grant_id").processOnly().asText(36));
         eb.field("creditNoteId", f -> f.physicalColumn("credit_note_id").processOnly().asText(36));
+        // F-M15 b: why it ended under review without a decision (ERASED: its sponsor was erased; none otherwise).
+        eb.field("endedCode", f -> f.physicalColumn("ended_code").processOnly().asText(20));
         eb.field("version", f -> f.physicalColumn("version").asVersion());
         eb.stateTransitions("status", st -> st
             .initial(REVIEW)

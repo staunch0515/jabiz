@@ -7,7 +7,19 @@ import com.jabiz.process.ProcessDefinition;
 import com.jabiz.query.EntityQuery;
 import com.jabiz.query.QueryPredicate;
 import com.jabiz.quizbuks.QbPermissions;
+import com.jabiz.param.ParamValues;
+import com.jabiz.quizbuks.setup.QbParams;
+import com.jabiz.quizbuks.wallet.ManualCredits;
 import com.jabiz.quizbuks.wallet.QbLedger;
+import com.jabiz.quizbuks.wallet.QbTopUps;
+import com.jabiz.quizbuks.wallet.TopUpStatus;
+import com.jabiz.runtime.approval.WithdrawApproval;
+import com.jabiz.runtime.process.steps.HoldLock;
+import com.jabiz.runtime.process.steps.LoadParams;
+import com.jabiz.runtime.process.steps.RunTemplate;
+import com.jabiz.runtime.task.CloseTasks;
+import com.jabiz.runtime.task.CreateTask;
+import com.jabiz.runtime.task.TaskSpec;
 import com.jabiz.quizbuks.wallet.QbWallets;
 import com.jabiz.runtime.EntityInstance;
 import com.jabiz.runtime.ledger.LedgerProcesses;
@@ -19,6 +31,7 @@ import jakarta.validation.constraints.Size;
 
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -34,6 +47,19 @@ import java.util.Map;
 public final class MoneyClose {
 
     public static final String REGISTER = "QB_SPONSOR_CLOSURE_REGISTER";
+    /** The wind-up itself (the daily job's item and the consumer of {@value #DUE_EVENT}). */
+    public static final String CLOSE = "QB_SPONSOR_MONEY_CLOSE";
+    /** Step 0: a manual credit or a fee request under review, withdrawn (sub-process). */
+    public static final String WITHDRAW = "QB_SPONSOR_CLOSE_WITHDRAW";
+    public static final String JOB = "qb.sponsor-money-close";
+    public static final String DUE_TEMPLATE = "qb.system.money-close-due";
+    public static final String UNINVOICED_TEMPLATE = "qb.system.money-close-uninvoiced";
+    public static final String DUE_SUBSCRIPTION = "qb.sponsor-money-close";
+    /** Finance's task when a wind-up takes long, and the one when a manual credit under review was withdrawn. */
+    public static final String SLOW_TASK = "qb.erasure-close.slow";
+    public static final String SLOW_TASK_TITLE = "task.qb.erasure-close.slow";
+    public static final String WITHDRAWN_TASK = "qb.erasure-close.withdrawn";
+    public static final String WITHDRAWN_TASK_TITLE = "task.qb.erasure-close.withdrawn";
     /** The wind-up's last step for one lot of granted credit (sub-process; the caller holds the wallet lock). */
     public static final String VOID_LOT = "QB_FEE_CREDIT_VOID_LOT";
     /** The posting's description (only a description: the monthly report's kind is the expiry's). */
@@ -56,6 +82,33 @@ public final class MoneyClose {
     static final String POST_INPUT = "postInput";
     static final String POSTING = "posting";
     static final String VOIDED = "voided";
+    static final String PARAMS = "params";
+    static final String IN_REVIEW_TOPUPS = "inReviewTopUps";
+    static final String IN_REVIEW_REQUESTS = "inReviewRequests";
+    static final String WITHDRAWN = "withdrawn";
+    static final String OPEN_DEPOSIT = "openDeposit";
+    static final String UNINVOICED = "uninvoiced";
+    static final String ISSUED = "issued";
+    static final String UNPAID = "unpaid";
+    static final String CREDITS = "credits";
+    static final String CASH_WALLET = "cashWallet";
+    static final String TO_VOID = "toVoid";
+    static final String LOTS_VOIDED = "lotsVoided";
+    static final String OUTCOME = "outcome";
+    static final String ROW = "row";
+    static final String ALERT = "alert";
+
+    /** What one run of the wind-up did. */
+    public static final String NONE = "NONE";
+    public static final String WAITING_DEPOSITS = "DEPOSIT_OPEN";
+    public static final String SWITCHED_OFF = "SWITCH_OFF";
+    /** Fees owed and something to pay them with: the next run pays (F-M13's automatic payment, after #696). */
+    public static final String TO_PAY = "TO_PAY";
+    public static final String CLOSED = "CLOSED";
+
+    /** A manual credit or a fee request still under review when the wind-up ran. */
+    public static final String TOPUP = "TOPUP";
+    public static final String REQUEST = "REQUEST";
 
     /** The wallet rows that are the platform fee account (a zero balance counts: the account was there). */
     static final List<String> ACCOUNT_WALLETS = List.of(QbWallets.CASH, QbWallets.FEE_CREDIT);
@@ -77,6 +130,23 @@ public final class MoneyClose {
      * @param voided what was left of it, voided
      */
     public record VoidLotOutput(String grantId, boolean marked, BigDecimal voided) {}
+
+    /** @param sponsorId the erased sponsor whose account is wound up */
+    public record CloseInput(@NotBlank @Size(max = 128) String sponsorId) {}
+
+    /**
+     * @param outcome {@code NONE} (no closure, or nothing to do), {@code SWITCH_OFF}, {@code DEPOSIT_OPEN},
+     *                {@code TO_PAY} or {@code CLOSED}
+     * @param owed    what the unpaid invoices still owe after the run
+     */
+    public record CloseOutput(String sponsorId, String outcome, int invoicesIssued, int lotsVoided, int withdrawn,
+        BigDecimal owed) {}
+
+    /** @param kind {@value #TOPUP} or {@value #REQUEST}; @param id its record */
+    public record WithdrawInput(@NotBlank @Size(max = 10) String kind, @NotBlank @Size(max = 36) String id) {}
+
+    /** @param withdrawn whether it was still under review and is ended now */
+    public record WithdrawOutput(String kind, String id, boolean withdrawn) {}
 
     private MoneyClose() {}
 
@@ -126,6 +196,309 @@ public final class MoneyClose {
         values.put("erasedAt", ctx.opTime());
         ctx.changes().insert(QbSponsorClosures.CLOSURE, values);
         ctx.put(REGISTERED, true);
+    }
+
+    // ---- the wind-up -------------------------------------------------------------------------------------------------
+
+    /**
+     * Winds up an erased sponsor's platform fee account (§5.2), again and again until it is done: the daily job's item
+     * and the consumer of {@value #DUE_EVENT}. It never takes {@code qb.account} or {@code qb.quiz} (the account will not
+     * change any more); its only lock is the sponsor's wallet lock, after step 0's withdrawals (an approval's lock comes
+     * before a wallet's).
+     * <ol start="0">
+     *   <li>whatever the switch, a manual credit or a fee request still under review is withdrawn ({@value #WITHDRAW});
+     *   <li>the switch {@code qb.erasure.close.enabled} off: only {@code SWITCH_OFF} is recorded;
+     *   <li>a prepayment still held: {@code DEPOSIT_OPEN}, nothing else (it is released a day after its end);
+     *   <li>every month with postpaid fees not invoiced yet is invoiced (the month's own item, re-entering the lock);
+     *   <li>the unpaid invoices are paid as far as the account goes, earliest first (F-M13's automatic payment, after
+     *       #696; until then a run with something to pay records {@code TO_PAY});
+     *   <li>last, what is left of every lot of granted credit not voided and not expired is voided
+     *       ({@value #VOID_LOT}), and the closure is {@code CLOSED} ({@code FEE_OWED} when fees are still owed).
+     * </ol>
+     * A run that does not finish within {@code qb.erasure.close.alert-days} of the erasure gives finance one task, closed
+     * when the wind-up is done.
+     */
+    public static ProcessDefinition<CloseInput, CloseOutput, ProcessContext> close() {
+        return ProcessDefinition.define(CLOSE, 1, CloseInput.class, CloseOutput.class, ProcessContext.class, pb -> pb
+            .description("Winds up an erased sponsor's platform fee account: invoices what is not invoiced, pays the "
+                + "invoices as far as the account goes and voids the granted credit left.")
+            .permissions(QbPermissions.FEE_SYSTEM)
+            .internal()
+            .contextFactory(FeeProcesses::context)
+            .outputMapper(MoneyClose::closeOutput)
+            .step("Load the switch and the alert days", LoadParams.<ProcessContext>optional(ProcessContext::opTime,
+                PARAMS, QbParams.ERASURE_CLOSE_ENABLED, QbParams.ERASURE_CLOSE_ALERT_DAYS))
+            // Step 0, whatever the switch: what is under review is withdrawn before anything else (its approval's lock
+            // comes before the wallet's).
+            .step("Read what is under review", QueryEntities.<ProcessContext>all(
+                QueryEntities.query(QbTopUps.defaultDataset(QbTopUps.TOPUP), ctx -> EntityQuery.builder()
+                    .where(new QueryPredicate.And(List.of(new QueryPredicate.Eq("sponsorId", sponsorId(ctx)),
+                        new QueryPredicate.Eq("method", QbTopUps.MANUAL),
+                        new QueryPredicate.Eq("status", TopUpStatus.REVIEW)))).limit(FeeGate.MAX_UNPAID).build(),
+                    IN_REVIEW_TOPUPS),
+                QueryEntities.query(QbFees.defaultDataset(QbFees.REQUEST), ctx -> EntityQuery.builder()
+                    .where(new QueryPredicate.And(List.of(new QueryPredicate.Eq("sponsorId", sponsorId(ctx)),
+                        new QueryPredicate.Eq("status", QbFees.REVIEW)))).limit(FeeGate.MAX_UNPAID).build(),
+                    IN_REVIEW_REQUESTS)))
+            .step("Withdraw what is under review", CallProcess.forEach(WITHDRAW, 1, MoneyClose::withdrawInputs,
+                WITHDRAWN))
+            .step("Lock the sponsor's wallet", HoldLock.<ProcessContext>exclusive(
+                ctx -> QbWallets.lockName(QbWallets.SPONSOR, sponsorId(ctx))))
+            .step("Read the closure and what is held", QueryEntities.<ProcessContext>all(
+                QueryEntities.query(QbFees.defaultDataset(QbSponsorClosures.CLOSURE),
+                    ctx -> one(new QueryPredicate.Eq("sponsorId", sponsorId(ctx))), CLOSURE),
+                QueryEntities.query(QbFees.defaultDataset(QbPrepayments.PREPAYMENT), ctx -> one(
+                    new QueryPredicate.Eq("sponsorId", sponsorId(ctx)),
+                    new QueryPredicate.Eq("status", QbPrepayments.OPEN)), OPEN_DEPOSIT)))
+            .compute("Decide whether to go on", (metadata, ctx) -> decideStart(ctx))
+            .step("Find the months not invoiced", RunTemplate.<ProcessContext>when(MoneyClose::goingOn,
+                UNINVOICED_TEMPLATE, ctx -> Map.of("sponsorId", sponsorId(ctx)), UNINVOICED))
+            .step("Invoice them", CallProcess.forEach(FeeProcesses.INVOICE_ITEM, 1, MoneyClose::invoiceInputs,
+                ISSUED))
+            // Step 7 (F-M13's automatic payment, after #696) goes here.
+            .step("Read the account and the invoices again", QueryEntities.<ProcessContext>all(
+                QueryEntities.query(QbFees.defaultDataset(QbFees.INVOICE), ctx -> goingOn(ctx)
+                    ? CreditNotes.unpaid(sponsorId(ctx)) : nothing("invoiceId"), UNPAID),
+                QueryEntities.query(QbFeeAccount.defaultDataset(QbFeeAccount.GRANT), ctx -> goingOn(ctx)
+                    ? FeeSettlement.credits(sponsorId(ctx), ctx.opTime()) : nothing("grantId"), CREDITS),
+                QueryEntities.query(QbWallets.defaultDataset(QbWallets.WALLET),
+                    ctx -> QbWallets.query(QbWallets.CASH, goingOn(ctx) ? sponsorId(ctx) : null), CASH_WALLET),
+                QueryEntities.query(QbFeeAccount.defaultDataset(QbFeeAccount.GRANT), ctx -> goingOn(ctx)
+                    ? EntityQuery.builder().where(new QueryPredicate.And(List.of(
+                        new QueryPredicate.Eq("sponsorId", sponsorId(ctx)),
+                        new QueryPredicate.IsNull("voidedAt"),
+                        new QueryPredicate.Gt("expiresAt", ctx.opTime()))))
+                    .limit(FeeSettlement.MAX_CREDITS).build() : nothing("grantId"), TO_VOID)))
+            .compute("Decide the end", (metadata, ctx) -> decideEnd(ctx))
+            .step("Void the granted credit left", CallProcess.forEach(VOID_LOT, 1, MoneyClose::voidInputs,
+                LOTS_VOIDED))
+            .compute("Record the run", (metadata, ctx) -> recordRun(ctx))
+            .step("Tell finance it takes long", CreateTask.<ProcessContext>when(ctx -> Boolean.TRUE.equals(ctx.get(ALERT)),
+                MoneyClose::slowTask))
+            .step("Close finance's task", CloseTasks.<ProcessContext>done(ctx -> CLOSED.equals(ctx.get(OUTCOME))
+                ? slowTaskSource(sponsorId(ctx)) : slowTaskSource("none"))));
+    }
+
+    static List<WithdrawInput> withdrawInputs(ProcessContext ctx) {
+        List<WithdrawInput> inputs = new ArrayList<>();
+        FeeGate.list(ctx, IN_REVIEW_TOPUPS).forEach(row -> inputs.add(new WithdrawInput(TOPUP, String.valueOf(row.id()))));
+        FeeGate.list(ctx, IN_REVIEW_REQUESTS).forEach(row -> inputs.add(new WithdrawInput(REQUEST,
+            String.valueOf(row.id()))));
+        return inputs;
+    }
+
+    /** Whether the run winds up now: a closure that is not done (or done with fees owed), the switch on, nothing held. */
+    static void decideStart(ProcessContext ctx) {
+        EntityInstance closure = FeeGate.first(ctx, CLOSURE);
+        if (closure == null) {
+            ctx.put(OUTCOME, NONE);
+            return;
+        }
+        if (!switchOn(ctx.get(PARAMS, ParamValues.class))) {
+            ctx.put(OUTCOME, SWITCHED_OFF);
+            return;
+        }
+        if (FeeGate.first(ctx, OPEN_DEPOSIT) != null) {
+            ctx.put(OUTCOME, WAITING_DEPOSITS);
+            return;
+        }
+        ctx.put(GO_ON, true);
+    }
+
+    static final String GO_ON = "goOn";
+
+    static boolean goingOn(ProcessContext ctx) {
+        return Boolean.TRUE.equals(ctx.get(GO_ON));
+    }
+
+    /** Whether the switch is {@code true}: anything else (not published, malformed) is off. */
+    static boolean switchOn(ParamValues params) {
+        return params != null && Boolean.TRUE.equals(params.find(QbParams.ERASURE_CLOSE_ENABLED, Boolean.class)
+            .orElse(null));
+    }
+
+    /** The months to invoice, the earliest first. */
+    @SuppressWarnings("unchecked")
+    static List<FeeProcesses.InvoiceInput> invoiceInputs(ProcessContext ctx) {
+        if (!goingOn(ctx) || !(ctx.get(UNINVOICED) instanceof List<?> rows)) {
+            return List.of();
+        }
+        return ((List<Map<String, Object>>) rows).stream().map(row -> String.valueOf(row.get("period"))).sorted()
+            .map(period -> new FeeProcesses.InvoiceInput(sponsorId(ctx), period)).toList();
+    }
+
+    /** What the invoices still owe after the payments (each as {@link QbFees#owed}). */
+    static BigDecimal owed(ProcessContext ctx) {
+        return FeeGate.list(ctx, UNPAID).stream().map(QbFees::owed).reduce(BigDecimal.ZERO, BigDecimal::add);
+    }
+
+    /**
+     * After the invoices and the payments: fees owed while the account still has something to pay them with wait for
+     * the next payment; otherwise the granted credit left is voided now and the closure is done.
+     */
+    static void decideEnd(ProcessContext ctx) {
+        if (!goingOn(ctx)) {
+            return;
+        }
+        BigDecimal spendable = FeeSettlement.spendable(FeeGate.list(ctx, CREDITS), FeeGate.first(ctx, CASH_WALLET),
+            ctx.opTime());
+        ctx.put(OUTCOME, ErasureCloseRules.end(owed(ctx), spendable));
+    }
+
+    static List<VoidLotInput> voidInputs(ProcessContext ctx) {
+        if (!CLOSED.equals(ctx.get(OUTCOME))) {
+            return List.of();
+        }
+        return FeeGate.list(ctx, TO_VOID).stream().map(lot -> new VoidLotInput(sponsorId(ctx), String.valueOf(lot.id())))
+            .toList();
+    }
+
+    /** The closure's row after the run, and whether finance is told now that it takes long. */
+    static void recordRun(ProcessContext ctx) {
+        EntityInstance closure = FeeGate.first(ctx, CLOSURE);
+        if (closure == null) {
+            return;
+        }
+        String outcome = (String) ctx.get(OUTCOME);
+        Map<String, Object> values = new LinkedHashMap<>();
+        values.put("lastRunAt", ctx.opTime());
+        if (CLOSED.equals(outcome)) {
+            values.put("status", QbSponsorClosures.CLOSED);
+            values.put("closedAt", closure.get("closedAt") == null ? ctx.opTime() : closure.get("closedAt"));
+            values.put("reasonCode", owed(ctx).signum() > 0 ? QbSponsorClosures.FEE_OWED : null);
+        } else {
+            values.put("reasonCode", ErasureCloseRules.reasonOf(outcome, (String) closure.get("reasonCode")));
+            BigDecimal days = ctx.get(PARAMS, ParamValues.class) == null ? null
+                : ctx.get(PARAMS, ParamValues.class).find(QbParams.ERASURE_CLOSE_ALERT_DAYS, BigDecimal.class).orElse(null);
+            if (QbSponsorClosures.WAITING.equals(closure.get("status")) && closure.get("alertedAt") == null
+                && ErasureCloseRules.slow((Instant) closure.get("erasedAt"), days, ctx.opTime())) {
+                values.put("alertedAt", ctx.opTime());
+                ctx.put(ALERT, true);
+            }
+        }
+        ctx.changes().update(QbSponsorClosures.CLOSURE, closure.id(), closure.version(), values);
+    }
+
+    static String slowTaskSource(Object sponsorId) {
+        return "erasure-close:" + sponsorId;
+    }
+
+    static TaskSpec slowTask(ProcessContext ctx) {
+        EntityInstance closure = FeeGate.first(ctx, CLOSURE);
+        Map<String, String> params = new LinkedHashMap<>();
+        params.put("sponsor", sponsorId(ctx));
+        params.put("reason", String.valueOf(ErasureCloseRules.reasonOf((String) ctx.get(OUTCOME),
+            (String) closure.get("reasonCode"))));
+        return TaskSpec.forPermission(SLOW_TASK, SLOW_TASK_TITLE, params, QbPermissions.FEE_MANAGE)
+            .about(QbSponsorClosures.CLOSURE, String.valueOf(closure.id())).source(slowTaskSource(sponsorId(ctx)));
+    }
+
+    @SuppressWarnings("unchecked")
+    static CloseOutput closeOutput(ProcessContext ctx) {
+        int issued = ctx.get(ISSUED) instanceof List<?> list ? list.size() : 0;
+        int voided = ctx.get(LOTS_VOIDED) instanceof List<?> list
+            ? (int) ((List<Object>) list).stream().filter(o -> ((VoidLotOutput) o).marked()).count() : 0;
+        int withdrawn = ctx.get(WITHDRAWN) instanceof List<?> list
+            ? (int) ((List<Object>) list).stream().filter(o -> ((WithdrawOutput) o).withdrawn()).count() : 0;
+        return new CloseOutput(sponsorId(ctx), (String) ctx.get(OUTCOME), issued, voided, withdrawn,
+            goingOn(ctx) ? owed(ctx) : BigDecimal.ZERO);
+    }
+
+    private static String sponsorId(ProcessContext ctx) {
+        return ctx.get(INPUT, CloseInput.class).sponsorId();
+    }
+
+    private static EntityQuery nothing(String key) {
+        return EntityQuery.builder().where(new QueryPredicate.In(key, List.of())).limit(1).build();
+    }
+
+    /** The input of the job's item and of the consumer: the sponsor. */
+    static CloseInput closeInput(DomainEvent event) {
+        return new CloseInput(String.valueOf(event.payload().get("sponsorId")));
+    }
+
+    // ---- step 0: withdrawing what is under review -------------------------------------------------------------------
+
+    /**
+     * A manual credit or a platform fee request still under review when its sponsor was erased (Fable M1): its pending
+     * approval is withdrawn (the erasure overwrote the reason it was bound to, so a decision could not land) and it
+     * ends: the credit {@code CANCELLED}, the request {@code REJECTED}, both with {@code endedCode = ERASED}; nothing is
+     * posted or granted. A manual credit may stand for money received: finance gets a task with its amount. A bank
+     * top-up's check by finance is not withdrawn (its money arrived; its approval is bound to no erased field).
+     */
+    public static ProcessDefinition<WithdrawInput, WithdrawOutput, ProcessContext> withdraw() {
+        return ProcessDefinition.define(WITHDRAW, 1, WithdrawInput.class, WithdrawOutput.class, ProcessContext.class,
+            pb -> pb
+                .description("Ends a manual credit or a platform fee request under review when its sponsor's account "
+                    + "was deleted (a part of the wind-up).")
+                .permissions(QbPermissions.FEE_SYSTEM)
+                .subProcessOnly()
+                .contextFactory(FeeProcesses::context)
+                .outputMapper(ctx -> new WithdrawOutput(withdrawInput(ctx).kind(), withdrawInput(ctx).id(),
+                    Boolean.TRUE.equals(ctx.get(WITHDRAWN))))
+                .step("Read it", QueryEntities.<ProcessContext>all(
+                    QueryEntities.query(QbTopUps.defaultDataset(QbTopUps.TOPUP), ctx -> TOPUP.equals(
+                        withdrawInput(ctx).kind()) ? FeeProcesses.byId("topUpId", withdrawInput(ctx).id())
+                        : nothing("topUpId"), IN_REVIEW_TOPUPS),
+                    QueryEntities.query(QbFees.defaultDataset(QbFees.REQUEST), ctx -> REQUEST.equals(
+                        withdrawInput(ctx).kind()) ? FeeProcesses.byId("requestId", withdrawInput(ctx).id())
+                        : nothing("requestId"), IN_REVIEW_REQUESTS)))
+                .compute("Decide", (metadata, ctx) -> ctx.put(WITHDRAWN, stillInReview(ctx)))
+                .step("Withdraw the manual credit's approval", WithdrawApproval.<ProcessContext>when(
+                    ctx -> Boolean.TRUE.equals(ctx.get(WITHDRAWN)) && TOPUP.equals(withdrawInput(ctx).kind()),
+                    ManualCredits.APPROVAL_SUBJECT, ctx -> withdrawInput(ctx).id()))
+                .step("Withdraw the request's approval", WithdrawApproval.<ProcessContext>when(
+                    ctx -> Boolean.TRUE.equals(ctx.get(WITHDRAWN)) && REQUEST.equals(withdrawInput(ctx).kind()),
+                    QbFees.APPROVAL_SUBJECT, ctx -> withdrawInput(ctx).id()))
+                .compute("End it", (metadata, ctx) -> endWithdrawn(ctx))
+                .step("Tell finance", CreateTask.<ProcessContext>when(
+                    ctx -> Boolean.TRUE.equals(ctx.get(WITHDRAWN)) && TOPUP.equals(withdrawInput(ctx).kind()),
+                    MoneyClose::withdrawnTask)));
+    }
+
+    private static WithdrawInput withdrawInput(ProcessContext ctx) {
+        return ctx.get(INPUT, WithdrawInput.class);
+    }
+
+    private static EntityInstance withdrawnRow(ProcessContext ctx) {
+        return TOPUP.equals(withdrawInput(ctx).kind()) ? FeeGate.first(ctx, IN_REVIEW_TOPUPS)
+            : FeeGate.first(ctx, IN_REVIEW_REQUESTS);
+    }
+
+    static boolean stillInReview(ProcessContext ctx) {
+        EntityInstance row = withdrawnRow(ctx);
+        if (row == null) {
+            return false;
+        }
+        return TOPUP.equals(withdrawInput(ctx).kind())
+            ? QbTopUps.MANUAL.equals(row.get("method")) && TopUpStatus.REVIEW.equals(row.get("status"))
+            : QbFees.REVIEW.equals(row.get("status"));
+    }
+
+    static void endWithdrawn(ProcessContext ctx) {
+        if (!Boolean.TRUE.equals(ctx.get(WITHDRAWN))) {
+            return;
+        }
+        EntityInstance row = withdrawnRow(ctx);
+        Map<String, Object> values = new LinkedHashMap<>();
+        values.put("endedCode", QbSponsorClosures.ENDED_ERASED);
+        if (TOPUP.equals(withdrawInput(ctx).kind())) {
+            values.put("status", TopUpStatus.CANCELLED);
+            ctx.changes().update(QbTopUps.TOPUP, row.id(), row.version(), values);
+        } else {
+            values.put("status", QbFees.REJECTED);
+            values.put("decidedAt", ctx.opTime());
+            ctx.changes().update(QbFees.REQUEST, row.id(), row.version(), values);
+        }
+    }
+
+    static TaskSpec withdrawnTask(ProcessContext ctx) {
+        EntityInstance row = withdrawnRow(ctx);
+        Map<String, String> params = new LinkedHashMap<>();
+        params.put("amount", FeeGate.money(row.get("amount")).toPlainString());
+        params.put("sponsor", String.valueOf((Object) row.get("sponsorId")));
+        return TaskSpec.forPermission(WITHDRAWN_TASK, WITHDRAWN_TASK_TITLE, params, QbPermissions.FEE_MANAGE)
+            .about(QbTopUps.TOPUP, String.valueOf(row.id())).source("erasure-withdrawn:" + row.id());
     }
 
     // ---- voiding one lot --------------------------------------------------------------------------------------------

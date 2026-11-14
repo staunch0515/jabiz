@@ -47,7 +47,8 @@ class ClosureRegisterIT extends CreditNoteItSupport {
 
         assertThat(closures(sponsor)).singleElement().satisfies(row -> {
             assertThat(row).containsEntry("status", QbSponsorClosures.WAITING);
-            assertThat(row.get("reason_code")).isNull();
+            // The registration asks for the wind-up at once; the switch is off here (declared off), so it only says so.
+            assertThat(row).containsEntry("reason_code", QbSponsorClosures.SWITCH_OFF);
             assertThat(row.get("closed_at")).isNull();
             assertThat(row.get("erased_at")).isNotNull();
         });

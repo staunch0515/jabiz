@@ -30,6 +30,9 @@ public final class QbSponsorClosures {
     public static final String FEE_OWED = "FEE_OWED";
     public static final List<String> REASONS = List.of(SWITCH_OFF, DEPOSIT_OPEN, FEE_OWED);
 
+    /** Why a manual credit or a fee request under review ended without a decision: its sponsor was erased. */
+    public static final String ENDED_ERASED = "ERASED";
+
     private QbSponsorClosures() {}
 
     public static final EntityDefinition CLOSURE_ENTITY = EntityDefinition.define(CLOSURE, eb -> {
@@ -47,6 +50,8 @@ public final class QbSponsorClosures {
             .asTemporal(TemporalRole.EVENT_TIME));
         eb.field("lastRunAt", f -> f.physicalColumn("last_run_at").processOnly().asTemporal(TemporalRole.EVENT_TIME));
         eb.field("closedAt", f -> f.physicalColumn("closed_at").processOnly().asTemporal(TemporalRole.EVENT_TIME));
+        // When finance was given the task that it takes long (once).
+        eb.field("alertedAt", f -> f.physicalColumn("alerted_at").processOnly().asTemporal(TemporalRole.EVENT_TIME));
         eb.field("version", f -> f.physicalColumn("version").asVersion());
         eb.listView("default", lv -> lv
             .columns("sponsorId", "status", "reasonCode", "erasedAt", "lastRunAt", "closedAt")

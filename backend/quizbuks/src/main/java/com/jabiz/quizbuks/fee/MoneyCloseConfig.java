@@ -4,6 +4,8 @@ import com.jabiz.dataset.DatasetDefinition;
 import com.jabiz.dictionary.StaticDictionary;
 import com.jabiz.entity.EntityDefinition;
 import com.jabiz.event.EventSubscription;
+import com.jabiz.job.JobDefinition;
+import com.jabiz.job.JobItems;
 import com.jabiz.process.ProcessContext;
 import com.jabiz.process.ProcessDefinition;
 import com.jabiz.quizbuks.QbPermissions;
@@ -11,14 +13,26 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
+import java.time.ZoneId;
+import java.time.ZoneOffset;
+
 /** F-M15 b: the beans of an erased sponsor's money's wind-up (docs/quizbuks/plans/impl/F-M15.md §4.1, §5). */
 @Configuration
 public class MoneyCloseConfig {
 
     private final String poolRef;
+    private final ZoneId zone;
 
-    MoneyCloseConfig(@Value("${jabiz.storage.default-pool-ref:default}") String poolRef) {
+    MoneyCloseConfig(@Value("${jabiz.storage.default-pool-ref:default}") String poolRef,
+        @Value("${jabiz.fiscal-year-zone:UTC}") String zone) {
         this.poolRef = poolRef;
+        ZoneId zoneId;
+        try {
+            zoneId = ZoneId.of(zone);
+        } catch (RuntimeException e) {
+            zoneId = ZoneOffset.UTC;
+        }
+        this.zone = zoneId;
     }
 
     @Bean
@@ -69,5 +83,40 @@ public class MoneyCloseConfig {
         ProcessDefinition<MoneyClose.RegisterInput, MoneyClose.RegisterOutput, ProcessContext> qbSponsorClosureRegister) {
         return EventSubscription.of(MoneyClose.REGISTER_SUBSCRIPTION, MoneyClose.ACCOUNT_ERASED_EVENT,
             qbSponsorClosureRegister, MoneyClose::registerInput);
+    }
+
+    @Bean
+    ProcessDefinition<MoneyClose.CloseInput, MoneyClose.CloseOutput, ProcessContext> qbSponsorMoneyClose() {
+        return MoneyClose.close();
+    }
+
+    @Bean
+    ProcessDefinition<MoneyClose.WithdrawInput, MoneyClose.WithdrawOutput, ProcessContext> qbSponsorCloseWithdraw() {
+        return MoneyClose.withdraw();
+    }
+
+    /** A closure just registered is wound up at once (it records DEPOSIT_OPEN while its publications settle). */
+    @Bean
+    EventSubscription<MoneyClose.CloseInput> qbSponsorMoneyCloseSubscription(
+        ProcessDefinition<MoneyClose.CloseInput, MoneyClose.CloseOutput, ProcessContext> qbSponsorMoneyClose) {
+        return EventSubscription.of(MoneyClose.DUE_SUBSCRIPTION, MoneyClose.DUE_EVENT, qbSponsorMoneyClose,
+            MoneyClose::closeInput);
+    }
+
+    /**
+     * Every day ({@code quizbuks.erasure-close.cron}, {@code QB_ERASURE_CLOSE_CRON}; 03:53 in the fiscal year's zone,
+     * after the distribution fee's final settlements and the prepayments' release): every closure not done, and those
+     * done with fees owed and cash that arrived since (§5.6), at most {@code quizbuks.erasure-close.max-items} a run.
+     */
+    @Bean
+    JobDefinition<MoneyClose.CloseInput> qbSponsorMoneyCloseJob(
+        ProcessDefinition<MoneyClose.CloseInput, MoneyClose.CloseOutput, ProcessContext> qbSponsorMoneyClose,
+        @Value("${quizbuks.erasure-close.cron:0 53 3 * * *}") String cron,
+        @Value("${quizbuks.erasure-close.max-items:10000}") int maxItems) {
+        return JobDefinition.forEach(MoneyClose.JOB, cron, zone,
+                JobItems.template(MoneyClose.DUE_TEMPLATE, scheduledTime -> java.util.Map.of(), "sponsorId"),
+                qbSponsorMoneyClose,
+                (scheduledTime, row) -> new MoneyClose.CloseInput(String.valueOf(row.get("sponsorId"))))
+            .maxItems(maxItems);
     }
 }

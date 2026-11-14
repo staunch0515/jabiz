@@ -9,6 +9,8 @@ CREATE TABLE qb_sponsor_closure (
     erased_at   timestamptz  NOT NULL,
     last_run_at timestamptz,
     closed_at   timestamptz,
+    -- When finance was told it is taking long (once: the task is not given again while it waits).
+    alerted_at  timestamptz,
     version     bigint       NOT NULL DEFAULT 1,
     CONSTRAINT qb_sponsor_closure_closed CHECK ((status = 'CLOSED') = (closed_at IS NOT NULL))
 );
@@ -16,3 +18,8 @@ CREATE TABLE qb_sponsor_closure (
 CREATE UNIQUE INDEX qb_sponsor_closure_sponsor_idx ON qb_sponsor_closure (sponsor_id);
 -- The daily job's items (what is waiting, what closed with something owed).
 CREATE INDEX qb_sponsor_closure_status_idx ON qb_sponsor_closure (status, reason_code);
+
+-- §5.2 step 0 (Fable M1): a manual credit or a platform fee request still under review when its sponsor was erased is
+-- withdrawn by the wind-up (the erasure overwrote the reason its approval was bound to): why it ended, as a code.
+ALTER TABLE qb_topup ADD COLUMN ended_code varchar(20) CHECK (ended_code IN ('ERASED'));
+ALTER TABLE qb_fee_request ADD COLUMN ended_code varchar(20) CHECK (ended_code IN ('ERASED'));
