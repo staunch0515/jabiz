@@ -39,8 +39,9 @@ class ErasureLoadLimitIT extends PlayItSupport {
     void aSponsorWithManyPublicationsAndCashRewardsCanStillAsk() {
         String sponsor = newSponsor(unique("s-fm15a-many"));
         int live = 2;
-        rows("qb_publication_card", null, HISTORY, n -> Map.of(
-            "publisher_kind", "'SPONSOR'", "publisher_id", text(sponsor),
+        rows("qb_publication_card", "QbPublication", HISTORY, n -> Map.of(
+            "publisher_kind", "'SPONSOR'", "publisher_id", text(sponsor), "reward_method", "'SPONSOR_CASH'",
+            "audience", "'PUBLIC'",
             "status", "CASE WHEN n <= " + live + " THEN 'LIVE' ELSE 'ENDED' END"));
         int owed = 3;
         rows("qb_cash_reward_version", "QbCashReward", HISTORY, n -> Map.of(
@@ -56,11 +57,13 @@ class ErasureLoadLimitIT extends PlayItSupport {
     @Test
     void aTakerWithManyWithdrawalsRewardsAndVouchersCanStillAsk() {
         String taker = newTaker(unique("t-fm15a-many"), null);
-        int sending = 1;
+        int reviewing = 1;
+        // At most one transfer of a user is not finished (a partial unique index): one under review, the rest
+        // rejected (nothing posted).
         rows("qb_transfer", null, HISTORY, n -> Map.of(
-            "user_id", text(taker),
-            "status", "CASE WHEN n <= " + sending + " THEN '" + TransferStatus.SENDING + "' ELSE '"
-                + TransferStatus.SENT + "' END"));
+            "user_id", text(taker), "method", "'STRIPE'", "amount", "1000", "fee", "0", "net", "1000",
+            "status", "CASE WHEN n <= " + reviewing + " THEN '" + TransferStatus.REVIEW + "' ELSE '"
+                + TransferStatus.REJECTED + "' END"));
         int owed = 2;
         rows("qb_cash_reward_version", "QbCashReward", HISTORY, n -> Map.of(
             "publisher_kind", "'SPONSOR'", "sponsor_id", text(UUID.randomUUID().toString()), "user_id", text(taker),
@@ -73,7 +76,7 @@ class ErasureLoadLimitIT extends PlayItSupport {
                 + RedemptionStatus.REDEEMED + "' END"));
 
         Map<String, ErasureNotice> found = noticesOf(taker);
-        assertThat(found.get("qb.withdrawal-in-progress").params()).containsEntry("count", (long) sending);
+        assertThat(found.get("qb.withdrawal-in-progress").params()).containsEntry("count", (long) reviewing);
         assertThat(found.get("qb.rewards-unclaimed").params()).containsEntry("count", (long) (owed + vouchers));
     }
 
@@ -83,18 +86,20 @@ class ErasureLoadLimitIT extends PlayItSupport {
         int unpaid = 2;
         // 1,000 each, 300 of them paid and 100 credited: 600 owed each.
         rows("qb_fee_invoice", null, HISTORY, n -> Map.of(
-            "sponsor_id", text(sponsor), "invoice_no", "'IT-' || ids.id", "total", "1000",
-            "paid_amount", "CASE WHEN n <= " + unpaid + " THEN 300 ELSE 1000 END",
+            "sponsor_id", text(sponsor), "billing_mode", "'PREPAID'", "amount", "1000", "tax", "0", "total", "1000",
+            "paid_amount", "CASE WHEN n <= " + unpaid + " THEN 300 ELSE 0 END",
             "credit_applied", "CASE WHEN n <= " + unpaid + " THEN 100 ELSE 0 END",
-            "status", "CASE WHEN n <= " + unpaid + " THEN 'PARTIAL' ELSE 'PAID' END"));
+            "status", "CASE WHEN n <= " + unpaid + " THEN 'PARTIAL' ELSE 'VOID' END"));
         int open = 1;
         rows("qb_prepayment", null, HISTORY, n -> Map.of(
             "sponsor_id", text(sponsor), "purpose", "'DISTRIBUTION'", "mode", "'PREPAID'",
             "amount", "2000", "remaining", "CASE WHEN n <= " + open + " THEN 1500 ELSE 0 END",
-            "status", "CASE WHEN n <= " + open + " THEN 'OPEN' ELSE 'RELEASED' END"));
+            "status", "CASE WHEN n <= " + open + " THEN 'OPEN' ELSE 'RELEASED' END",
+            "released_at", "CASE WHEN n <= " + open + " THEN NULL ELSE TIMESTAMPTZ '2026-01-02T00:00:00Z' END"));
         int waiting = 1;
         rows("qb_topup", null, HISTORY, n -> Map.of(
-            "sponsor_id", text(sponsor), "method", "'BANK'", "amount", "5000",
+            "sponsor_id", text(sponsor), "method", "'BANK'", "amount", "5000", "requested_amount", "5000",
+            "target", "'CASH'", "transfer_code", "left(md5(CAST(ids.id AS text)), 10)",
             "status", "CASE WHEN n <= " + waiting + " THEN 'AWAITING' ELSE 'CANCELLED' END"));
 
         Map<String, ErasureNotice> found = noticesOf(sponsor);
@@ -120,8 +125,9 @@ class ErasureLoadLimitIT extends PlayItSupport {
 
     /**
      * {@code count} rows of {@code table}, numbered {@code n} from 1: the values given are SQL expressions (they may
-     * use {@code n}); every other required column without a default gets a plain value of its type. A temporal table
-     * ({@code entity} not null) gets version 1 of new instances, registered under the latest operation.
+     * use {@code n} and the new key {@code ids.id}); every other required column without a default gets a plain value
+     * of its type. With {@code entity}, the keys are registered as its instances under the latest operation (a temporal
+     * table's, or a card's, whose key references them); a temporal table ({@code *_version}) gets version 1.
      */
     static void rows(String table, String entity, int count, Function<Integer, Map<String, String>> values) {
         Map<String, String> given = new LinkedHashMap<>(values.apply(0));
@@ -131,7 +137,7 @@ class ErasureLoadLimitIT extends PlayItSupport {
         String key = String.valueOf(query("SELECT a.attname FROM pg_index i JOIN pg_attribute a "
             + "ON a.attrelid = i.indrelid AND a.attnum = i.indkey[0] WHERE i.indrelid = CAST(? AS regclass) "
             + "AND i.indisprimary", table).getFirst().get("attname"));
-        if (entity != null) {
+        if (table.endsWith("_version")) {
             given.put("version_no", "1");
             given.put("process_seq_id", "(SELECT max(process_seq_id) FROM op_process)");
         }
@@ -164,11 +170,14 @@ class ErasureLoadLimitIT extends PlayItSupport {
         return switch (type) {
             case "uuid" -> "gen_random_uuid()";
             case "boolean" -> "false";
-            case "smallint", "integer", "bigint", "numeric", "real", "double precision" -> "0";
+            // Amounts must mostly be positive.
+            case "smallint", "integer", "bigint", "numeric", "real", "double precision" -> "1";
             case "date" -> "DATE '2026-01-01'";
             case "timestamp with time zone", "timestamp without time zone" -> "TIMESTAMPTZ '2026-01-01T00:00:00Z'";
             case "jsonb", "json" -> "'{}'";
-            default -> length != null && length.intValue() < 8 ? "'x'" : "'x' || n";
+            // Unique where a column must be (the new key's text, cut to the column's length).
+            default -> length == null ? "'x' || CAST(ids.id AS text)"
+                : length.intValue() < 8 ? "'x'" : "left('x' || CAST(ids.id AS text), " + length.intValue() + ")";
         };
     }
 }
