@@ -111,7 +111,7 @@ public final class MoneyClose {
     public static final String NONE = "NONE";
     public static final String WAITING_DEPOSITS = "DEPOSIT_OPEN";
     public static final String SWITCHED_OFF = "SWITCH_OFF";
-    /** Fees owed and something to pay them with: the next run pays (F-M13's automatic payment, after #696). */
+    /** Fees owed and something to pay them with after a run's payments (more invoices than a run pays): the next run. */
     public static final String TO_PAY = "TO_PAY";
     public static final String CLOSED = "CLOSED";
     /**

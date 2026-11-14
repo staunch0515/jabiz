@@ -91,7 +91,7 @@
       确认人： ／ 日期： ／ 依据：
 - [ ] **财务与法务：注销后开出的账单**（F-M15 问题 12）：注销之后才开出的账单没有收件方名称（个人信息已抹除），编号、日期、金额完整并存档；请确认能否作为凭证（适格请求书的收件方名称），不能时另定替代办法
       确认人： ／ 日期： ／ 依据：
-- [ ] **注销收尾的开关 `qb.erasure.close.enabled`**（F-M15 b，受控，首次上线登记为开）：在 F-M13 的自动付款合并之后再发布；之前发布的话，有欠费又有钱可付的注销收尾停在"等付款"（`TO_PAY`），不作废赠送额度，次日照常重试
+- [ ] **注销收尾的开关 `qb.erasure.close.enabled`**（F-M15 b，受控，首次上线登记为开）：F-M13 的自动付款已合并（#696），收尾以它的单项付款、不看 `qb.fee.auto-pay.enabled`；发布后注销的发起方会先用账户里的钱付欠费、再作废剩余的赠送额度，由财务确认发布时点
       确认人： ／ 日期： ／ 依据：
 
 - [ ] **运营商分成的 8 个设置**（F-M12 a）：部署后，`QB_SETUP` 提出的 `qb.operator.share.kinds`、`qb.operator.share.ai-cost-in-base`、`qb.operator.credit-recovery.rate`、`qb.operator.gift.treatment.*`（4 个）、`qb.operator.gift.recover-outside-base` 已由另一位管理员发布（四眼）；未发布时结算任务对每个运营商都 422 `QB_OPERATOR_NO_SHARE_SETTING`。**必须在部署后的第一次结算任务之前完成**（staging：12 月的第一次任务之前）

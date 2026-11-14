@@ -486,6 +486,71 @@ class AdminFinanceIT extends PayoutItSupport {
         assertBooksBalance();
     }
 
+    /**
+     * F-M15 b (plan §6): a wind-up's postings are of the kinds that exist: the invoice it issues posts nothing, its
+     * payment is FEE_PAID (from the granted credit: 2190 / 1130) and its void of what is left FEE_CREDIT_VOIDED
+     * (2190 / 5140). No new kind.
+     */
+    @Test
+    void aWindUpsPostingsAreTheKindsThatExistRowByRow() {
+        param(QbParams.ERASURE_CLOSE_ENABLED, "true");
+        String sponsor = newSponsor(unique("s-f08-wind-up"));
+        ZonedDateTime month = now().atZone(ZoneOffset.UTC).plusMonths(5).withDayOfMonth(1).truncatedTo(ChronoUnit.DAYS);
+        Instant from = month.toInstant();
+        Instant to = month.plusMonths(1).toInstant();
+        clock.set(from.plus(Duration.ofHours(1)));
+        run(com.jabiz.quizbuks.fee.FeeProcesses.BILLING_SET, TestTokens.bearer(tokens, "f08-billing",
+            com.jabiz.quizbuks.QbPermissions.FEE_BILLING), body("userId", sponsor, "billingMode", "POSTPAID",
+            "creditLimit", 50_000, "reason", "F-M15 b"));
+        Map<String, Object> request = run(com.jabiz.quizbuks.fee.FeeRequests.RECORD, finance(), body("kind",
+            com.jabiz.quizbuks.fee.QbFees.REQUEST_MANUAL, "sponsorId", sponsor, "amount", 300, "reason",
+            "Custom report"));
+        run("APPROVAL_DECIDE", tokenOf(user("f08-wind-up-content"), com.jabiz.quizbuks.setup.QbRoles.ADMIN_CONTENT),
+            body("requestId", request.get("approvalRequestId"), "decision", "APPROVE"));
+        deliverEvents();
+        String grantId = java.util.UUID.randomUUID().toString();
+        execute("INSERT INTO qb_fee_credit_grant (grant_id, sponsor_id, source, source_key, amount, remaining, "
+            + "voided_amount, granted_at, expires_at, version) VALUES (?, ?, 'MANUAL', ?, 1000, 1000, 0, ?, ?, 1)",
+            grantId, sponsor, "test:" + grantId, java.sql.Timestamp.from(clock.instant()),
+            java.sql.Timestamp.from(to.plus(Duration.ofDays(400))));
+        run("LEDGER_POST", TestTokens.bearer(tokens, "ledger-test", "ledger.post"), body("bookingTime",
+            clock.instant().toString(), "description", "Granted credit (test)", "sourceEntity", "QbFeeCreditGrant",
+            "sourceId", grantId, "entries", List.of(
+                body("accountCode", "5140", "direction", "DEBIT", "amount", 1000, "dimensions", Map.of("party", sponsor)),
+                body("accountCode", "2190", "direction", "CREDIT", "amount", 1000, "dimensions",
+                    Map.of("party", sponsor)))));
+        execute("INSERT INTO qb_wallet (wallet_id, owner_id, kind, balance, pending_count, pending_amount, pending_out, "
+            + "version) VALUES (?, ?, 'FEE_CREDIT', 1000, 0, 0, 0, 1)", java.util.UUID.randomUUID().toString(), sponsor);
+        clock.set(from.plus(Duration.ofHours(2)));
+        systemRun(com.jabiz.quizbuks.fee.MoneyClose.REGISTER, body("userId", sponsor, "erasedAt",
+            clock.instant().toString()));
+        com.jabiz.quizbuks.fee.MoneyClose.CloseOutput done = (com.jabiz.quizbuks.fee.MoneyClose.CloseOutput) systemRun(
+            com.jabiz.quizbuks.fee.MoneyClose.CLOSE, body("sponsorId", sponsor));
+        assertThat(done.outcome()).isEqualTo(com.jabiz.quizbuks.fee.MoneyClose.CLOSED);
+        assertThat(done.invoicesPaid()).isEqualTo(1);
+
+        List<Expected> expected = List.of(
+            row("FEE_CHARGED", 1, 330, "1130", 330, "4120", -300, "2150", -30),
+            row("FEE_PAID", 1, 330, "2190", 330, "1130", -330),
+            row("FEE_CREDIT_VOIDED", 1, 670, "2190", 670, "5140", -670));
+        Map<String, Map<String, Object>> monthly = report(MONTHLY, from, to).stream()
+            .collect(Collectors.toMap(r -> (String) r.get("category"), Function.identity()));
+        for (Expected want : expected) {
+            Map<String, Object> got = monthly.get(want.category());
+            assertThat(((Number) got.get("transactionCount")).longValue()).as(want.category() + " count " + got)
+                .isEqualTo(want.count());
+            assertThat(money(got.get("amount"))).as(want.category() + " amount " + got)
+                .isEqualByComparingTo(BigDecimal.valueOf(want.amount()));
+            for (Map.Entry<String, String> column : COLUMNS.entrySet()) {
+                assertThat(money(got.get(column.getValue()))).as(want.category() + " " + column.getKey() + " " + got)
+                    .isEqualByComparingTo(BigDecimal.valueOf(want.moves().getOrDefault(column.getKey(), 0L)));
+            }
+        }
+        // Nothing of the wind-up is OTHER.
+        assertThat(((Number) monthly.get("OTHER").get("transactionCount")).longValue()).isZero();
+        assertBooksBalance();
+    }
+
     @Test
     void onlyFinanceReadsTheMoney() {
         String content = tokenOf(user("f-content"), QbRoles.ADMIN_CONTENT);

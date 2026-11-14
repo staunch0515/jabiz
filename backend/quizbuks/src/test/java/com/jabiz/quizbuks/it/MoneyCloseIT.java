@@ -6,10 +6,7 @@ import com.jabiz.quizbuks.fee.QbFees;
 import com.jabiz.quizbuks.fee.QbSponsorClosures;
 import com.jabiz.quizbuks.setup.QbParams;
 import com.jabiz.quizbuks.wallet.ManualCredits;
-import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.springframework.test.context.DynamicPropertyRegistry;
-import org.springframework.test.context.DynamicPropertySource;
 
 import java.math.BigDecimal;
 import java.time.Duration;
@@ -27,22 +24,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  * platform fee account. The invoices are paid through F-M13's automatic payment item, the earliest first, the granted
  * credit before the cash; the granted credit left is voided only after the last payment (H2). E1–E3 are the plan's §2.
  */
-class MoneyCloseIT extends CreditNoteItSupport {
-
-    @DynamicPropertySource
-    static void maintenance(DynamicPropertyRegistry registry) {
-        registry.add("jabiz.erasure.datasource.url", () -> DB.r2dbcUrl() + "?schema=" + schema());
-        registry.add("jabiz.erasure.datasource.username", DB::username);
-        registry.add("jabiz.erasure.datasource.password", DB::password);
-    }
-
-    @BeforeEach
-    void maintenanceRoleAndTheSwitch() {
-        execute("DO $$ BEGIN CREATE ROLE jabiz_maintenance; EXCEPTION WHEN duplicate_object THEN NULL; END $$");
-        execute("DO $$ BEGIN EXECUTE 'GRANT jabiz_maintenance TO ' || quote_ident(current_user);"
-            + " EXCEPTION WHEN OTHERS THEN NULL; END $$");
-        param(QbParams.ERASURE_CLOSE_ENABLED, "true");
-    }
+class MoneyCloseIT extends MoneyCloseItSupport {
 
     @Test
     void theSwitchOffOnlyRecordsAndTheNextRunAfterItIsOnWindsUp() {
@@ -549,16 +531,6 @@ class MoneyCloseIT extends CreditNoteItSupport {
         assertThat(openTasks(QbFees.overdueTaskSource(invoiceId))).isEmpty();
     }
 
-    /** The postpaid invoice of the month {@code in} falls in, as the monthly job's item issues it. */
-    private void invoicePeriod(String sponsor, java.time.Instant in) {
-        systemRun(com.jabiz.quizbuks.fee.FeeProcesses.INVOICE_ITEM, body("sponsorId", sponsor, "period",
-            com.jabiz.quizbuks.fee.FeeRules.period(in, ZoneId.of("Asia/Tokyo"))));
-    }
-
-    private static BigDecimal money(Object value) {
-        return new BigDecimal(String.valueOf(value));
-    }
-
     /** Finance's list of wind-ups, filtered as the page does, at the clock's time. */
     private List<Object> closuresShown(String show) {
         return items("qb.admin.money-closures", finance(), Map.of("limit", 1000, "params", Map.of("show", show,
@@ -596,28 +568,6 @@ class MoneyCloseIT extends CreditNoteItSupport {
                 .add(String.valueOf(row.get("check_code")));
         }
         return found;
-    }
-
-    /**
-     * Review M3: the account is really erased first (ACCOUNT_ERASE: tombstones, the reasons overwritten), then the
-     * registration runs as the erasure's event would (the event is left undelivered: a replay registers nothing more).
-     */
-    private void erase(String sponsor) {
-        runAsSystem("ACCOUNT_ERASE", Map.of("userId", sponsor, "requestedBy", "it-support"));
-        assertThat(((MoneyClose.RegisterOutput) systemRun(MoneyClose.REGISTER, Map.of("userId", sponsor)))
-            .registered()).isTrue();
-    }
-
-    private MoneyClose.CloseOutput close(String sponsor) {
-        return (MoneyClose.CloseOutput) systemRun(MoneyClose.CLOSE, Map.of("sponsorId", sponsor));
-    }
-
-    private static Map<String, Object> closure(String sponsor) {
-        return query("SELECT * FROM qb_sponsor_closure WHERE sponsor_id = ?", sponsor).getFirst();
-    }
-
-    private static Map<String, Object> lotOf(String grantId) {
-        return query("SELECT * FROM qb_fee_credit_grant WHERE grant_id = ?", grantId).getFirst();
     }
 
     private static List<Map<String, Object>> openTasks(String sourceKey) {
