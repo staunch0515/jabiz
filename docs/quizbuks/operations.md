@@ -248,7 +248,7 @@ FROM pg_stat_statements ORDER BY total_exec_time DESC LIMIT 20;
    再在管理系统扩展的"QuizBuks → 规约类"页（`/qb/legal`）预览草稿并"发布"（`QB_LEGAL_PUBLISH`，每次要求二次验证，留审计；发布的是页面读到的草稿版本，期间被改即拒绝）：生效时间留空即立即生效，或填以后的时间作预告（至多 `qb.legal.max-announce-days` 天；预告期间不能再发布同一种文本）；
    预告有误时在同一页的版本列表中填理由"撤回"（`QB_LEGAL_WITHDRAW`，只能在生效前；撤回的版本永不生效、不要求同意，版本号不再使用，公开的历史中标为"已撤回"）；
    实质性变更勾选"须重新同意"，措辞修订不勾。已发布的版本不可修改，改错只能发布新版本。正式模式下缺少已生效的学者条款、发起方条款或隐私政策时**启动告警**（`LiveModeDataCheck`）。
-   帮助中心的问答在平台管理系统"帮助中心问答"中维护（英语必填、`seq` 排序、"公开中"才出现在页面）。支持邮箱 `qb.support.email`（普通参数，空即不显示"仍需帮助"的联系方式）在平台管理系统参数中设；Q41 起 `QB_SETUP` 新建它时为 `quizbuks@gmail.com`，已建过的（空）不会被改，要在平台管理系统参数中改一次。
+   帮助中心的问答在平台管理系统"帮助中心问答"中维护（英语必填、`seq` 排序、"公开中"才出现在页面）。问答的对象有 App、发起方页面、两者（ALL）与**运营商帮助（OPERATOR）**：运营商帮助只给登录后的运营商成员（运营商管理系统 `/operator/` 的菜单"帮助"，页面 `/qb/operator/help`，可按文字搜索、答案按 Markdown 显示，读模板 `qb.operator.faq`，权限 `qb.operator.use`），**不是公开的**——公开的帮助中心模板 `qb.public.faq` 不会给出它，ALL 也不包含它；新建时选对象"运营商帮助（登录后）"并勾选"公开中"（这里的"公开中"指已发布）。草稿文案放在 `docs/quizbuks/help/`，由内容管理员粘贴发布。支持邮箱 `qb.support.email`（普通参数，空即不显示"仍需帮助"的联系方式）在平台管理系统参数中设；Q41 起 `QB_SETUP` 新建它时为 `quizbuks@gmail.com`，已建过的（空）不会被改，要在平台管理系统参数中改一次。
    发布条款时可勾选"在收件箱中公告"：一分钟内（任务 `qb.broadcast-dispatch`）给相关的人发一条系统公告（学者条款 → App，隐私政策 → App 与发起方页面，其余 → 发起方页面），有效 30 天。
 10. **站内信与公告**（Q7c）：个人消息（奖励、转账、收款账户）由事件的消费者写入，不需设置；公告在管理系统扩展的"QuizBuks → 公告与通知"（`/qb/broadcasts`）编写与发送（发送要求二次验证，撤回每次二次验证并填理由，发起方可见）。
    普通参数（`QB_SETUP` 建立，可在平台管理系统参数中直接改）：发起方每个发布的通知上限 `qb.broadcast.sponsor.max-per-publication`（3）、两条之间的最短间隔 `qb.broadcast.sponsor.min-interval-hours`（24）、
@@ -325,9 +325,9 @@ FROM pg_stat_statements ORDER BY total_exec_time DESC LIMIT 20;
      - 法务相关的不打开：`qb.transfer.enabled`、`qb.withdrawal.bank.enabled` 保持 `false`（§1.3b、§1.3c）；`qb.kudos.buy.enabled`、`qb.kudos.sell.enabled`、`qb.reward.kudos.enabled`、`qb.play.entry-fee.enabled` 的首次上线的值也是 `false`（学分只显示、不使用，学分的帮助见 `help/fee-account.md`）；
      - `qb.fee.monthly`、`qb.creator-fee-rate`（与 `qb.transfer.fee-rate`）的提案值是 0，**必须先发布**（与其他提案一起，不等价目表）：首次上线不收这些费用，发布后参数才存在、卡片才显示"一致"，以后改声明值也不会改到已上线的系统；价目表设好、收费开始前再由受控变更改为实际金额；赠送额度的开关 `qb.fee-credit.grant.enabled` 在价目表与赠送额度（`qb.fee-credit.grant.*`）设好之后发布；
      - AI 使用说明发布、**且 AI 使用手册（`manual-sponsor.*.md`、`manual-app.*.md`）已按首次上线的状态（学分只显示、不使用，无报名费）改好并由内容管理员重新载入、发布**之后，才发布 `qb.ai.enabled` 与 `qb.help.enabled`（两条提案的值都是 `true`）；
-     - 收费组尚未上线的行：已经存在的两个键 `qb.audience.billing.enabled`（F-M7）、`qb.ai.site-profile.enabled`（F-M9）由 `QB_SETUP` 提出 `false`，**照常发布**，卡片比较它们的现值（为开即"不同"，启动检查警告）；其余的键（AI 费 `qb.ai.fee.enabled`、自动付账单 `qb.fee.auto-pay.enabled`；配送费 `qb.distribution.billing.enabled` 与曝光费 `qb.exposure.billing.enabled`（F-M8c）已是普通的生效行）尚不存在，卡片显示"等 F-Mx 上线"，不提案、不用管；它们的上线顺序见 `plans/impl/F-M.md` §4；
+     - 收费组尚未上线的行：已经存在的两个键 `qb.ai.fee.enabled`、`qb.ai.site-profile.enabled`（F-M9）由 `QB_SETUP` 提出 `false`，**照常发布**，卡片比较它们的现值（为开即"不同"，启动检查警告）；受众规则费 `qb.audience.billing.enabled`（F-M7）已是生效行、提案值为 `true`，价目表设好后发布；其余的键（自动付账单 `qb.fee.auto-pay.enabled`；配送费 `qb.distribution.billing.enabled` 与曝光费 `qb.exposure.billing.enabled`（F-M8c）已是普通的生效行）尚不存在，卡片显示"等 F-Mx 上线"，不提案、不用管；它们的上线顺序见 `plans/impl/F-M.md` §4；
   3. 财务页卡片中可比较的行全部显示"一致"（金额类的行显示"金额，不比较"）。新建的测试系统（`staging`）同样应全部一致；只有此前已经建过参数的测试系统，以及本地环境（不是 `production` / `staging`，提出声明值），才会显示"不同"；
-  4. 启动日志没有 `FirstLaunchSwitchesCheck` 的警告（`production` 上：学分买卖、转账、提现、学分奖励、报名费的开关为开，受众规则费 `qb.audience.billing.enabled` 或网站资料的 AI `qb.ai.site-profile.enabled` 为开，或学分奖励的开关从未发布；Stripe 正式模式而环境不是 `production`）。
+  4. 启动日志没有 `FirstLaunchSwitchesCheck` 的警告（`production` 上：学分买卖、转账、提现、学分奖励、报名费的开关为开，AI 收费 `qb.ai.fee.enabled`、网站资料的 AI `qb.ai.site-profile.enabled` 或自动付款 `qb.fee.auto-pay.enabled` 为开，或学分奖励的开关从未发布；Stripe 正式模式而环境不是 `production`）。
   运营商自己的提现（`qb.operator.withdrawal.*`）没有开关：那是运营商的收入，不是学分，不由本项挡住。
 - [ ] 小额实测：一位内部发起方用真实卡充值最小额（`qb.topup.min`），确认到账、手续费分录、收据；在 Stripe Dashboard 全额退款，确认扣回；次日核对为 `OK`
 - [ ] 资金调度：充值在 Stripe 上几天后才变为可用余额，转账从可用余额转出；定好打开转账前的余额与打款计划
@@ -629,7 +629,7 @@ AI 为运营商找发起方（F-S1：所有者一律是运营商；平台不自�
 - **规则目录**：内容管理员（`qb.audience.rules.write`）在平台管理系统「受众规则」决定每种规则是否开放给发起方、是否计费、排序；没改过的规则即开放、计费。关闭的规则发起方不能再选，已提交的发布照旧。新增一种规则要开发。
 - **价目表**：每个所有者（直营 `direct` 与每个运营商）一张：每种规则的日价与每次最低使用费，理由必填，历史在审计中。直营与任何运营商的由财务（`qb.audience.prices.write`）在平台管理系统改，运营商的负责人在 `/operator/` 改自己的。没有价目表的直营即免费；运营商没有价目表时按受控参数 `qb.audience.price.fallback`（`DIRECT` 用直营的价，`FREE` 免费）。
 - **费用** = max（最低使用费，Σ 所用计费规则的日价 × 天数），天数为发布期间按 24 小时向上取整；没用计费规则的不收。
-- **开关**（受控参数，四眼）：`qb.audience.billing.enabled`（缺省关：报价为 0）、`qb.audience.price.fallback`、`qb.audience.fee.refund-unused-days`（Q47c-2 才起作用）。打开之前先设好价目表；**Q47c-2 上线之前不要打开**（打开后发起方看到费用，但提交时还不扣款）。部署后执行一次 `QB_SETUP` 提出这三个参数，由另一位管理员发布。
+- **开关**（受控参数，四眼）：`qb.audience.billing.enabled`（缺省关：报价为 0）、`qb.audience.price.fallback`、`qb.audience.fee.refund-unused-days`（Q47c-2 才起作用）。打开之前先设好各运营商的价目表（没有价目表的运营商下，规则按 0 计费）。提交发布时的预留与上架时的记费已在 F-M5、F-M7 上线，所以**首次上线即开**：首次上线的登记行是"生效行、值为开"，部署后执行一次 `QB_SETUP` 提出这三个参数（`qb.audience.billing.enabled` 的提案值为 `true`），由另一位管理员在价目表设好之后发布。
 
 ### 7.16 ~~协议答题（Q86）~~
 
@@ -1386,7 +1386,7 @@ Quiz 与发布有主题词（平台词表中的词与自定义词），学者可
   - **关注待办**：同一对象只要有一个未办的就不再建；不再出现即以完成关闭。人手工关了而条件还在，次日会重建：要处理的是条件，不是待办。
   - **差异待办**：后一天的取代前一天的（前一天的以取消关闭）；一次没有差异的运行把它以完成关闭。
   - **不动的情况**：当天的核对没有运行时，两个任务什么也不做（由 `qb-reconcile-missing` 叫人）。补跑的核对（`JOB_RUN_REQUEST`）晚于 UTC 18:52 完成时，当天的两个任务已经跑过、什么也没做：核对补跑之后，再对这两个任务各补跑一次当天的计划时刻。补跑更早的时刻（其后已有更晚的运行）时，两个任务也什么都不做：待办只按最新的一次运行建立与关闭。一次运行的条目超过 1,000 条而被截断时，不关任何关注待办：不见不等于没有。
-- **截断时保留的次序**：学者钱包三项最先，然后差异、关注、提示。摘要里的计数永远是全的。
+- **截断时保留的次序**：学者钱包三项最先，然后差异、关注、提示。摘要里只列出有条目的核对项，其计数是全的（未列出的核对项即为 0）。
 - **两个阈值改为受控**（四眼）：`qb.prepayment.release.overdue-days`（预付款在发布结束后几天未退回即报）与 `qb.audience.refund.missing-after-hours`（受众规则费在发布结束后几小时未判定即报）。原则：决定核对报不报的阈值受控，只决定何时提醒的不受控。已有的安装保留现值（设置流程不再动已有的参数），以后修改要提出受控变更、由另一位管理员发布；新安装由 `QB_SETUP` 提出缺省值（2 天、30 小时），发布之前天数按 2 天计、小时数的检查不执行。
 - **模板**：原来的 `qb.system.recon-fee-account` 按领域拆成 `recon-fee-credit`、`recon-operator-account`、`recon-prepayments`、`recon-credit-notes` 四个，结果不变。
 - **运营商结算的核对读多长的历史（F-M12 c，`qb.system.recon-operator-settlement`）**：这几项核对只读"锚点"之前三个月以来的历史，锚点是**上一次干净（`OK`）、且包含这几项核对的运行**的计划时刻；没有这样的运行时读全部历史。锚点从**上线后的第一次核对**算起：上线前的 `OK` 运行没有这几项核对，不算锚点。运行仍是 `DIFF` 时锚点不前移，所以一个差异不会因为拖得久而从窗口里掉出去。窗口之内的结算逐列对明细行；窗口之内的赠送额度付款去找没写行的；运营商只要在窗口内有结算或为结算做过分录（冲正沿用原分录的来源），它的"扣回"就按全部历史核对；两次结算本应数入的费用与付款不按时间截断（一笔费用可以因分批数入或运营商落后而久久没有被数入）。
@@ -1456,7 +1456,7 @@ Quiz 与发布有主题词（平台词表中的词与自定义词），学者可
 
 ### 7.55 每日核对与月报分类一览（F-M14a）
 
-**核对总表**（`ReconChecks.ALL`，按它的顺序，共 64 项：差异 50、需关注 8、提示 6）。级别的含义与待办见 §7.52；"差异"拦月末分录导出，"需关注"与"提示"不拦。"报开发"＝代码或数据有缺陷，不要手工改表；"补跑"一律经 `JOB_RUN_REQUEST`（任务名、计划时刻与原因）。核对页每组标题下的一句"怎么办"与本表一致。
+**核对总表**（`ReconChecks.ALL`，按它的顺序，共 69 项：差异 55、需关注 8、提示 6）。级别的含义与待办见 §7.52；"差异"拦月末分录导出，"需关注"与"提示"不拦。"报开发"＝代码或数据有缺陷，不要手工改表；"补跑"一律经 `JOB_RUN_REQUEST`（任务名、计划时刻与原因）。核对页每组标题下的一句"怎么办"与本表一致。
 
 | 码 | 查什么 | 级别 | 常见原因 | 怎么办 | 谁处理 | 相关项 |
 |---|---|---|---|---|---|---|
@@ -1519,7 +1519,12 @@ Quiz 与发布有主题词（平台词表中的词与自定义词），学者可
 | `EXPOSURE_UNPURCHASED` | 进行中、用他人视频却没有已购的发布 | 提示 | 开关打开之前提交的，或运营商没有价目 | 不用处理（给运营商与总部看，不建待办） | — | EXPOSURE_PRICE_RANGE |
 | `EXPOSURE_SETTLED_SHORT` | `final` 行的次数少于它那一刻已计入的次数（不超过已购） | 差异 | 结算行写错 | 补结算前先看该发布的各行（§7.54）；报开发 | 财务 | EXPOSURE_SETTLED_OVER |
 | `EXPOSURE_AMOUNT_MISMATCH` | 各结算行的金额之和 ≠ ⌈最大次数 × 单价⌉ | 差异 | 有行被手工动过或重复 | 报开发 | 财务 | EXPOSURE_SETTLED_OVER |
-| `AI_RESERVATION_SHORT` | 收费的 AI 作业结束时，费用超出它的预留（或当时的 AI 额度），超出部分由平台承担（F-M9；引用为作业编号，实际为平台承担的税前日元；月度记费收进后不再出现） | 提示 | 预留的上限（每次尝试的调用次数、页数、输出上限）低于该作业的实际用量，或期间额度被退回 | 发起方无需处理；同类作业经常出现时，按实际用量调高预留的受控参数（§7.56） | 总部（AI 设置） | — |
+| `AI_RESERVATION_SHORT` | 收费的 AI 作业结束时，费用超出它的预留（或当时的 AI 额度），超出部分由平台承担（F-M9；引用为作业编号，实际为平台承担的税前日元；在作业结束的当月与下一月、月度记费收进之前列出） | 提示 | 预留的上限（每次尝试的调用次数、页数、输出上限）低于该作业的实际用量，或期间额度被退回 | 发起方无需处理；同类作业经常出现时，按实际用量调高预留的受控参数（§7.56） | 总部（AI 设置） | — |
+| `AI_CREDIT` | 发起方的 AI 额度剩余 = 2180 用途 `AI` 的余额（引用 `ledger`，没有未关闭的额度而 2180 有余额也列出）= 额度变动之和（`movements`）；累计购入 = 变动 `BUY` 之和（`bought`）（F-M9a-2b） | 差异 | 过账或变动漏写、额度被流程以外改动 | 对照该发起方的 `qb_ai_credit_movement_version` 与 2180 明细；报开发 | 报开发 | PREPAYMENTS、PREPAYMENT_PARTS |
+| `AI_FEE_MONTH` | 每笔 AI 费的金额 = 收进它的作业此刻的 `fee_yen` 之和（引用为费用编号；看最近 40 天记的费用，以及上一次运行报出差异的费用（#702 审查 M4：差异不会因过窗而消失）；#699 审查 L3：按记费后的实际值比，被缩减的作业以缩减后的为准） | 差异 | 作业在记费后被改动，或被两笔费用收进 | 报开发 | 报开发 | AI_FEE_UNBILLED |
+| `AI_FEE_UNBILLED` | 收费且有费用的 AI 作业，在它的月份（`fee_period`，财年时区）结束 `qb.ai.fee.unbilled-after-hours`（缺省 48，按 48–720 取）小时后仍未记费（引用为月份，实际为这些作业的费用合计）；已结束、有费用而没有月份的作业立即列出（引用 `none`，#702 审查 L2：没有记费会收进它） | 差异 | 月度任务 `qb.ai-fee-monthly` 没跑或某项失败（缺税率等） | 看该任务的运行与失败的项，修好原因后对那个计划时刻补跑（`JOB_RUN_REQUEST`，§7.56） | 财务 | AI_FEE_MONTH |
+| `AI_FEE_RESERVED` | 已结束的收费 AI 作业仍有预留（结局流程会把预留清零） | 差异 | 结局流程以外改了作业 | 报开发 | 报开发 | — |
+| `AI_CREDIT_EXPIRED_HELD` | AI 额度中已到期（或在到期前已作废）的赠送额度，在到期 `qb.ai.credit.expired-held-after-hours`（缺省 48，按 48–720 取）小时后仍超出仍占着额度的作业（进行中的预留与已结束未记费的含税费用，#702 审查 L1）所占的部分（占用按税率向上取整，税率未设按 100%，不会误报） | 差异 | 每日任务 `qb.ai-credit-expire` 没跑或某项失败 | 看该任务的运行与失败的项，补跑 | 财务 | FEE_CREDIT_PROMOTION |
 | `ERASED_GIFT_LEFT` | 已完成收尾（`CLOSED`）的已注销发起方没有剩余的赠送额度（收尾时未到期的各笔） | 差异 | 收尾的作废漏了某笔 | 报开发（§7.59） | 报开发 | FEE_CREDIT、FEE_CREDIT_PROMOTION |
 | `ERASED_CLOSE_OPEN` | 收尾在注销后 `qb.erasure.close.alert-days` 天内完成 | 需关注 | 开关 `qb.erasure.close.enabled` 关着、预付款未释放，或任务失败 | §7.59 | 财务 | ERASED_NO_CLOSURE |
 | `ERASED_FEE_OWED` | 已完成收尾的已注销发起方仍欠的平台费（按发起方合计） | 提示 | 账户里的钱不够付 | 财务决定是否免除（§7.59）；不再有逾期提醒 | 财务 | FEES_RECEIVABLE |
@@ -1528,15 +1533,21 @@ Quiz 与发布有主题词（平台词表中的词与自定义词），学者可
 **已知局限**
 - 关注待办手工关闭而条件仍在，次日会重建；"已持续 n 天"从连续找到同一（核对项, 对象）的那几次运行中的第一次算起（UTC 日数）：某次运行不再找到它即重新数，没有运行的日子不打断；核对页一次至多显示 100 个关注条目的天数。
 - 一次运行的条目超过 1,000 条时只保存前 1,000 条（学者钱包、差异、关注、提示的次序），摘要里的计数是全的；此时不自动关闭关注待办。
-- 摘要是各码计数的 JSON，写在 2,000 个字符的列里；每项 7 位数时约 1,100 个字符，`ReconChecksTest` 在余量不足 150 个字符时失败。
+- 摘要是各码计数的 JSON，写在 2,000 个字符的列里（列已封存，不能加宽）。#702 起只列出计数不为 0 的码，以 `"_format":"nonzero"` 开头；页面与月末导出把未列出的码当作 0（导出看的是运行的状态，不读摘要）。69 项每项 5 位数时约 1,500 个字符，`ReconChecksTest` 在余量不足 150 个字符时失败。
+- 仍然写不下时（几乎不会：要很多项同时有百万条以上），摘要按差异、关注、提示的次序保留能写下的码，加 `"_truncated":true`，并在日志中告警（`Reconciliation`："The reconciliation's summary was cut…"）；运行照常写入，总条数仍在运行的条目数里。#702 之前的运行的摘要列出全部的码（含 0）。
 - 配送费"月结算漏做"的缺省阈值 30 小时：月初 00:00 起 30 小时是 2 日 06:00，而 2 日的核对在 03:37，所以最早 3 日才报。
 - 核对按 UTC 18:37 运行；按 `jabiz.fiscal-year-zone` 排的任务随该设置移动，表中的先后以 `Asia/Tokyo` 为前提。
+- `AI_FEE_MONTH` 靠"上一次运行报出的差异"把超过 40 天的费用带进来：核对任务停跑超过 40 天、或上一次运行的条目超过 1,000 条而没保存这一条时，40 天以前的费用在这期间出现的差异看不到；差异一经解决（某次运行不再报出），之后对 40 天以前的费用的改动也看不到。
 
 **月报分类**（`qb.admin.monthly`，按来源单据、是否冲正、所动科目与方向归类，每笔只归一类）：`TOPUP`、`BANK_TOPUP`、`MANUAL_TOPUP`、`GRANT`、`REFUND`、`DISPUTE`、`STRIPE_FEE`、`REWARD`、`TRANSFER_SENT`、`TRANSFER_SETTLED`、`WITHDRAWAL_PAID`、`TRANSFER_FAILED`、`TRANSFER_REVERSED`、`PAYOUT`、`PAYOUT_FAILED`、`OPERATOR_SHARE`、`OPERATOR_PAID`、`REFERRAL_REWARD`、`CASH_TOPUP`、`CASH_BANK_TOPUP`、`CASH_REFUND`、`CASH_DISPUTE`、`KUDOS_BOUGHT`、`KUDOS_SOLD`、`FEE_CHARGED`、`FEE_PAID`、`FEE_VOIDED`、`ENTRY_FEE`、`ENTRY_FEE_SETTLED`、`FEE_CREDIT_GRANTED`、`FEE_CREDIT_VOIDED`、`OPERATOR_TRANSFER_TO_DIRECT`、`PREPAYMENT_FROZEN`、`PREPAYMENT_USED`、`PREPAYMENT_RELEASED`、`DISTRIBUTION_CHARGED`、`DISTRIBUTION_DEPOSIT`、`DISTRIBUTION_RELEASED`、`FEE_CREDIT_NOTE`、`FEE_CREDIT_RECOVERED`、`EXPOSURE_CHARGED`、`EXPOSURE_DEPOSIT`（冻结与追加）、`EXPOSURE_RELEASED`、`AI_CHARGED`、`AI_CREDIT_BOUGHT`、`AI_CREDIT_USED`、`AI_CREDIT_RETURNED`、`AI_CREDIT_VOIDED`、`AUDIENCE_CHARGED`（受众规则费，引用 `fee_audience_`；F-M14b 起从 `FEE_CHARGED` 分出。**财务请注意**：比较 F-M14b 上线前后的月报时，受众规则费从 `FEE_CHARGED` 移到了这一行，两行合计不变；导出的 CSV 多一行）、`OTHER`。规则一句话：**退回与扣回不另立类，按它在账上的方向落进已有的类**——退回到预付款的是 `FEE_PAID` 的负数，预付款退回账户是 `PREPAYMENT_RELEASED`，到期赠送的作废是 `FEE_CREDIT_VOIDED`；运营商结算中对赠送额度的扣回（及其退还）是 `FEE_CREDIT_RECOVERED`（F-M12，按结算记账，不另是退回）；凭证本身是 `FEE_CREDIT_NOTE`；抵用不过账。`PREPAYMENT_USED` 不分用途（各费用的记账已按种类分行），只有 AI 费从 AI 额度付的是 `AI_CREDIT_USED`（F-M9，按引用 `fee_ai_` 分开）。AI 额度的到期分两笔：`AI_CREDIT_VOIDED` 是到期的赠送从额度回到 2190，同一时刻的作废（2190 → 5140，来源为原赠送）照常是 `FEE_CREDIT_VOIDED`；退回时原赠送已到期的部分同样落 `FEE_CREDIT_VOIDED`。归不进去的才是 `OTHER`（只应有开发期没有来源的入账）；新增一种过账时，同一个 PR 里加它的类（`backend/quizbuks/CLAUDE.md`）。
 
 ### 7.56 AI 费的预留与实测（F-M9）
 
 收费的 AI 请求在发起时按"可能的最大费用"（含税，税向上取整）从 AI 额度中预留；作业结束时按有回答的用量收费，**至多收到预留为止**。超出部分由平台承担（`qb_ai_job.absorbed_yen`），每日核对以提示级 `AI_RESERVATION_SHORT` 列出（引用为作业编号，在作业结束的当月与下一月列出：费用被封到 0 的作业不会被月度记费收进，所以按月份而不按记费结束）。
+
+**AI 收费的开关与每日核对**（F-M9a-2b，#702 审查）：`qb.ai.fee.enabled`（AI 收费）与 `qb.ai.site-profile.enabled`（从官网生成）在首次上线时**都关**（资金开关卡片的"AI 费"一组，`QB_SETUP` 提议为关；正式环境开着时启动检查照其他首发为关的开关警告）。打开的顺序（`launch-checklist.md`）：先在 staging 打开两者、买额度、跑真实网站的官网生成作业取 P95（见下面"定数"）；正式环境先发布三个预留参数并确认加价、汇率、分成，再发布 AI 收费，最后发布官网生成；都是受控变更，由另一位管理员发布。官网生成按 AI 额度收费，所以 AI 收费关着时从官网生成的请求一律被拒（`QB_AI_UNAVAILABLE`）：**staging 上官网生成开而 AI 收费关时，部署后从官网生成全部被拒**，先开 AI 收费或关掉官网生成。启动检查（正式环境与 staging）对"官网生成开而 AI 收费关"给警告；AI 收费开着时（不论官网生成开否），对三个预留参数中没有设置或不可用（不是从 1 起的整数，调用次数至多 4）的给警告（此时预留按作业的最坏情况，请求会比需要的更常被拒）；只是警告，改成拦截是后续项（F-M9.md）。每日核对的 AI 项：`AI_CREDIT`、`AI_FEE_MONTH`、`AI_FEE_UNBILLED`（`qb.ai.fee.unbilled-after-hours`，缺省 48）、`AI_FEE_RESERVED`、`AI_CREDIT_EXPIRED_HELD`（`qb.ai.credit.expired-held-after-hours`，缺省 48），见 §7.55；两个小时数核对按 48 至 720 取（平台的参数没有范围：提案可以超出，核对取到范围内）。`AI_FEE_MONTH` 比较最近 40 天记的 AI 费与上一次运行报出差异的费用，按费用编号找作业（索引 `qb_ai_job_fee_charge_idx`）。
+
+**发起方的 AI 额度页与报价**（F-M9b1）：发起方在"资金 → AI 额度"（`/sponsor/money/ai`）购买（`QB_AI_CREDIT_BUY`）、退回（`QB_AI_CREDIT_RETURN`）并看明细（模板 `qb.sponsor.ai-credit*`）；页上的"可用""可退"取自只读流程 `QB_AI_CREDIT_STANDING`（与请求、退回同一算法 `AiFees.room`，不取锁，每人每小时 300 次；首页只在 AI 收费开着且设了 low-amount 时、进入首页时读一次）。三个 AI 面板在提交前调用对应的报价流程（`QB_AI_QUESTIONS_QUOTE`、`QB_AI_TRANSLATE_QUOTE`、`QB_AI_PUBLICATION_TRANSLATE_QUOTE`、`QB_SITE_PROFILE_QUOTE`，只读（不写业务数据，平台照常记操作记录）、不取锁、每人每小时 300 次），给出"本次最多"（= 请求会预留的金额）与可用额；请求在锁内重算，过时的报价只会表现为请求的 422 `QB_AI_CREDIT_SHORT`。`qb.ai.credit.low-amount`（可选的受控参数，未设即不提示）设了之后，可用低于它、且近 `qb.ai.credit.low-recent-days`（可选受控，未设为 30）天内有过收费的 AI 请求时，发起方首页的"待我处理"与 AI 额度页提示"AI 额度不足"（从不用 AI 的发起方不被提示）。
 
 **AI 额度的退回与到期**（F-M9a-2）：发起方可随时退回 AI 额度（`QB_AI_CREDIT_RETURN`，需已验证的邮箱；先退现金、再退赠送，至多"额度 − 进行中作业的预留与未记费的含税费用 − 已到期或已作废的赠送"）。赠送到期，或在到期前被作废（点亮赠送的节点不再持有时，`LightGrants`），额度里属于它的部分不再能用于新的请求（请求时就扣除，不等每日任务）、也不能退回，由每日任务 `qb.ai-credit-expire`（每天 03:47，财年时区）作废：先记 2180 → 2190（月报 `AI_CREDIT_VOIDED`），同一时刻按原赠送再作废 2190 → 5140（`FEE_CREDIT_VOIDED`）。进行中的作业所占的部分留到月度记费先用掉，之后的一次每日任务再作废。税率未设置而有未记费的费用时，退回以 422 `QB_AI_FEE_TAX_UNSET` 拒绝，到期的项失败（任务告警）。
 
@@ -1552,7 +1563,7 @@ Quiz 与发布有主题词（平台词表中的词与自定义词），学者可
 
   未设置或超出范围时取作业自身的上限（最坏情况）。
 - **价格未知**：模型的价格不在价目表中时，作业结束时这部分按 0 收费，由平台承担，只记 warn 日志（不进 `absorbed_yen`，也不出核对项）；请求时价格未知的模型直接被拒（`QB_AI_UNAVAILABLE`）。
-- **定数**（打开 `qb.ai.fee.enabled` 之前，由能连库的人执行；`launch-checklist.md` 有对应的一行）：取最近的已结束官网生成作业，按尝试看每次调用的输入与输出，取 P95 作为上面三个参数，经受控变更发布。
+- **定数**（打开 `qb.ai.fee.enabled` 之前，由能连库的人执行；`launch-checklist.md` 有对应的一行）：**数据来源是 staging**：在 staging 打开 AI 收费与官网生成，用测试发起方买额度，对若干真实网站跑官网生成；再在 staging 的库上用下面的 SQL 取这些已结束作业每次尝试的调用次数、页数与输出的 P95，作为上面三个参数，在正式环境经受控变更发布（先于 `qb.ai.fee.enabled`）。正式上线后可用正式环境的作业按同一 SQL 复核。
 
 ```sql
 -- 已结束的官网生成作业：总用量与作业参数

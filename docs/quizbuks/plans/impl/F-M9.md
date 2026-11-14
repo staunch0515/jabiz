@@ -114,23 +114,27 @@
 
 | 键 | 类型 / 缺省 / 范围 | 受控 |
 |---|---|---|
-| `qb.ai.fee.enabled` | 布尔，false（`FirstLaunchSwitches` 首次上线值 true；**打开的前提见 `launch-checklist.md`**） | 是 |
+| `qb.ai.fee.enabled` | 布尔，false（`FirstLaunchSwitches` 首次上线值 **false**：#702 审查 M1，总控沿用 #692 复核时的决定——预留的三个参数要先在 staging 以真实作业的 P95 定下；**打开的前提与顺序见 `launch-checklist.md`**） | 是 |
 | `qb.ai.fee.markup` | 数，1.5，1 至 10，两位小数 | 是 |
 | `qb.ai.fee.usd-jpy` | 数，150，50 至 500，两位小数 | 是 |
 | `qb.ai.credit.min-purchase` | 日元整数，**未设置即不限**（同 `qb.fee-credit.manual.max`，不由 `QB_SETUP` 建立），设时 100 至 1 000 000 | 是 |
 | `qb.ai.credit.low-amount` | 日元整数，500，0 至 100 000（0 = 不提示） | 否 |
-| `qb.ai.fee.unbilled-after-hours` | 整数，30，1 至 720（核对：以 `feePeriod` 的下月初起算，月度记费晚于此仍有未记费；`feePeriod` 是结果被记录时所在的月，月末前后结束的作业可能归下个月，晚一个月记费、不算未记费） | 是 |
+| `qb.ai.fee.unbilled-after-hours` | 整数，48，核对按 48 至 720 取（#702 审查 L3：平台的参数没有范围，提案可以超出，核对取到范围内；少于 48 时 1 日的月度任务稍晚就成差异，多于 720 漏跑会藏一个月）（核对：以 `feePeriod` 的下月初起算，月度记费晚于此仍有未记费；`feePeriod` 是结果被记录时所在的月，月末前后结束的作业可能归下个月，晚一个月记费、不算未记费） | 是 |
+| `qb.ai.credit.expired-held-after-hours` | 整数，48，核对按 48 至 720 取（到期或作废的赠送超出仍占着额度的作业所占的部分，这么多小时后仍在额度中即差异） | 是 |
 | `qb.ai.fee.absorbed-alert-yen` | 日元整数，1 000，0 至 10 000 000（一个月内平台承担的合计超过即给财务待办；**合计 = `absorbedYen` + `unrecordedUsd` 按冻结汇率折成日元**，两者口径不同——前者含倍数、后者是成本，页面分开列） | 否 |
 
 沿用：`qb.fee.tax-rate`、`qb.ai.price.*`（不认识的模型）、`qb.ai.sponsor.*`、`qb.ai.global.monthly-tokens`、`qb.ai.enabled`。倍数、汇率的改动只影响此后的请求（冻结在作业上）；税率在记费时才读（§4 第 3 条的再核保证不会超出额度）。
 
 ## 7 页面与运营闭合
 
-- **发起方**（b）：
-  - `/money/ai` `AiCreditPage`：额度合计（赠送 / 现金，每笔赠送的到期日）、可用额、本月未记费金额、"购买"（金额、最低购买额、预览"先用赠送，余下用现金"）、"退回"、用量明细（模板 `qb.sponsor.ai-credit` 新：作业的日期、种类、费用 / "预留中"、状态；变动记录来自 `QbAiCreditMovement`）。
+- **发起方**（b1，总控 2026-11-14 改写）：
+  - `/money/ai` `AiCreditPage`：一览（可用、剩余、预留中、未记费含税，取自只读流程 `QB_AI_CREDIT_STANDING`）；"购买"（金额；设了最低购买额时写明；显示平台费账户中可用的赠送额度与现金，"赠送先用、余下用现金"只作文字说明，成功后显示服务器给出的拆分）；"退回"（金额，或"全部可退" = 流程给出的 `returnable`）；明细三张表（模板 `qb.sponsor.ai-credit-lots`、`qb.sponsor.ai-credit-jobs`、`qb.sponsor.ai-credit-movements`；一览的模板 `qb.sponsor.ai-credit` 已删，#707 审查 L4，都是发起方自己的数据集 `FeeConfig.own`）。页面只显示模板与流程给的数，前端不重算。
   - 钱包页 `FeeAccount` 的预付款块把 AI 额度分开显示（`qb.sponsor.wallet` 的 `prepaymentHeld` 排除用途 `AI`，另加 `aiCreditHeld`）。
-  - 三个 AI 面板（题目、翻译、官网生成）：显示可用额、"本次最多约 ¥X"（`QB_AI_FEE_QUOTE`）与"购买"；额度不足的 422 直接给入口。首页"待我处理"加"AI 额度不足"（可用额低于 `qb.ai.credit.low-amount` 且近 30 天用过 AI 时）。
-  - 费用不显示美元，只显示日元；帮助 `docs/quizbuks/help/ai-credit.md`（新，三语）写清"按大模型收费的 150%、汇率、向上取整、赠送先用、赠送到期、可退回、超时或没有回答的调用不收费（失败的作业有回答的用量照收，含平台自己的重试，以问题 13 的答案为准）"，并更新 `manual-sponsor.*` 与官网生成的帮助 `site-profile.md`。
+  - 报价：四个只读流程 `QB_AI_QUESTIONS_QUOTE`、`QB_AI_TRANSLATE_QUOTE`、`QB_AI_PUBLICATION_TRANSLATE_QUOTE`、`QB_SITE_PROFILE_QUOTE`，与各自的请求共用构建器（同一段代码 `AiProcesses.feeQuote` 算预留与报价）；权限与入口范围同请求（读不到别人的测验或发布）；不取锁、不写业务数据（平台照常记操作记录 `op_process`；带幂等键调用时另记 `op_process_result`；AI 说明既不要求也不记录）；额度不足是答案而非拒绝（`enough`、`shortYen`）；`jabiz.process.rate-limits` 按用户 300/小时（同曝光费的报价）。IT `AiQuoteIT`：四种各一例断言"报价的本次最多 == 随后同输入请求的预留"；`ProcessAccessIT` 断言四者开放、权限与邮箱要求同请求、有限流。
+  - 三个 AI 面板（题目、翻译、官网生成）显示"本次最多 ¥X，可用 ¥Y"，不足时给出差额与购买入口并禁用提交；请求因 `QB_AI_CREDIT_SHORT` 被拒时同样给入口。
+  - 首页"待我处理"的"AI 额度不足"：`QB_AI_CREDIT_STANDING` 的 `low`（收费开着、`qb.ai.credit.low-amount` 已设、可用低于它，**且近 N 天有过收费的 AI 请求**：N 为 `qb.ai.credit.low-recent-days`，可选受控，未设为 30；从不用 AI 的发起方不被提示，总控 2026-11-14）。`qb.ai.credit.low-amount` 是可选的受控参数，不进 setup，**未设即不提示**；`launch-checklist.md` 有一行提醒上线前决定（与最低购买额并列）。
+  - 金额按应用规则显示为点数（Kudos，Q61；总控 2026-11-14，#707 审查 M2），不显示美元、不写币种名；发起方能看到的服务器消息（`QB_AI_CREDIT_SHORT` 等）同样用点数；帮助 `docs/quizbuks/help/ai-credit.md`（新，三语）、`manual-sponsor.*` 的"资金"与官网生成的帮助 `site-profile.md`。
+- **b2**（之后另一个 PR）：运营商与总部的页面（下面两项）。
 - **运营商管理系统**：发起方详情加 AI 额度余额与本月 AI 费（只读，限自己的发起方）；AI 费出现在现有的费用列表（种类 `AI`）。**新增的视图 / 模板声明 `withinEntryScope`**（D64，按运营商限定，同现有运营商页的写法），并测试别的运营商看不到。
 - **平台管理系统**（`/qb/ai`）：`qb.admin.ai-jobs` 加费用列（美元成本、日元费用、平台承担、运营商）；新模板 `qb.admin.ai-fees`（按月、发起方、运营商：成本美元、收费日元、**承担（`absorbedYen` 与 `unrecordedUsd` 分列并合计）**、未记费、额度余额；可导出）；倍数 / 汇率 / 最低购买额 / 开关的受控变更入口沿用参数页。
 - **任务与自动收尾**：`qb.ai-fee-monthly`、`qb.ai-credit-expire`（均可补跑）；预留随作业结束释放（发起方自己取消的，预留留到 `QB_AI_JOB_CANCELLED` 才释放）；到期提醒复用 F-M2 的赠送到期提醒（赠送还在 AI 额度中时也提醒，实现时确认 `qb.fee-credit-remind` 的取项含这部分）。
@@ -236,6 +240,15 @@
 - `QB_AI_CREDIT_SHORT` 的 `needed`、`available`、`minPurchase` 只用于填消息（平台的 422 不另返回这些字段）；页面的数字取自 `QB_AI_FEE_QUOTE`（b）。
 - 推到 a-2 的：可用额中"已过期未作废的赠送"一项（随到期任务）、`qb.ai.fee.enabled` 改 `ACTIVE`、"收费关而官网生成开"时拒绝并在启动检查警告（问题 6）、审核人对照检查与帮助 AI 不动额度的断言、锁序测试（AI 锁内不取钱包锁，a-2 才有 AI → 钱包的路径）。a-1 的开关仍是 `WAITING` 且列入 `KEY_BEFORE_MEANING`，首次上线时必须为关（`FirstLaunchSwitchesCheck`）。
 
+
+**a-2b 的实施（2026-11-14）**：
+- 每日核对加五项（模板 `qb.system.recon-ai-credit`，每日核对多一条语句）：`AI_CREDIT`（额度剩余 = 2180 用途 AI = 变动之和；累计购入 = `BUY` 之和）、`AI_FEE_MONTH`（#699 审查 L3：按每笔 AI 费，比较它与收进它的作业记费后的 `fee_yen` 之和；只看近 40 天）、`AI_FEE_UNBILLED`、`AI_FEE_RESERVED`、`AI_CREDIT_EXPIRED_HELD`（占用按税率向上取整，税率未设按 100%，只会少报、不会误报）。§8 的 `AI_FEE_ABSORBED` 由已有的提示 `AI_RESERVATION_SHORT` 承担，不另设；`FEE_CREDIT_PROMOTION` 已包含 AI 额度中的作废（完整一轮的 IT 无差异）。
+- 两个受控参数（进 setup，缺省 48）：`qb.ai.fee.unbilled-after-hours`、`qb.ai.credit.expired-held-after-hours`。
+- `qb.ai.fee.enabled` 与 `qb.ai.site-profile.enabled` 由 WAITING 改为 ACTIVE，`KEY_BEFORE_MEANING` 清空；首次上线的值是**关**（#702 审查 M1），资金开关卡片不把它们列为"应为开"，正式环境开着时启动检查照其他"首发为关"的开关警告。
+- 问题 6：AI 收费关时从官网生成的请求被拒（`QB_AI_UNAVAILABLE`）；`FirstLaunchSwitchesCheck` 在正式环境与 staging 对"官网生成开而 AI 收费关"警告，并在 AI 收费开着时（不论官网生成开否，#702 审查 M2）对三个预留参数没有设置或不可用的警告（#692 复核 L-b）。
+- **待办（后续项，#702 审查 M2）**：AI 收费开而三个预留参数未设时，目前只是启动警告；改成硬拦截（拒绝发布 `qb.ai.fee.enabled = true` 的受控变更，或启动失败）另做。
+- `AI_FEE_MONTH` 除最近 40 天的费用外，还看上一次运行报出的费用（#702 审查 M4），差异不会因过窗而消失。
+- a-1 延后的测试：审核人的翻译核对与 AI 帮助在 AI 收费开着时不收费、不预留、不需要额度；作业结局只取 AI 锁、不取钱包锁。
 
 **#692 审查（Fable，2026-11-14）后的修订**：
 - 预留是严格上界，超出预留的部分不由平台承担（总控）：每次尝试按"原模型跑一遍 + 回退模型再全部跑一遍"相加（`AiCost.maxOf`）；官网生成按网页读取器每次尝试 4 次调用、续接时输入重算（`ClaudeWebResearch.mostOfAttempt`）；预留的税向上取整。

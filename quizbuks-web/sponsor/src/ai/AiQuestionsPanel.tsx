@@ -37,6 +37,8 @@ import { useTranslation } from 'react-i18next'
 import type { Material, Quiz } from '../content/api'
 import { formProblem, ProblemList, useEditing } from '../content/editing'
 import { LIMITS } from '../content/limits'
+import { AiCreditRefusal, AiQuoteNote, useAiQuote } from '../aicredit/AiQuote'
+import { AI_CREDIT_PROCESS } from '../aicredit/api'
 import { SPONSOR } from '../messages'
 import { pickText, readLegal, readMyConsents } from '../qb/legal'
 import { QB } from '../qb/messages'
@@ -55,6 +57,7 @@ import {
   type AiJob,
   type AiLanguage,
   type AiOption,
+  type AiRequestInput,
   type Difficulty,
 } from './api'
 import { AI_CODE, AI_KINDS, AI_LANGUAGES, AI_LIMITS, DIFFICULTIES } from './ids'
@@ -160,16 +163,22 @@ function RequestDialog({ quiz, materials, maxCount, open, onOpenChange }: {
     + chosen.reduce((sum, materialId) => sum + (sizes.get(materialId) ?? 0), 0)
   const tooLarge = !fitsInput(total)
 
+  const input = (): AiRequestInput => ({
+    quizId: editing.quizId,
+    materialIds: materials.filter((m) => chosen.includes(m.materialId)).map((m) => m.materialId),
+    count: Number(count),
+    difficulty,
+    language,
+    avoidExisting,
+    aiNoticeVersionNo: notice.data?.mustAccept ? notice.data.versionNo : null,
+  })
+  // The cost is asked with the request's own input (the notice's version may be left out), when the form could be sent.
+  const n = Number(count)
+  const quote = useAiQuote(AI_CREDIT_PROCESS.questionsQuote, open && Number.isInteger(n) && n >= 1 && n <= maxCount
+    && !tooLarge ? { ...input(), aiNoticeVersionNo: null } : null)
+
   const request = useMutation({
-    mutationFn: () => requestAiQuestions({
-      quizId: editing.quizId,
-      materialIds: materials.filter((m) => chosen.includes(m.materialId)).map((m) => m.materialId),
-      count: Number(count),
-      difficulty,
-      language,
-      avoidExisting,
-      aiNoticeVersionNo: notice.data?.mustAccept ? notice.data.versionNo : null,
-    }),
+    mutationFn: () => requestAiQuestions(input()),
     onSuccess: async () => {
       onOpenChange(false)
       await queryClient.invalidateQueries({ queryKey: AI_QUERY })
@@ -272,12 +281,14 @@ function RequestDialog({ quiz, materials, maxCount, open, onOpenChange }: {
           <p className="text-muted-foreground text-sm" data-testid="ai-sent">{t('ai.dialog.sent')}</p>
           <AiNoticeSection notice={notice} agreed={agreed} onAgreed={setAgreed} />
           {local && <p role="alert" className="text-destructive text-sm" data-testid="ai-local-problem">{local}</p>}
+          <AiQuoteNote quote={quote} />
           <ProblemList problems={formProblem(request.error, [])} testId="ai-request-error" />
+          <AiCreditRefusal error={request.error} />
           <DialogFooter>
             <Button type="button" variant="outline" disabled={request.isPending} onClick={() => onOpenChange(false)}>
               {t('common.cancel')}
             </Button>
-            <Button type="submit" disabled={request.isPending || tooLarge || notice.isPending}
+            <Button type="submit" disabled={request.isPending || tooLarge || notice.isPending || quote.blocked}
               aria-busy={request.isPending || undefined} data-testid="ai-submit">
               <Sparkles aria-hidden />
               {t('ai.dialog.submit')}

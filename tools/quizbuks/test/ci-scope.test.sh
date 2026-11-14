@@ -48,7 +48,8 @@ expect_tests true 'a help page' docs/quizbuks/help/fee-account.md
 expect_tests true 'a help page among other documents' docs/ROADMAP.md docs/quizbuks/help/site-profile.md
 expect_tests true 'a prompt document' docs/quizbuks/profile-package-prompts.md
 expect_tests true 'the other prompt document' docs/quizbuks/quiz-file-prompts.md
-expect_tests false 'other documents' docs/quizbuks/operations.md docs/quizbuks/plans/impl/F-C7.md
+expect_tests false 'other documents' docs/quizbuks/first-launch-spec.md docs/quizbuks/plans/impl/F-C7.md
+expect_tests true 'the daily checks table (F-M14b)' docs/quizbuks/operations.md
 expect_tests false 'code' backend/quizbuks/src/main/resources/quizbuks/help/manual-app.en.md
 expect_tests false 'nothing changed' ''
 

@@ -31,7 +31,7 @@ class SponsorTodoIT extends VideoUseItSupport {
 
     private static final List<String> COLUMNS = List.of("claimsToConfirm", "digitalToSend", "fundsShort",
         "rewardsWaiting", "invoicesOverdue", "feeInvoicesUncovered", "publicationsInReview", "pageInReview", "sharedVideosInReview",
-        "videoUsesToConfirm", "creditsExpiring", "exposureLow");
+        "videoUsesToConfirm", "creditsExpiring", "exposureLow", "aiCreditCheck");
 
     private Map<String, Object> todo(String sponsor) {
         List<Map<String, Object>> rows = items("qb.sponsor.todo", sponsorToken(sponsor), body("params",
@@ -86,6 +86,30 @@ class SponsorTodoIT extends VideoUseItSupport {
         execute("INSERT INTO qb_fee_credit_grant (grant_id, sponsor_id, source, source_key, amount, remaining, "
             + "granted_at, expires_at) VALUES (?, ?, 'MANUAL', ?, 1000, ?, ?, ?)", UUID.randomUUID().toString(),
             sponsor, key, remaining, Timestamp.from(granted), Timestamp.from(expiresAt));
+    }
+
+    /**
+     * F-M9b (#707 review M1): aiCreditCheck is 1 only with the AI fee on and qb.ai.credit.low-amount set (the one case
+     * the home asks whether the AI credit is short); it is not a count of the caller's.
+     */
+    @Test
+    void theAiCreditCheckIsOnOnlyWithTheFeeOnAndTheLowAmountSet() {
+        String sponsor = "ai-check-" + java.util.UUID.randomUUID();
+        assertThat(count(sponsor, "aiCreditCheck")).as("neither").isZero();
+        setControlledParam(com.jabiz.quizbuks.setup.QbParams.AI_FEE_ENABLED, "true");
+        try {
+            assertThat(count(sponsor, "aiCreditCheck")).as("the fee on, no amount").isZero();
+            Map<String, Object> change = run("CONTROL_CHANGE_PROPOSE", TestTokens.bearer(tokens, "super-admin",
+                "control.propose"), body("targetEntity", "SysParam", "values", Map.of("paramKey",
+                com.jabiz.quizbuks.setup.QbParams.AI_CREDIT_LOW_AMOUNT, "value", "500", "valueKind",
+                com.jabiz.quizbuks.setup.QbParams.AI_CREDIT_MIN_PURCHASE_KIND), "reason", "test"));
+            run("CONTROL_CHANGE_PUBLISH", TestTokens.bearer(tokens, "finance-admin", "control.publish"),
+                body("changeId", change.get("changeId")));
+            assertThat(count(sponsor, "aiCreditCheck")).as("both").isEqualTo(1);
+        } finally {
+            setControlledParam(com.jabiz.quizbuks.setup.QbParams.AI_FEE_ENABLED, "false");
+        }
+        assertThat(count(sponsor, "aiCreditCheck")).as("the fee off again").isZero();
     }
 
     @Test

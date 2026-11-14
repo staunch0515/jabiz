@@ -53,6 +53,8 @@ class BanCoverageTest extends PlayItSupport {
     static final Map<String, String> EXEMPT = new TreeMap<>(Map.ofEntries(
         Map.entry("QB_OPERATOR_TEAM", READ_ONLY),
         Map.entry("QB_AUDIENCE_FEE_QUOTE", READ_ONLY),
+        // F-M9b: the caller's own AI credit at a glance (buying is refused while banned; the return is too).
+        Map.entry("QB_AI_CREDIT_STANDING", READ_ONLY + "：自己的 AI 额度一览，购买与退回在封禁期间照常被拒"),
         Map.entry("QB_PUBLICATION_FUNDS_CHECK", READ_ONLY + "：向导最后一步的试算，不写任何东西"),
         Map.entry("QB_MY_CERTIFICATIONS", READ_ONLY),
         Map.entry("QB_SPONSOR_MY_CERTIFICATES", READ_ONLY),

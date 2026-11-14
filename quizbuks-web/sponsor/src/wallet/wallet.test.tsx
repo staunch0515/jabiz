@@ -49,6 +49,8 @@ interface Server {
   fromOperator?: string
   /** F-M5: what the prepayments of the Sponsor's publications still hold. */
   prepaymentHeld?: string
+  /** F-M9b: what the AI credit holds (apart from the publications' prepayments). */
+  aiCreditHeld?: string
   exchange?: { status: number; body: unknown }
 }
 
@@ -81,7 +83,8 @@ function server(options: Server = {}) {
         return json(200, { items: [{ balance: '5000', held: '1000', pendingCount: 2, pendingAmount: '700',
           toppedUp: '6000', takenBack: '0', topUpCount: 2, spent: '1000', cashBalance: options.cashBalance ?? '0',
           cashHeld: '0', entryFeesUnsettled: options.entryFees ?? '0',
-          cashFromOperator: options.fromOperator ?? '0', prepaymentHeld: options.prepaymentHeld ?? '0' }], offset: 0, limit: 1 })
+          cashFromOperator: options.fromOperator ?? '0', prepaymentHeld: options.prepaymentHeld ?? '0',
+          aiCreditHeld: options.aiCreditHeld ?? '0' }], offset: 0, limit: 1 })
       case '/api/queries/qb.sponsor.fee-invoices':
         return json(200, { items: [], offset: 0, limit: 10, total: 0 })
       case '/api/dictionaries/urn:jabiz:dict:quizbuks:fee-invoice-status':
@@ -359,12 +362,22 @@ describe('the cash account (Q87a)', () => {
     expect(screen.getByTestId('wallet-fee-account')).toHaveTextContent('Held in prepayments')
   })
 
+  it('shows the AI credit apart from the publications\' prepayments (F-M9b)', async () => {
+    server({ cashBalance: '500', prepaymentHeld: '1650', aiCreditHeld: '3000' })
+    window.history.replaceState(null, '', '/money/account')
+    render(<App />)
+    expect(await screen.findByTestId('fee-account-ai-credit')).toHaveTextContent('3,000 Kudos')
+    expect(screen.getByTestId('fee-account-prepayment-held')).toHaveTextContent('1,650 Kudos')
+    expect(screen.getByTestId('wallet-fee-account')).toHaveTextContent('AI credit')
+  })
+
   it('shows no held row while the prepayments hold nothing (F-M5)', async () => {
     server({ cashBalance: '500' })
     window.history.replaceState(null, '', '/money/account')
     render(<App />)
     expect(await screen.findByTestId('fee-account-cash')).toBeInTheDocument()
     expect(screen.queryByTestId('fee-account-prepayment-held')).toBeNull()
+    expect(screen.queryByTestId('fee-account-ai-credit')).toBeNull()
   })
 
   it('shows the server\'s refusal of an exchange', async () => {

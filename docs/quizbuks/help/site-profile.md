@@ -32,7 +32,7 @@
 
 **读不了时**：打不开、网站不允许这类读取（robots.txt）、几乎没有文字（页面靠脚本绘制）、用时太长或没有找到可用的内容时，页面会写明原因。可以改用“给 AI 工具的提示词”，或者手工填写。
 
-**次数与费用**：每个发起方一次只能有一个在读取；每天最多 3 次、每月最多 10 次（失败的也算），并计入你的 AI 额度。
+**次数与费用**：每个发起方一次只能有一个在读取；每天最多 3 次、每月最多 10 次（失败的也算）。费用从你的 AI 额度中扣（见帮助“AI 额度”）：读取时先按可能的最大费用预留，额度不够时不能开始，页面给出去“资金 → AI 额度”购买的链接；平台没有开启 AI 收费时，这个功能不可用。
 
 ### 日本語 · 公式サイトからの下書きと「私たちを知る」クイズ
 
@@ -54,7 +54,7 @@
 
 **読み取れないとき**：開けない、サイトがこの種の読み取りを許可していない（robots.txt）、文章がほとんどない（スクリプトで描画している）、時間がかかりすぎた、使える内容がなかった場合は、理由が表示されます。「AI ツール用のプロンプト」を使うか、手入力に切り替えてください。
 
-**回数と費用**：主催者ごとに同時に読み取れるのは 1 件、1 日最大 3 回、1 か月最大 10 回です（失敗した分も数えます）。AI の利用枠にも数えられます。
+**回数と費用**：主催者ごとに同時に読み取れるのは 1 件、1 日最大 3 回、1 か月最大 10 回です（失敗した分も数えます）。料金は AI クレジットから差し引かれます（ヘルプ「AI クレジット」参照）。読み取りの開始時にかかりうる最大の料金を予約し、足りないときは開始できず、「資金 → AI クレジット」で購入するためのリンクが表示されます。プラットフォームで AI の料金が有効になっていないときは、この機能は使えません。
 
 ### English · Drafting from your website, and the "get to know us" quiz
 
@@ -76,4 +76,4 @@
 
 **When it cannot be read**: if the website did not open, does not allow this kind of reading (robots.txt), shows almost no text (it draws its pages with scripts), took too long or gave nothing usable, the page says why. Use the prompt for an AI tool instead, or fill it in by hand.
 
-**Times and cost**: a Sponsor can have one reading at a time, at most 3 a day and 10 a month (those that failed count too), and each counts toward your AI allowance.
+**Times and cost**: a Sponsor can have one reading at a time, at most 3 a day and 10 a month (those that failed count too). It is paid from your AI credit (see the help "AI credit"): the most a reading may cost is held when it starts; when the credit cannot hold it, it does not start and the page links to "Money → AI credit" to buy more. While the platform does not charge for AI, this feature is not available.

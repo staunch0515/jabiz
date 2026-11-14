@@ -1,5 +1,5 @@
 import { signInAdmin } from './admin'
-import { aiReady, quizForAi } from './ai'
+import { aiCredit, aiReady, quizForAi } from './ai'
 import { query } from './content'
 import { approvedSponsor } from './publishing'
 import { expect, expectAccessible, prepareQuizbuks, signIn, test, unique, setAppearance } from './support'
@@ -22,6 +22,7 @@ for (const appearance of ['light', 'dark'] as const) {
     test.setTimeout(180_000)
     await setAppearance(page, appearance)
     const sponsor = await approvedSponsor(request, 'Ada')
+    await aiCredit(request, sponsor.token)
     const title = unique('AI quiz ')
     const quizId = await quizForAi(request, sponsor.token, title)
     await signIn(page, '/sponsor/', sponsor.email)
