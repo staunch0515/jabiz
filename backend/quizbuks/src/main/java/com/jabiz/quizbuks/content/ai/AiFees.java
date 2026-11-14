@@ -203,11 +203,23 @@ final class AiFees {
      */
     record Room(BigDecimal available, BigDecimal returnable) {}
 
-    /** The {@link Room} of the standing {@link #queries} read and the lots ({@link Prepayments#HELD_LOTS}, if read). */
+    /**
+     * The {@link Room} of the standing {@link #queries} read and the lots ({@link Prepayments#HELD_LOTS}). Every caller
+     * reads the lots whenever the credit holds something ({@link #holdsCredit}: the request and its quotes through
+     * {@link #readsLots}, the standing directly); a credit that holds nothing has no lots and no room. #707 review M3:
+     * a credit that holds something with no lots read is a caller's defect, never a room of 0.
+     */
     static Room room(ProcessContext ctx, BigDecimal taxRate) {
-        Standing standing = standing(ctx, null);
-        BigDecimal returnable = AiCreditGiveBack.returnable(Prepayments.aiLots(ctx), standing.occupied(taxRate),
-            ctx.opTime());
+        return room(standing(ctx, null), holdsCredit(ctx), Prepayments.aiLots(ctx), taxRate, ctx.opTime());
+    }
+
+    static Room room(Standing standing, boolean holds, List<AiFeeRules.Lot> lots, BigDecimal taxRate,
+        java.time.Instant now) {
+        if (holds && lots.isEmpty()) {
+            throw new IllegalStateException("The AI credit holds " + standing.remaining() + " but its lots were not "
+                + "read (" + Prepayments.HELD_TEMPLATE + ")");
+        }
+        BigDecimal returnable = AiCreditGiveBack.returnable(lots, standing.occupied(taxRate), now);
         return new Room(standing.available(taxRate).min(returnable), returnable);
     }
 
