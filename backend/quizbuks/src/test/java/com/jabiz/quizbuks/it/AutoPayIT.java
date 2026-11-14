@@ -218,6 +218,23 @@ class AutoPayIT extends PlayItSupport {
             .singleElement().satisfies(row -> assertThat(row.get("pending")).isEqualTo(false));
     }
 
+    @Test
+    void thePaymentClosesTheOverdueReminderOfTheInvoice() {
+        String sponsor = newSponsor(unique("s-fm13c-overdue"));
+        String invoiceId = invoice(sponsor, 1100, 31, 0);
+        assertThat(((com.jabiz.quizbuks.fee.FeeProcesses.ItemOutput) systemRun(
+            com.jabiz.quizbuks.fee.FeeProcesses.OVERDUE_ITEM, body("invoiceId", invoiceId))).outcome())
+            .isEqualTo("REMINDED");
+        String source = QbFees.overdueTaskSource(invoiceId);
+        assertThat(FeeIT.openTasks(com.jabiz.quizbuks.QbPermissions.FEE_MANAGE, source)).singleElement()
+            .satisfies(task -> assertThat(task).containsEntry("status", "OPEN"));
+        param(QbParams.FEE_AUTO_PAY_ENABLED, "true");
+        cash(sponsor, 1100);
+        assertThat(autoPay(sponsor).outcome()).isEqualTo("PAID");
+        assertThat(FeeIT.openTasks(com.jabiz.quizbuks.QbPermissions.FEE_MANAGE, source)).singleElement()
+            .satisfies(task -> assertThat(task).containsEntry("status", "DONE"));
+    }
+
     BigDecimal balance(String sponsor, String kind) {
         List<Map<String, Object>> rows = query("SELECT balance FROM qb_wallet WHERE owner_id = ? AND kind = ?",
             sponsor, kind);

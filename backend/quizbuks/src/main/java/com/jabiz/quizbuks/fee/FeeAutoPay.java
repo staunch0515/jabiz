@@ -26,7 +26,6 @@ import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Comparator;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -34,18 +33,18 @@ import java.util.Map;
  * F-M13 (docs/quizbuks/plans/impl/F-M13.md §3.5): money arriving in the platform fee account pays the sponsor's unpaid
  * invoices by itself, the earliest first, as far as the account goes ({@value #AUTO_PAY}, {@code internal()}).
  *
- * <p><b>One invoice, one transaction.</b> A run pays one invoice under the sponsor's wallet lock (as the invoice's own
- * payment takes it) through the same sub-process {@code QB_FEE_SETTLE}, so that a hand's payment and the automatic one
- * never pay an invoice twice and an invoice that fails never holds the others back. It pays no credit note and writes no
- * use of one: the owed of an invoice is its own figure ({@link QbFees#owed}).
+ * <p><b>One run, one invoice, one transaction.</b> A run pays the earliest owing invoice under the sponsor's wallet lock
+ * (as the invoice's own payment takes it) through the same sub-process {@code QB_FEE_SETTLE}, so that a hand's payment
+ * and the automatic one never pay an invoice twice. It pays no credit note and writes no use of one: the owed of an
+ * invoice is its own figure ({@link QbFees#owed}). A paid invoice publishes {@value #PAID_EVENT} in the same
+ * transaction (the mail gathers them, {@code MailProcesses}); when it was paid in full and more are unpaid the run asks
+ * for the next one with {@value #FUNDED_EVENT} ({@code n} counts the chain, up to the limit
+ * {@value QbParams#FEE_AUTO_PAY_MAX_INVOICES}), so a run that fails stops its chain and nothing paid before it is lost.
  *
- * <p>Two ways start it. An event, only to be quick ({@value #FUNDED_EVENT}, from a cash top-up, platform fee Kudos
- * granted and an operator's transfer): no invoice is named, the earliest owing one is paid, and when something was paid
- * and more are unpaid the run asks for the next one ({@code n} counts them, up to the limit
- * {@value QbParams#FEE_AUTO_PAY_MAX_INVOICES}). The daily job {@value #JOB} takes every other way the account grows (a
- * prepayment given back, an invoice voided, a credit note's cash, a lost event): its items are the unpaid invoices of
- * the sponsors with something to pay them with, so each is a transaction of its own and a failing one is the only one
- * that fails.
+ * <p>Two things start a chain. An event, only to be quick ({@value #FUNDED_EVENT}, from a cash top-up, platform fee
+ * Kudos granted and an operator's transfer). The daily job {@value #JOB} takes every other way the account grows (a
+ * prepayment given back, an invoice voided, a credit note's cash, a lost event): its items are the sponsors with an
+ * unpaid invoice and something to pay it with, each a transaction of its own.
  *
  * <p>The switch {@value QbParams#FEE_AUTO_PAY_ENABLED} is read at each run; unless it is {@code true} (a parameter
  * nobody published has no value) nothing is paid.
