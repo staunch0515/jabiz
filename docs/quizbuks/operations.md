@@ -1482,6 +1482,11 @@ Quiz 与发布有主题词（平台词表中的词与自定义词），学者可
 | `LIGHT_VOIDS` | 撤销点亮后赠送剩余未作废 | 差异 | 结算任务失败 | 补跑 qb.tree-grant-retry；仍在则报开发 | 财务 | LIGHT_GRANTS |
 | `CERTIFIED_GRANTS` | 企业认证补发与认证或额度不符 | 差异 | 补发条件判断有误 | §7.42 | 报开发 | — |
 | `OPERATOR_ACCOUNT` | 2140（按运营商）= 结算 − 提现 − 转出 | 差异 | 结算、提现或转出漏过账 | §7.13、§7.43 | 报开发 | — |
+| `OPERATOR_SETTLEMENT_WAITING` | 运营商最早未结算的月份过了起算点之后 `qb.operator.settlement.waiting-after-hours` 小时（缺省 48）仍没有结算（引用 `<月>:<在等的步骤>`） | 差异 | 在等配送费或曝光费的结算、后付费用的月账单；只有月份时是结算任务失败 | 按引用中的步骤查前一步；只有月份时看任务记录与待办，修好后补跑 `qb.operator-settlement`（§7.57） | 财务 | OPERATOR_SETTLEMENT_COVERAGE |
+| `OPERATOR_SETTLEMENT_COVERAGE` | 新做法结算的各列 = 其明细；应已被两次结算算入的费用（`fee:`）与赠送付款（`gift:`）都有明细 | 差异 | 结算写错；连续被行数上限截断 | 先看行数上限的待办；否则报开发（§7.57） | 财务 / 报开发 | OPERATOR_SETTLEMENT_WAITING、GIFT_RECOVERY |
+| `GIFT_RECOVERY` | 结算的赠送扣回合计 = 来源为结算的 5140 净贷方；每月应扣 = 实扣 + 结转出 − 结转入；结转入 = 上月结转出 | 差异 | 结算或它的过账有误 | 报开发；不手工改分录（§7.57） | 报开发 | FEE_CREDIT_PROMOTION、OPERATOR_GIFT_CARRY_OPEN |
+| `OPERATOR_CHARGE_NO_OPERATOR` | 切换点之后记下、没有运营商的费用（没有结算会算入它） | 差异 | 记费时发起方没有运营商 | 查明它当时属于哪个运营商后报开发处理；不手工补（§7.57） | 报开发 | — |
+| `OPERATOR_GIFT_CARRY_OPEN` | 已停用、最新结算仍结转着赠送扣回的运营商 | 提示 | 合同结束时分成不够扣回 | 不自动追缴；由财务与运营商商定（§7.57"合同结束"） | 财务 | GIFT_RECOVERY |
 | `PREPAYMENTS` | 2180（按发起方）= 未关闭预付款剩余 | 差异 | 预付款与过账不一致 | §7.47 | 报开发 | PREPAYMENT_PARTS |
 | `PREPAYMENT_STALE` | 应退而未退的预付款 | 差异 | 退回任务失败或没跑 | 补跑 qb.prepayment-release | 财务 | PREPAYMENTS |
 | `PREPAYMENT_PARTS` | 预付款的分摊之和 = 剩余 | 差异 | 分摊行漏写 | §7.47 | 报开发 | PREPAYMENTS |
