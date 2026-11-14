@@ -91,6 +91,8 @@
 
 - [ ] **运营商分成的 8 个设置**（F-M12 a）：部署后，`QB_SETUP` 提出的 `qb.operator.share.kinds`、`qb.operator.share.ai-cost-in-base`、`qb.operator.credit-recovery.rate`、`qb.operator.gift.treatment.*`（4 个）、`qb.operator.gift.recover-outside-base` 已由另一位管理员发布（四眼）；未发布时结算任务对每个运营商都 422 `QB_OPERATOR_NO_SHARE_SETTING`。**必须在部署后的第一次结算任务之前完成**（staging：12 月的第一次任务之前）
       确认人： ／ 日期： ／ 依据：
+- [ ] **数据库连接与结算的索引**（F-M12 d，#701）：部署后确认应用的连接上 PostgreSQL 的 JIT 为关（`operations.md` §7.59"数据库的 JIT 关闭"：环境变量 `SPRING_R2DBC_PROPERTIES_OPTIONS` 没有覆盖 `application.yml` 的 `jit=off`；开着 `pg_stat_statements` 时应用语句的 `jit_functions` 为 0），以及迁移 V129 并发建的两个索引都有效：`SELECT c.relname, x.indisvalid FROM pg_index x JOIN pg_class c ON c.oid = x.indexrelid WHERE c.relname IN ('qb_fee_charge_version_operator_period_idx', 'qb_fee_payment_version_credit_paid_idx')` 两行都为 `t`（为 `f` 照 V129 的注释处理）。
+      确认人： ／ 日期： ／ 依据：
 
 ## 内容与运营
 
