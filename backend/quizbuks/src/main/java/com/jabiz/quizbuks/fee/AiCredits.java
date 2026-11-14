@@ -50,7 +50,10 @@ public final class AiCredits {
     public static final String RETURN_KIND = "RETURN";
     public static final String CHARGE_KIND = "CHARGE";
     public static final String EXPIRE_KIND = "EXPIRE";
-    public static final List<String> MOVEMENT_KINDS = List.of(BUY_KIND, RETURN_KIND, CHARGE_KIND, EXPIRE_KIND);
+    /** F-M15c: everything given back and the credit closed, at the wind-up of an erased sponsor's account. */
+    public static final String CLOSE_KIND = "CLOSE";
+    public static final List<String> MOVEMENT_KINDS = List.of(BUY_KIND, RETURN_KIND, CHARGE_KIND, EXPIRE_KIND,
+        CLOSE_KIND);
 
     public static final String BUY = "QB_AI_CREDIT_BUY";
 

@@ -42,6 +42,10 @@ import java.util.Map;
  *       latest to expire first ({@link AiFeeRules#giveBack}).</li>
  *   <li>{@code EXPIRE}: the expired fee credit the open jobs do not hold ({@link AiFeeRules#expired}); what they hold
  *       stays to be charged (the month's charge spends it first) and is voided by a later run.</li>
+ *   <li>{@code CLOSE} (F-M15c, the wind-up of an erased sponsor's account): everything the credit holds, expired fee
+ *       credit too, and the credit is closed ({@code RELEASED}, {@code ERASED}) even when it holds nothing. The erased
+ *       sponsor's AI jobs were deleted with the account and their fees not charged are never charged (plan H3), so
+ *       nothing is held for them ({@code occupied} is 0).</li>
  * </ul>
  *
  * <p>Either way one posting (debit 2180, credit 2190 for the fee credit and 2160 for the cash) and a negative part a
@@ -62,6 +66,11 @@ public final class AiCreditGiveBack {
     /** An expiry's reference (a return's is the credit's own, {@code prepay_ai}): the monthly report tells them apart. */
     public static final String EXPIRED_REFERENCE = "prepay_ai_expired";
 
+    public static final String RETURN = "RETURN";
+    public static final String EXPIRE = "EXPIRE";
+    /** F-M15c: everything back and the credit closed (an erased sponsor's wind-up). */
+    public static final String CLOSE = "CLOSE";
+
     static final String INPUT = "input";
     static final String CREDIT = "credit";
     static final String PLAN = "plan";
@@ -71,14 +80,14 @@ public final class AiCreditGiveBack {
     private AiCreditGiveBack() {}
 
     /**
-     * @param kind      {@code RETURN} or {@code EXPIRE}
-     * @param amount    a return's amount; none: all that may be given back (an expiry's is what expired)
+     * @param kind      {@code RETURN}, {@code EXPIRE} or {@code CLOSE}
+     * @param amount    a return's amount; none: all that may be given back (an expiry's is what expired, a close's all)
      * @param occupied  what the sponsor's open jobs hold of the credit with tax (unbilled fees and reservations), read
      *                  under the AI lock
      * @param reference a return's request key (a repeated one is the caller's to refuse); an expiry's none
      */
     public record GiveBackInput(@NotBlank @Size(max = 128) String sponsorId,
-        @NotBlank @Pattern(regexp = "RETURN|EXPIRE") String kind,
+        @NotBlank @Pattern(regexp = "RETURN|EXPIRE|CLOSE") String kind,
         @DecimalMin("1") @DecimalMax(FeeProcesses.MAX_AMOUNT) @Digits(integer = 13, fraction = 0) BigDecimal amount,
         @NotNull @DecimalMin("0") @Digits(integer = 15, fraction = 0) BigDecimal occupied,
         @Size(max = AiCredits.REQUEST_KEY_LENGTH) String reference) {}
@@ -155,7 +164,7 @@ public final class AiCreditGiveBack {
         GiveBackInput input = input(ctx);
         EntityInstance credit = FeeGate.first(ctx, CREDIT);
         if (credit == null) {
-            if ("RETURN".equals(input.kind()) && input.amount() != null) {
+            if (RETURN.equals(input.kind()) && input.amount() != null) {
                 refuse(BigDecimal.ZERO);
             }
             return;
@@ -169,7 +178,9 @@ public final class AiCreditGiveBack {
                 + held);
         }
         List<AiFeeRules.Lot> out;
-        if ("RETURN".equals(input.kind())) {
+        if (CLOSE.equals(input.kind())) {
+            out = AiFeeRules.giveBack(lots, held);
+        } else if (RETURN.equals(input.kind())) {
             BigDecimal returnable = returnable(lots, input.occupied(), ctx.opTime());
             BigDecimal amount = input.amount() == null ? returnable : input.amount();
             if (amount.compareTo(returnable) > 0) {
@@ -199,8 +210,8 @@ public final class AiCreditGiveBack {
             lines.add(new LedgerProcesses.Line(QbLedger.SPONSOR_CASH, Direction.CREDIT, cash, null, party));
         }
         ctx.put(PLAN, new Plan(credit, back, total, new LedgerProcesses.PostInput(ctx.opTime(),
-            "RETURN".equals(input.kind()) ? RETURNED : EXPIRED, "RETURN".equals(input.kind())
-                ? Prepayments.reference(QbPrepayments.AI) : EXPIRED_REFERENCE, lines,
+            EXPIRE.equals(input.kind()) ? EXPIRED : RETURNED, EXPIRE.equals(input.kind())
+                ? EXPIRED_REFERENCE : Prepayments.reference(QbPrepayments.AI), lines,
             QbPrepayments.PREPAYMENT, String.valueOf(credit.id()))));
     }
 
@@ -210,6 +221,10 @@ public final class AiCreditGiveBack {
         EntityInstance found = FeeGate.first(ctx, CREDIT);
         if (!ctx.contains(PLAN)) {
             BigDecimal balance = found == null ? BigDecimal.ZERO : FeeGate.money(found.get("remaining"));
+            if (found != null && CLOSE.equals(input.kind())) {
+                // Nothing left in it: closed all the same, without a posting or a movement.
+                ctx.changes().update(QbPrepayments.PREPAYMENT, found.id(), found.version(), closed(ctx, balance));
+            }
             ctx.put(OUTPUT, new GiveBackOutput(found == null ? null : String.valueOf(found.id()), BigDecimal.ZERO,
                 BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO, balance));
             return;
@@ -220,13 +235,18 @@ public final class AiCreditGiveBack {
         Prepayments.ReleaseOutput moved = Prepayments.toLots(ctx, input.sponsorId(),
             List.of(new Prepayments.Returned(prepaymentId, plan.back(), transactionId)));
         BigDecimal balance = FeeGate.money(plan.credit().get("remaining")).subtract(plan.total());
-        // The credit stays open at 0 (one a sponsor, never closed but by F-M15); its amount is what was bought.
+        // The credit stays open at 0 (one a sponsor, never closed but by F-M15c's CLOSE); its amount is what was
+        // bought.
         ctx.changes().update(QbPrepayments.PREPAYMENT, plan.credit().id(), plan.credit().version(),
-            Map.of("remaining", balance));
+            CLOSE.equals(input.kind()) ? closed(ctx, balance) : Map.of("remaining", balance));
         Map<String, Object> movement = new LinkedHashMap<>();
         movement.put("sponsorId", input.sponsorId());
         movement.put("prepaymentId", prepaymentId);
-        movement.put("kind", "RETURN".equals(input.kind()) ? AiCredits.RETURN_KIND : AiCredits.EXPIRE_KIND);
+        movement.put("kind", switch (input.kind()) {
+            case RETURN -> AiCredits.RETURN_KIND;
+            case EXPIRE -> AiCredits.EXPIRE_KIND;
+            default -> AiCredits.CLOSE_KIND;
+        });
         movement.put("amount", plan.total().negate());
         movement.put("credit", moved.credit().add(moved.voided()).negate());
         movement.put("cash", moved.cash().negate());
@@ -236,6 +256,16 @@ public final class AiCreditGiveBack {
         ctx.changes().insert(AiCredits.MOVEMENT, movement);
         ctx.put(OUTPUT, new GiveBackOutput(prepaymentId, plan.total(), moved.credit(), moved.voided(), moved.cash(),
             balance));
+    }
+
+    /** A closed credit (F-M15c): what is left in it (0 after a close), released for the account's erasure. */
+    private static Map<String, Object> closed(ProcessContext ctx, BigDecimal balance) {
+        Map<String, Object> values = new LinkedHashMap<>();
+        values.put("remaining", balance);
+        values.put("status", QbPrepayments.RELEASED);
+        values.put("releasedAt", ctx.opTime());
+        values.put("releaseReason", QbPrepayments.ERASED);
+        return values;
     }
 
     /** The lots the credit holds, in the order it is spent, with each grant's expiry and whether it was voided. */

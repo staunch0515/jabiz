@@ -49,7 +49,9 @@ public final class QbPrepayments {
     public static final String REJECTED = "REJECTED";
     public static final String REVIEW_EXPIRED = "REVIEW_EXPIRED";
     public static final String ENDED = "ENDED";
-    public static final List<String> RELEASE_REASONS = List.of(WITHDRAWN, REJECTED, REVIEW_EXPIRED, ENDED);
+    /** F-M15c: the AI credit closed at the wind-up of an erased sponsor's account. */
+    public static final String ERASED = "ERASED";
+    public static final List<String> RELEASE_REASONS = List.of(WITHDRAWN, REJECTED, REVIEW_EXPIRED, ENDED, ERASED);
 
     /** The ledger dimension (position 3) that carries the purpose on 2180's lines. */
     public static final String PURPOSE = "purpose";

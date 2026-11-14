@@ -48,17 +48,6 @@ public final class ErasureCloseRules {
 
     /** Why a run that took long did not finish, as the key of the slow task's title: its outcome, or {@code OTHER}. */
     public static String slowReason(String outcome) {
-        return slowReason(outcome, false);
-    }
-
-    /**
-     * As {@link #slowReason(String)}; a run that waits only on the AI credit's prepayment says so (re-review M2: it
-     * waits until F-M15 c closes that prepayment, as expected).
-     */
-    public static String slowReason(String outcome, boolean onlyAiDeposit) {
-        if (MoneyClose.WAITING_DEPOSITS.equals(outcome) && onlyAiDeposit) {
-            return outcome + "_AI";
-        }
         return MoneyClose.SWITCHED_OFF.equals(outcome) || MoneyClose.WAITING_DEPOSITS.equals(outcome)
             || MoneyClose.TO_PAY.equals(outcome) || MoneyClose.MORE.equals(outcome) ? outcome : "OTHER";
     }

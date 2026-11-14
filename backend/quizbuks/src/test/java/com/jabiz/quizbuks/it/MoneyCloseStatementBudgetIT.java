@@ -21,8 +21,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 /**
  * F-M15 b (docs/quizbuks/plans/impl/F-M15.md §5.2 L3, §10 MoneyCloseLockOrderIT and MoneyCloseStatementBudgetIT): the
  * locks a wind-up takes (the sponsor's wallet only, the withdrawals of what is under review before it; never
- * {@code qb.account}, {@code qb.quiz} or an AI lock) and its statements, measured and then fixed here: nothing to do, a deposit to wait
- * for, one invoice to pay, three, and one month not invoiced yet. Each counted after a run of the same shape (warm
+ * {@code qb.account} or {@code qb.quiz}; F-M15c: the sponsor's AI lock before the wallet's, only when an AI credit is
+ * closed) and its statements, measured and then fixed here: nothing to do, a deposit to wait for, one invoice to pay,
+ * three, one month not invoiced yet, and an AI credit to close. Each counted after a run of the same shape (warm
  * caches).
  */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.MOCK, properties = "it.sql-log.enabled=true")
@@ -50,6 +51,50 @@ class MoneyCloseStatementBudgetIT extends MoneyCloseItSupport {
     static final int NOTHING_TO_PAY = 10;
     /** The current month not invoiced yet: invoiced by its item, then paid. */
     static final int UNINVOICED = 28;
+    /**
+     * F-M15c: an AI credit bought with cash, nothing else, closed: the process row, the parameters, the read of what
+     * is under review (the AI credit with it), the AI lock and the wallet's; the give-back (its row, the credit and the
+     * wallets in one read, what it holds by lot, the lots, the posting, the lots and wallets read again for their parts,
+     * the writes in one statement); the closure, the months not invoiced, the account, the task, the closure's update,
+     * the commit.
+     */
+    static final int AI_CREDIT = 18;
+
+    @Test
+    void anAiCreditIsClosedUnderTheSponsorsAiLockThenTheWallet() {
+        String sponsor = withAiCredit("lock");
+        erase(sponsor);
+        SqlStatementLog.clear();
+        assertThat(close(sponsor).outcome()).isEqualTo(MoneyClose.CLOSED);
+        List<String> locks = SqlStatementLog.locks();
+        System.out.println("[statement-budget] wind-up locks with an AI credit: " + locks);
+        // F-M9's order qb.ai:<sponsor> → qb.wallet; never qb.ai:*, qb.account or qb.quiz.
+        assertThat(java.util.Set.copyOf(locks)).containsExactlyInAnyOrder("qb.ai:" + sponsor,
+            "qb.wallet:SPONSOR:" + sponsor);
+        assertThat(locks.getFirst()).isEqualTo("qb.ai:" + sponsor);
+    }
+
+    @Test
+    void theStatementsOfAWindUpThatClosesAnAiCredit() {
+        countedClose(withAiCredit("warm"));
+        List<String> ai = countedClose(withAiCredit("measured"));
+        System.out.println("[statement-budget] wind-up, an AI credit: " + ai.size() + "\n" + listing(ai));
+        assertThat(ai).as("AI credit:\n" + listing(ai)).hasSize(AI_CREDIT);
+    }
+
+    /** A sponsor with an AI credit of F-M9 bought with cash, nothing else. */
+    private String withAiCredit(String name) {
+        String sponsor = newSponsor(unique("s-fm15c-budget-" + name));
+        cash(sponsor, 500);
+        param(com.jabiz.quizbuks.setup.QbParams.AI_FEE_ENABLED, "true");
+        try {
+            run(com.jabiz.quizbuks.fee.AiCredits.BUY, sponsorToken(sponsor), body("amount", 400, "requestKey",
+                UUID.randomUUID().toString()));
+        } finally {
+            param(com.jabiz.quizbuks.setup.QbParams.AI_FEE_ENABLED, "false");
+        }
+        return sponsor;
+    }
 
     @Test
     void theLocksOfAWindUpAreTheWithdrawnApprovalsThenTheWallet() {

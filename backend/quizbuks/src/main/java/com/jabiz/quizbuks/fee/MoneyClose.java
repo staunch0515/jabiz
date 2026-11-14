@@ -7,6 +7,7 @@ import com.jabiz.process.ProcessDefinition;
 import com.jabiz.query.EntityQuery;
 import com.jabiz.query.QueryPredicate;
 import com.jabiz.quizbuks.QbPermissions;
+import com.jabiz.quizbuks.content.ai.QbAi;
 import com.jabiz.param.ParamValues;
 import com.jabiz.quizbuks.setup.QbParams;
 import com.jabiz.quizbuks.wallet.ManualCredits;
@@ -110,6 +111,8 @@ public final class MoneyClose {
     static final String CREDITS_AFTER = "creditsAfter";
     static final String CASH_WALLET_AFTER = "cashWalletAfter";
     static final String PAID = "paid";
+    static final String AI_CREDIT = "aiCredit";
+    static final String AI_CLOSED = "aiClosed";
 
     /** What one run of the wind-up did. */
     public static final String NONE = "NONE";
@@ -287,23 +290,37 @@ public final class MoneyClose {
                 QueryEntities.query(QbFees.defaultDataset(QbFees.REQUEST), ctx -> EntityQuery.builder()
                     .where(new QueryPredicate.And(List.of(new QueryPredicate.Eq("sponsorId", sponsorId(ctx)),
                         new QueryPredicate.Eq("status", QbFees.REVIEW)))).limit(FeeGate.MAX_UNPAID).build(),
-                    IN_REVIEW_REQUESTS)))
+                    IN_REVIEW_REQUESTS),
+                // F-M15c: whether there is an AI credit to close (its lock is taken only then); read again under it.
+                QueryEntities.query(QbFees.defaultDataset(QbPrepayments.PREPAYMENT), ctx -> EntityQuery.builder()
+                    .where(new QueryPredicate.And(List.of(new QueryPredicate.Eq("sponsorId", sponsorId(ctx)),
+                        new QueryPredicate.Eq("purpose", QbPrepayments.AI),
+                        new QueryPredicate.Eq("status", QbPrepayments.OPEN)))).limit(1).build(), AI_CREDIT)))
             // Re-review L2: when the erasure's purge was done (it overwrites every row naming the sponsor then); read
             // only when something is under review.
             .step("Read when the purge was done", RunTemplate.<ProcessContext>when(MoneyClose::somethingUnderReview,
                 PURGED_TEMPLATE, ctx -> Map.of("userId", sponsorId(ctx)), PURGED))
             .step("Withdraw what is under review", CallProcess.forEach(WITHDRAW, 1, MoneyClose::withdrawInputs,
                 WITHDRAWN))
+            // F-M15c: the AI lock before the wallet's (F-M9's order qb.ai:<sponsor> → qb.wallet), only when an AI
+            // credit is to be closed; nothing this process calls takes qb.account or qb.quiz.
+            .step("Lock the sponsor's AI", HoldLock.<ProcessContext>exclusive(
+                ctx -> closesAiCredit(ctx) ? QbAi.lockName(sponsorId(ctx)) : null))
             .step("Lock the sponsor's wallet", HoldLock.<ProcessContext>exclusive(
                 ctx -> QbWallets.lockName(QbWallets.SPONSOR, sponsorId(ctx))))
+            // Step 3 (F-M15c): the AI credit given back whole and closed, before the prepayments are looked at, so it
+            // never holds the wind-up up. Its jobs were deleted with the account and their fees not charged are never
+            // charged (plan H3): nothing is held for them.
+            .step("Close the AI credit", CallProcess.<ProcessContext>when(MoneyClose::closesAiCredit,
+                AiCreditGiveBack.GIVE_BACK, 1, ctx -> new AiCreditGiveBack.GiveBackInput(sponsorId(ctx),
+                    AiCreditGiveBack.CLOSE, null, BigDecimal.ZERO, null), AI_CLOSED))
             .step("Read the closure and what is held", QueryEntities.<ProcessContext>all(
                 QueryEntities.query(QbFees.defaultDataset(QbSponsorClosures.CLOSURE),
                     ctx -> one(new QueryPredicate.Eq("sponsorId", sponsorId(ctx))), CLOSURE),
-                // The AI credit's last (re-review M2): the one read is AI only when nothing else is held.
                 QueryEntities.query(QbFees.defaultDataset(QbPrepayments.PREPAYMENT), ctx -> EntityQuery.builder()
                     .where(new QueryPredicate.And(List.of(new QueryPredicate.Eq("sponsorId", sponsorId(ctx)),
                         new QueryPredicate.Eq("status", QbPrepayments.OPEN))))
-                    .orderBy(QbPrepayments.PURPOSE, false).limit(1).build(), OPEN_DEPOSIT)))
+                    .limit(1).build(), OPEN_DEPOSIT)))
             .compute("Decide whether to go on", (metadata, ctx) -> decideStart(ctx))
             .step("Find the months not invoiced", RunTemplate.<ProcessContext>when(MoneyClose::goingOn,
                 UNINVOICED_TEMPLATE, ctx -> Map.of("sponsorId", sponsorId(ctx)), UNINVOICED))
@@ -363,6 +380,12 @@ public final class MoneyClose {
         FeeGate.list(ctx, IN_REVIEW_REQUESTS).stream().filter(row -> before(row.get("requestedAt"), until))
             .forEach(row -> inputs.add(new WithdrawInput(REQUEST, String.valueOf(row.id()))));
         return inputs;
+    }
+
+    /** Whether this run closes the AI credit: a wind-up registered, the switch on and an AI credit open. */
+    static boolean closesAiCredit(ProcessContext ctx) {
+        return FeeGate.first(ctx, REGISTERED_CLOSURE) != null && FeeGate.first(ctx, AI_CREDIT) != null
+            && switchOn(ctx.get(PARAMS, ParamValues.class));
     }
 
     static boolean somethingUnderReview(ProcessContext ctx) {
@@ -523,10 +546,8 @@ public final class MoneyClose {
         Map<String, String> params = new LinkedHashMap<>();
         params.put("sponsor", sponsorId(ctx));
         // The title says why in words, one message per reason (review L7).
-        EntityInstance held = FeeGate.first(ctx, OPEN_DEPOSIT);
-        boolean onlyAi = held != null && QbPrepayments.AI.equals(held.get(QbPrepayments.PURPOSE));
         return TaskSpec.forPermission(SLOW_TASK, SLOW_TASK_TITLE + "." + ErasureCloseRules.slowReason(
-                (String) ctx.get(OUTCOME), onlyAi), params, QbPermissions.FEE_MANAGE)
+                (String) ctx.get(OUTCOME)), params, QbPermissions.FEE_MANAGE)
             .about(QbSponsorClosures.CLOSURE, String.valueOf(closure.id())).source(slowTaskSource(sponsorId(ctx)));
     }
 

@@ -669,20 +669,113 @@ class MoneyCloseIT extends MoneyCloseItSupport {
     }
 
     @Test
-    void aWindUpWaitingOnlyOnTheAiCreditsPrepaymentSaysSoInFinancesTask() {
-        // Re-review M2: the AI credit's prepayment is closed by F-M15 c; until then such a wind-up waits, as expected,
-        // and the slow task's title says that it is the AI credit's.
-        String sponsor = newSponsor(unique("s-fm15b-ai"));
-        grant(sponsor, 200, clock.instant().plus(Duration.ofDays(90)));
-        SyntheticRows.rows("qb_prepayment", null, 1, null, n -> Map.of("sponsor_id", text(sponsor), "purpose", "'AI'",
-            "mode", "'PREPAID'", "amount", "100", "remaining", "100", "charge_amount", "0", "status", "'OPEN'",
-            "frozen_at", "TIMESTAMPTZ '2026-01-01T00:00:00Z'"));
+    void e3TheAiCreditIsClosedAndItsGrantedCreditPaysTheInvoiceBeforeAnythingIsVoided() {
+        // Plan §2 E3, the AI credit's part (F-M15c): lot Y bought into the AI credit with some cash, lot X in the
+        // account, an invoice. The run gives the AI credit back whole and closes it (it no longer holds the wind-up
+        // up); Y pays first (it expires first), X the rest, only X's remainder is voided, and the cash stays.
+        String sponsor = newSponsor(unique("s-fm15c-e3"));
+        String y = grant(sponsor, 1_000, clock.instant().plus(Duration.ofDays(30)));
+        cash(sponsor, 400);
+        buyAiCredit(sponsor, 1_200);
+        assertThat(remainingOf(y)).isZero();
+        String x = grant(sponsor, 500, clock.instant().plus(Duration.ofDays(90)));
+        billing(sponsor, "POSTPAID", 50_000);
+        manualFee(sponsor, 1_000);
         erase(sponsor);
-        clock.set(clock.instant().plus(Duration.ofDays(3)));
-        assertThat(close(sponsor).outcome()).isEqualTo(MoneyClose.WAITING_DEPOSITS);
-        assertThat(openTasks("erasure-close:" + sponsor)).singleElement()
-            .satisfies(task -> assertThat(String.valueOf(task.get("title_key")))
-                .isEqualTo(MoneyClose.SLOW_TASK_TITLE + ".DEPOSIT_OPEN_AI"));
+
+        MoneyClose.CloseOutput run = close(sponsor);
+        assertThat(run.outcome()).isEqualTo(MoneyClose.CLOSED);
+        assertThat(aiCredit(sponsor)).containsEntry("status", "RELEASED").containsEntry("release_reason", "ERASED");
+        assertThat(money(aiCredit(sponsor).get("remaining"))).isZero();
+        assertThat(aiMovements(sponsor)).containsExactly("BUY 1200 1000/200 1200", "CLOSE -1200 -1000/-200 0");
+        BigDecimal total = money(query("SELECT total FROM qb_fee_invoice WHERE sponsor_id = ?", sponsor).getFirst()
+            .get("total"));
+        assertThat(total).isGreaterThan(new BigDecimal("1000"));
+        assertThat(remainingOf(y)).isZero();
+        assertThat(money(lotOf(y).get("voided_amount"))).isZero();
+        assertThat(money(lotOf(x).get("voided_amount")))
+            .isEqualByComparingTo(new BigDecimal("500").subtract(total.subtract(new BigDecimal("1000"))));
+        assertThat(query("SELECT status FROM qb_fee_invoice WHERE sponsor_id = ?", sponsor).getFirst())
+            .containsEntry("status", QbFees.PAID);
+        assertThat(balance(sponsor, "CASH")).isEqualByComparingTo("400");
+        assertThat(closure(sponsor)).containsEntry("reason_code", null);
+        assertBooksBalance();
+        assertThat(differences(sponsor)).isEmpty();
+    }
+
+    @Test
+    void anAiCreditsExpiredGrantedCreditIsVoidedAtOnceAndAnEmptyOneIsClosedWithoutAMovement() {
+        // F-M15c: what comes back to a grant that has expired is voided at once (2190 → 5140, the grant the source);
+        // a credit that holds nothing is closed all the same.
+        String sponsor = newSponsor(unique("s-fm15c-exp"));
+        String z = grant(sponsor, 300, clock.instant().plus(Duration.ofDays(10)));
+        cash(sponsor, 100);
+        buyAiCredit(sponsor, 400);
+        clock.set(clock.instant().plus(Duration.ofDays(20)));
+        erase(sponsor);
+
+        assertThat(close(sponsor).outcome()).isEqualTo(MoneyClose.CLOSED);
+        assertThat(aiCredit(sponsor)).containsEntry("status", "RELEASED").containsEntry("release_reason", "ERASED");
+        assertThat(money(lotOf(z).get("voided_amount"))).isEqualByComparingTo("300");
+        assertThat(remainingOf(z)).isZero();
+        assertThat(balance(sponsor, "CASH")).isEqualByComparingTo("100");
+        assertThat(balance(sponsor, "FEE_CREDIT")).isZero();
+        assertBooksBalance();
+        assertThat(differences(sponsor)).isEmpty();
+
+        String empty = newSponsor(unique("s-fm15c-empty"));
+        cash(empty, 300);
+        buyAiCredit(empty, 300);
+        run(com.jabiz.quizbuks.content.ai.AiCreditReturns.RETURN, sponsorToken(empty), body("requestKey",
+            UUID.randomUUID().toString()));
+        assertThat(aiCredit(empty)).containsEntry("status", "OPEN");
+        erase(empty);
+        assertThat(close(empty).outcome()).isEqualTo(MoneyClose.CLOSED);
+        assertThat(aiCredit(empty)).containsEntry("status", "RELEASED").containsEntry("release_reason", "ERASED");
+        assertThat(aiMovements(empty)).containsExactly("BUY 300 0/300 300", "RETURN -300 0/-300 0");
+        assertThat(balance(empty, "CASH")).isEqualByComparingTo("300");
+        assertBooksBalance();
+        assertThat(differences(empty)).isEmpty();
+    }
+
+    @Test
+    void theSwitchOffLeavesTheAiCreditOpenAndTakesNoAiLock() {
+        String sponsor = newSponsor(unique("s-fm15c-off"));
+        cash(sponsor, 500);
+        buyAiCredit(sponsor, 500);
+        param(QbParams.ERASURE_CLOSE_ENABLED, "false");
+        erase(sponsor);
+        assertThat(close(sponsor).outcome()).isEqualTo(MoneyClose.SWITCHED_OFF);
+        assertThat(aiCredit(sponsor)).containsEntry("status", "OPEN");
+        param(QbParams.ERASURE_CLOSE_ENABLED, "true");
+        assertThat(close(sponsor).outcome()).isEqualTo(MoneyClose.CLOSED);
+        assertThat(aiCredit(sponsor)).containsEntry("status", "RELEASED");
+        assertThat(balance(sponsor, "CASH")).isEqualByComparingTo("500");
+        assertBooksBalance();
+        assertThat(differences(sponsor)).isEmpty();
+    }
+
+    /** F-M9's purchase of AI credit by the sponsor, with the fee switched on for it only. */
+    private void buyAiCredit(String sponsor, long amount) {
+        param(QbParams.AI_FEE_ENABLED, "true");
+        try {
+            run(com.jabiz.quizbuks.fee.AiCredits.BUY, sponsorToken(sponsor), body("amount", amount, "requestKey",
+                UUID.randomUUID().toString()));
+        } finally {
+            param(QbParams.AI_FEE_ENABLED, "false");
+        }
+    }
+
+    private static Map<String, Object> aiCredit(String sponsor) {
+        return query("SELECT * FROM qb_prepayment WHERE sponsor_id = ? AND purpose = 'AI'", sponsor).getFirst();
+    }
+
+    private static List<String> aiMovements(String sponsor) {
+        return query("SELECT kind, amount, credit, cash, balance FROM qb_ai_credit_movement_version WHERE "
+            + "sponsor_id = ? ORDER BY moved_at, process_seq_id", sponsor).stream()
+            .map(m -> m.get("kind") + " " + money(m.get("amount")).toPlainString() + " "
+                + money(m.get("credit")).toPlainString() + "/" + money(m.get("cash")).toPlainString() + " "
+                + money(m.get("balance")).toPlainString()).toList();
     }
 
     @Test
