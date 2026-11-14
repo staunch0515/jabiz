@@ -172,4 +172,48 @@ class AiChargingTest {
         assertThat(AiLimits.FRAMING_TOKENS).as("questions: " + bytes + " bytes of system prompt and schema")
             .isGreaterThanOrEqualTo((bytes + 2) / 3 + margin);
     }
+
+    /**
+     * #692 re-review: a website draft reserves the web reader's every call at the job's own limits, or the controlled
+     * limits below them (the calls, the pages and the output, qb.ai.fee.site-profile.*); other kinds are unchanged.
+     */
+    @Test
+    void aWebsiteDraftReservesItsOwnLimitsOrTheControlledOnesBelowThem() {
+        long reserved = SiteProfileJob.reservedInput(10);
+        EntityInstance site = job(QbAi.KIND_SITE_PROFILE, ClaudeService.SONNET, 1_000,
+            Map.of("reservedInputTokens", reserved, "maxOutputTokens", SiteProfileJob.MAX_OUTPUT_TOKENS));
+        AiSettings.Fee none = new AiSettings.Fee(true, BigDecimal.ONE, BigDecimal.ONE, BigDecimal.ZERO, null);
+        assertThat(AiProcesses.mostOfAttempt(site, none)).isEqualTo(ClaudeWebResearch.mostOfAttempt(
+            ClaudeService.SONNET, reserved, SiteProfileJob.MAX_OUTPUT_TOKENS));
+        AiSettings.Fee limited = new AiSettings.Fee(true, BigDecimal.ONE, BigDecimal.ONE, BigDecimal.ZERO, null, 2, 3,
+            8_000);
+        ClaudeApi.Usage lower = AiProcesses.mostOfAttempt(site, limited);
+        assertThat(lower).isEqualTo(ClaudeWebResearch.attempt(ClaudeService.SONNET, SiteProfileJob.reservedInput(3),
+            8_000, 2));
+        // Two calls: the pages' input twice and the first call's output once more, 8,000 out each.
+        assertThat(lower.inputTokens()).isEqualTo(2 * SiteProfileJob.reservedInput(3) + 8_000);
+        assertThat(lower.outputTokens()).isEqualTo(16_000);
+        // Limits above the job's own are the job's (the pages and the output never reserve more than it may use).
+        AiSettings.Fee above = new AiSettings.Fee(true, BigDecimal.ONE, BigDecimal.ONE, BigDecimal.ZERO, null, 4, 50,
+            1_000_000);
+        assertThat(AiProcesses.mostOfAttempt(site, above)).isEqualTo(AiProcesses.mostOfAttempt(site, none));
+        // A question job reserves what it did.
+        EntityInstance questions = job(QbAi.KIND_QUESTIONS, ClaudeService.SONNET, 4_000, Map.of("count", 3));
+        assertThat(AiProcesses.mostOfAttempt(questions, limited)).isEqualTo(AiProcesses.unrecordedAttempt(questions));
+    }
+
+    /** The limits are read from their stored text: absent, not a whole number or out of range is the job's own. */
+    @Test
+    void aWebsiteDraftsLimitsOutOfRangeAreTheJobsOwn() {
+        Map<String, String> values = new LinkedHashMap<>();
+        values.put(com.jabiz.quizbuks.setup.QbParams.AI_FEE_SITE_CALLS, "5");
+        values.put(com.jabiz.quizbuks.setup.QbParams.AI_FEE_SITE_PAGES, "0");
+        values.put(com.jabiz.quizbuks.setup.QbParams.AI_FEE_SITE_OUTPUT, "8000");
+        AiSettings.Fee fee = AiSettings.of(values).fee();
+        assertThat(fee.siteCalls()).isNull();
+        assertThat(fee.sitePages()).isNull();
+        assertThat(fee.siteOutput()).isEqualTo(8_000);
+        values.put(com.jabiz.quizbuks.setup.QbParams.AI_FEE_SITE_CALLS, "2");
+        assertThat(AiSettings.of(values).fee().siteCalls()).isEqualTo(2);
+    }
 }

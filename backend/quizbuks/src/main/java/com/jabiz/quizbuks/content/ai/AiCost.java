@@ -105,11 +105,22 @@ public final class AiCost {
      * @param fallback the price of a model QuizBuks does not know (the parameters), or null
      */
     public static BigDecimal maxOf(String model, ClaudeApi.Usage attempt, int attempts, long searches, Price fallback) {
+        return maxOf(model, attempt, attempts, searches, fallback, true);
+    }
+
+    /**
+     * The same, for a request that may not fall back ({@code mayFallBack} false: a request with PDF documents is sent
+     * without the provider's fallback, {@link ClaudeApi}; #692 re-review L4), counted on its own model only. In the
+     * provider's {@code "default"} mode a refusal is run again on the one model recommended for its category, never on
+     * a chain (the provider's documentation), so a fallback is counted once.
+     */
+    public static BigDecimal maxOf(String model, ClaudeApi.Usage attempt, int attempts, long searches, Price fallback,
+        boolean mayFallBack) {
         BigDecimal most = of(model, null, attempt, fallback);
         if (most == null) {
             return null;
         }
-        if (!ClaudeService.HAIKU.equals(model)) {
+        if (mayFallBack && !ClaudeService.HAIKU.equals(model)) {
             ClaudeApi.Usage fellBack = new ClaudeApi.Usage(attempt.inputTokens(), attempt.outputTokens(),
                 attempt.inputTokens(), attempt.outputTokens(), 0, 0);
             BigDecimal other = of(model, null, fellBack, fallback);

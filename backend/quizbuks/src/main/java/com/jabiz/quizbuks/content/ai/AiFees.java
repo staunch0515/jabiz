@@ -143,7 +143,7 @@ final class AiFees {
      *                for a charged request
      */
     static void reserve(ProcessContext ctx, AiSettings settings, String kind,
-        java.util.function.Supplier<ClaudeApi.Usage> attempt, int attempts, long searches) {
+        java.util.function.Supplier<ClaudeApi.Usage> attempt, int attempts, long searches, boolean mayFallBack) {
         AiSettings.Fee fee = settings.fee();
         if (!fee.enabled() || !CHARGED_KINDS.contains(kind)) {
             ctx.put(FROZEN, new Frozen(QbAi.FEE_NONE, null, null, null, BigDecimal.ZERO));
@@ -151,7 +151,7 @@ final class AiFees {
         }
         List<Violation> problems = new ArrayList<>(settings.feeProblems());
         BigDecimal maxUsd = problems.isEmpty() ? AiCost.maxOf(settings.model(), attempt.get(), attempts, searches,
-            settings.price()) : null;
+            settings.price(), mayFallBack) : null;
         if (problems.isEmpty() && maxUsd == null) {
             problems.add(new Violation(null, AiCodes.UNAVAILABLE, "AI generation is unavailable: the model's price is "
                 + "not known", Map.of("enabled", settings.enabled())));

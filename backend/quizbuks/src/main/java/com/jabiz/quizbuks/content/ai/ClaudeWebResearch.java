@@ -139,11 +139,19 @@ public final class ClaudeWebResearch {
      * @param outputTokens  the output one call asks for
      */
     public static ClaudeApi.Usage mostOfAttempt(String model, long reservedInput, int outputTokens) {
+        return attempt(model, reservedInput, outputTokens, MAX_CALLS);
+    }
+
+    /**
+     * #692 re-review: one attempt counted at {@code calls} calls (1 to {@value #MAX_CALLS}), as
+     * {@link #mostOfAttempt} counts each; what a website draft reserves when its limits are set below the job's.
+     */
+    public static ClaudeApi.Usage attempt(String model, long reservedInput, int outputTokens, int calls) {
         long in = 0;
         long out = 0;
         long longIn = 0;
         long longOut = 0;
-        for (int call = 0; call < MAX_CALLS; call++) {
+        for (int call = 0; call < Math.max(1, Math.min(MAX_CALLS, calls)); call++) {
             ClaudeApi.Usage one = ClaudeCalls.priced(model,
                 ClaudeApi.unrecorded(reservedInput + (long) call * outputTokens, outputTokens));
             in += one.inputTokens();

@@ -29,6 +29,15 @@ class AiCostTest {
     }
 
     @Test
+    void aRequestThatMayNotFallBackIsCountedOnItsOwnModel() {
+        // A request with PDF documents goes without the provider's fallback (#692 re-review L4): its own $0.06 a time.
+        ClaudeApi.Usage attempt = new ClaudeApi.Usage(10_000, 4_000);
+        assertThat(AiCost.maxOf(ClaudeService.SONNET, attempt, 3, 0, null, false)).isEqualByComparingTo("0.180000");
+        assertThat(AiCost.maxOf(ClaudeService.SONNET, attempt, 3, 0, null, true))
+            .isEqualByComparingTo(AiCost.maxOf(ClaudeService.SONNET, attempt, 3, 0, null));
+    }
+
+    @Test
     void theWebReadersAttemptIsEveryCallWithTheOutputBeforeIt() {
         // Four calls (#692 review M1): 100,000 + k x 30,000 in (k from 0) and 30,000 out each.
         ClaudeApi.Usage attempt = ClaudeWebResearch.mostOfAttempt(ClaudeService.SONNET, 100_000, 30_000);

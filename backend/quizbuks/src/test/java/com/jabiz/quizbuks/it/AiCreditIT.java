@@ -351,7 +351,8 @@ class AiCreditIT extends AiItSupport {
         buy(sponsor, 5_000);
         String token = sponsorFull(sponsor);
         List<String> quiz = quizWithArticle(token, title(), "Material after many free endings.");
-        // Asked and ended days ago: today's requests (the daily limit) are not theirs.
+        // One more than a sponsor may have open (AiFees.MAX_OPEN, 2,000), asked and ended days ago: today's requests
+        // (the daily limit) are not theirs.
         Timestamp at = Timestamp.from(clock.instant().minus(Duration.ofDays(3)));
         execute("INSERT INTO qb_ai_job (ai_job_id, external_job_id, sponsor_id, quiz_id, kind, params, model, status, "
             + "input_bytes, estimated_tokens, zone, requested_at, finished_at, version, fee_mode, fee_markup, "
@@ -359,7 +360,7 @@ class AiCreditIT extends AiItSupport {
             + "SELECT gen_random_uuid()::text, gen_random_uuid()::text, ?, ?::uuid, 'QUESTIONS', '{}', "
             + "'claude-opus-5-5', CASE WHEN i % 2 = 0 THEN 'CANCELLED' ELSE 'FAILED' END, 10, 10, 'Asia/Tokyo', ?, ?, 1, "
             + "'CREDIT', 1.5, 150, 0, 0, 0, '2026-11' FROM generate_series(1, ?) AS i",
-            sponsor, quiz.get(0), at, at, AiProcesses.FEE_MAX_OPEN + 1);
+            sponsor, quiz.get(0), at, at, 2_001);
         Object aiJobId = request(token, quiz.get(0), List.of(quiz.get(1)), 2).get("aiJobId");
         assertThat(money(job(aiJobId).get("reserved_yen"))).isPositive();
         runUntilDone(aiJobId);
@@ -405,6 +406,7 @@ class AiCreditIT extends AiItSupport {
         assertThat(money(cut.get("billable_usd"))).isEqualByComparingTo("0.015600");
         assertThat(money(cut.get("unrecorded_usd"))).isZero();
         assertThat(money(cut.get("fee_yen"))).isEqualByComparingTo(feeOf(cut)).isEqualByComparingTo("4");
+        assertThat(money(cut.get("absorbed_yen"))).isZero();
         assertThat(money(cut.get("reserved_yen"))).isZero();
 
         List<String> t = charged("ai-failed-unanswered-");
@@ -416,6 +418,7 @@ class AiCreditIT extends AiItSupport {
         assertThat(none).containsEntry("status", QbAi.FAILED);
         assertThat(money(none.get("billable_usd"))).isZero();
         assertThat(money(none.get("fee_yen"))).isZero();
+        assertThat(money(none.get("absorbed_yen"))).isZero();
         assertThat(money(none.get("reserved_yen"))).isZero();
     }
 
@@ -441,6 +444,7 @@ class AiCreditIT extends AiItSupport {
         assertThat(money(done.get("billable_usd")).add(money(done.get("unrecorded_usd"))))
             .isEqualByComparingTo(money(done.get("cost_usd")));
         assertThat(money(done.get("fee_yen"))).isEqualByComparingTo(feeOf(done)).isEqualByComparingTo("5");
+        assertThat(money(done.get("absorbed_yen"))).isZero();
     }
 
     /** #692 review M3: cancelled while its attempt ran, the job is charged what that attempt was answered. */
@@ -462,6 +466,7 @@ class AiCreditIT extends AiItSupport {
         // 700 in and 300 out at $4 / $20 a million.
         assertThat(money(done.get("billable_usd"))).isEqualByComparingTo("0.008800");
         assertThat(money(done.get("fee_yen"))).isEqualByComparingTo(feeOf(done)).isEqualByComparingTo("2");
+        assertThat(money(done.get("absorbed_yen"))).isZero();
         assertThat(money(done.get("reserved_yen"))).isZero();
     }
 
@@ -487,6 +492,7 @@ class AiCreditIT extends AiItSupport {
             BigDecimal fee = money(done.get("billable_usd")).multiply(MARKUP).multiply(RATE)
                 .setScale(0, RoundingMode.UP);
             assertThat(money(done.get("fee_yen"))).isEqualByComparingTo(fee).isPositive();
+            assertThat(money(done.get("absorbed_yen"))).isZero();
             assertThat(AiFeeRules.withTax(fee, TAX)).isLessThanOrEqualTo(reserved);
             assertThat(money(done.get("reserved_yen"))).isZero();
         } finally {
@@ -529,5 +535,42 @@ class AiCreditIT extends AiItSupport {
             assertThat(money(item.get("actual"))).isEqualByComparingTo(money(done.get("absorbed_yen")));
         });
         assertThat(String.valueOf(output)).as("a note alone leaves the run as it was").doesNotContain("AI_RESERVATION");
+    }
+
+    /**
+     * #692 re-review L6: an answer the provider's fallback served (the refused call and the fallback's in
+     * usage.iterations, the fallback at its dearer price) is charged within what the request reserved, all of it.
+     */
+    @Test
+    void aFallbackAnswerIsChargedWithinItsReservation() {
+        feeOn();
+        List<String> s = charged("ai-fallback-");
+        Map<String, Object> message = new java.util.LinkedHashMap<>();
+        message.put("id", "msg_stub");
+        message.put("type", "message");
+        message.put("role", "assistant");
+        message.put("model", "claude-opus-5");
+        message.put("content", List.of(Map.of("type", "fallback", "from", Map.of("model", "claude-opus-5-5"),
+            "to", Map.of("model", "claude-opus-5")), Map.of("type", "text", "text", questions(1))));
+        message.put("stop_reason", "end_turn");
+        message.put("usage", Map.of("input_tokens", 1_500, "output_tokens", 900, "iterations", List.of(
+            Map.of("type", "message", "input_tokens", 1_500, "output_tokens", 300),
+            Map.of("type", "fallback_message", "input_tokens", 1_500, "output_tokens", 900))));
+        CLAUDE.script(MESSAGES, StubHttpServer.Answer.json(200, JSON.writeValueAsString(message)));
+        Object aiJobId = request(s.get(1), s.get(2), List.of(s.get(3)), 1).get("aiJobId");
+        BigDecimal reserved = money(job(aiJobId).get("reserved_yen"));
+        runUntilDone(aiJobId);
+        Map<String, Object> done = job(aiJobId);
+        assertThat(done).containsEntry("status", QbAi.READY);
+        assertThat(number(done.get("fallback_input_tokens"))).isEqualTo(1_500);
+        // 1,500 in and 300 out at Opus 5.5's $4 / $20 ($0.012), 1,500 in and 900 out at Opus 5's $5 / $25 ($0.030).
+        assertThat(money(done.get("billable_usd"))).isEqualByComparingTo("0.042000");
+        assertThat(money(done.get("fee_yen"))).isEqualByComparingTo(feeOf(done)).isPositive();
+        assertThat(money(done.get("absorbed_yen"))).isZero();
+        assertThat(AiFeeRules.withTax(money(done.get("fee_yen")), TAX)).isLessThanOrEqualTo(reserved);
+    }
+
+    private static long number(Object value) {
+        return ((Number) value).longValue();
     }
 }

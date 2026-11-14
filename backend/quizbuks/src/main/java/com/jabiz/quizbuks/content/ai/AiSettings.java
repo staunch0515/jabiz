@@ -34,15 +34,26 @@ public record AiSettings(boolean enabled, String model, String effort, Integer d
      * @param usdJpy      the yen of a dollar, 50 to 500
      * @param taxRate     the platform fees' tax rate ({@code qb.fee.tax-rate}), 0 to below 1
      * @param minPurchase the least purchase of credit; null: none (not set)
+     * @param siteCalls   the calls a website draft's attempt reserves ({@code qb.ai.fee.site-profile.calls}); null: the
+     *                    web reader's most
+     * @param sitePages   the pages it reserves; null: the job's own
+     * @param siteOutput  the output tokens it reserves; null: the job's own
      */
     public record Fee(boolean enabled, BigDecimal markup, BigDecimal usdJpy, BigDecimal taxRate,
-        BigDecimal minPurchase) {}
+        BigDecimal minPurchase, Integer siteCalls, Integer sitePages, Integer siteOutput) {
+
+        /** The fee's parameters without a website draft's own limits. */
+        public Fee(boolean enabled, BigDecimal markup, BigDecimal usdJpy, BigDecimal taxRate, BigDecimal minPurchase) {
+            this(enabled, markup, usdJpy, taxRate, minPurchase, null, null, null);
+        }
+    }
 
     /** The keys a request reads. */
     public static final List<String> KEYS = List.of(QbParams.AI_ENABLED, QbParams.AI_MODEL, QbParams.AI_EFFORT,
         QbParams.AI_SPONSOR_DAILY_JOBS, QbParams.AI_SPONSOR_MONTHLY_TOKENS, QbParams.AI_GLOBAL_MONTHLY_TOKENS,
         QbParams.AI_EXPIRE_DAYS, QbParams.AI_PRICE_INPUT, QbParams.AI_PRICE_OUTPUT, QbParams.AI_FEE_ENABLED,
-        QbParams.AI_FEE_MARKUP, QbParams.AI_FEE_USD_JPY, QbParams.FEE_TAX_RATE, QbParams.AI_CREDIT_MIN_PURCHASE);
+        QbParams.AI_FEE_MARKUP, QbParams.AI_FEE_USD_JPY, QbParams.FEE_TAX_RATE, QbParams.AI_CREDIT_MIN_PURCHASE,
+        QbParams.AI_FEE_SITE_CALLS, QbParams.AI_FEE_SITE_PAGES, QbParams.AI_FEE_SITE_OUTPUT);
 
     private static final BigDecimal MARKUP_MIN = BigDecimal.ONE;
     private static final BigDecimal MARKUP_MAX = BigDecimal.TEN;
@@ -71,7 +82,10 @@ public record AiSettings(boolean enabled, String model, String effort, Integer d
                 within(decimal(values.get(QbParams.AI_FEE_USD_JPY)), USD_JPY_MIN, USD_JPY_MAX),
                 rate(decimal(values.get(QbParams.FEE_TAX_RATE))),
                 whole(values.get(QbParams.AI_CREDIT_MIN_PURCHASE)) == null ? null
-                    : BigDecimal.valueOf(whole(values.get(QbParams.AI_CREDIT_MIN_PURCHASE)))));
+                    : BigDecimal.valueOf(whole(values.get(QbParams.AI_CREDIT_MIN_PURCHASE))),
+                limit(values.get(QbParams.AI_FEE_SITE_CALLS), ClaudeWebResearch.MAX_CALLS),
+                limit(values.get(QbParams.AI_FEE_SITE_PAGES), Integer.MAX_VALUE),
+                limit(values.get(QbParams.AI_FEE_SITE_OUTPUT), Integer.MAX_VALUE)));
     }
 
     /**
@@ -92,6 +106,12 @@ public record AiSettings(boolean enabled, String model, String effort, Integer d
             return null;
         }
         return new BigDecimal(text.strip());
+    }
+
+    /** A whole number from 1 to {@code max}; null otherwise (the job's own limit applies). */
+    private static Integer limit(String text, int max) {
+        Long value = whole(text);
+        return value == null || value < 1 || value > max ? null : value.intValue();
     }
 
     private static BigDecimal within(BigDecimal value, BigDecimal min, BigDecimal max) {

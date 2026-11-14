@@ -177,6 +177,23 @@ public final class QbParams {
      * {@link #AI_CREDIT_MIN_PURCHASE} is controlled too but optional ({@code SetupConfig}).
      */
     public static final List<String> AI_FEE_CONTROLLED = List.of(AI_FEE_ENABLED, AI_FEE_MARKUP, AI_FEE_USD_JPY);
+    /**
+     * F-M9 (#692 re-review, the coordinator's decision): what a website draft's request reserves, as limits below the
+     * job's own (each optional and controlled, not created by {@code QB_SETUP}): the calls an attempt is counted at (1 to
+     * 4, the web reader's most), the pages (1 to the job's {@code qb.site-profile.max-pages}) and the output tokens (1 to
+     * the job's). Absent or out of range, the job's own limit (the most it may cost). A job's end takes no more than its
+     * reservation; the rest is the platform's and noted by the daily reconciliation (AI_RESERVATION_SHORT). Their values
+     * are set from the real jobs' usage (P95) before the fee is turned on.
+     */
+    public static final String AI_FEE_SITE_CALLS = "qb.ai.fee.site-profile.calls";
+    public static final String AI_FEE_SITE_PAGES = "qb.ai.fee.site-profile.pages";
+    public static final String AI_FEE_SITE_OUTPUT = "qb.ai.fee.site-profile.output-tokens";
+    /** The optional controlled limits of a website draft's reservation. */
+    public static final List<String> AI_FEE_SITE_LIMITS = List.of(AI_FEE_SITE_CALLS, AI_FEE_SITE_PAGES,
+        AI_FEE_SITE_OUTPUT);
+    /** The kind the controlled change that first sets one of {@link #AI_FEE_SITE_LIMITS} gives (a whole number). */
+    public static final Map<String, Object> AI_FEE_SITE_LIMIT_KIND = Map.of("type", "numeric", "precision", 6,
+        "scale", 0);
     /** The kind the controlled change that first sets {@link #AI_CREDIT_MIN_PURCHASE} gives (yen, whole). */
     public static final Map<String, Object> AI_CREDIT_MIN_PURCHASE_KIND = Map.of("type", "monetary", "currency", "JPY",
         "scale", 0);

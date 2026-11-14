@@ -99,9 +99,6 @@ import java.util.UUID;
  */
 public final class AiProcesses {
 
-    /** F-M9: the most charged jobs a sponsor may have holding part of the credit (tests). */
-    public static final int FEE_MAX_OPEN = AiFees.MAX_OPEN;
-
     public static final String REQUEST = "QB_AI_QUESTIONS_REQUEST";
     /** Q73d-1: candidate translations of a quiz's text, and the sponsor's reviewed ones written. */
     public static final String TRANSLATE_REQUEST = "QB_AI_TRANSLATE_REQUEST";
@@ -830,8 +827,10 @@ public final class AiProcesses {
         }
         // F-M9: the AI fee, frozen on the job to come (a charged kind reserves the most it may cost of the credit).
         boolean site = QbAi.KIND_SITE_PROFILE.equals(kind);
-        AiFees.reserve(ctx, ctx.get(SETTINGS, AiSettings.class), kind, () -> mostOfAttempt(toCome(ctx)),
-            site ? SiteProfileJob.ATTEMPTS : AiQuestionsJob.ATTEMPTS, site ? AiFees.SITE_SEARCHES : 0);
+        AiFees.reserve(ctx, ctx.get(SETTINGS, AiSettings.class), kind,
+            () -> mostOfAttempt(toCome(ctx), ctx.get(SETTINGS, AiSettings.class).fee()),
+            site ? SiteProfileJob.ATTEMPTS : AiQuestionsJob.ATTEMPTS, site ? AiFees.SITE_SEARCHES : 0,
+            !ctx.contains(PDF_FILES) || ((List<?>) ctx.get(PDF_FILES)).isEmpty());
     }
 
     /** The job a request is about to record, as {@link #unrecordedAttempt} reads a job: its kind, model, size and params. */
@@ -1238,11 +1237,12 @@ public final class AiProcesses {
     }
 
     /**
-     * F-M9 (#692 review M1): the most one attempt of the job may use, which a charged request reserves: the web reader's
-     * every call ({@link ClaudeWebResearch#mostOfAttempt}); for the other kinds one attempt is the calls
-     * {@link #unrecordedAttempt} counts.
+     * F-M9 (#692 review M1 and re-review): what one attempt of the job reserves. A website draft is the web reader's
+     * calls, each at most the pages and output the job allows, or the controlled limits below them
+     * ({@code qb.ai.fee.site-profile.*}: what most jobs use, the rest the platform's, the coordinator's decision); the
+     * other kinds are the calls {@link #unrecordedAttempt} counts.
      */
-    static ClaudeApi.Usage mostOfAttempt(EntityInstance job) {
+    static ClaudeApi.Usage mostOfAttempt(EntityInstance job, AiSettings.Fee fee) {
         if (!QbAi.KIND_SITE_PROFILE.equals(job.get("kind"))) {
             return unrecordedAttempt(job);
         }
@@ -1251,7 +1251,14 @@ public final class AiProcesses {
             : AiLimits.reservedInput(QuizEditing.number(job.get("inputBytes")), 0);
         int output = params.get("maxOutputTokens") instanceof Number asked ? asked.intValue()
             : SiteProfileJob.MAX_OUTPUT_TOKENS;
-        return ClaudeWebResearch.mostOfAttempt(job.get("model"), input, output);
+        if (fee.sitePages() != null) {
+            input = Math.min(input, SiteProfileJob.reservedInput(fee.sitePages()));
+        }
+        if (fee.siteOutput() != null) {
+            output = Math.min(output, fee.siteOutput());
+        }
+        return ClaudeWebResearch.attempt(job.get("model"), input, output,
+            fee.siteCalls() == null ? ClaudeWebResearch.MAX_CALLS : fee.siteCalls());
     }
 
     static Map<String, Object> finished(ClaudeApi.Usage usage, BigDecimal cost, Integer attempts,
