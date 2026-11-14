@@ -202,8 +202,10 @@ export interface InvoiceSources {
   unpaid: number
 }
 
-export async function readInvoiceSources(invoiceId: string): Promise<InvoiceSources> {
-  const row = (await runQuery<Row>(TEMPLATE.feeInvoiceSources, { params: { invoiceId }, limit: 1 })).items[0] ?? {}
+export async function readInvoiceSources(invoiceId: string): Promise<InvoiceSources | null> {
+  const row = (await runQuery<Row>(TEMPLATE.feeInvoiceSources, { params: { invoiceId }, limit: 1 })).items[0]
+  // None: nothing is shown, which is not 'not available'.
+  if (!row) return null
   const some = (value: unknown) => (value == null ? null : num(value))
   return { gift: some(row.sourceGift), prepayment: some(row.sourcePrepayment),
     prepaymentGift: some(row.sourcePrepaymentGift), cash: some(row.sourceCash),

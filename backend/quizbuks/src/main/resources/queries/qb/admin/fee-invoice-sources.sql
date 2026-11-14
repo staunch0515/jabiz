@@ -8,8 +8,9 @@ datasets:
 params:
   invoiceId: { like: QbFeeInvoice.invoiceId, required: true, description: The invoice }
   asOfDay:   { kind: { type: date }, description: "The day the document states the payment status as of (the issue's day in the fiscal zone); none: not stated" }
+  unavailableNote: { kind: { type: text, maxLength: 500 }, description: "What the document says, in its language, when the details of how it was paid are not available (none: nothing is said)" }
 results:
-  asOf:                { kind: { type: date } }
+  asOfNote:            { kind: { type: text, maxLength: 600 } }
   sourceGift:          { kind: { type: monetary, currency: JPY, scale: 0 } }
   sourcePrepayment:    { kind: { type: monetary, currency: JPY, scale: 0 } }
   sourcePrepaymentGift: { kind: { type: monetary, currency: JPY, scale: 0 } }
@@ -19,8 +20,8 @@ results:
 permissions: [qb.admin.finance.read]
 ---*/
 -- THE definition of an invoice's payment sources; qb.admin.fee-invoice-sources is the same statement over the
--- administration's datasets: CHANGE BOTH (InvoiceSourcesTextTest compares them word for word below this comment's
--- header). One statement, one snapshot: the payment rows, the credit notes' share and the total are read together,
+-- administration's datasets: CHANGE BOTH (InvoiceSourcesTextTest compares what is below the header of each, word for
+-- word). One statement, one snapshot: the payment rows, the credit notes' share and the total are read together,
 -- so the five add up to the total whatever is being paid just now (gift + prepayment + cash + credit notes + unpaid =
 -- total; 'prepayment gift' is the part of the prepayment's rows that came from gift credit and is not added).
 -- The payment rows of an invoice: the ones that name it, or the charge it is the own invoice of (a prepaid charge's
@@ -58,7 +59,9 @@ figures AS (
     LEFT JOIN paid x ON x.invoice_id = i.{{QbFeeInvoice.invoiceId}}
     WHERE i.{{QbFeeInvoice.invoiceId}} = :invoiceId
 )
-SELECT CAST(:asOfDay AS date) AS asOf,
+SELECT CAST(coalesce(to_char(CAST(:asOfDay AS date), 'YYYY-MM-DD'), '')
+            || CASE WHEN f.status <> 'VOID' AND f.gift + f.prepayment + f.cash <> f.paid_amount
+                    THEN ' - ' || coalesce(CAST(:unavailableNote AS text), '') ELSE '' END AS varchar(600)) AS asOfNote,
        CASE WHEN f.status = 'VOID' THEN 0
             WHEN f.gift + f.prepayment + f.cash = f.paid_amount THEN f.gift END AS sourceGift,
        CASE WHEN f.status = 'VOID' THEN 0
@@ -67,7 +70,7 @@ SELECT CAST(:asOfDay AS date) AS asOf,
             WHEN f.gift + f.prepayment + f.cash = f.paid_amount THEN f.prepayment_gift END AS sourcePrepaymentGift,
        CASE WHEN f.status = 'VOID' THEN 0
             WHEN f.gift + f.prepayment + f.cash = f.paid_amount THEN f.cash END AS sourceCash,
-       f.credit_applied AS sourceCreditNote,
+       CASE WHEN f.status = 'VOID' THEN 0 ELSE f.credit_applied END AS sourceCreditNote,
        CASE WHEN f.status = 'VOID' THEN 0
             ELSE greatest(f.total - f.paid_amount - f.credit_applied, 0) END AS sourceUnpaid
 FROM figures f

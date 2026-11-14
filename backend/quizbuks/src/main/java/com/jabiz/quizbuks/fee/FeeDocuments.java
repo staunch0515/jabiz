@@ -24,7 +24,7 @@ public final class FeeDocuments {
         .note("byRate")
         .table(FeeProcesses.RATES_TEMPLATE, "taxPercent", "rateNet", "rateTax", "rateGross")
         .totals(FeeProcesses.DOCUMENT_TEMPLATE, "amount", "tax", "total")
-        .text("paymentAsOf", FeeProcesses.SOURCES_TEMPLATE, "asOf")
+        .text("paymentAsOf", FeeProcesses.SOURCES_TEMPLATE, "asOfNote")
         .facts(FeeProcesses.SOURCES_TEMPLATE, "sourceGift", "sourcePrepayment", "sourcePrepaymentGift", "sourceCash",
             "sourceCreditNote", "sourceUnpaid")
         .note("note"));

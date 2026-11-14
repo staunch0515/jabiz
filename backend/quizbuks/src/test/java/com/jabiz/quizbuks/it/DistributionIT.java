@@ -577,6 +577,31 @@ class DistributionIT extends PrepaymentItSupport {
     }
 
     @Test
+    void aDepositOfFeeCreditAndCashPaysAFeeAndItsInvoiceNamesBothParts() {
+        autoApprove(true);
+        distribution(true);
+        String sponsor = distributionSponsor("fm13-mixed");
+        // Two winners at most: 10 and 1 tax set aside, of the fee credit's 5 and the cash's 6.
+        grant(sponsor, 5, clock.instant().plus(Duration.ofDays(400)));
+        cash(sponsor, 100);
+        String publicationId = publication(sponsor, "FM13 mixed", Map.of("maxWinners", 2, "endAt",
+            clock.instant().plus(Duration.ofDays(70)).toString()));
+        assertThat((BigDecimal) distributionPrepayment(publicationId).get("amount")).isEqualByComparingTo("11");
+        // Two starts (each fails): 10 and 1 tax = 11, all of the deposit.
+        failedStarts(publicationId, 2, "fm13-mixed");
+        monthly();
+        Map<String, Object> charge = distributionCharges(sponsor).getFirst();
+        String invoiceId = String.valueOf(query("SELECT invoice_id FROM qb_fee_invoice WHERE charge_id = ?",
+            String.valueOf(charge.get("charge_id"))).getFirst().get("invoice_id"));
+        Map<String, Object> sources = items("qb.sponsor.fee-invoice-sources", sponsorToken(sponsor),
+            Map.of("params", Map.of("invoiceId", invoiceId))).getFirst();
+        assertThat(sources).containsEntry("sourcePrepayment", 11).containsEntry("sourcePrepaymentGift", 5)
+            .containsEntry("sourceGift", 0).containsEntry("sourceCash", 0).containsEntry("sourceUnpaid", 0);
+        assertThat(((Number) sources.get("sourcePrepaymentGift")).longValue())
+            .isLessThan(((Number) sources.get("sourcePrepayment")).longValue());
+    }
+
+    @Test
     void beyondTheDepositTheFeeCreditThenCashPayAndTheRestIsOwedPartlyThenWhole() {
         autoApprove(true);
         distribution(true);

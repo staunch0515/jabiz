@@ -408,7 +408,8 @@ class FeeIT extends PlayItSupport {
         // F-M13: each own invoice of a fee paid early was paid with cash, all of it.
         for (Map<String, Object> early : invoices) {
             assertThat(sources(sponsorToken(sponsor), early.get("invoice_id"))).containsEntry("sourceCash", 1100)
-                .containsEntry("sourceGift", 0).containsEntry("sourceUnpaid", 0);
+                .containsEntry("sourceGift", 0).containsEntry("sourcePrepayment", 0)
+                .containsEntry("sourceCreditNote", 0).containsEntry("sourceUnpaid", 0);
         }
         assertThat(balance(sponsor, QbWallets.CASH)).isEqualByComparingTo("2800");
         assertThat(items("qb.sponsor.wallet", sponsorToken(sponsor), Map.of()).getFirst())
@@ -476,7 +477,20 @@ class FeeIT extends PlayItSupport {
         Map<String, Object> document = run(FeeProcesses.DOCUMENT, sponsorToken(sponsor),
             body("invoiceId", invoiceId, "language", "en"));
         String text = documentText(sponsorToken(sponsor), document.get("documentRunId"));
-        assertThat(text).contains("Still owed").doesNotContain("null");
+        // The three ways of paying have no figure after their labels (the next label follows at once), the credit notes' 0
+        // does; and the document says why, in its language.
+        assertThat(text).contains("Still owed").doesNotContain("null")
+            .contains("Paid with granted credit (JPY) Paid from the prepayment (JPY) of which the prepayment came from "
+                + "granted credit (JPY) Paid with cash (JPY) Paid by credit notes (JPY) 0 Still owed (JPY) 0")
+            .contains("Payment details are not available");
+        // A voided invoice that had credit notes (which the rules refuse, so it is made by hand) holds none of it.
+        String voidedId = java.util.UUID.randomUUID().toString();
+        execute("INSERT INTO qb_fee_invoice (invoice_id, invoice_no, sponsor_id, billing_mode, period, amount, tax, "
+            + "total, paid_amount, credit_applied, status, issued_at, issued_on, due_on, voided_at) VALUES (?, ?, ?, "
+            + "'PREPAID', '2026-08', 1000, 100, 1100, 0, 300, 'VOID', now(), current_date, current_date, now())",
+            voidedId, "VOID-" + voidedId.substring(0, 8), sponsor);
+        assertThat(sources(sponsorToken(sponsor), voidedId)).containsEntry("sourceCreditNote", 0)
+            .containsEntry("sourceUnpaid", 0).containsEntry("sourceCash", 0);
     }
 
     @Test
@@ -531,7 +545,9 @@ class FeeIT extends PlayItSupport {
             "language", "en"));
         assertThat(documentText(sponsorToken(en), enDocument.get("documentRunId")))
             .contains("Subtotals by tax rate").contains("Subtotal before tax (JPY)").contains("Tax rate (%)")
-            .contains("Paid with cash (JPY)").contains("Still owed (JPY)");
+            .contains("Paid with cash (JPY)").contains("Still owed (JPY)")
+            // The line (month, rate, amounts) and the subtotal of the one rate.
+            .containsPattern("10\\.00 1,000 100 1,100").containsPattern("Paid with cash \\(JPY\\) 1,100");
         // And in Chinese, for another sponsor's invoice: issued all the same.
         String other = newSponsor(unique("s-fm13-zh"));
         cash(other, 5000);
@@ -539,7 +555,8 @@ class FeeIT extends PlayItSupport {
         String otherInvoice = String.valueOf(invoices(other).getFirst().get("invoice_id"));
         Map<String, Object> zh = run(FeeProcesses.DOCUMENT, sponsorToken(other), body("invoiceId", otherInvoice,
             "language", "zh"));
-        assertThat(documentText(sponsorToken(other), zh.get("documentRunId"))).contains("1,100");
+        assertThat(documentText(sponsorToken(other), zh.get("documentRunId"))).contains("10.00 1,000 100 1,100")
+            .contains("1,100");
     }
 
     @Test
@@ -555,6 +572,7 @@ class FeeIT extends PlayItSupport {
         String token = sponsorToken(sponsor);
         java.util.concurrent.atomic.AtomicBoolean paying = new java.util.concurrent.atomic.AtomicBoolean(true);
         java.util.concurrent.ExecutorService pool = java.util.concurrent.Executors.newFixedThreadPool(2);
+        java.util.Set<String> seen = java.util.concurrent.ConcurrentHashMap.newKeySet();
         java.util.concurrent.Future<Integer> reads = pool.submit(() -> {
             int n = 0;
             while (paying.get()) {
@@ -566,6 +584,7 @@ class FeeIT extends PlayItSupport {
                 }
                 // One statement, one snapshot: whatever is paid meanwhile, the figures add up to the total.
                 assertThat(sum).isEqualByComparingTo("1100");
+                seen.add(String.valueOf(row.get("sourceUnpaid")));
                 n++;
             }
             return n;
@@ -578,9 +597,11 @@ class FeeIT extends PlayItSupport {
             }
         } finally {
             paying.set(false);
+            pool.shutdown();
         }
         assertThat(reads.get()).isPositive();
-        pool.shutdown();
+        // The reads did overlap the payments: more than one state of the invoice was seen (1100 at first, 0 at the end).
+        assertThat(seen).hasSizeGreaterThanOrEqualTo(2);
         assertThat(sources(token, invoiceId)).containsEntry("sourceCash", 1100).containsEntry("sourceUnpaid", 0);
     }
 

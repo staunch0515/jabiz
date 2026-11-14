@@ -786,8 +786,10 @@ export const readFeeCreditSources = (): Promise<DictionaryItem[]> => readDiction
 export const readCashSources = (): Promise<DictionaryItem[]> => readDictionary(WALLET_DICTIONARY.cashSource)
 
 /** F-M13: what the invoice was paid with, as of now (the document's is as of its issue). */
-export async function readInvoiceSources(invoiceId: string): Promise<InvoiceSources> {
-  const row = (await runQuery<Row>(WALLET_TEMPLATE.invoiceSources, { params: { invoiceId }, limit: 1 })).items[0] ?? {}
+export async function readInvoiceSources(invoiceId: string): Promise<InvoiceSources | null> {
+  const row = (await runQuery<Row>(WALLET_TEMPLATE.invoiceSources, { params: { invoiceId }, limit: 1 })).items[0]
+  // None (not the caller's invoice, or gone): nothing is shown, which is not 'not available'.
+  if (!row) return null
   const some = (value: unknown) => (value == null ? null : num(value))
   return {
     gift: some(row.sourceGift),

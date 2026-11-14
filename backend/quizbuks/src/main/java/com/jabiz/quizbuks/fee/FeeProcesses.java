@@ -104,6 +104,8 @@ public final class FeeProcesses {
     public static final String SOURCES_TEMPLATE = "qb.sponsor.fee-invoice-sources";
     /** The template parameter of the day the payment status is as of. */
     static final String AS_OF_DAY = "asOfDay";
+    /** The template parameter of what the document says when the details of how it was paid are not available. */
+    static final String UNAVAILABLE_NOTE = "unavailableNote";
     public static final String UNINVOICED_TEMPLATE = "qb.sponsor.fee-uninvoiced";
     public static final String ISSUER_TEMPLATE = "qb.sponsor.receipt-issuer";
     public static final String LAYOUT_ID = "qb.fee_invoice";
@@ -956,7 +958,17 @@ public final class FeeProcesses {
 
     // ---- the document -----------------------------------------------------------------------------------------------
 
-    public static ProcessDefinition<DocumentInput, InvoiceOutput, ProcessContext> document(ZoneId zone) {
+    /**
+     * What the document says, in its language, of an invoice whose details of how it was paid are not available (a message
+     * of {@code document.qb.fee_invoice}): given the language asked for and the request.
+     */
+    @FunctionalInterface
+    public interface UnavailableNote {
+        String in(String language, com.jabiz.context.RequestContext request);
+    }
+
+    public static ProcessDefinition<DocumentInput, InvoiceOutput, ProcessContext> document(ZoneId zone,
+        UnavailableNote unavailable) {
         return ProcessDefinition.define(DOCUMENT, 1, DocumentInput.class, InvoiceOutput.class, ProcessContext.class,
             pb -> pb
                 .description("Issues the PDF of a platform fee invoice of one's own, or gives the one already issued.")
@@ -998,7 +1010,8 @@ public final class FeeProcesses {
                     // The payment status is stated as of the issue's day in the fiscal zone: a snapshot, as the
                     // document is (F-M13 §3.2); the time itself is never read by the template.
                     ctx -> new DocumentProcesses.IssueInput(LAYOUT_ID, Map.of(INVOICE_ID, ctx.get(INVOICE_ID),
-                        AS_OF_DAY, FeeRules.issuedOn(ctx.opTime(), zone)), null, null,
+                        AS_OF_DAY, FeeRules.issuedOn(ctx.opTime(), zone), UNAVAILABLE_NOTE,
+                        unavailable.in(ctx.get(INPUT, DocumentInput.class).language(), ctx.request())), null, null,
                         ctx.get(INPUT, DocumentInput.class).language()), ISSUED))
                 .compute("Record the document", (metadata, ctx) -> {
                     if (ctx.contains(ISSUED)) {
