@@ -225,7 +225,7 @@ class ReconChecksTest {
         assertThat(ReconChecks.ALL).allSatisfy(code -> assertThat(ReconChecks.owner(code)).as(code).isNotBlank());
         // Five need attention (the two price ranges, the audience fee without its period, a credit with a due fee, and
         // F-M10's AI help usage total, owned by the content administrators and leading to the AI page they can open),
-        // three are notes (the taker wallet's lag, the distribution fee at its floor, F-M8's unpurchased exposures),
+        // four are notes (the taker wallet's lag, the distribution fee at its floor, F-M8's unpurchased exposures, F-M12 c's suspended operator's credit to take back),
         // the rest are differences.
         assertThat(ReconChecks.ATTENTION).containsExactlyInAnyOrder(ReconChecks.DISTRIBUTION_PRICE_RANGE,
             ReconChecks.AUDIENCE_REFUND_NO_PERIOD, ReconChecks.CREDIT_UNUSED_WITH_DUE, ReconChecks.HELP_USAGE_TOTAL,
@@ -234,7 +234,17 @@ class ReconChecksTest {
         assertThat(ReconChecks.link(ReconChecks.HELP_USAGE_TOTAL)).isEqualTo("/qb/ai");
         assertThat(ReconChecks.link(ReconChecks.DISTRIBUTION_PRICE_RANGE)).isEqualTo(ReconTasks.RECONCILIATION_PAGE);
         assertThat(ReconChecks.ALL.stream().filter(c -> ReconChecks.level(c) == ReconChecks.Level.DIFFERENCE))
-            .hasSize(ReconChecks.ALL.size() - 8);
+            .hasSize(ReconChecks.ALL.size() - ReconChecks.ATTENTION.size() - ReconChecks.NOTES.size());
+        assertThat(ReconChecks.ATTENTION).hasSize(5);
+        assertThat(ReconChecks.NOTES).hasSize(4);
+        assertThat(ReconChecks.NOTES).contains(ReconChecks.OPERATOR_GIFT_CARRY_OPEN);
+        // F-M12 c: the settlement's checks are differences, owned by finance (qb.reconcile), none for attention.
+        for (String check : List.of(ReconChecks.OPERATOR_SETTLEMENT_WAITING, ReconChecks.OPERATOR_SETTLEMENT_COVERAGE,
+            ReconChecks.GIFT_RECOVERY, ReconChecks.OPERATOR_CHARGE_NO_OPERATOR)) {
+            assertThat(ReconChecks.level(check)).as(check).isEqualTo(ReconChecks.Level.DIFFERENCE);
+            assertThat(ReconChecks.owner(check)).as(check).isEqualTo(QbPermissions.RECONCILE);
+        }
+        assertThat(ReconChecks.level(ReconChecks.OPERATOR_GIFT_CARRY_OPEN)).isEqualTo(ReconChecks.Level.NOTE);
     }
 
     @Test

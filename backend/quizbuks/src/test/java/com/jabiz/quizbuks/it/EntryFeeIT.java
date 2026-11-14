@@ -24,6 +24,11 @@ import static org.assertj.core.api.Assertions.assertThat;
  */
 class EntryFeeIT extends PlayItSupport {
 
+    @org.junit.jupiter.api.BeforeEach
+    void operatorsAreNotWaitedFor() {
+        settlementsAreNotWaitedFor();
+    }
+
     @Autowired
     @Qualifier("qbEntryFeeSettleJob")
     JobDefinition<?> settleJob;

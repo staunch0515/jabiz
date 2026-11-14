@@ -54,4 +54,66 @@ class OperatorReadinessTemplateTest {
         }
         assertThat(expressions.get(0)).isEqualTo(expressions.get(1)).contains("COLLATE \"C\"");
     }
+
+    /**
+     * F-M12 c: the daily check names the steps a month waits for with the readiness template's own conditions, copied
+     * into it: each branch's EXISTS, with the parameters renamed to the check's columns, is the same text.
+     */
+    @Test
+    void theDailyChecksStepsAreTheReadinessBranchesWrittenTheSame() throws IOException {
+        Path system = Path.of("src/main/resources/queries/qb/system");
+        String readiness = code(Files.readString(system.resolve("operator-settlement-readiness.sql")));
+        String check = code(Files.readString(system.resolve("recon-operator-settlement.sql")));
+        // The steps are the readiness template's own: a branch added there and not to the check fails here.
+        List<String> steps = new java.util.ArrayList<>();
+        Matcher blocked = Pattern.compile("SELECT '(\\w+)' AS blockedBy").matcher(readiness);
+        while (blocked.find()) {
+            steps.add(blocked.group(1));
+        }
+        assertThat(steps).isNotEmpty();
+        for (String step : steps) {
+            Matcher a = Pattern.compile("SELECT '" + step + "' AS blockedBy WHERE EXISTS \\((.*?)\\)\\s*(?:UNION ALL|$)")
+                .matcher(readiness);
+            assertThat(a.find()).as(step + " in the readiness template").isTrue();
+            Matcher b = Pattern.compile("CASE WHEN EXISTS \\(((?:(?!CASE WHEN).)*?)\\) THEN '" + step + "' END").matcher(check);
+            assertThat(b.find()).as(step + " in the check").isTrue();
+            String expected = a.group(1).replace(":operatorId", "b.r_operator").replace(":month", "b.r_month")
+                .replace(":periodStart", "b.r_from").replace(":periodEnd", "b.r_to");
+            assertThat(b.group(1)).as(step).isEqualTo(expected);
+        }
+    }
+
+    /**
+     * F-M12 c (review L7): the time a month became ready is read from the same rows the steps are: the conditions of each
+     * step's subquery for it are, word for word, those of the step's branch (up to the settlement it waits for).
+     */
+    @Test
+    void theReadyTimeReadsTheRowsTheStepsDo() throws IOException {
+        String check = code(Files.readString(Path.of("src/main/resources/queries/qb/system/recon-operator-settlement.sql")));
+        for (String marker : List.of("{{QbPublication.distributionUnit}} IS NOT NULL",
+            "{{QbPublication.exposureUnit}} IS NOT NULL", "{{QbFeeCharge.period}} = b.r_month")) {
+            java.util.Set<String> conditions = new java.util.TreeSet<>();
+            int count = 0;
+            for (int at = check.indexOf(marker); at >= 0; at = check.indexOf(marker, at + 1)) {
+                count++;
+                int from = check.lastIndexOf("WHERE ", at);
+                int end = Integer.MAX_VALUE;
+                for (String stop : List.of(" AND NOT EXISTS", ") t)", ") THEN")) {
+                    int found = check.indexOf(stop, at);
+                    if (found >= 0) {
+                        end = Math.min(end, found);
+                    }
+                }
+                conditions.add(check.substring(from, end).replaceAll("[\\s)]+$", ""));
+            }
+            assertThat(count).as(marker + " in the branch and in the ready time").isEqualTo(2);
+            assertThat(conditions).as(marker).hasSize(1);
+        }
+    }
+
+    /** The statement without comments, its white space and the aliases the copies are free to differ in. */
+    private static String code(String sql) {
+        return sql.lines().filter(line -> !line.strip().startsWith("--")).collect(java.util.stream.Collectors.joining(" "))
+            .replaceAll("\\s+", " ").trim();
+    }
 }

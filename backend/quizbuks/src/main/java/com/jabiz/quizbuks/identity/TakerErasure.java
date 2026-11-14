@@ -98,9 +98,13 @@ public class TakerErasure {
             @Override
             public List<ErasureLoad> loads() {
                 return List.of(
-                    ErasureLoad.of(TRANSFERS, QbPayouts.defaultDataset(QbPayouts.TRANSFER), "userId"),
-                    ErasureLoad.of(CASH, QbRewards.defaultDataset(QbRewards.CASH_REWARD), "userId"),
-                    ErasureLoad.of(REDEMPTIONS, QbRewards.defaultDataset(QbRewards.REDEMPTION), "userId"));
+                    // F-M15 a: counts of the open ones, however many rows the user has (a row load reads at most 100).
+                    ErasureLoad.count(TRANSFERS, QbPayouts.defaultDataset(QbPayouts.TRANSFER), "userId")
+                        .where("status", OPEN_TRANSFERS.stream().sorted().toArray()),
+                    ErasureLoad.count(CASH, QbRewards.defaultDataset(QbRewards.CASH_REWARD), "userId")
+                        .where("status", OPEN_CASH.stream().sorted().toArray()),
+                    ErasureLoad.count(REDEMPTIONS, QbRewards.defaultDataset(QbRewards.REDEMPTION), "userId")
+                        .where("status", OPEN_REDEMPTIONS.stream().sorted().toArray()));
             }
 
             @Override
@@ -118,18 +122,14 @@ public class TakerErasure {
      */
     static List<ErasureNotice> notices(ErasureSubject subject) {
         List<ErasureNotice> notices = new ArrayList<>();
-        long withdrawals = open(subject, TRANSFERS, OPEN_TRANSFERS);
+        long withdrawals = subject.count(TRANSFERS);
         if (withdrawals > 0) {
             notices.add(ErasureNotice.of(NOTICE_WITHDRAWAL, Map.of("count", withdrawals)));
         }
-        long rewards = open(subject, CASH, OPEN_CASH) + open(subject, REDEMPTIONS, OPEN_REDEMPTIONS);
+        long rewards = subject.count(CASH) + subject.count(REDEMPTIONS);
         if (rewards > 0) {
             notices.add(ErasureNotice.of(NOTICE_REWARDS, Map.of("count", rewards)));
         }
         return List.copyOf(notices);
-    }
-
-    private static long open(ErasureSubject subject, String load, Set<String> statuses) {
-        return subject.rows(load).stream().filter(row -> statuses.contains(String.valueOf(row.get("status")))).count();
     }
 }
