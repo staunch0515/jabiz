@@ -8,10 +8,13 @@
 -- reads every such part from the earliest switch point on, not narrowed by a window. Most parts are paid in cash; the
 -- partial index holds the granted credit's only.
 --
--- Built plainly, in the migration's transaction, as the application's other indexes: the application's Flyway
--- (spring.flyway) defines no placeholder for CONCURRENTLY in production and takes its transactional lock, under which a
--- CREATE INDEX CONCURRENTLY would wait for Flyway's own open transaction for ever (platform V66, decision D81). The
--- fees and the payments are written a few times a month per Sponsor; the build holds their writes for its seconds.
-CREATE INDEX IF NOT EXISTS qb_fee_charge_version_operator_period_idx ON qb_fee_charge_version (operator_id, period);
-CREATE INDEX IF NOT EXISTS qb_fee_payment_version_credit_paid_idx ON qb_fee_payment_version (paid_at)
+-- Built without blocking the fees' and payments' writes, as V127: CONCURRENTLY through the placeholder of
+-- application.yml (empty in the tests, which migrate several schemas of one database side by side), outside a
+-- transaction (V129__quizbuks_operator_settlement_indexes.sql.conf: each statement commits by itself), with Flyway's
+-- session-level lock (docs/guide/platform-operations.md section 6). A build that failed half way leaves an INVALID
+-- index of its name that IF NOT EXISTS keeps: drop it by hand (DROP INDEX CONCURRENTLY with its name), run flyway
+-- repair and restart; the startup check SCHEMA warns of an INVALID index.
+CREATE INDEX ${concurrently} IF NOT EXISTS qb_fee_charge_version_operator_period_idx
+    ON qb_fee_charge_version (operator_id, period);
+CREATE INDEX ${concurrently} IF NOT EXISTS qb_fee_payment_version_credit_paid_idx ON qb_fee_payment_version (paid_at)
     WHERE sub_account = 'FEE_CREDIT';
