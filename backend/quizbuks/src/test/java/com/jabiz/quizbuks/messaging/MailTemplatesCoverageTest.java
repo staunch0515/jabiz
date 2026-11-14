@@ -37,7 +37,7 @@ class MailTemplatesCoverageTest {
      * {@code qb.topup.granted}, {@code qb.fee-credit.expiring}) stay ordinary notices.
      */
     private static final List<String> PROTECTED = List.of("qb.bank-account.changed", "qb.transfer.sent",
-        "qb.transfer.failed", "qb.payout.action-needed", "qb.fee.invoice-issued", "qb.fee.invoice-overdue", "qb.fee.auto-paid",
+        "qb.transfer.failed", "qb.payout.action-needed", "qb.fee.invoice-issued", "qb.fee.invoice-overdue", "qb.fee.auto-paid", "qb.fee.invoice-voided",
         "qb.topup.paid-cash", "qb.publication.funds-short", "qb.publication.exposure-low");
 
     private static List<MailTemplate> declared() throws ClassNotFoundException, IllegalAccessException {

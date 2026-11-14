@@ -1,16 +1,21 @@
 /*---
 id: qb.system.recon-credit-notes
 description: Whether the audience fees' refunds and the credit notes are consistent, by sponsor (F-M7) - the audience fees not decided, charged for a publication that never went on, and the credit notes' uses and limits against their fees and invoices (one of the four templates of the daily fee-account reconciliation, F-M14 G10)
-entities: [QbFeeCreditNote, QbFeeCreditNoteUse, QbFeeInvoice, QbFeeCharge, QbPrepayment, QbPublicationCard]
+entities: [QbFeeCreditNote, QbFeeCreditNoteUse, QbFeeInvoice, QbFeePayment, QbFeeCreditGrant, QbWallet, SysParam, QbFeeCharge, QbPrepayment, QbPublicationCard]
 datasets:
   QbFeeCreditNote: urn:jabiz:dataset:default:QbFeeCreditNote
   QbFeeCreditNoteUse: urn:jabiz:dataset:default:QbFeeCreditNoteUse
   QbFeeInvoice: urn:jabiz:dataset:default:QbFeeInvoice
+  QbFeePayment: urn:jabiz:dataset:default:QbFeePayment
+  QbFeeCreditGrant: urn:jabiz:dataset:default:QbFeeCreditGrant
+  QbWallet: urn:jabiz:dataset:default:QbWallet
+  SysParam: urn:jabiz:dataset:now:SysParam
   QbFeeCharge: urn:jabiz:dataset:default:QbFeeCharge
   QbPrepayment: urn:jabiz:dataset:default:QbPrepayment
   QbPublicationCard: urn:jabiz:dataset:default:QbPublicationCard
 params:
   at: { like: QbPublicationCard.endedAt, description: "The run's time: an ended publication's prepayment still open a while after it is a difference (none: not checked)" }
+  missedHours: { kind: { type: numeric, precision: 3, scale: 0 }, description: "F-M13c: qb.fee.auto-pay.missed-after-hours (none: the automatic payment's misses are not checked)" }
   refundHours: { kind: { type: numeric, precision: 3, scale: 0 }, description: "F-M7: qb.audience.refund.missing-after-hours (none: the audience fees not decided are not checked)" }
 results:
   checkCode: { kind: { type: text, maxLength: 30 } }
@@ -105,3 +110,45 @@ WHERE cl.r_left > 0
   AND EXISTS (SELECT 1 FROM {{QbFeeInvoice}} ui
               WHERE ui.{{QbFeeInvoice.sponsorId}} = cl.r_party
                 AND ui.{{QbFeeInvoice.status}} IN ('OPEN', 'PARTIAL', 'OVERDUE'))
+UNION ALL
+-- INVOICE_PAID_SUM (F-M13c, a difference): by invoice (not voided), what the invoice says was paid (paidAmount) against
+--   what its payment parts add up to (a part given back is negative; an invoice of one charge was paid as the charge), and its credit applied against what its notes'
+--   uses add up to. An invoice paid before the parts existed (paidAmount, no part) is left out; so is one with no
+--   credit applied and no use.
+SELECT CAST('INVOICE_PAID_SUM' AS varchar(30)), CAST(pi.{{QbFeeInvoice.sponsorId}} AS varchar(128)),
+       CAST(pi.{{QbFeeInvoice.invoiceNo}} AS varchar(128)),
+       pi.{{QbFeeInvoice.paidAmount}} + pi.{{QbFeeInvoice.creditApplied}},
+       coalesce(pp.r_paid, pi.{{QbFeeInvoice.paidAmount}}) + coalesce(pu.r_used, 0)
+FROM {{QbFeeInvoice}} pi
+LEFT JOIN LATERAL (SELECT sum(p.{{QbFeePayment.amount}}) AS r_paid
+           FROM {{QbFeePayment}} p
+           WHERE (p.{{QbFeePayment.targetEntity}} = 'QbFeeInvoice'
+                  AND p.{{QbFeePayment.targetId}} = CAST(pi.{{QbFeeInvoice.invoiceId}} AS text))
+              OR (p.{{QbFeePayment.targetEntity}} = 'QbFeeCharge'
+                  AND p.{{QbFeePayment.targetId}} = pi.{{QbFeeInvoice.chargeId}})) pp ON true
+LEFT JOIN (SELECT u.{{QbFeeCreditNoteUse.invoiceId}} AS r_invoice, sum(u.{{QbFeeCreditNoteUse.amount}}) AS r_used
+           FROM {{QbFeeCreditNoteUse}} u GROUP BY u.{{QbFeeCreditNoteUse.invoiceId}}) pu
+       ON pu.r_invoice = CAST(pi.{{QbFeeInvoice.invoiceId}} AS text)
+WHERE pi.{{QbFeeInvoice.status}} <> 'VOID'
+  AND pi.{{QbFeeInvoice.paidAmount}} + pi.{{QbFeeInvoice.creditApplied}}
+      <> coalesce(pp.r_paid, pi.{{QbFeeInvoice.paidAmount}}) + coalesce(pu.r_used, 0)
+UNION ALL
+-- AUTO_PAY_MISSED (F-M13c, for attention): by sponsor, with the automatic payment on (the parameter is true, read as the
+--   run reads it), the unpaid invoices issued more than qb.fee.auto-pay.missed-after-hours (handed in) before :at while
+--   the sponsor's account has something to pay them with (the fee credit not expired plus the cash not held): expected
+--   0, actual the invoices' count. The nightly run pays them, so one still unpaid after the hours is a payment that did
+--   not run or did not finish; it clears itself when they are paid.
+SELECT CAST('AUTO_PAY_MISSED' AS varchar(30)), CAST(mi.{{QbFeeInvoice.sponsorId}} AS varchar(128)),
+       CAST(NULL AS varchar(128)), CAST(0 AS numeric), CAST(count(*) AS numeric)
+FROM {{QbFeeInvoice}} mi
+WHERE CAST(:at AS timestamptz) IS NOT NULL AND CAST(:missedHours AS int) IS NOT NULL
+  AND (SELECT max(p.{{SysParam.value}}) FROM {{SysParam}} p WHERE p.{{SysParam.paramKey}} = 'qb.fee.auto-pay.enabled') = 'true'
+  AND mi.{{QbFeeInvoice.status}} IN ('OPEN', 'PARTIAL', 'OVERDUE')
+  AND mi.{{QbFeeInvoice.total}} - mi.{{QbFeeInvoice.paidAmount}} - mi.{{QbFeeInvoice.creditApplied}} > 0
+  AND mi.{{QbFeeInvoice.issuedAt}} < CAST(:at AS timestamptz) - make_interval(hours => CAST(:missedHours AS int))
+  AND coalesce((SELECT sum(g.{{QbFeeCreditGrant.remaining}}) FROM {{QbFeeCreditGrant}} g
+                WHERE g.{{QbFeeCreditGrant.sponsorId}} = mi.{{QbFeeInvoice.sponsorId}}
+                  AND g.{{QbFeeCreditGrant.remaining}} > 0 AND g.{{QbFeeCreditGrant.expiresAt}} > CAST(:at AS timestamptz)), 0)
+      + coalesce((SELECT sum(greatest(w.{{QbWallet.balance}} - w.{{QbWallet.held}}, 0)) FROM {{QbWallet}} w
+                  WHERE w.{{QbWallet.ownerId}} = mi.{{QbFeeInvoice.sponsorId}} AND w.{{QbWallet.kind}} = 'CASH'), 0) > 0
+GROUP BY mi.{{QbFeeInvoice.sponsorId}}

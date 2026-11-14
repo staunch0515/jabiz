@@ -95,6 +95,8 @@ public final class MailProcesses {
     /** F-M2: a sponsor's platform fee Kudos expire soon. */
     public static final String FEE_AUTO_PAID = "QB_MAIL_FEE_AUTO_PAID";
     public static final String FEE_AUTO_PAID_CONSUMER = "qb.mail-fee-auto-paid";
+    public static final String FEE_INVOICE_VOIDED = "QB_MAIL_FEE_INVOICE_VOIDED";
+    public static final String FEE_INVOICE_VOIDED_CONSUMER = "qb.mail-fee-invoice-voided";
     public static final String FEE_CREDIT = "QB_MAIL_FEE_CREDIT";
     public static final String FEE_CREDIT_EXPIRING_CONSUMER = "qb.mail-fee-credit-expiring";
 
@@ -128,6 +130,10 @@ public final class MailProcesses {
      * @param transactionIds the payments the automatic payment made (what is said is read from them again)
      * @param invoiceIds     the invoices they were of
      */
+    /** @param invoiceId the invoice voided (the amounts are read again) */
+    public record FeeVoidedMailInput(@NotBlank String invoiceId, @NotNull java.time.Instant occurredAt) {
+    }
+
     public record FeeAutoPaidMailInput(@NotBlank String sponsorId, @NotNull java.util.List<String> transactionIds,
         @NotNull java.util.List<String> invoiceIds, @NotNull Instant occurredAt) {}
 
@@ -361,6 +367,67 @@ public final class MailProcesses {
                         "owed", MailValues.amount(owed)));
                 }
             }, messages, NotificationMails.FEE_AUTO_PAID);
+    }
+
+    static final String VOIDED_INVOICE = "voidedInvoice";
+    static final String VOIDED_PAYMENTS = "voidedPayments";
+
+    /** The sponsor is told an invoice was voided and what went back to their account (never the reason). */
+    public static ProcessDefinition<FeeVoidedMailInput, MailOutput, ProcessContext> feeInvoiceVoided(
+        MessageCatalog messages) {
+        return define(FEE_INVOICE_VOIDED, "Mails a sponsor that a platform fee invoice was voided.",
+            FeeVoidedMailInput.class, FeeVoidedMailInput::occurredAt, pb -> pb
+                .step("Load the invoice", QueryEntities.<ProcessContext>of(
+                    com.jabiz.quizbuks.fee.QbFees.defaultDataset(com.jabiz.quizbuks.fee.QbFees.INVOICE),
+                    ctx -> byId("invoiceId", input(ctx, FeeVoidedMailInput.class).invoiceId()), VOIDED_INVOICE))
+                // What was paid is given back on the invoice's own parts and, for an invoice of one charge, the charge's.
+                .step("Load the payments, the ban and the sponsor", QueryEntities.<ProcessContext>all(
+                    QueryEntities.query(com.jabiz.quizbuks.fee.QbFeeAccount.defaultDataset(
+                        com.jabiz.quizbuks.fee.QbFeeAccount.PAYMENT), ctx -> EntityQuery.builder().where(
+                        new QueryPredicate.In("targetId", paidTargets(ctx))).limit(PAYMENT_ROWS).build(),
+                        VOIDED_PAYMENTS),
+                    QueryEntities.query(QbAccounts.defaultDataset(QbAccounts.BAN), ctx -> byId("userId",
+                        uuid(sponsorOf(ctx))), BAN),
+                    QueryEntities.query(SecurityEntities.USER_DATASET, ctx -> byId("userId",
+                        uuid(sponsorOf(ctx))), USER))),
+            ctx -> {
+                EntityInstance invoice = first(ctx, VOIDED_INVOICE);
+                EntityInstance ban = first(ctx, BAN);
+                // Stale (not voided as the event says) or a banned sponsor: nothing is said.
+                if (invoice == null || !com.jabiz.quizbuks.fee.QbFees.VOID.equals(invoice.get("status"))
+                    || ban != null && BanRules.banned(ban.attributes())) {
+                    return;
+                }
+                // What went back is read from the invoice's payment rows given back (negative), not from the event.
+                java.math.BigDecimal refunded = java.math.BigDecimal.ZERO;
+                for (EntityInstance payment : list(ctx, VOIDED_PAYMENTS)) {
+                    java.math.BigDecimal amount = new java.math.BigDecimal(String.valueOf((Object) payment.get("amount")));
+                    if (amount.signum() < 0) {
+                        refunded = refunded.add(amount.negate());
+                    }
+                }
+                decide(ctx, NotificationMails.FEE_INVOICE_VOIDED, Map.of("invoiceNo",
+                    String.valueOf((Object) invoice.get("invoiceNo")), "refunded", MailValues.amount(refunded)));
+            }, messages, NotificationMails.FEE_INVOICE_VOIDED);
+    }
+
+    private static List<Object> paidTargets(ProcessContext ctx) {
+        List<Object> ids = new ArrayList<>(List.of(input(ctx, FeeVoidedMailInput.class).invoiceId()));
+        EntityInstance invoice = first(ctx, VOIDED_INVOICE);
+        if (invoice != null && invoice.get("chargeId") != null) {
+            ids.add(String.valueOf((Object) invoice.get("chargeId")));
+        }
+        return ids;
+    }
+
+    /** The sponsor is read from the invoice the first query found: the second step looks the person up with it. */
+    private static String sponsorOf(ProcessContext ctx) {
+        EntityInstance invoice = first(ctx, VOIDED_INVOICE);
+        return invoice == null ? "00000000-0000-0000-0000-000000000000" : String.valueOf((Object) invoice.get("sponsorId"));
+    }
+
+    static FeeVoidedMailInput feeVoidedInput(DomainEvent event) {
+        return new FeeVoidedMailInput(text(event, "invoiceId"), event.createdTime());
     }
 
     private static final int PAYMENT_ROWS = 1_000;

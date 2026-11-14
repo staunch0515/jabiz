@@ -282,6 +282,14 @@ class FeeAccountIT extends PlayItSupport {
         run("APPROVAL_DECIDE", content(), body("requestId", voiding.get("approvalRequestId"), "decision", "APPROVE"));
         deliverEvents();
         assertThat(invoice(sponsor)).containsEntry("status", QbFees.VOID);
+        // F-M13c: the sponsor is told once, with what went back read from the payments given back; the reason stays inside.
+        deliverEvents();
+        assertThat(templatesTo(sponsor)).contains("qb.fee.invoice-voided");
+        assertThat(mailTo(sponsor)).filteredOn(row -> "qb.fee.invoice-voided".equals(row.get("template")))
+            .singleElement().satisfies(row -> {
+                String params = String.valueOf(row.get("params"));
+                assertThat(params).contains("1,100").doesNotContain("Charged by mistake");
+            });
         // Voided: what was paid was given back, so nothing is owed and nothing stays paid.
         assertThat(sources(token, invoiceId)).containsEntry("sourceGift", 0).containsEntry("sourceCash", 0)
             .containsEntry("sourceUnpaid", 0);

@@ -346,6 +346,8 @@ public final class QbParams {
      */
     public static final String FEE_AUTO_PAY_ENABLED = "qb.fee.auto-pay.enabled";
     public static final String FEE_AUTO_PAY_MAX_INVOICES = "qb.fee.auto-pay.max-invoices";
+    /** F-M13c: hours after which an unpaid invoice with money on the account is reported by the daily check. */
+    public static final String FEE_AUTO_PAY_MISSED_AFTER_HOURS = "qb.fee.auto-pay.missed-after-hours";
     /** The headquarters' range of the operators' exposure prices, in the order the price check reads them. */
     public static final List<String> EXPOSURE_RANGE = List.of(EXPOSURE_UNIT_MIN, EXPOSURE_UNIT_MAX);
     /** The controlled ones, in the order of {@link #CONTROLLED} (before {@link #REWARD_KUDOS}). */
@@ -700,7 +702,7 @@ public final class QbParams {
         SITE_PROFILE_CONTROLLED, DISTRIBUTION_CONTROLLED, EXPOSURE_CONTROLLED, REWARD_KUDOS, RECON_THRESHOLDS,
         HELP_USER_LIMITS,
         OPERATOR_SHARE, OPERATOR_SETTLEMENT, OPERATOR_SETTLEMENT_CHECK, AI_FEE_CONTROLLED,
-        List.of(FEE_AUTO_PAY_ENABLED))
+        List.of(FEE_AUTO_PAY_ENABLED, FEE_AUTO_PAY_MISSED_AFTER_HOURS))
         .flatMap(List::stream).toList();
 
     /** A parameter: its key, kind (as the platform writes kinds) and first value. */
@@ -1194,7 +1196,10 @@ public final class QbParams {
         new Param(FEE_AUTO_PAY_ENABLED, BOOL, false,
             "Whether money arriving in the platform fee account (a top-up in cash, platform fee Kudos granted, a transfer "
                 + "from the operator) pays the sponsor's unpaid invoices by itself, the earliest first (declared off: the "
-                + "tests rely on it; a parameter that is not true means off)"));
+                + "tests rely on it; a parameter that is not true means off)"),
+        new Param(FEE_AUTO_PAY_MISSED_AFTER_HOURS, Map.of("type", "numeric", "precision", 3, "scale", 0), "48",
+            "After how many hours of its issue an unpaid invoice of a sponsor whose account has money is reported by the "
+                + "daily check while the automatic payment is on (1 to 720)"));
 
     /** The declared value of a parameter: what {@code QB_SETUP} writes. */
     public static String defaultOf(String key) {

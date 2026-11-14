@@ -171,6 +171,24 @@ class MessagingConfig {
     }
 
     @Bean
+    ProcessDefinition<MailProcesses.FeeVoidedMailInput, MailProcesses.MailOutput, ProcessContext> qbMailFeeInvoiceVoided(
+        MessageCatalog messages) {
+        return MailProcesses.feeInvoiceVoided(messages);
+    }
+
+    @Bean
+    MailTemplate qbFeeInvoiceVoidedMail() {
+        return NotificationMails.FEE_INVOICE_VOIDED;
+    }
+
+    @Bean
+    EventSubscription<MailProcesses.FeeVoidedMailInput> qbMailFeeInvoiceVoidedSubscription(
+        ProcessDefinition<MailProcesses.FeeVoidedMailInput, MailProcesses.MailOutput, ProcessContext> qbMailFeeInvoiceVoided) {
+        return EventSubscription.of(MailProcesses.FEE_INVOICE_VOIDED_CONSUMER,
+            com.jabiz.quizbuks.fee.FeeRequests.VOIDED_EVENT, qbMailFeeInvoiceVoided, MailProcesses::feeVoidedInput);
+    }
+
+    @Bean
     EventSubscription<MailProcesses.FeeAutoPaidMailInput> qbMailFeeAutoPaidSubscription(
         ProcessDefinition<MailProcesses.FeeAutoPaidMailInput, MailProcesses.MailOutput, ProcessContext> qbMailFeeAutoPaid) {
         return EventSubscription.of(MailProcesses.FEE_AUTO_PAID_CONSUMER,

@@ -116,6 +116,9 @@ class AutoPayIT extends PlayItSupport {
         assertThat(row(middle)).containsEntry("status", QbFees.PAID);
         assertThat(row(late)).containsEntry("status", QbFees.OPEN);
         assertThat(balance(sponsor, QbWallets.CASH)).isEqualByComparingTo("300");
+        // The chain ended at the limit: the mail told both invoices at once, not one mail each.
+        deliverEvents();
+        assertThat(mailTo(sponsor)).filteredOn(row -> "qb.fee.auto-paid".equals(row.get("template"))).hasSize(1);
         run("PARAM_SET", admin(), body("key", QbParams.FEE_AUTO_PAY_MAX_INVOICES, "value", "20"));
     }
 
@@ -131,7 +134,7 @@ class AutoPayIT extends PlayItSupport {
     }
 
     @Test
-    void theDailyJobPaysTheOtherWaysTheAccountGrewOneInvoiceATransactionEach() {
+    void theDailyJobStartsAChainForASponsorAndOneMailTellsAllItPaid() {
         String sponsor = newSponsor(unique("s-fm13b-job"));
         String a = invoice(sponsor, 1100, 8, 0);
         String b = invoice(sponsor, 1100, 4, 0);
@@ -142,8 +145,14 @@ class AutoPayIT extends PlayItSupport {
         execute("UPDATE jabiz_shedlock SET lock_until = locked_at");
         JobRunner.JobRun run = jobRunner.execute(qbFeeAutoPayJob, clock.instant());
         assertThat(run.outcome()).isEqualTo(JobRunner.Outcome.SUCCEEDED);
+        // One item for the sponsor: the first run pays the earliest, the chain's event asks for the next, then the mail.
+        deliverEvents();
+        deliverEvents();
+        deliverEvents();
         assertThat(row(a)).containsEntry("status", QbFees.PAID);
         assertThat(row(b)).containsEntry("status", QbFees.PAID);
+        assertThat(mailTo(sponsor)).filteredOn(row -> "qb.fee.auto-paid".equals(row.get("template")))
+            .singleElement().satisfies(row -> assertThat(String.valueOf(row.get("params"))).contains("2"));
         // Nothing to pay it with: not an item.
         assertThat(row(unpaid)).containsEntry("status", "OPEN");
     }

@@ -87,6 +87,16 @@ public final class NotificationMails {
             .protectedText());
 
     /**
+     * F-M13c: an invoice was voided and what was paid of it went back to the account. Transactional and protected (it
+     * speaks of money given back); the internal reason of the void is never in it.
+     */
+    public static final MailTemplate FEE_INVOICE_VOIDED = MailTemplate.define("qb.fee.invoice-voided", t -> t
+        .category(MailCategory.TRANSACTIONAL).param("invoiceNo", "refunded")
+            .sample("invoiceNo", "INV-0001")
+            .sample("refunded", "1,100")
+            .protectedText());
+
+    /**
      * F-M2: a sponsor's platform fee Kudos expire soon (each lot once, at most once per sponsor in 24 hours): what is
      * left of the lots, how many, and when the first expires. The sponsor console's, opted out of in its preferences.
      */
@@ -144,7 +154,7 @@ public final class NotificationMails {
             .protectedText());
 
     public static final List<MailTemplate> ALL = List.of(TRANSFER_SENT, TRANSFER_FAILED, PAYOUT_ACTION_NEEDED,
-        TOPUP_PAID, TOPUP_PAID_CASH, TOPUP_GRANTED, FEE_INVOICE_ISSUED, FEE_INVOICE_OVERDUE, FEE_AUTO_PAID, FEE_CREDIT_EXPIRING, PUBLICATION_APPROVED, PUBLICATION_REJECTED, PUBLICATION_TAKEN_DOWN, PUBLICATION_FUNDS_SHORT,
+        TOPUP_PAID, TOPUP_PAID_CASH, TOPUP_GRANTED, FEE_INVOICE_ISSUED, FEE_INVOICE_OVERDUE, FEE_AUTO_PAID, FEE_INVOICE_VOIDED, FEE_CREDIT_EXPIRING, PUBLICATION_APPROVED, PUBLICATION_REJECTED, PUBLICATION_TAKEN_DOWN, PUBLICATION_FUNDS_SHORT,
         PUBLICATION_ENDED, PUBLICATION_EXPOSURE_LOW);
 
     /**
