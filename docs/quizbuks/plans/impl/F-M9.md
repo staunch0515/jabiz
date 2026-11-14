@@ -2,7 +2,7 @@
 
 状态：已批准实施（总控 2026-11-13）。
 
-规格 `docs/quizbuks/first-launch-spec.md` F-M9（规则、参数、运营闭合、验收）；上下文是 F-M1、F-M5、F-M6 已合入的"账户 + 预付款 + 记费"，以及 F-C7（官网生成）、F-C10（帮助 AI）。格式照 `F-M.md` §8、§9。分支 `1.3/quizbuks-FM9-ai-credit`；建议分两个 PR：**a 后端**（数据、计价、预留、购买 / 退回 / 月度记费 / 到期、核对与月报），**b 页面**（发起方 AI 额度页与各 AI 面板、总部 AI 页、帮助、`operations.md`）。迁移号：开 PR 时取当时的下一个空号（`main` 现在最大 V118；**F-M7 的分支已占 V119，未合并**，见 §8）。
+规格 `docs/quizbuks/first-launch-spec.md` F-M9（规则、参数、运营闭合、验收）；上下文是 F-M1、F-M5、F-M6 已合入的"账户 + 预付款 + 记费"，以及 F-C7（官网生成）、F-C10（帮助 AI）。格式照 `F-M.md` §8、§9。分支 `1.3/quizbuks-FM9-ai-credit`；分三个 PR：**a-1 后端**（数据、计价、购买、请求时的预留与作业结束时的结算；`qb.ai.fee.enabled` 仍关着），**a-2 后端**（退回、到期、月度记费、核对与月报、运营商分成的 AI 种类），**b 页面**（发起方 AI 额度页与各 AI 面板、总部 AI 页、帮助、`operations.md`）。迁移号 **V124**（总控 2026-11-13 更正：基线最大为 V122，V123 是 S3 的 #689，须先于本项合并），只在 a-1，开 PR 前再与总控确认。
 
 ## 1 现状与范围
 
@@ -17,10 +17,10 @@
 - `costUsd` 来自 `AiCost`（各模型标价、回退模型、长提示价），**只是估算，不向任何人收费**（Q8 A-8）。**它只按 Token 算，不含网页搜索**：`AiCost.of`（`AiProcesses.java:948` 等调用处）没有搜索项；`ClaudeWebResearch.SEARCH_PRICE_USD`（`:45`）与 `searchCost`（`:129`）现在只有 `ProspectProcesses.java:1184` 用，官网生成的处理器只把搜索次数记成指标 `SEARCHES`（`:269`），所以给 `AiCost` 加搜索项不会算两次（见 §3）。
 - 开关：`qb.ai.enabled`（作业 `enabledBy`）；`qb.ai.fee.enabled` 只在 `FirstLaunchSwitches` 里是 `WAITING("F-M9")`，键还不存在；`qb.ai.site-profile.enabled` 键已存在（受控、缺省关），在 `KEY_BEFORE_MEANING` 中，等本项接上收费。
 - 钱的底座已就绪：`QbPrepayments.AI` 是合法用途，`Prepayments.FreezeInput` 允许用途 `AI`、发布为空，`QbPrepayment` 注释写明"AI 额度，F-M9"；`FeeAllocation`（赠送先、现金后）、`Prepayments.held`（按笔、赠送最早到期先）、`QB_PREPAYMENT_USE`、2180 与维度 `purpose` 都有。缺：费用种类 `AI`（`FeeRules.KINDS`、`ChargeInput.kind` 的正则、`qb_fee_charge_version` 的 CHECK）、额度的购买 / 退回 / 到期、请求时的预留、月度记费。
-- 运营商分成的基数现在由 `queries/qb/system/operator-fees.sql` 一处给出（按运营商、记费日期汇总费用的税前金额，不分种类），现在 AI 费会整笔进去（见 §3 的处理：AI 不进运营商的分成基数，直到 F-M12 决定怎么算）。
+- 运营商分成的基数（F-M12a #687 起）：每笔费用在结算中写一行 `CHARGE`，种类在受控清单 `qb.operator.share.kinds` 中的才进基数（取 `amount − shareExcluded`），不在的 `excluded = amount`；清单缺省**不含 `AI`**。`FeeProcesses.ChargeInput` 末尾的 `shareExcluded`（缺省 0，夹在 [0, amount]，存 `qb_fee_charge_version.share_excluded`）由记费的调用方给出（F-M12 计划 §2、§3.2 的 `AI` 一行）。原来的 `operator-fees.sql` 已由 #687 删除。
 - 页面：发起方 `/money/ai`（`AI_CREDIT_PATH`，`wallet/WalletPage.tsx` 的 `AiCreditPage`）现在只显示 Token 用量（`ai/AiUsageMetric.tsx`）；总部 `/qb/ai`（`AiPage.tsx`，`qb.admin.ai-usage`、`qb.admin.ai-jobs`）。
 
-**本项做**：额度的购买 / 退回 / 赠送部分到期；请求时按最高费用预留、作业结束时按实际结算；每月按（发起方，作业发生时的运营商）记 `AI` 费；**把 AI 种类排除在运营商分成基数之外**（`operator-fees.sql` 一处筛选，见 §3）；开关、参数、核对、月报、页面、帮助、`operations.md`、`launch-checklist.md` 一项。AI 出题、翻译、官网生成三类（发起方的作业）收费。
+**本项做**：额度的购买 / 退回 / 赠送部分到期；请求时按最高费用预留、作业结束时按实际结算；每月按（发起方，作业发生时的运营商）记 `AI` 费；**给 AI 费填 `shareExcluded`（成本部分）并补 AI 种类的运营商结算 IT**（AI 是否进分成基数由 F-M12 的清单决定，缺省不进，见 §3）；开关、参数、核对、月报、页面、帮助、`operations.md`、`launch-checklist.md` 一项。AI 出题、翻译、官网生成三类（发起方的作业）收费。
 
 **不做**：运营商的分成怎样算（F-M12，本项只保证费用带正确的运营商，并先不把 AI 费分出去）；账单 PDF 的分列（F-M13 余下）；封禁、注销时对额度的处理（F-M15；本项提供可被调用的退回 / 作废子流程）；按模型不同的倍数、套餐价、运营商定价（规格"不做"；AI 费不设运营商价目表，倍数与汇率是总部的受控参数）；审核人的对照检查与帮助 AI 一律不收（**F-M10 的边界**：测试断言它们不改发起方的额度，帮助的用量与阈值告警仍是 F-M10）。
 
@@ -71,7 +71,7 @@
   - 释放预留、写 `feeYen` 与 `feePeriod`，全部在 `qb.ai:<发起方>` → `qb.ai:*` 锁内，**只改 `QbAiJob`，不取钱包锁**；`QbAiUsage` 与 Token 限额照旧。
 - **迟到的用量**（M6）：作业结算后才到的实例用量（D52 第 5 条：迟到实例的用量由平台照记）**不回写 `QbAiJob`、`QbAiUsage`，不向发起方收**——作业的 `feeYen` 在结算时就定了。它只留在平台自己的尝试记录里；它在每月与提供方账单对照时表现为"账单大于总部页合计"的差额（`operations.md` 写明）。
 - 审核人的 `TRANSLATION_CHECK`、旧的 `COVER`、帮助 AI、AI 获客（Q48d，运营商承担）：`feeMode` 恒为 `NONE`，在开关开着时也不动发起方的额度（测试）。**"帮助 AI 不动发起方额度"的断言由本项的实施 PR 加**（F-M10 审查 L7，总控 2026-11-13）；F-M10 只保留"不改发起方用量表"的回归测试。
-- **运营商分成基数**（M2，L5）：**AI 不进运营商的分成基数，直到 F-M12 决定怎么算**。`queries/qb/system/operator-fees.sql` 的条件加 `AND c.<kind> <> 'AI'`（一处筛选；AI 费的 150% 里 100% 是平台的成本，整笔分给运营商，分成超过费用的三分之一时平台就亏）。F-M12 把成本部分扣出基数后，再按它的设计放开这条筛选。**打开 `qb.ai.fee.enabled` 的前提**写进 `launch-checklist.md`（"AI"一节新增一项：F-M12 完成，或财务确认分成比例）。
+- **运营商分成基数**（M2，L5；按 F-M12a #687 改写，总控 2026-11-13）：**AI 不进运营商的分成基数，直到 F-M12 问题 4 决定**。这由 F-M12 的清单 `qb.operator.share.kinds`（缺省不含 `AI`，结算对 AI 费写 `excluded = amount`）保证，本项不另加筛选。本项的月度记费给每笔 `AI` 费填 `shareExcluded` = 该组作业的 Σ⌈`billableUsd` × `feeUsdJpy`⌉（成本部分，按冻结在作业上的汇率，不乘倍数；不超过该笔税前金额；平台承担而减少的作业按减少后的比例），使清单加入 `AI` 后基数只取加价部分（F-M12 §3.2）。**合并条件**（总控）：本项补 AI 种类的运营商结算 IT——清单不含 `AI` 时 `excluded = amount`；含 `AI` 时基数为 `amount − shareExcluded`；`ai-cost-in-base` 打开时为全额。AI 费的结算就绪条件（该月没有未记费的 AI 作业）属于 F-M12b，谁后合并谁加。**打开 `qb.ai.fee.enabled` 的前提**写进 `launch-checklist.md`（"AI"一节新增一项：财务已确认 AI 费是否参与分成，即 F-M12 问题 4）。
 
 ## 4 流程
 
@@ -108,7 +108,7 @@
 | 退回 | 借 2180，贷 2160 / 2190；已到期的赠送部分借 2180、贷 5140 | `AI_CREDIT_RETURNED`（新） |
 | 赠送到期 | 借 2180，贷 5140；来源 `QbFeeCreditGrant` + 原笔编号；同时写负的分摊（§4 第 5 条） | `AI_CREDIT_VOIDED`（新） |
 
-均不落 `OTHER`；`AdminFinanceIT` 逐行加一例（全程：买 → 请求 → 记费 → 退回 → 到期）。平台承担的部分（`absorbedYen`、`unrecordedUsd`）不入账。AI 不进运营商的分成基数，直到 F-M12 决定怎么算（§3 末条，`operator-fees.sql` 一处筛选）。
+均不落 `OTHER`；`AdminFinanceIT` 逐行加一例（全程：买 → 请求 → 记费 → 退回 → 到期）。平台承担的部分（`absorbedYen`、`unrecordedUsd`）不入账。AI 不进运营商的分成基数，直到 F-M12 问题 4 决定（§3 末条：F-M12 的清单缺省不含 `AI`；本项填 `shareExcluded`）。
 
 ## 6 参数（`QbParams`，缺省由 `QB_SETUP` 提出；钱与开关列入 `CONTROLLED`）
 
@@ -136,7 +136,7 @@
 - **任务与自动收尾**：`qb.ai-fee-monthly`、`qb.ai-credit-expire`（均可补跑）；预留随作业结束释放（发起方自己取消的，预留留到 `QB_AI_JOB_CANCELLED` 才释放）；到期提醒复用 F-M2 的赠送到期提醒（赠送还在 AI 额度中时也提醒，实现时确认 `qb.fee-credit-remind` 的取项含这部分）。
 - **告警**：平台承担的合计（见 §6）超过阈值、核对差异的待办按 F-M14 的负责权限规则（缺省 `qb.reconcile`，财务持有；F-M14 审查 M2）；每月把 Anthropic 控制台的账单与总部页的"成本美元合计"对照（`operations.md`）。
 - **`operations.md`** 新的一节（编号取当时最大的小节号 + 1；F-M7 也会加一节，排在它后面）：开关与参数、价格 / 汇率的受控变更、两个任务的时刻与补跑、**完整的锁顺序**、核对项的处理、与提供方账单对照（含"迟到的用量只表现为差额"）、"不要用关收费开关止损"、关开关后的行为、官网生成的前提、**给财务：AI 费的收入在次月 1 日才入账，月末与年末的截止差一个月（与配送费一致）**、平台承担的三种情况与上限。
-- **`launch-checklist.md`**（本 PR 改，只加一项，在"AI"一节）：**AI 费的分成**——打开 `qb.ai.fee.enabled` 之前，F-M12 已完成（AI 费的成本部分不进运营商分成基数），或财务已书面确认运营商对 AI 费的分成比例（本项先把 AI 种类排除在分成基数之外）。
+- **`launch-checklist.md`**（本 PR 改，只加一项，在"AI"一节）：**AI 费的分成**——打开 `qb.ai.fee.enabled` 之前，财务已确认 AI 费是否参与运营商分成（F-M12 问题 4；缺省清单不含 `AI`，即完全不分成；若只让加价参与，把 `AI` 加进 `qb.operator.share.kinds`，成本部分由 `shareExcluded` 扣出）。
 
 ## 8 对账、月报与依赖
 
@@ -147,7 +147,7 @@
   - 提示（不算差异）`AI_FEE_ABSORBED`：平台承担的作业（`absorbedYen` 与 `unrecordedUsd`），供总部查看；`FEE_CREDIT_PROMOTION` 的 5140 比较要包含 AI 额度中的作废（来源 `QbFeeCreditGrant`，与 §4 第 5 条一致，实现时确认它按来源筛选的方式）。
 - **月报**：§5 的五类；`FEE_CHARGED` 下 `AI` 种类分列。
 - **依赖 F-M7（未合并，分支 `origin/1.3/quizbuks-FM7-audience`）**——逻辑上不依赖它的贷项凭证，但会改同一批文件，须在它合入后拉取并合并：
-  1. 迁移号：它用 V119；本项取"开 PR 时的下一个空号"（预计 V120 或更大）。
+  1. 迁移号：F-M7 已合并（V119）；本项用 V124（总控 2026-11-13 更正；V123 为 #689，须先合并）。
   2. `FeeProcesses` / `QbPrepayments`（它给预付款加 `refundDecidedAt`、`refundOutcome`）/ `FeeConfig` / `QbParams` / `FirstLaunchSwitches` / `FeeRequests`：同文件的并行修改，冲突在合并时解决。
   3. `wallet.sql`（它加 `creditNoteCredit`，改"未付"的算法）、`recon-fee-account.sql`、`monthly.sql`、`recon-fee-receivable.sql`：本项在其上追加。
   4. 贷项凭证可以对任意费用开手工凭证：对种类 `AI` 的费用，按 F-M7 的规则退到账户（不是 AI 额度）。**本项不依赖它，但保留一个测试确认对 AI 费开贷项凭证不出错**（待它合入后补，列为 b 的测试）。
@@ -156,7 +156,7 @@
 - 其他已合并的依赖：F-M1（`FeeAllocation`、`QbFeePayment`）、F-M5（`Prepayments`、2180）、F-M11（`QbFeeCharge.operatorId` 由调用方给）、F-C7（官网生成作业）、F-C10（帮助独立）；**官网生成的收费依赖本项**（`qb.ai.site-profile.enabled` 由此改 `ACTIVE`）。
 - **对后续项的约束**：
   - **F-M15 必须关闭每个注销发起方那一笔 `OPEN` 的 AI 预付款**（`SponsorErasure` 现在不处理 `QbPrepayment`），并决定注销或抹除时剩余额度的去处（推荐按 F-M15 的规则退回；封禁不没收，问题 16）；封禁、注销要在 AI 锁内调用本项的退回 / 作废 Java，锁序见 §4 第 7 条，其间调用的子流程不能取 `qb.account`。
-  - **F-M12**：本项把 AI 种类先排除在分成基数之外（`operator-fees.sql`）；F-M12 把成本部分扣出基数后放开这条筛选，并更新 `launch-checklist.md` 的那一项。
+  - **F-M12**：AI 种类是否进分成基数由 F-M12 的清单决定（缺省不含）；本项填 `shareExcluded`（成本部分）并补 AI 种类的结算 IT；AI 费的结算就绪条件在 F-M12b，谁后合并谁加。
   - F-M13：账单 PDF 的分列。
 
 ## 9 测试清单
@@ -169,7 +169,7 @@
 - `AiCreditStatementBudgetIT`（新，`SqlStatementLog`）：开关开 / 关两种请求的语句数相同（读取并入同一条）；写入只多作业列；**`QB_AI_FEE_SETTLE` 的语句预算断言确切值：固定部分 + 每个作业一次回写，取 1 个与 200 个作业各一例**（上限 200）；购买、退回、到期各断言确切值。**AI 的现有预算测试不变**。
 - 只追加：`QbAiCreditMovement` 与 `qb_fee_charge_version` 没有 UPDATE / DELETE；`SealedColumnsHistory`；`QbAiCreditMovement` 的数据视图 `processOnlyWrites()`（经通用接口写被拒）。
 - 范围（D64）：运营商页新增的视图 / 模板声明 `withinEntryScope`，别的运营商看不到（测试）。
-- 核对与月报：`ReconChecksTest` 每个新项各一例；`AdminFinanceIT` 五类逐行；`FirstLaunchSwitchesCheckTest` / `FirstLaunchSetupIT` 两行 `ACTIVE`；`SetupParamsCheck`；`MessagesTest` 三语；`ProcessAccessIT` 新流程的权限与 `internal()`；ArchUnit；`operator-fees.sql` 不含种类 `AI`（分成基数测试）。
+- 核对与月报：`ReconChecksTest` 每个新项各一例；`AdminFinanceIT` 五类逐行；`FirstLaunchSwitchesCheckTest` / `FirstLaunchSetupIT` 两行 `ACTIVE`；`SetupParamsCheck`；`MessagesTest` 三语；`ProcessAccessIT` 新流程的权限与 `internal()`；ArchUnit；AI 种类的运营商结算 IT（清单不含 `AI` 时 `excluded = amount`；含 `AI` 时基数为 `amount − shareExcluded`；`ai-cost-in-base` 打开时为全额；`shareExcluded` 的取值与上限）。
 - F-M7 合入后：对 AI 费开贷项凭证的测试保留（§8 依赖 4）。
 - 场景：`ai-credit.yml`（买 → 请求 → 完成 → 月度记费 → 退回，固定时钟，`completeExternalJob` / `runJob`）及快照。
 - 前端 Vitest：`AiCreditPage`、购买 / 退回对话框、面板的额度提示与"不足"入口、总部 AI 页新列；axe 过（亮暗两种外观）。
@@ -229,6 +229,25 @@
     - **答复**：需求方 2026-11-13：按推荐。
 
 ## 12 审查（Fable）与总控的决定（2026-11-12）
+
+**实施时的修订（a-1，2026-11-13）**：§2 "`amount` 保持不变"不成立——`qb_prepayment` 有 `CHECK (remaining <= amount)`，再次购买只加 `remaining` 会被拒；而 F-M8 已为曝光的追加解除了 `amount` 的 `immutable`（`QB_PREPAYMENT_TOP_UP`）。所以 AI 额度的购买首次用 `QB_PREPAYMENT_FREEZE`（无发布）、之后用 `QB_PREPAYMENT_TOP_UP`（用途放宽到 `AI`，按发起方找那一笔），`amount` = 累计购入、`remaining` 同增；累计购入直接读 `amount`，`QbAiCreditMovement` 的 `BUY` 之和与它相等（核对）。其余用途照旧。
+其余 a-1 的实施说明：
+- 作业结束时可扣的上限 = 除本作业外的可用额（本作业的预留本来就在额度剩余之内，再加一次会重复计算；`AiCreditIT` 先失败后修复）。
+- `QB_AI_CREDIT_SHORT` 的 `needed`、`available`、`minPurchase` 只用于填消息（平台的 422 不另返回这些字段）；页面的数字取自 `QB_AI_FEE_QUOTE`（b）。
+- 推到 a-2 的：可用额中"已过期未作废的赠送"一项（随到期任务）、`qb.ai.fee.enabled` 改 `ACTIVE`、"收费关而官网生成开"时拒绝并在启动检查警告（问题 6）、审核人对照检查与帮助 AI 不动额度的断言、锁序测试（AI 锁内不取钱包锁，a-2 才有 AI → 钱包的路径）。a-1 的开关仍是 `WAITING` 且列入 `KEY_BEFORE_MEANING`，首次上线时必须为关（`FirstLaunchSwitchesCheck`）。
+
+
+**#692 审查（Fable，2026-11-14）后的修订**：
+- 预留是严格上界，超出预留的部分不由平台承担（总控）：每次尝试按"原模型跑一遍 + 回退模型再全部跑一遍"相加（`AiCost.maxOf`）；官网生成按网页读取器每次尝试 4 次调用、续接时输入重算（`ClaudeWebResearch.mostOfAttempt`）；预留的税向上取整。
+- §2 的部分索引与读取都排除"已结束且 `fee_yen = 0`"的作业：未运行即取消、失败且无回答的作业不预留、也不会进入记费，不能永远留在未结集合中。
+- H4（AI 额度的 `held` 按笔汇总）由 a-2 解决，是 a-2 的合并条件。
+
+**#692 复核后的修订（总控 2026-11-14，替需求方定；首发时收费开关关着，不挡上线）**：
+- 结算按预留封顶：作业向发起方收的不超过它的预留（也不超过当时的额度）；超出部分记为平台承担（`absorbedYen`），每日核对以提示级 `AI_RESERVATION_SHORT` 列出（引用为作业编号，实际为平台承担的税前日元；月度记费收进后不再出现）。一个作业超支不会占用发起方其他请求的额度。
+- 因为有了封顶，预留不必按最坏情况：官网生成的预留按三个可选的受控参数计算，`qb.ai.fee.site-profile.calls`（每次尝试的调用次数，1–4）、`.pages`（页数）、`.output-tokens`（输出上限）。未设置或超出范围时取作业自身的上限（即现在的最坏情况）。打开收费开关之前，按实际作业用量的 P95 设定它们（数据取自 staging 的 `qb_ai_job` 与 `sys_external_job_usage`）。出题类保持原算法；回退仍相加，PDF 请求不回退（不加回退那一遍）。按服务方文档，`fallbacks: "default"` 只回退到该类别推荐的一个模型，不成链，所以计一遍。
+- 预留是"多数情况够用"，超出由平台承担并上报。
+
+**F-M12a（#687）合并后的修订（2026-11-13）**：§3 末条原写"`operator-fees.sql` 加一处筛选"，该模板已由 #687 删除，分成基数改为按清单 `qb.operator.share.kinds`（缺省不含 `AI`）；本项改为给 AI 费填 `shareExcluded`（成本部分）并补 AI 种类的结算 IT（总控：合并条件）。下文 M2 一条中的"`operator-fees.sql` 一处筛选"以此为准。迁移号 V124，拆成 a-1、a-2、b 三个 PR（§0 开头）。
 
 审查对象 `56528a85d` 的计划；决定已写进上文各节，这里列去处。
 - **高**：

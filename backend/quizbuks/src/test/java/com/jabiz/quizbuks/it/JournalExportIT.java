@@ -77,7 +77,7 @@ class JournalExportIT extends JournalItSupport {
         // Ended, but the only reconciliation ran before its end: still refused; after it, mapped but for one account.
         Instant beforeEnd = one.end().minus(Duration.ofHours(1));
         clock.set(beforeEnd);
-        assertThat(reconcile(beforeEnd)).isEqualTo("OK");
+        assertThat(reconcileRun(beforeEnd)).isEqualTo("OK");
         clock.set(one.end().plus(Duration.ofHours(1)));
         mapAll(QbParams.JOURNAL_ACCOUNT_2120);
         assertThat(refusedExport(first.toString())).containsExactly(JournalCodes.RECON_NOT_OK,
@@ -88,7 +88,7 @@ class JournalExportIT extends JournalItSupport {
         // first export's cut-off: the second export's (M3 a).
         String earlyTwo = post(two.start().plus(Duration.ofMinutes(9 * 60 + 30)), "1120", "1110", 11, null,
             "early two");
-        assertThat(reconcile(reconciled)).isEqualTo("OK");
+        assertThat(reconcileRun(reconciled)).isEqualTo("OK");
         param(QbParams.JOURNAL_ACCOUNT_2120, "bad code");
         assertThat(refusedExport(first.toString())).containsExactly(JournalCodes.ACCOUNT_INVALID);
         param(QbParams.JOURNAL_ACCOUNT_2120, "X2120");
@@ -176,7 +176,7 @@ class JournalExportIT extends JournalItSupport {
         // A difference: the reconciliation finds it after the month, and the export waits until it is gone.
         String unbalancing = post(two.start().plus(Duration.ofDays(3)), "1110", "2110", 25, other, "diff");
         clock.set(two.end().plus(Duration.ofHours(4)));
-        assertThat(reconcile(clock.instant())).isEqualTo("DIFF");
+        assertThat(reconcileRun(clock.instant())).isEqualTo("DIFF");
         assertThat(refusedExport(two.label())).containsExactly(JournalCodes.RECON_NOT_OK);
         String correcting = post(two.start().plus(Duration.ofDays(3)), "2110", "1110", 25, other, "diff fixed");
         // F-M14 (review M5): an item for attention (an operator's price outside the headquarters' range) leaves the
@@ -186,7 +186,7 @@ class JournalExportIT extends JournalItSupport {
             + "minimum_deposit, reason, updated_at, updated_by, version) VALUES (gen_random_uuid()::text, "
             + "'op-journal-attention', 2, 1, 20, 500, 'F-M14', now(), 'it', 1)");
         advance(Duration.ofHours(1));
-        assertThat(reconcile(clock.instant())).isEqualTo("OK");
+        assertThat(reconcileRun(clock.instant())).isEqualTo("OK");
         assertThat(query("SELECT 1 FROM qb_recon_item_version i JOIN qb_recon_run_version r ON r.run_id = i.run_id "
             + "WHERE r.scheduled_time = ? AND i.check_code = 'DISTRIBUTION_PRICE_RANGE'",
             java.sql.Timestamp.from(clock.instant()))).hasSize(1);
@@ -206,7 +206,7 @@ class JournalExportIT extends JournalItSupport {
         String lateReversal = reverse(late, null);
         String backReversal = reverse(formula, one.start().plus(Duration.ofDays(6)));
         clock.set(three.end().plus(Duration.ofHours(4)));
-        assertThat(reconcile(clock.instant())).isEqualTo("OK");
+        assertThat(reconcileRun(clock.instant())).isEqualTo("OK");
         advance(Duration.ofMinutes(1));
         // Two exports at once (M3 c): one waits for the other's lock, then finds the month exported; no number is
         // drawn for it.

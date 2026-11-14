@@ -87,6 +87,8 @@
 - [ ] **曝光的最少购买次数**（F-M8 问题 3）：提交发布时最少购买的曝光次数（`qb.exposure.min-purchase`）现为占位的 100 次；上线前由需求方定数并以受控变更设好（追加购买不设最少）
 - [ ] **曝光价格范围与单次追加上限**（F-M8）：运营商可设的单价范围（`qb.exposure.unit.min` 现为占位 1、`qb.exposure.unit.max` 现为占位 100，日元 / 次）与一次追加购买的上限（`qb.exposure.top-up.max` 现为占位 1,000,000）上线前由需求方定数并以受控变更设好；**开关 `qb.exposure.billing.enabled` 在曝光费的结算（F-M8c）合并之前不要打开**（它在首次上线登记表里为“等待”，F-M8c 才改为生效）
       确认人： ／ 日期： ／ 依据：
+- [ ] **F-M15b 合并前不上线生产**（总控 2026-11-14）：注销前的提示（F-M15 a，`erasure.notice.qb.fee-*`、`qb.deposits-held`、`qb.gift-void`、`qb.cash-left`、`qb.topup-pending`）描述的是 F-M15b 的注销收尾（付欠费、作废赠送额度）；b 合并之前，删除账户时这些收尾还不会发生
+
 - [ ] **运营商分成的 8 个设置**（F-M12 a）：部署后，`QB_SETUP` 提出的 `qb.operator.share.kinds`、`qb.operator.share.ai-cost-in-base`、`qb.operator.credit-recovery.rate`、`qb.operator.gift.treatment.*`（4 个）、`qb.operator.gift.recover-outside-base` 已由另一位管理员发布（四眼）；未发布时结算任务对每个运营商都 422 `QB_OPERATOR_NO_SHARE_SETTING`。**必须在部署后的第一次结算任务之前完成**（staging：12 月的第一次任务之前）
       确认人： ／ 日期： ／ 依据：
 
@@ -134,6 +136,8 @@
       确认人： ／ 日期： ／ 依据：
 - [ ] **AI 费的分成**（F-M9、F-M12）：打开 `qb.ai.fee.enabled`（AI 收费开关）之前，F-M12 已完成（AI 费中属于成本的部分不进运营商分成基数），或财务已书面确认运营商对 AI 费的分成比例（AI 费是成本的 150%，其中 100% 是平台付给 AI 提供方的成本，整笔分给运营商，分成超过费用的三分之一时平台就亏；F-M9 先把 AI 种类排除在分成基数之外，所以这一项没有完成时运营商分不到 AI 费）
       确认人： ／ 日期： ／ 依据：
+- [ ] **官网生成的 AI 费预留**（F-M9，#692 复核）：打开 AI 收费开关（`qb.ai.fee.enabled`）之前，用 staging 或生产上真实 `SITE_PROFILE` 作业的用量（`operations.md` §7.56 的 SQL）定出 P95，经受控变更发布 `qb.ai.fee.site-profile.calls` / `.pages` / `.output-tokens`。未设置时预留按作业自身的上限（最坏情况），请求会因为预留过大而常被拒；作业超出预留的部分由平台承担，每日核对以提示 `AI_RESERVATION_SHORT` 列出
+
 - [ ] **暂停的演练（平台 16v-2）**：`QB_SETUP` 的 `qb.ai.enabled` 提案（`false`）已发布，启动日志中没有 `EXTERNAL` 对 `qb.ai.questions` / `qb.ai.cover` 的 `enabledBy` 警告；以测试商家请求一次后以四眼关闭开关，确认作业留在排队（商家页面注明 AI 暂停）、`jabiz.external.job.held` 为 1、提供方没有收到调用，重新打开后作业完成；部署环境中没有残留的 `QB_AI_HALTED`
       确认人： ／ 日期： ／ 依据：
 - [ ] 值班手册中的 AI 紧急停止按 `operations.md` §7.8 的顺序：吊销密钥 → 四眼关闭 `qb.ai.enabled`（排队与重试中的作业随之暂停）→ 逐个取消；两位能发布受控变更的管理员的联系方式已写明

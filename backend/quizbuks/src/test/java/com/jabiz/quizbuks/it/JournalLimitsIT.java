@@ -71,7 +71,7 @@ class JournalLimitsIT extends JournalItSupport {
             posted.add(wide(one.start().plus(Duration.ofDays(2)).plusSeconds(i), PARTIES, "vol-" + i));
         }
         clock.set(one.end().plus(Duration.ofHours(4)));
-        assertThat(reconcile(clock.instant())).isEqualTo("OK");
+        assertThat(reconcileRun(clock.instant())).isEqualTo("OK");
         mapAll();
         advance(JournalPeriods.SETTLE.plusMinutes(1));
 
@@ -147,7 +147,7 @@ class JournalLimitsIT extends JournalItSupport {
         clock.set(two.start().plus(Duration.ofDays(1)));
         wide(clock.instant(), 2 * PARTIES, "too wide");
         clock.set(two.end().plus(Duration.ofHours(4)));
-        assertThat(reconcile(clock.instant())).isEqualTo("OK");
+        assertThat(reconcileRun(clock.instant())).isEqualTo("OK");
         advance(JournalPeriods.SETTLE.plusMinutes(1));
         assertThat(preview()).containsEntry("withinLimits", false).containsEntry("nearLimit", true)
             .containsEntry("ready", false);
