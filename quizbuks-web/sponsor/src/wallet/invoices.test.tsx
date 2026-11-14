@@ -29,6 +29,8 @@ interface Server {
   payments?: Record<string, unknown>[]
   /** F-M7: the credit notes. */
   creditNotes?: Record<string, unknown>[]
+  /** F-M13: the row of `qb.sponsor.fee-invoice-sources`. */
+  sources?: Record<string, unknown>
 }
 
 const WALLET = { balance: '2000', held: '0', pendingCount: 0, pendingAmount: '0', toppedUp: '6000', takenBack: '0',
@@ -71,6 +73,9 @@ function server(options: Server = {}) {
           sellEnabled: false }], offset: 0, limit: 1 })
       case '/api/queries/qb.sponsor.fee-invoices':
         return json(200, { items: options.invoices ?? [INVOICE], offset: 0, limit: 10, total: options.invoices?.length ?? 1 })
+      case '/api/queries/qb.sponsor.fee-invoice-sources':
+        return json(200, { items: [options.sources ?? { sourceGift: '200', sourcePrepayment: '300',
+          sourcePrepaymentGift: '100', sourceCash: '0', sourceCreditNote: '0', sourceUnpaid: '600' }], offset: 0, limit: 1 })
       case '/api/queries/qb.sponsor.fee-credit-notes':
         return json(200, { items: options.creditNotes ?? [], offset: 0, limit: 10, total: options.creditNotes?.length ?? 0 })
       case '/api/processes/QB_FEE_CREDIT_NOTE_DOCUMENT/latest':
@@ -232,6 +237,52 @@ describe("the platform's invoices", () => {
     const row = (await screen.findAllByTestId('invoice-row'))[0]
     expect(row).toHaveAttribute('data-status', 'PARTIAL')
     expect(within(row).getByTestId('invoice-row-paid')).toHaveTextContent('500 Kudos')
+  })
+})
+
+describe('what an invoice was paid with (F-M13)', () => {
+  it('opens under the row, with the prepayment\'s granted credit named and what is still owed', async () => {
+    server({ invoices: [{ ...INVOICE, status: 'PARTIAL', paidAmount: '500', issuedOn: '2026-01-02' }] })
+    window.history.replaceState(null, '', '/money/bills')
+    render(<App />)
+    const row = (await screen.findAllByTestId('invoice-row'))[0]
+    await userEvent.click(within(row).getByRole('button', { name: /expand row/i }))
+    const sources = await screen.findByTestId('invoice-sources')
+    expect(sources).toHaveTextContent('Granted credit')
+    expect(sources).toHaveTextContent('200 Kudos')
+    expect(sources).toHaveTextContent('Prepayment')
+    expect(sources).toHaveTextContent('of which granted credit: 100 Kudos')
+    expect(sources).toHaveTextContent('Still owed')
+    expect(sources).toHaveTextContent('600 Kudos')
+    await expectAccessible()
+  })
+
+  it('says so when the details of how it was paid are not available, and shows only what the invoice itself says', async () => {
+    server({ invoices: [{ ...INVOICE, status: 'PAID', paidAmount: '1100' }], sources: { sourceGift: null,
+      sourcePrepayment: null, sourcePrepaymentGift: null, sourceCash: null, sourceCreditNote: '0', sourceUnpaid: '0' } })
+    window.history.replaceState(null, '', '/money/bills')
+    render(<App />)
+    const row = (await screen.findAllByTestId('invoice-row'))[0]
+    await userEvent.click(within(row).getByRole('button', { name: /expand row/i }))
+    const sources = await screen.findByTestId('invoice-sources')
+    expect(within(sources).getByTestId('invoice-sources-unavailable')).toBeInTheDocument()
+    expect(sources).not.toHaveTextContent('Granted credit')
+    expect(sources).toHaveTextContent('Still owed')
+  })
+
+  it('says when a voided invoice was voided, and keeps its original to download once it was issued', async () => {
+    server({ invoices: [
+      { ...INVOICE, invoiceId: 'v1', invoiceNo: 'QBF-2026-00009', status: 'VOID', voidedAt: '2026-02-03T05:00:00Z',
+        documentRunId: 'd1' },
+      { ...INVOICE, invoiceId: 'v2', invoiceNo: 'QBF-2026-00010', status: 'VOID', voidedAt: '2026-02-03T05:00:00Z',
+        documentRunId: null }] })
+    window.history.replaceState(null, '', '/money/bills')
+    render(<App />)
+    const rows = await screen.findAllByTestId('invoice-row')
+    expect(within(rows[0]).getByTestId('invoice-row-voided-on')).toHaveTextContent(/Voided on/)
+    expect(within(rows[0]).getByTestId('invoice-row-document')).toBeInTheDocument()
+    // None was issued before: none is offered (the server refuses a new one).
+    expect(within(rows[1]).queryByTestId('invoice-row-document')).toBeNull()
   })
 })
 
