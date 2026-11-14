@@ -5,7 +5,7 @@ import { taker } from './play'
 import { allowRewardMethods } from './publishing'
 import { CAPITALS } from './tree'
 import { fundedSponsor } from './wallet'
-import { adminToken, expect, PASSWORD, rows, run, setControlledParam, tokenOf, unique } from './support'
+import { expect, PASSWORD, run, tokenOf, unique } from './support'
 
 /*
  * What the first launch's closed-loop test (launch-loop.spec, docs/quizbuks/plans/impl/F-F12.md) shares between its
@@ -137,27 +137,5 @@ export async function answerQuiz(page: Page, count: number): Promise<{ attemptId
   return { attemptId: attemptIn(page), order }
 }
 
-/** A controlled parameter as it stands now: its value and kind, or none while nobody has set it. */
-async function paramNow(request: APIRequestContext, admin: string, key: string) {
-  const [found] = await rows(request, admin, 'urn:jabiz:dataset:platform:SysParam',
-    [{ field: 'paramKey', op: 'eq', value: key }], 1)
-  return found ? { value: String(found.attributes.value), kind: found.attributes.valueKind as Record<string, unknown> }
-    : null
-}
-
-/**
- * Remembers controlled parameters a step has to change, and returns what puts them back (call it in a `finally`): the
- * value they had, or `absent` where nobody had set them (the platform reads those as closed). The parameters are
- * global, so a step changing them is in a serial describe: no other worker of the shard reads them meanwhile.
- */
-export async function rememberParams(request: APIRequestContext, keys: { key: string; absent: string }[]) {
-  // One after the other, with one session: the platform limits how many passwords it hashes at once.
-  const admin = await adminToken(request)
-  const before: { key: string; absent: string; was: Awaited<ReturnType<typeof paramNow>> }[] = []
-  for (const { key, absent } of keys) before.push({ key, absent, was: await paramNow(request, admin, key) })
-  return async () => {
-    for (const { key, absent, was } of before) {
-      await setControlledParam(request, key, was?.value ?? absent, was?.kind)
-    }
-  }
-}
+/** Kept here too, for the steps' imports: the helper is the suite's (support.ts). */
+export { rememberParams } from './support'

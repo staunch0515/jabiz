@@ -6,8 +6,8 @@ import { taker } from './play'
 import { boundPublication, operatorTree } from './tree'
 import { approvedSponsor } from './wallet'
 import {
-  adminToken, expect, expectAccessible, PASSWORD, prepareQuizbuks, run, setControlledParam, signIn, signOut, test, tokenOf,
-  unique,
+  adminToken, expect, expectAccessible, PASSWORD, prepareQuizbuks, rememberParams, run, setControlledParam, signIn,
+  signOut, test, tokenOf, unique,
 } from './support'
 
 /*
@@ -21,11 +21,22 @@ test.beforeEach(async ({ request }) => {
   await prepareQuizbuks(request)
 })
 
+/** What a test changed of the global parameters, put back after it (passed or not) for the tests after it. */
+let restore: (() => Promise<void>) | undefined
+test.afterEach(async () => {
+  await restore?.()
+  restore = undefined
+})
+
 const GRANT = 1000
 const pass = { op: 'ALL', items: [{ passed: true }] }
 
 /** The platform's template Sponsors light, in effect: one node, opening digital prizes and granting credit. */
 async function template(request: APIRequestContext) {
+  // Put back after the test: the gate would stay pointed at this test's template, and every later Sponsor would need
+  // its node for digital prizes.
+  restore = await rememberParams(request, [{ key: 'qb.tree.grant.max-per-node', absent: '0' },
+    { key: 'qb.fee-credit.grant.enabled', absent: 'false' }, { key: 'qb.tree.gate.digital-prize-node', absent: '' }])
   await setControlledParam(request, 'qb.tree.grant.max-per-node', String(GRANT),
     { type: 'monetary', currency: 'JPY', scale: 0 })
   await setControlledParam(request, 'qb.fee-credit.grant.enabled', 'true')

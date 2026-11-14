@@ -4,20 +4,31 @@ import { contentToken } from './help'
 import { contentAdmin } from './legal'
 import { ensureDefaultOperator } from './operators'
 import { fundedSponsor } from './play'
-import { expect, expectAccessible, PASSWORD, prepareQuizbuks, run, signIn, test, unique } from './support'
+import {
+  expect, expectAccessible, PASSWORD, prepareQuizbuks, rememberParams, run, setControlledParam, signIn, test, unique,
+} from './support'
 
 /**
  * Audience rules as a product line (docs/quizbuks/plans/Q47c-audience-billing.md, Q47c-1): headquarters' rule
  * catalog and the operators' price lists in the administration, and the sponsor's wizard, which shows no prices
- * while charging is off (the end-to-end job never turns it on: the other tests' publications stay free).
+ * while charging is off. The test turns it off itself, and puts back what it found, rather than count on no other test
+ * (or no run cut short) having left it on.
  */
 test.beforeEach(async ({ request }) => {
   await prepareQuizbuks(request)
 })
 
+let restore: (() => Promise<void>) | undefined
+test.afterEach(async () => {
+  await restore?.()
+  restore = undefined
+})
+
 test('headquarters manage the rules and their prices; the wizard stays free while charging is off', async ({ page,
   request }) => {
   test.setTimeout(180_000)
+  restore = await rememberParams(request, [{ key: 'qb.audience.billing.enabled', absent: 'false' }])
+  await setControlledParam(request, 'qb.audience.billing.enabled', 'false')
   const admin = await contentAdmin(request, 'Rina')
   await signInAdmin(page, admin, PASSWORD)
 

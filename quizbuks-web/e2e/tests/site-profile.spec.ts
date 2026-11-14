@@ -1,7 +1,7 @@
 import { aiCredit, aiReady } from './ai'
 import { approvedSponsor } from './publishing'
-import { expect, expectAccessible, openArea, prepareQuizbuks, rows, setAppearance, setControlledParam, signIn, test,
-  unique } from './support'
+import { expect, expectAccessible, openArea, prepareQuizbuks, rememberParams, rows, setAppearance, setControlledParam,
+  signIn, test, unique } from './support'
 
 /*
  * Drafting a profile and a "get to know us" quiz from the sponsor's website (F-C7, docs/quizbuks/plans/impl/F-C7.md)
@@ -14,7 +14,15 @@ import { expect, expectAccessible, openArea, prepareQuizbuks, rows, setAppearanc
 test.beforeEach(async ({ request }) => {
   await prepareQuizbuks(request)
   await aiReady(request)
+  restore = await rememberParams(request, [{ key: 'qb.ai.site-profile.enabled', absent: 'false' }])
   await setControlledParam(request, 'qb.ai.site-profile.enabled', 'true')
+})
+
+/** What a test changed of the global parameters, put back after it (passed or not) for the tests after it. */
+let restore: (() => Promise<void>) | undefined
+test.afterEach(async () => {
+  await restore?.()
+  restore = undefined
 })
 
 const PAGES = 'urn:jabiz:dataset:me:QbSponsorPage'
