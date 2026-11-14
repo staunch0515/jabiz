@@ -70,8 +70,7 @@ class FirstLaunchSwitchesCheckTest {
     void theSwitchesThatMustBeOffAreTheRegistrysFalseRowsAndTheWaitingOnesWhoseKeyExists() {
         assertThat(FirstLaunchSwitchesCheck.MUST_BE_OFF).containsExactlyInAnyOrder(QbParams.KUDOS_BUY_ENABLED,
             QbParams.KUDOS_SELL_ENABLED, QbParams.TRANSFER_ENABLED, QbParams.WITHDRAWAL_BANK_ENABLED,
-            QbParams.REWARD_KUDOS_ENABLED, QbParams.ENTRY_FEE_ENABLED, QbParams.AI_FEE_ENABLED,
-            QbParams.SITE_PROFILE_ENABLED);
+            QbParams.REWARD_KUDOS_ENABLED, QbParams.ENTRY_FEE_ENABLED);
         // A waiting row whose key does not exist yet never counts: there is nothing to turn on.
         FirstLaunchSwitches.ALL.stream().filter(row -> row.status() == FirstLaunchSwitches.Status.WAITING)
             .filter(row -> !FirstLaunchSwitches.KEY_BEFORE_MEANING.contains(row.key()))
@@ -79,12 +78,49 @@ class FirstLaunchSwitchesCheckTest {
     }
 
     @Test
-    void aWaitingFeatureSwitchThatIsAlreadyOnWarns() {
-        // F-M7: the audience fee's switch is no longer waiting (on at the launch): it does not warn.
+    void aSwitchThatWaitedForItsFeatureNoLongerWarnsWhenOn() {
+        // F-M7: the audience fee's switch is no longer waiting (on at the launch); F-M9a-2b: nor the AI fee's and the
+        // website draft's.
         assertThat(FirstLaunchSwitchesCheck.problems(Map.of(QbParams.AUDIENCE_BILLING_ENABLED, "true",
-            QbParams.SITE_PROFILE_ENABLED, "true", QbParams.REWARD_KUDOS_ENABLED, "false"))).singleElement()
-            .satisfies(problem -> assertThat(problem.location())
-                .isEqualTo("parameter " + QbParams.SITE_PROFILE_ENABLED));
+            QbParams.SITE_PROFILE_ENABLED, "true", QbParams.AI_FEE_ENABLED, "true",
+            QbParams.REWARD_KUDOS_ENABLED, "false"))).isEmpty();
+    }
+
+    /** F-M9a-2b (plan question 6): the website draft on while the AI fee is off warns (every draft is refused). */
+    @Test
+    void theWebsiteDraftOnWithTheAiFeeOffWarns() {
+        assertThat(FirstLaunchSwitchesCheck.aiFeeProblems(Map.of(QbParams.SITE_PROFILE_ENABLED, "true",
+            QbParams.AI_FEE_ENABLED, "false"))).singleElement().satisfies(problem -> {
+                assertThat(problem.location()).isEqualTo("parameter " + QbParams.SITE_PROFILE_ENABLED);
+                assertThat(problem.message()).contains(QbParams.AI_FEE_ENABLED).contains("refused");
+            });
+        assertThat(FirstLaunchSwitchesCheck.aiFeeProblems(Map.of(QbParams.SITE_PROFILE_ENABLED, "true")))
+            .hasSize(1);
+        // Both off, or the fee on alone: nothing.
+        assertThat(FirstLaunchSwitchesCheck.aiFeeProblems(Map.of())).isEmpty();
+        assertThat(FirstLaunchSwitchesCheck.aiFeeProblems(Map.of(QbParams.AI_FEE_ENABLED, "true"))).isEmpty();
+    }
+
+    /**
+     * F-M9a-2b (#692 re-review L-b): with both on, each of the website draft's reservation limits not set or not usable
+     * warns; usable ones do not.
+     */
+    @Test
+    void theWebsiteDraftsReservationLimitsNotSetOrNotUsableWarn() {
+        Map<String, String> on = Map.of(QbParams.SITE_PROFILE_ENABLED, "true", QbParams.AI_FEE_ENABLED, "true");
+        assertThat(FirstLaunchSwitchesCheck.aiFeeProblems(on)).extracting(CheckProblem::location).containsExactly(
+            "parameter " + QbParams.AI_FEE_SITE_CALLS, "parameter " + QbParams.AI_FEE_SITE_PAGES,
+            "parameter " + QbParams.AI_FEE_SITE_OUTPUT);
+        Map<String, String> set = new java.util.HashMap<>(on);
+        set.put(QbParams.AI_FEE_SITE_CALLS, "5");
+        set.put(QbParams.AI_FEE_SITE_PAGES, "0");
+        set.put(QbParams.AI_FEE_SITE_OUTPUT, "2.5");
+        assertThat(FirstLaunchSwitchesCheck.aiFeeProblems(set)).hasSize(3).allSatisfy(problem ->
+            assertThat(problem.message()).contains("ignored"));
+        set.put(QbParams.AI_FEE_SITE_CALLS, "3");
+        set.put(QbParams.AI_FEE_SITE_PAGES, "8");
+        set.put(QbParams.AI_FEE_SITE_OUTPUT, "4000");
+        assertThat(FirstLaunchSwitchesCheck.aiFeeProblems(set)).isEmpty();
     }
 
     @Test

@@ -178,6 +178,16 @@ public final class QbParams {
      */
     public static final List<String> AI_FEE_CONTROLLED = List.of(AI_FEE_ENABLED, AI_FEE_MARKUP, AI_FEE_USD_JPY);
     /**
+     * F-M9a-2b (plan §8): the daily check's hours for the AI fee: jobs with a fee not charged this many hours after
+     * their month ended ({@code AI_FEE_UNBILLED}), and expired or voided fee credit still in an AI credit this many
+     * hours after it expired ({@code AI_CREDIT_EXPIRED_HELD}). Controlled; a check does not run while its parameter is
+     * not published.
+     */
+    public static final String AI_FEE_UNBILLED_AFTER_HOURS = "qb.ai.fee.unbilled-after-hours";
+    public static final String AI_CREDIT_EXPIRED_HELD_AFTER_HOURS = "qb.ai.credit.expired-held-after-hours";
+    public static final List<String> AI_FEE_CHECK = List.of(AI_FEE_UNBILLED_AFTER_HOURS,
+        AI_CREDIT_EXPIRED_HELD_AFTER_HOURS);
+    /**
      * F-M9 (#692 re-review, the coordinator's decision): what a website draft's request reserves, as limits below the
      * job's own (each optional and controlled, not created by {@code QB_SETUP}): the calls an attempt is counted at (1 to
      * 4, the web reader's most), the pages (1 to the job's {@code qb.site-profile.max-pages}) and the output tokens (1 to
@@ -692,7 +702,7 @@ public final class QbParams {
         List.of(ENTRY_FEE_ENABLED), List.of(USAGE_FREE_BYTES), List.of(VIDEO_MAINLAND_SITES), HELP_CONTROLLED, FEE_CREDIT_PARAMS,
         SITE_PROFILE_CONTROLLED, DISTRIBUTION_CONTROLLED, EXPOSURE_CONTROLLED, REWARD_KUDOS, RECON_THRESHOLDS,
         HELP_USER_LIMITS,
-        OPERATOR_SHARE, OPERATOR_SETTLEMENT, OPERATOR_SETTLEMENT_CHECK, AI_FEE_CONTROLLED)
+        OPERATOR_SHARE, OPERATOR_SETTLEMENT, OPERATOR_SETTLEMENT_CHECK, AI_FEE_CONTROLLED, AI_FEE_CHECK)
         .flatMap(List::stream).toList();
 
     /** A parameter: its key, kind (as the platform writes kinds) and first value. */
@@ -1178,7 +1188,15 @@ public final class QbParams {
         new Param(AI_FEE_MARKUP, Map.of("type", "numeric", "precision", 4, "scale", 2), "1.5",
             "The AI fee as a multiple of the provider's list price, from 1 to 10 (frozen on each job at its request)"),
         new Param(AI_FEE_USD_JPY, Map.of("type", "numeric", "precision", 5, "scale", 2), "150",
-            "The yen of a US dollar for the AI fee, from 50 to 500 (frozen on each job at its request)"));
+            "The yen of a US dollar for the AI fee, from 50 to 500 (frozen on each job at its request)"),
+        // F-M9a-2b: the daily check's hours for the AI fee (controlled; last, so the proposals before keep their places).
+        new Param(AI_FEE_UNBILLED_AFTER_HOURS, Map.of("type", "numeric", "precision", 3, "scale", 0), "48",
+            "How many hours after their month ended charged AI jobs not charged yet are reported by the daily check "
+                + "(the monthly charge runs on the 1st; the check does not run until this is published)"),
+        new Param(AI_CREDIT_EXPIRED_HELD_AFTER_HOURS, Map.of("type", "numeric", "precision", 3, "scale", 0), "48",
+            "How many hours after it expired (or was voided) fee credit still in an AI credit beyond what the open jobs "
+                + "hold is reported by the daily check (the expiry runs daily; the check does not run until this is "
+                + "published)"));
 
     /** The declared value of a parameter: what {@code QB_SETUP} writes. */
     public static String defaultOf(String key) {

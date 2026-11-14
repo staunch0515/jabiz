@@ -54,6 +54,16 @@ public class FirstLaunchSwitchesCheck implements PlatformCheck {
                 && FirstLaunchSwitches.KEY_BEFORE_MEANING.contains(row.key())))
         .map(FirstLaunchSwitches.Row::key).toList();
 
+    /**
+     * F-M9a-2b: the AI fee's switches and the website draft's reservation limits, which {@link #aiFeeProblems} reads
+     * (#692 re-review L-b, plan question 6).
+     */
+    static final List<String> AI_FEE_KEYS = List.of(QbParams.AI_FEE_ENABLED, QbParams.SITE_PROFILE_ENABLED,
+        QbParams.AI_FEE_SITE_CALLS, QbParams.AI_FEE_SITE_PAGES, QbParams.AI_FEE_SITE_OUTPUT);
+
+    /** The most calls an attempt of the website draft makes (ClaudeWebResearch.MAX_CALLS): the calls limit's top. */
+    static final int SITE_CALLS_MAX = com.jabiz.quizbuks.content.ai.ClaudeWebResearch.MAX_CALLS;
+
     private final JabizWebProperties web;
     private final StripeSettings stripe;
     private final Environment environment;
@@ -86,7 +96,9 @@ public class FirstLaunchSwitchesCheck implements PlatformCheck {
                 connection.setSchema(schema);
             }
             connection.setReadOnly(true);
-            problems.addAll(problems(values(connection)));
+            Map<String, String> values = values(connection);
+            problems.addAll(problems(values));
+            problems.addAll(aiFeeProblems(values));
         } catch (SQLException | RuntimeException e) {
             problems.add(CheckProblem.warning(CountryCatalog.CATEGORY, LOCATION,
                 "the first launch's switches could not be read: " + e.getMessage()));
@@ -137,6 +149,51 @@ public class FirstLaunchSwitchesCheck implements PlatformCheck {
         return List.copyOf(problems);
     }
 
+    /**
+     * F-M9a-2b, the warnings of the AI fee (values in effect, by key): the website draft on while the AI fee is off (a
+     * draft is then refused, plan question 6); and with both on, each of the website draft's reservation limits not
+     * set or not usable (a whole number from 1, the calls at most {@value #SITE_CALLS_MAX}): the reservation is then the
+     * job's worst case, and requests are refused more often than they need be (#692 re-review L-b; set them from the
+     * P95 of real jobs, operations.md 7.56).
+     */
+    static List<CheckProblem> aiFeeProblems(Map<String, String> values) {
+        List<CheckProblem> problems = new ArrayList<>();
+        boolean fee = "true".equalsIgnoreCase(String.valueOf(values.get(QbParams.AI_FEE_ENABLED)).trim());
+        boolean site = "true".equalsIgnoreCase(String.valueOf(values.get(QbParams.SITE_PROFILE_ENABLED)).trim());
+        if (site && !fee) {
+            problems.add(CheckProblem.warning(CountryCatalog.CATEGORY, "parameter " + QbParams.SITE_PROFILE_ENABLED,
+                "is on while " + QbParams.AI_FEE_ENABLED + " is off: drafting from a website is charged to the AI "
+                    + "credit, so every request is refused (QB_AI_UNAVAILABLE). Turn the AI fee on first, or the "
+                    + "website draft off (operations.md 7.56)"));
+        }
+        if (site && fee) {
+            for (String key : List.of(QbParams.AI_FEE_SITE_CALLS, QbParams.AI_FEE_SITE_PAGES,
+                QbParams.AI_FEE_SITE_OUTPUT)) {
+                String value = values.get(key);
+                int max = QbParams.AI_FEE_SITE_CALLS.equals(key) ? SITE_CALLS_MAX : Integer.MAX_VALUE;
+                if (value == null) {
+                    problems.add(CheckProblem.warning(CountryCatalog.CATEGORY, "parameter " + key, "is not set: the "
+                        + "website draft reserves the job's worst case, so requests are refused more often than they "
+                        + "need be. Set it from the P95 of real jobs (operations.md 7.56)"));
+                } else if (!usable(value, max)) {
+                    problems.add(CheckProblem.warning(CountryCatalog.CATEGORY, "parameter " + key, "is '" + value
+                        + "', not a whole number from 1" + (max == Integer.MAX_VALUE ? "" : " to " + max)
+                        + ": it is ignored and the website draft reserves the job's worst case (operations.md 7.56)"));
+                }
+            }
+        }
+        return List.copyOf(problems);
+    }
+
+    private static boolean usable(String value, int max) {
+        String text = value.strip();
+        if (!text.matches("[0-9]{1,9}")) {
+            return false;
+        }
+        long number = Long.parseLong(text);
+        return number >= 1 && number <= max;
+    }
+
     /** The values in effect now (by the application's clock) of the switches, by key, deleted ones left out. */
     private Map<String, String> values(Connection connection) throws SQLException {
         EntityDefinition param = entities.getOrThrow(ParamEntities.ENTITY);
@@ -148,7 +205,9 @@ public class FirstLaunchSwitchesCheck implements PlatformCheck {
             + "WHERE NOT v.is_deleted";
         Map<String, String> values = new HashMap<>();
         try (PreparedStatement statement = connection.prepareStatement(sql)) {
-            statement.setArray(1, connection.createArrayOf("text", MUST_BE_OFF.toArray()));
+            List<String> keys = new ArrayList<>(MUST_BE_OFF);
+            keys.addAll(AI_FEE_KEYS);
+            statement.setArray(1, connection.createArrayOf("text", keys.toArray()));
             statement.setObject(2, OffsetDateTime.ofInstant(clock.instant(), ZoneOffset.UTC));
             try (ResultSet rows = statement.executeQuery()) {
                 while (rows.next()) {

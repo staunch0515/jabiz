@@ -134,7 +134,8 @@ class ReconChecksTest {
         assertThat(result.status()).isEqualTo(ReconChecks.OK);
         assertThat(result.total()).isZero();
         // Every check by name, the F-M6 notes (DISTRIBUTION_AT_FLOOR) and the F-M7 checks among them.
-        assertThat(result.summary()).startsWith("{\"AI_RESERVATION_SHORT\":0,\"AUDIENCE_FEE_NOT_LIVE\":0,\"AUDIENCE_REFUND_MISSING\":0,"
+        assertThat(result.summary()).startsWith("{\"AI_CREDIT\":0,\"AI_CREDIT_EXPIRED_HELD\":0,\"AI_FEE_MONTH\":0,"
+            + "\"AI_FEE_RESERVED\":0,\"AI_FEE_UNBILLED\":0,\"AI_RESERVATION_SHORT\":0,\"AUDIENCE_FEE_NOT_LIVE\":0,\"AUDIENCE_REFUND_MISSING\":0,"
             + "\"AUDIENCE_REFUND_NO_PERIOD\":0,\"CASH_ACCOUNT\":0,\"CASH_LOTS\":0,\"CERTIFIED_GRANTS\":0,"
             + "\"CREDIT_NOTE_LIMITS\":0,\"CREDIT_NOTE_USES\":0,\"CREDIT_NOTE_USE_VOID\":0,\"CREDIT_UNUSED_WITH_DUE\":0,"
             + "\"DISTRIBUTION_AT_FLOOR\":0,\"DISTRIBUTION_DEPOSITS\":0,\"DISTRIBUTION_FINAL_MISSING\":0,"

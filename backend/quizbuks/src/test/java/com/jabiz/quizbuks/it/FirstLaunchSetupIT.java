@@ -76,8 +76,10 @@ class FirstLaunchSetupIT extends ContentItSupport {
             .containsEntry(QbParams.KUDOS_BUY_ENABLED, "false").containsEntry(QbParams.TOPUP_TARGETS, "CASH")
             .containsEntry(QbParams.TOPUP_DEFAULT_TARGET, "CASH")
             .containsEntry(QbParams.ENTRY_FEE_ENABLED, "false");
-        // The waiting rows whose key exists are proposed off (the declared value, which is false), not on.
-        assertThat(proposed).containsEntry(QbParams.SITE_PROFILE_ENABLED, "false");
+        // F-M9a-2b: the AI fee and the website draft were waiting rows whose key existed (proposed off); they are
+        // charged at the launch now, the website draft with the AI fee.
+        assertThat(proposed).containsEntry(QbParams.AI_FEE_ENABLED, "true")
+            .containsEntry(QbParams.SITE_PROFILE_ENABLED, "true");
         // F-M7: the audience fee is charged at the launch; the unused days are given back only once the requester
         // turns that on (the declared value, off).
         assertThat(proposed).containsEntry(QbParams.AUDIENCE_BILLING_ENABLED, "true")
@@ -132,8 +134,12 @@ class FirstLaunchSetupIT extends ContentItSupport {
         // A rate or an amount of 0 is a value the numeric kind takes (written with its scale).
         assertThat(new java.math.BigDecimal(current(QbParams.FEE_MONTHLY))).isZero();
         assertThat(new java.math.BigDecimal(current(QbParams.CREATOR_FEE_RATE))).isZero();
-        // The startup check runs its SQL against the database: all off, nothing to say.
-        assertThat(check.check()).isEmpty();
+        // The startup check runs its SQL against the database: the switches as the first launch has them; only the
+        // website draft's three reservation limits are named (F-M9a-2b, #692 re-review L-b: QB_SETUP does not set
+        // them, they come from the P95 of real jobs, operations.md 7.56).
+        assertThat(check.check()).extracting(CheckProblem::location).containsExactly(
+            "parameter " + QbParams.AI_FEE_SITE_CALLS, "parameter " + QbParams.AI_FEE_SITE_PAGES,
+            "parameter " + QbParams.AI_FEE_SITE_OUTPUT);
 
         // A second run proposes nothing new, and what an administrator published since stays.
         setControlledParam(QbParams.KUDOS_BUY_ENABLED, "true");
@@ -143,9 +149,10 @@ class FirstLaunchSetupIT extends ContentItSupport {
         assertThat(proposedValues()).isEmpty();
         assertThat(current(QbParams.KUDOS_BUY_ENABLED)).isEqualTo("true");
         // ... and the check, reading the same rows, now names it.
-        assertThat(check.check()).singleElement().satisfies(problem -> {
-            assertThat(problem.isError()).isFalse();
-            assertThat(problem.location()).isEqualTo("parameter " + QbParams.KUDOS_BUY_ENABLED);
-        });
+        assertThat(check.check()).filteredOn(problem -> !problem.location().startsWith("parameter qb.ai.fee.site-"))
+            .singleElement().satisfies(problem -> {
+                assertThat(problem.isError()).isFalse();
+                assertThat(problem.location()).isEqualTo("parameter " + QbParams.KUDOS_BUY_ENABLED);
+            });
     }
 }

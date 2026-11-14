@@ -157,6 +157,22 @@ public final class ReconChecks {
      * whose fee was lowered to nothing is never taken in by the month's charge, so the charge cannot end the note).
      */
     public static final String AI_RESERVATION_SHORT = "AI_RESERVATION_SHORT";
+    /**
+     * F-M9a-2b (plan §8): by sponsor, the open AI credit's remaining against 2180 of the purpose AI ({@code ledger}),
+     * against its movements ({@code movements}), and what it bought in all against the movements BUY ({@code bought}).
+     */
+    public static final String AI_CREDIT = "AI_CREDIT";
+    /** F-M9a-2b (plan §8, #699 review L3): an AI charge's amount against its jobs' fees as charged (the reference). */
+    public static final String AI_FEE_MONTH = "AI_FEE_MONTH";
+    /** F-M9a-2b: jobs with a fee not charged {@code qb.ai.fee.unbilled-after-hours} after their month ended. */
+    public static final String AI_FEE_UNBILLED = "AI_FEE_UNBILLED";
+    /** F-M9a-2b: finished charged jobs still holding a reservation. */
+    public static final String AI_FEE_RESERVED = "AI_FEE_RESERVED";
+    /**
+     * F-M9a-2b: expired (or voided) fee credit still in an AI credit {@code qb.ai.credit.expired-held-after-hours} after
+     * it expired, beyond what the open jobs hold (the daily expiry did not void it).
+     */
+    public static final String AI_CREDIT_EXPIRED_HELD = "AI_CREDIT_EXPIRED_HELD";
     /** Account 2110 in all against all sponsors' cached balances. */
     public static final String TOTAL_2110 = "TOTAL_2110";
     /** Every posted line's debit less credit: 0. */
@@ -197,7 +213,7 @@ public final class ReconChecks {
         GIFT_RECOVERY, OPERATOR_CHARGE_NO_OPERATOR, OPERATOR_GIFT_CARRY_OPEN, EXPOSURE_DEPOSITS,
         EXPOSURE_SETTLED_OVER, EXPOSURE_UNSETTLED, EXPOSURE_FINAL_MISSING, EXPOSURE_PRICE_RANGE,
         EXPOSURE_UNIT_MISMATCH, EXPOSURE_UNPURCHASED, EXPOSURE_SETTLED_SHORT, EXPOSURE_AMOUNT_MISMATCH,
-        AI_RESERVATION_SHORT);
+        AI_RESERVATION_SHORT, AI_CREDIT, AI_FEE_MONTH, AI_FEE_UNBILLED, AI_FEE_RESERVED, AI_CREDIT_EXPIRED_HELD);
 
     /** Codes no longer reported that runs written before may still name: readable, never written. */
     public static final List<String> RETIRED = List.of(DISTRIBUTION_PRICE_OUT_OF_RANGE);

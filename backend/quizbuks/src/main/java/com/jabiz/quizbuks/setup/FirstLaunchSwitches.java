@@ -96,11 +96,18 @@ public final class FirstLaunchSwitches {
         keep(QbParams.EXPOSURE_UNIT_MAX, "exposure"),
         keep(QbParams.EXPOSURE_MIN_PURCHASE, "exposure"),
         keep(QbParams.EXPOSURE_TOP_UP_MAX, "exposure"),
-        // F-M9a-1's key exists (declared off, controlled): requests are only charged once a-2 can charge the month's fees.
-        waiting(QbParams.AI_FEE_ENABLED, "aifee", true, "F-M9"),
-        // F-C7a's key exists (declared off, controlled) but drafting from a website is only charged once F-M9 can
-        // charge the AI credit: it stays off at the launch and its row turns ACTIVE with F-M9's pull request.
-        waiting(QbParams.SITE_PROFILE_ENABLED, "aifee", true, "F-M9"),
+        // F-M9a-2b: the AI credit is bought, charged by the month, given back and voided by expiry, and checked daily:
+        // sponsors' AI requests are charged at the launch. Before its proposal is published the requester confirms the
+        // markup and the rate, whether the AI fee is in the operators' share (qb.operator.share.kinds), and the website
+        // draft's reservation limits (launch checklist, operations.md 7.56).
+        active(QbParams.AI_FEE_ENABLED, "aifee", true,
+            "sponsors' AI requests are charged to their AI credit at the launch (declared off: the tests rely on it); "
+                + "the requester confirms the markup, the rate, the share and the website draft's limits first"),
+        // F-C7a: drafting from a website is charged to the AI credit (F-M9), so it opens with the AI fee; its proposal is
+        // published after the AI fee's and after the timing test on staging (operations.md, the website draft).
+        active(QbParams.SITE_PROFILE_ENABLED, "aifee", true,
+            "drafting a quiz from a website is open at the launch, charged to the AI credit (declared off: the tests "
+                + "rely on it); published after qb.ai.fee.enabled and the timing test on staging"),
         waiting("qb.fee.auto-pay.enabled", "autopay", true, "F-M13"),
         manual(QbParams.FEE_CREDIT_MANUAL_MAX, "grant"),
         manual(QbParams.TREE_GRANT_MAX_PER_NODE, "grant"));
@@ -109,8 +116,7 @@ public final class FirstLaunchSwitches {
      * The keys that are already in {@link QbParams#ALL} while their row still {@link Status#WAITING}: the key exists,
      * what it means does not do yet. Any other waiting key found in {@code ALL} is a feature that forgot its row.
      */
-    public static final Set<String> KEY_BEFORE_MEANING = Set.of(QbParams.SITE_PROFILE_ENABLED,
-        QbParams.AI_FEE_ENABLED);
+    public static final Set<String> KEY_BEFORE_MEANING = Set.of();
 
     /** Whether a system of this {@code jabiz.web.environment} proposes the first launch's values. */
     public static boolean appliesTo(String environment) {

@@ -237,6 +237,13 @@
 - 推到 a-2 的：可用额中"已过期未作废的赠送"一项（随到期任务）、`qb.ai.fee.enabled` 改 `ACTIVE`、"收费关而官网生成开"时拒绝并在启动检查警告（问题 6）、审核人对照检查与帮助 AI 不动额度的断言、锁序测试（AI 锁内不取钱包锁，a-2 才有 AI → 钱包的路径）。a-1 的开关仍是 `WAITING` 且列入 `KEY_BEFORE_MEANING`，首次上线时必须为关（`FirstLaunchSwitchesCheck`）。
 
 
+**a-2b 的实施（2026-11-14）**：
+- 每日核对加五项（模板 `qb.system.recon-ai-credit`，每日核对多一条语句）：`AI_CREDIT`（额度剩余 = 2180 用途 AI = 变动之和；累计购入 = `BUY` 之和）、`AI_FEE_MONTH`（#699 审查 L3：按每笔 AI 费，比较它与收进它的作业记费后的 `fee_yen` 之和；只看近 40 天）、`AI_FEE_UNBILLED`、`AI_FEE_RESERVED`、`AI_CREDIT_EXPIRED_HELD`（占用按税率向上取整，税率未设按 100%，只会少报、不会误报）。§8 的 `AI_FEE_ABSORBED` 由已有的提示 `AI_RESERVATION_SHORT` 承担，不另设；`FEE_CREDIT_PROMOTION` 已包含 AI 额度中的作废（完整一轮的 IT 无差异）。
+- 两个受控参数（进 setup，缺省 48）：`qb.ai.fee.unbilled-after-hours`、`qb.ai.credit.expired-held-after-hours`。
+- `qb.ai.fee.enabled` 与 `qb.ai.site-profile.enabled` 由 WAITING 改为 ACTIVE（首次上线提议为开），`KEY_BEFORE_MEANING` 清空。
+- 问题 6：AI 收费关时从官网生成的请求被拒（`QB_AI_UNAVAILABLE`）；`FirstLaunchSwitchesCheck` 在正式环境对"官网生成开而 AI 收费关"警告，并在两者都开时对三个预留参数没有设置或不可用的警告（#692 复核 L-b）。
+- a-1 延后的测试：审核人的翻译核对与 AI 帮助在 AI 收费开着时不收费、不预留、不需要额度；作业结局只取 AI 锁、不取钱包锁。
+
 **#692 审查（Fable，2026-11-14）后的修订**：
 - 预留是严格上界，超出预留的部分不由平台承担（总控）：每次尝试按"原模型跑一遍 + 回退模型再全部跑一遍"相加（`AiCost.maxOf`）；官网生成按网页读取器每次尝试 4 次调用、续接时输入重算（`ClaudeWebResearch.mostOfAttempt`）；预留的税向上取整。
 - §2 的部分索引与读取都排除"已结束且 `fee_yen = 0`"的作业：未运行即取消、失败且无回答的作业不预留、也不会进入记费，不能永远留在未结集合中。

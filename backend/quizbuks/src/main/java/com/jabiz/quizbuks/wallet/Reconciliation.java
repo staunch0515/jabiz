@@ -70,6 +70,8 @@ public final class Reconciliation {
     static final String EXPOSURE_TEMPLATE = "qb.system.recon-exposure";
     /** F-M10: everybody's row of the AI help's usage against the people's rows. */
     static final String HELP_USAGE_TEMPLATE = "qb.system.recon-help-usage";
+    /** F-M9a-2b: the AI credit and the AI fee. */
+    static final String AI_CREDIT_TEMPLATE = "qb.system.recon-ai-credit";
 
     public record ReconcileInput(@NotNull Instant scheduledTime) {}
 
@@ -137,6 +139,7 @@ public final class Reconciliation {
     static final String CREDIT_NOTES = "creditNotes";
     static final String EXPOSURE = "exposure";
     static final String HELP_USAGE = "helpUsage";
+    static final String AI_CREDIT = "aiCredit";
     static final String OPERATOR_SETTLEMENT = "operatorSettlement";
     static final String LAST_OK = "lastOk";
     /**
@@ -199,7 +202,8 @@ public final class Reconciliation {
                     DISTRIBUTION_PARAMS, QbParams.DISTRIBUTION_UNSETTLED_AFTER_HOURS,
                     QbParams.DISTRIBUTION_FINAL_MISSING_AFTER_HOURS, QbParams.AUDIENCE_REFUND_MISSING_AFTER_HOURS,
                     QbParams.OPERATOR_SETTLEMENT_WAITING_AFTER_HOURS, QbParams.OPERATOR_SETTLEMENT_READINESS_MAX_DAYS,
-                    QbParams.EXPOSURE_UNSETTLED_AFTER_HOURS, QbParams.EXPOSURE_FINAL_MISSING_AFTER_HOURS))
+                    QbParams.EXPOSURE_UNSETTLED_AFTER_HOURS, QbParams.EXPOSURE_FINAL_MISSING_AFTER_HOURS,
+                    QbParams.AI_FEE_UNBILLED_AFTER_HOURS, QbParams.AI_CREDIT_EXPIRED_HELD_AFTER_HOURS))
                 // The fee account's checks are four statements by domain (F-M14 G10), each with the parameters it declares.
                 .step("Compare the fee credit", RunTemplate.<ProcessContext>of(FEE_CREDIT_TEMPLATE,
                     ctx -> Map.of(), FEE_CREDIT))
@@ -224,6 +228,9 @@ public final class Reconciliation {
                     ctx -> feeAccountParams(ctx, zone, "at", "zone", "waitingHours", "readinessDays", "since"), OPERATOR_SETTLEMENT))
                 .step("Compare the AI help's usage", RunTemplate.<ProcessContext>of(HELP_USAGE_TEMPLATE,
                     ctx -> feeAccountParams(ctx, zone, "at", "zone"), HELP_USAGE))
+                // F-M9a-2b: the AI credit against the ledger and its movements, the AI charges against their jobs.
+                .step("Compare the AI credit", RunTemplate.<ProcessContext>of(AI_CREDIT_TEMPLATE,
+                    ctx -> feeAccountParams(ctx, zone, "at", "zone", "unbilledHours", "expiredHours"), AI_CREDIT))
                 // The takers' cache follows by events: one found behind counts only when the previous run found them.
                 .step("Find the previous run", QueryEntities.<ProcessContext>of(defaultDataset(RUN_ENTITY_NAME),
                     ctx -> EntityQuery.builder().where(new QueryPredicate.Lt("scheduledTime",
@@ -278,6 +285,7 @@ public final class Reconciliation {
         found.addAll(ReconChecks.coded(rows(ctx, OPERATOR_SETTLEMENT)));
         found.addAll(ReconChecks.coded(rows(ctx, EXPOSURE)));
         found.addAll(ReconChecks.coded(rows(ctx, HELP_USAGE)));
+        found.addAll(ReconChecks.coded(rows(ctx, AI_CREDIT)));
         java.util.Set<String> foundBefore = new java.util.HashSet<>();
         TopUpCrediting.list(ctx, PREVIOUS_TAKERS).forEach(item -> foundBefore.add(item.get("partyId")));
         ReconChecks.TakerItems takers = ReconChecks.takers(rows(ctx, TAKERS), foundBefore);
@@ -365,6 +373,11 @@ public final class Reconciliation {
             java.math.BigDecimal.class).orElse(null));
         // F-M7 (N9): the audience fees not decided yet.
         values.put("refundHours", params.find(QbParams.AUDIENCE_REFUND_MISSING_AFTER_HOURS,
+            java.math.BigDecimal.class).orElse(null));
+        // F-M9a-2b: the AI fee's unbilled jobs and the expired fee credit left in AI credits.
+        values.put("unbilledHours", params.find(QbParams.AI_FEE_UNBILLED_AFTER_HOURS, java.math.BigDecimal.class)
+            .orElse(null));
+        values.put("expiredHours", params.find(QbParams.AI_CREDIT_EXPIRED_HELD_AFTER_HOURS,
             java.math.BigDecimal.class).orElse(null));
         // F-M12 c: the hours after which a month without an operator's settlement is reported.
         // F-M12 b: how long a settlement waits for its steps; not published counts as 0 in the template (from the month's end).
