@@ -93,6 +93,8 @@ public final class MailProcesses {
     public static final String FEE_INVOICE_OVERDUE_CONSUMER = "qb.mail-fee-invoice-overdue";
     public static final String PUBLICATION_CONSUMER = "qb.publication-notify";
     /** F-M2: a sponsor's platform fee Kudos expire soon. */
+    public static final String FEE_AUTO_PAID = "QB_MAIL_FEE_AUTO_PAID";
+    public static final String FEE_AUTO_PAID_CONSUMER = "qb.mail-fee-auto-paid";
     public static final String FEE_CREDIT = "QB_MAIL_FEE_CREDIT";
     public static final String FEE_CREDIT_EXPIRING_CONSUMER = "qb.mail-fee-credit-expiring";
 
@@ -121,6 +123,10 @@ public final class MailProcesses {
 
     /** @param reminder which reminder of an overdue invoice (1 – 3); null for an invoice issued */
     public record FeeInvoiceMailInput(@NotBlank String invoiceId, @NotNull Instant occurredAt, Integer reminder) {}
+
+    /** @param invoiceNos the numbers of the invoices paid (decided under the sponsor's lock; the mail only says them) */
+    public record FeeAutoPaidMailInput(@NotBlank String sponsorId, @NotNull java.util.List<String> invoiceNos,
+        @NotNull Instant occurredAt) {}
 
     /**
      * The payload of {@code qb.fee-credit.expiring} (F-M2), and when it was published.
@@ -290,6 +296,30 @@ public final class MailProcesses {
         Object reminder = event.payload().get("reminder");
         return new FeeInvoiceMailInput(text(event, "invoiceId"), event.createdTime(),
             reminder == null ? 1 : Integer.valueOf(String.valueOf(reminder)));
+    }
+
+    // ---- platform fee invoices paid by themselves (F-M13b) -------------------------------------------------------------
+
+    public static ProcessDefinition<FeeAutoPaidMailInput, MailOutput, ProcessContext> feeAutoPaid(
+        MessageCatalog messages) {
+        return define(FEE_AUTO_PAID, "Mails a sponsor that unpaid platform fee invoices were paid from their account.",
+            FeeAutoPaidMailInput.class, FeeAutoPaidMailInput::occurredAt, pb -> pb
+                .step("Load the sponsor", loadUser(ctx -> input(ctx, FeeAutoPaidMailInput.class).sponsorId())),
+            ctx -> {
+                FeeAutoPaidMailInput input = input(ctx, FeeAutoPaidMailInput.class);
+                if (!input.invoiceNos().isEmpty()) {
+                    decide(ctx, NotificationMails.FEE_AUTO_PAID, Map.of(
+                        "invoiceNos", String.join(", ", input.invoiceNos()),
+                        "count", MailValues.count(input.invoiceNos().size())));
+                }
+            }, messages, NotificationMails.FEE_AUTO_PAID);
+    }
+
+    static FeeAutoPaidMailInput feeAutoPaidInput(DomainEvent event) {
+        Object nos = event.payload().get("invoiceNos");
+        java.util.List<String> numbers = nos instanceof java.util.List<?> list
+            ? list.stream().map(String::valueOf).toList() : java.util.List.of();
+        return new FeeAutoPaidMailInput(text(event, "sponsorId"), numbers, event.createdTime());
     }
 
     // ---- platform fee Kudos (F-M2) -----------------------------------------------------------------------------------

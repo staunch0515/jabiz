@@ -75,6 +75,16 @@ public final class NotificationMails {
             .protectedText());
 
     /**
+     * F-M13b: unpaid platform invoices were paid from the fee account by themselves (the switch is published). Transactional,
+     * and protected: it speaks of a payment, so its text is one another administrator publishes.
+     */
+    public static final MailTemplate FEE_AUTO_PAID = MailTemplate.define("qb.fee.auto-paid", t -> t
+        .category(MailCategory.TRANSACTIONAL).param("invoiceNos", "count")
+            .sample("invoiceNos", "INV-0001, INV-0002")
+            .sample("count", "2")
+            .protectedText());
+
+    /**
      * F-M2: a sponsor's platform fee Kudos expire soon (each lot once, at most once per sponsor in 24 hours): what is
      * left of the lots, how many, and when the first expires. The sponsor console's, opted out of in its preferences.
      */
@@ -132,7 +142,7 @@ public final class NotificationMails {
             .protectedText());
 
     public static final List<MailTemplate> ALL = List.of(TRANSFER_SENT, TRANSFER_FAILED, PAYOUT_ACTION_NEEDED,
-        TOPUP_PAID, TOPUP_PAID_CASH, TOPUP_GRANTED, FEE_INVOICE_ISSUED, FEE_INVOICE_OVERDUE, FEE_CREDIT_EXPIRING, PUBLICATION_APPROVED, PUBLICATION_REJECTED, PUBLICATION_TAKEN_DOWN, PUBLICATION_FUNDS_SHORT,
+        TOPUP_PAID, TOPUP_PAID_CASH, TOPUP_GRANTED, FEE_INVOICE_ISSUED, FEE_INVOICE_OVERDUE, FEE_AUTO_PAID, FEE_CREDIT_EXPIRING, PUBLICATION_APPROVED, PUBLICATION_REJECTED, PUBLICATION_TAKEN_DOWN, PUBLICATION_FUNDS_SHORT,
         PUBLICATION_ENDED, PUBLICATION_EXPOSURE_LOW);
 
     /**
