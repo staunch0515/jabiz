@@ -161,8 +161,8 @@ class MessagingConfig {
 
     @Bean
     ProcessDefinition<MailProcesses.FeeAutoPaidMailInput, MailProcesses.MailOutput, ProcessContext> qbMailFeeAutoPaid(
-        MessageCatalog messages) {
-        return MailProcesses.feeAutoPaid(messages);
+        MessageCatalog messages, @Value("${quizbuks.mail.fee-paid-grace:PT2M}") java.time.Duration grace) {
+        return MailProcesses.feeAutoPaid(messages, grace);
     }
 
     @Bean
@@ -197,7 +197,9 @@ class MessagingConfig {
     /**
      * Every few minutes, each sponsor with invoices paid from their account that no mail told yet and whose last mail
      * went before the window: one mail lists everything paid up to {@code now - grace} (the grace outlasts a payment
-     * still being committed). Both are properties; a sponsor's payments over a window are one mail.
+     * still being committed). Both are properties; a sponsor's payments over a window are one mail. The grace must be
+     * longer than the longest a payment can take from its time to its commit (the lock wait and the statement
+     * timeout of the platform): a payment committed after the cut is told by the next mail, never lost.
      */
     @Bean
     JobDefinition<MailProcesses.FeePaidDueInput> qbMailFeePaidDueJob(

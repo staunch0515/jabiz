@@ -143,4 +143,65 @@ class AutoPayMailIT extends PlayItSupport {
         assertThat(told(sponsor)).hasSize(2);
         assertThat(String.valueOf(told(sponsor).get(1).get("params"))).contains("\"count\":\"1\"");
     }
+
+    @Test
+    void aPaymentByHandAfterTheLastMailIsNotListedWithTheNextOne() {
+        param(QbParams.FEE_AUTO_PAY_ENABLED, "true");
+        String sponsor = newSponsor(unique("s-fm13c-mail-hand"));
+        invoice(sponsor, 1100, 9);
+        cash(sponsor, 1100);
+        systemRun(FeeAutoPay.AUTO_PAY, body("sponsorId", sponsor));
+        deliverEvents();
+        mailJob(12);
+        assertThat(told(sponsor)).hasSize(1);
+        // By hand, five minutes later: no event, and not in the window the next payment starts (less the grace).
+        clock.set(clock.instant().plus(Duration.ofMinutes(15)));
+        String second = invoice(sponsor, 1100, 5);
+        cash(sponsor, 1100);
+        run(com.jabiz.quizbuks.fee.FeeProcesses.PAY, sponsorToken(sponsor), body("invoiceId", second));
+        clock.set(clock.instant().plus(Duration.ofMinutes(30)));
+        invoice(sponsor, 1100, 2);
+        cash(sponsor, 1100);
+        systemRun(FeeAutoPay.AUTO_PAY, body("sponsorId", sponsor));
+        deliverEvents();
+        mailJob(12);
+        assertThat(told(sponsor)).hasSize(2);
+        assertThat(String.valueOf(told(sponsor).get(1).get("params"))).contains("\"count\":\"1\"");
+    }
+
+    @Test
+    void moreThanTenInvoicesAreListedTenAndTheRestIsMarked() {
+        param(QbParams.FEE_AUTO_PAY_ENABLED, "true");
+        String sponsor = newSponsor(unique("s-fm13c-mail-many"));
+        for (int i = 0; i < 12; i++) {
+            invoice(sponsor, 110, 20 - i);
+        }
+        cash(sponsor, 1320);
+        systemRun(FeeAutoPay.AUTO_PAY, body("sponsorId", sponsor));
+        for (int i = 0; i < 16; i++) {
+            deliverEvents();
+        }
+        mailJob(12);
+        assertThat(told(sponsor)).singleElement().satisfies(row -> {
+            String params = String.valueOf(row.get("params"));
+            assertThat(params).contains("\"count\":\"12\"").contains("...");
+        });
+    }
+
+    @Test
+    void aBannedSponsorIsToldNothingAndAfterTheBanIsLiftedWhatWasMissedIsNotSentLate() {
+        param(QbParams.FEE_AUTO_PAY_ENABLED, "true");
+        String sponsor = newSponsor(unique("s-fm13c-mail-ban"));
+        invoice(sponsor, 1100, 9);
+        cash(sponsor, 1100);
+        String boss = userWithRole(unique("fm13c-boss"), com.jabiz.quizbuks.setup.QbRoles.ADMIN_SUPER);
+        run("QB_USER_BAN", tokenOf(boss, com.jabiz.quizbuks.setup.QbRoles.ADMIN_SUPER),
+            body("userId", sponsor, "reason", "Fraud"));
+        systemRun(FeeAutoPay.AUTO_PAY, body("sponsorId", sponsor));
+        deliverEvents();
+        mailJob(12);
+        assertThat(told(sponsor)).isEmpty();
+        mailJob(30);
+        assertThat(told(sponsor)).isEmpty();
+    }
 }

@@ -107,4 +107,42 @@ class AutoPayReconIT extends PlayItSupport {
             switchOn("false");
         }
     }
+
+    @Test
+    void anInvoiceWhosePaidAmountIsNotWhatItsPaymentsAddUpToIsADifferenceOnThePaidSide() {
+        param("true");
+        String sponsor = newSponsor(unique("s-fm13c-paidside"));
+        String invoiceId = invoice(sponsor, 1100, 1, 0);
+        cash(sponsor, 1100);
+        systemRun(com.jabiz.quizbuks.fee.FeeAutoPay.AUTO_PAY, body("sponsorId", sponsor));
+        assertThat(found(sponsor, ReconChecks.INVOICE_PAID_SUM)).isEmpty();
+        // Something outside the processes moved the invoice's figure: its payments no longer add up to it.
+        execute("UPDATE qb_fee_invoice SET paid_amount = 1000, status = 'PARTIAL', paid_at = NULL, payment_transaction_id = NULL WHERE invoice_id = ?", invoiceId);
+        assertThat(found(sponsor, ReconChecks.INVOICE_PAID_SUM)).singleElement().satisfies(row -> {
+            assertThat(String.valueOf(row.get("reference"))).endsWith(":paid");
+            assertThat(new BigDecimal(String.valueOf(row.get("expected")))).isEqualByComparingTo("1000");
+            assertThat(new BigDecimal(String.valueOf(row.get("actual")))).isEqualByComparingTo("1100");
+        });
+        param("false");
+    }
+
+    void param(String value) {
+        switchOn(value);
+    }
+
+    @Test
+    void cashThatIsAllHeldIsNotSomethingToPayWith() {
+        String sponsor = newSponsor(unique("s-fm13c-held"));
+        invoice(sponsor, 1100, 72, 0);
+        cash(sponsor, 500);
+        switchOn("true");
+        try {
+            assertThat(found(sponsor, ReconChecks.AUTO_PAY_MISSED, 60)).hasSize(1);
+            // A dispute holds all of it: the payment cannot use it, so nothing is missed.
+            execute("UPDATE qb_wallet SET held = balance WHERE owner_id = ? AND kind = 'CASH'", sponsor);
+            assertThat(found(sponsor, ReconChecks.AUTO_PAY_MISSED, 60)).isEmpty();
+        } finally {
+            switchOn("false");
+        }
+    }
 }

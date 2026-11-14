@@ -329,7 +329,7 @@ public final class MailProcesses {
      * once. The notice's lock is the sponsor's notices' (the payment holds the wallet's, never this one).
      */
     public static ProcessDefinition<FeeAutoPaidMailInput, MailOutput, ProcessContext> feeAutoPaid(
-        MessageCatalog messages) {
+        MessageCatalog messages, Duration grace) {
         return define(FEE_AUTO_PAID, "Marks that a sponsor has platform fee invoices paid from their account to be told.",
             FeeAutoPaidMailInput.class, input -> null, pb -> pb
                 .step("Lock the sponsor's notices", HoldLock.<ProcessContext>exclusive(
@@ -348,7 +348,14 @@ public final class MailProcesses {
                     row.put("pending", true);
                     ctx.changes().insert(QbMessaging.NOTICE, row);
                 } else if (!Boolean.TRUE.equals(notice.get("pending"))) {
-                    ctx.changes().update(QbMessaging.NOTICE, notice.id(), notice.version(), Map.of("pending", true));
+                    // Nothing was waiting: the window starts at this payment (less the grace a payment may take to be
+                    // committed), so what was paid by hand since the last mail is not listed with it.
+                    Instant last = instant(notice.get("lastSentAt"));
+                    Instant from = input.occurredAt().minus(grace);
+                    Map<String, Object> values = new LinkedHashMap<>();
+                    values.put("pending", true);
+                    values.put("lastSentAt", last != null && last.isAfter(from) ? last : from);
+                    ctx.changes().update(QbMessaging.NOTICE, notice.id(), notice.version(), values);
                 }
             }, messages);
     }
@@ -407,6 +414,9 @@ public final class MailProcesses {
                         new java.math.BigDecimal(String.valueOf((Object) payment.get("amount"))), java.math.BigDecimal::add);
                 }
                 for (EntityInstance invoice : list(ctx, PAID_INVOICES)) {
+                    if (com.jabiz.quizbuks.fee.QbFees.VOID.equals(invoice.get("status"))) {
+                        continue;
+                    }
                     java.math.BigDecimal part = paid.getOrDefault(String.valueOf(invoice.id()), java.math.BigDecimal.ZERO);
                     if (part.signum() <= 0) {
                         continue;
@@ -419,7 +429,7 @@ public final class MailProcesses {
                 }
                 if (!lines.isEmpty() && (ban == null || !BanRules.banned(ban.attributes()))) {
                     List<String> shown = lines.size() > MAX_LISTED ? new ArrayList<>(lines.subList(0, MAX_LISTED)) : lines;
-                    if (lines.size() > MAX_LISTED) {
+                    if (lines.size() > MAX_LISTED || list(ctx, PAID_INVOICES).size() >= INVOICE_ROWS) {
                         shown.add("...");
                     }
                     decide(ctx, NotificationMails.FEE_AUTO_PAID, Map.of("lines", String.join("\n", shown),

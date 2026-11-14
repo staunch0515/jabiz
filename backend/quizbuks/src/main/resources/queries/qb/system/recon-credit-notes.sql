@@ -1,7 +1,7 @@
 /*---
 id: qb.system.recon-credit-notes
 description: Whether the audience fees' refunds and the credit notes are consistent, by sponsor (F-M7) - the audience fees not decided, charged for a publication that never went on, and the credit notes' uses and limits against their fees and invoices (one of the four templates of the daily fee-account reconciliation, F-M14 G10)
-entities: [QbFeeCreditNote, QbFeeCreditNoteUse, QbFeeInvoice, QbFeePayment, QbFeeCreditGrant, QbCashLot, SysParam, QbFeeCharge, QbPrepayment, QbPublicationCard]
+entities: [QbFeeCreditNote, QbFeeCreditNoteUse, QbFeeInvoice, QbFeePayment, QbFeeCreditGrant, QbCashLot, QbWallet, SysParam, QbFeeCharge, QbPrepayment, QbPublicationCard]
 datasets:
   QbFeeCreditNote: urn:jabiz:dataset:default:QbFeeCreditNote
   QbFeeCreditNoteUse: urn:jabiz:dataset:default:QbFeeCreditNoteUse
@@ -9,6 +9,7 @@ datasets:
   QbFeePayment: urn:jabiz:dataset:default:QbFeePayment
   QbFeeCreditGrant: urn:jabiz:dataset:default:QbFeeCreditGrant
   QbCashLot: urn:jabiz:dataset:default:QbCashLot
+  QbWallet: urn:jabiz:dataset:default:QbWallet
   SysParam: urn:jabiz:dataset:now:SysParam
   QbFeeCharge: urn:jabiz:dataset:default:QbFeeCharge
   QbPrepayment: urn:jabiz:dataset:default:QbPrepayment
@@ -40,6 +41,12 @@ permissions: [qb.wallet.system]
 --   its notes' amounts and taxes against the fee's: expected the fee's amount and tax together, actual the notes'
 --   (only when either is above). CREDIT_NOTE_USE_VOID: a use on a voided invoice: expected 0, actual its amount.
 --   CREDIT_UNUSED_WITH_DUE: a sponsor with credit left and an invoice unpaid at once: expected 0, actual the credit.
+WITH parts AS (
+  -- The payment parts of invoices and of charges, summed once by target (INVOICE_PAID_SUM below).
+  SELECT p.{{QbFeePayment.targetEntity}} AS r_entity, p.{{QbFeePayment.targetId}} AS r_target,
+         sum(p.{{QbFeePayment.amount}}) AS r_paid
+  FROM {{QbFeePayment}} p WHERE p.{{QbFeePayment.targetEntity}} IN ('QbFeeInvoice', 'QbFeeCharge')
+  GROUP BY p.{{QbFeePayment.targetEntity}}, p.{{QbFeePayment.targetId}})
 SELECT CAST('AUDIENCE_REFUND_MISSING' AS varchar(30)) AS checkCode,
        CAST(ap.{{QbPrepayment.sponsorId}} AS varchar(128)) AS sponsorId,
        CAST(NULL AS varchar(128)) AS reference, CAST(0 AS numeric) AS expected, CAST(count(*) AS numeric) AS actual
@@ -120,12 +127,8 @@ SELECT CAST('INVOICE_PAID_SUM' AS varchar(30)), CAST(pi.{{QbFeeInvoice.sponsorId
        CAST(pi.{{QbFeeInvoice.invoiceNo}} || ':paid' AS varchar(128)), pi.{{QbFeeInvoice.paidAmount}},
        coalesce(pa.r_paid, 0) + coalesce(pc.r_paid, 0)
 FROM {{QbFeeInvoice}} pi
-LEFT JOIN (SELECT p.{{QbFeePayment.targetId}} AS r_target, sum(p.{{QbFeePayment.amount}}) AS r_paid
-           FROM {{QbFeePayment}} p WHERE p.{{QbFeePayment.targetEntity}} = 'QbFeeInvoice'
-           GROUP BY p.{{QbFeePayment.targetId}}) pa ON pa.r_target = CAST(pi.{{QbFeeInvoice.invoiceId}} AS text)
-LEFT JOIN (SELECT p.{{QbFeePayment.targetId}} AS r_target, sum(p.{{QbFeePayment.amount}}) AS r_paid
-           FROM {{QbFeePayment}} p WHERE p.{{QbFeePayment.targetEntity}} = 'QbFeeCharge'
-           GROUP BY p.{{QbFeePayment.targetId}}) pc ON pc.r_target = pi.{{QbFeeInvoice.chargeId}}
+LEFT JOIN parts pa ON pa.r_entity = 'QbFeeInvoice' AND pa.r_target = CAST(pi.{{QbFeeInvoice.invoiceId}} AS text)
+LEFT JOIN parts pc ON pc.r_entity = 'QbFeeCharge' AND pc.r_target = pi.{{QbFeeInvoice.chargeId}}
 WHERE pi.{{QbFeeInvoice.status}} <> 'VOID'
   AND (pa.r_target IS NOT NULL OR pc.r_target IS NOT NULL)
   AND pi.{{QbFeeInvoice.paidAmount}} <> coalesce(pa.r_paid, 0) + coalesce(pc.r_paid, 0)
@@ -159,7 +162,16 @@ WHERE CAST(:at AS timestamptz) IS NOT NULL AND CAST(:missedHours AS int) IS NOT 
                 WHERE g.{{QbFeeCreditGrant.sponsorId}} = mi.{{QbFeeInvoice.sponsorId}}
                   AND g.{{QbFeeCreditGrant.remaining}} > 0 AND g.{{QbFeeCreditGrant.expiresAt}} > CAST(:at AS timestamptz)
                   AND g.{{QbFeeCreditGrant.grantedAt}} < CAST(:at AS timestamptz) - make_interval(hours => CAST(:missedHours AS int))), 0)
-      + coalesce((SELECT sum(l.{{QbCashLot.remaining}}) FROM {{QbCashLot}} l
-                  WHERE l.{{QbCashLot.sponsorId}} = mi.{{QbFeeInvoice.sponsorId}} AND l.{{QbCashLot.remaining}} > 0
-                    AND l.{{QbCashLot.arrivedAt}} < CAST(:at AS timestamptz) - make_interval(hours => CAST(:missedHours AS int))), 0) > 0
+      + least(coalesce((SELECT sum(l.{{QbCashLot.remaining}}) FROM {{QbCashLot}} l
+                        WHERE l.{{QbCashLot.sponsorId}} = mi.{{QbFeeInvoice.sponsorId}} AND l.{{QbCashLot.remaining}} > 0
+                          AND l.{{QbCashLot.arrivedAt}} < CAST(:at AS timestamptz) - make_interval(hours => CAST(:missedHours AS int))), 0),
+              -- Not what a dispute or a hold keeps: the wallet's cash less what is held.
+              coalesce((SELECT sum(greatest(w.{{QbWallet.balance}} - w.{{QbWallet.held}}, 0)) FROM {{QbWallet}} w
+                        WHERE w.{{QbWallet.ownerId}} = mi.{{QbFeeInvoice.sponsorId}} AND w.{{QbWallet.kind}} = 'CASH'), 0)) > 0
+  -- Money given back to the lot it came from (an invoice voided, a credit note's cash) is in an old lot again but arrived
+  -- with no event: the nightly run pays it, so a sponsor with a payment given back within the hours is not reported yet.
+  -- A prepayment released or a dispute settled in the hours may still be reported for one night.
+  AND NOT EXISTS (SELECT 1 FROM {{QbFeePayment}} rp
+                  WHERE rp.{{QbFeePayment.sponsorId}} = mi.{{QbFeeInvoice.sponsorId}} AND rp.{{QbFeePayment.amount}} < 0
+                    AND rp.{{QbFeePayment.paidAt}} > CAST(:at AS timestamptz) - make_interval(hours => CAST(:missedHours AS int)))
 GROUP BY mi.{{QbFeeInvoice.sponsorId}}
