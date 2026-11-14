@@ -5,13 +5,15 @@ import { decideAsOperator, reviewerFor } from './operators'
 import { searchHome, taker } from './play'
 import { publicationOf } from './publishing'
 import { boundPublicationOf, CAPITALS, operatorTree, platformMap, pass } from './tree'
-import { answerQuiz, GRANT, loopCast, phone, rememberParams, STEP_TIMEOUT_MS, type Loop } from './launch-loop'
+import {
+  answerQuiz, GRANT, loopCast, minuteJobWaitMs, phone, rememberParams, STEP_TIMEOUT_MS, type Loop,
+} from './launch-loop'
 import { sharedVideos } from './exposure-videos'
 import { contentAdmin } from './legal'
 import { signInAdmin } from './admin'
 import { approvedSponsor, fund } from './wallet'
 import {
-  accessibleInBoth, adminToken, expect, mailTo, openArea, PASSWORD, prepareQuizbuks, run, runJobNow, setControlledParam, signIn,
+  accessibleInBoth, adminToken, expect, mailTo, openArea, PASSWORD, prepareQuizbuks, run, setControlledParam, signIn,
   signOut,
   takerArea, test, tokenOf, unique,
 } from './support'
@@ -553,7 +555,10 @@ test.describe.serial('the first launch\'s loop', () => {
       // Up to a minute and a half of the publication running, the grace of a minute after its end (the least, review
       // L1) and the first minute's final job after that (QB_DISTRIBUTION_FINAL_CRON runs every minute in the
       // end-to-end run; a run settles the publications ended a grace before its scheduled time).
-      test.setTimeout(STEP_TIMEOUT_MS + 300_000)
+      const runsMs = 75_000
+      const graceSec = 60
+      const settledWithinMs = minuteJobWaitMs(runsMs + graceSec * 1_000)
+      test.setTimeout(STEP_TIMEOUT_MS + settledWithinMs)
       const { sora, operator, rin, map } = loop
       const restore = await rememberParams(request, [
         { key: 'qb.distribution.billing.enabled', absent: 'false' },
@@ -561,16 +566,16 @@ test.describe.serial('the first launch\'s loop', () => {
       ])
       try {
         await setControlledParam(request, 'qb.distribution.billing.enabled', 'true')
-        await setControlledParam(request, 'qb.distribution.final.end-grace-sec', '60',
+        await setControlledParam(request, 'qb.distribution.final.end-grace-sec', String(graceSec),
           { type: 'numeric', precision: 5, scale: 0 })
         // Her operator's lead prices a start at 1 yen per Kudos of the highest tier, between 1 and 20: the reward of 10
         // comes to 0.1, so the floor of 1.
         await run(request, operator.operatorToken, 'QB_OPERATOR_DISTRIBUTION_PRICE_SET', { rate: '0.0100',
           unitFloor: '1.0000', unitCeiling: '20.0000', minimumDeposit: 500, reason: 'Closed loop' })
-        // Three winners at most: 3 set aside (tax rounds down to 0). It runs for 75 seconds.
+        // Three winners at most: 3 set aside (tax rounds down to 0). It runs for a little over a minute (runsMs).
         const name = unique('Coffee sprint ')
         const made = await boundPublicationOf(request, sora.token, map!.treeId, map!.basics, name,
-          { reward: 10, maxWinners: 3, endInMs: 75_000 })
+          { reward: 10, maxWinners: 3, endInMs: runsMs })
         const [held] = (await query(request, sora.token, 'qb.sponsor.publication-prepayments',
           { publicationId: made.publicationId })).filter((row) => row.purpose === 'DISTRIBUTION')
         expect(held).toEqual(expect.objectContaining({ status: 'OPEN', remaining: 3 }))
@@ -588,11 +593,8 @@ test.describe.serial('the first launch\'s loop', () => {
         await expect.poll(async () => {
           const [settled] = await query(request, sora.token, 'qb.sponsor.publication-distribution',
             { publicationId: made.publicationId })
-          if (settled.finalSettled === true) return true
-          // Asked again (D77) so that a run whose time was before the end does not leave it to the next minute's.
-          await runJobNow(request, 'qb.distribution-final').catch(() => undefined)
-          return false
-        }, { message: 'the final settlement', timeout: 270_000, intervals: [10_000] }).toBe(true)
+          return settled.finalSettled === true
+        }, { message: 'the final settlement', timeout: settledWithinMs, intervals: [5_000] }).toBe(true)
         const settlements = await query(request, sora.token, 'qb.sponsor.publication-distribution-settlements',
           { publicationId: made.publicationId })
         expect(settlements).toEqual([expect.objectContaining({ final: true, starts: 1, toStarts: 1, amount: 1, tax: 0,
@@ -607,7 +609,7 @@ test.describe.serial('the first launch\'s loop', () => {
 
   test('7b. an audience-rule publication ended early gives back its unused days by a credit note', async ({ page,
     request }) => {
-    test.setTimeout(STEP_TIMEOUT_MS + 180_000)
+    test.setTimeout(STEP_TIMEOUT_MS + minuteJobWaitMs())
     const { sora, operator, rin, map } = loop
     const restore = await rememberParams(request, [
       { key: 'qb.audience.billing.enabled', absent: 'false' },
@@ -639,10 +641,8 @@ test.describe.serial('the first launch\'s loop', () => {
       await expect.poll(async () => {
         note = (await query(request, sora.token, 'qb.sponsor.fee-credit-notes', {}))
           .find((row) => row.publicationId === made.publicationId)
-        if (note) return true
-        await runJobNow(request, 'qb.audience-refund').catch(() => undefined)
-        return false
-      }, { message: 'the credit note', timeout: 150_000, intervals: [10_000] }).toBe(true)
+        return note !== undefined
+      }, { message: 'the credit note', timeout: minuteJobWaitMs(), intervals: [5_000] }).toBe(true)
       expect(note).toEqual(expect.objectContaining({ reason: 'AUDIENCE_UNUSED', usedDays: 1 }))
       // Prepaid: all of it went back where it was paid from (the balances themselves: CreditNoteIT).
       expect(Number(note!.refundedCash) + Number(note!.refundedCredit)).toBe(Number(note!.total))
@@ -659,9 +659,12 @@ test.describe.serial('the first launch\'s loop', () => {
 
   test('7c. F-M8 the exposure fee: bought when submitted, counted by takers, settled once it ends, the rest given back',
     async ({ page, request }) => {
-      // It runs 90 seconds (it ends by its time: two of the three exposures bought are used, so it is not used up), the
-      // grace of a minute after that, and the first final job after it.
-      test.setTimeout(STEP_TIMEOUT_MS + 300_000)
+      // It runs a minute and a half (runsMs; it ends by its time: two of the three exposures bought are used, so it is
+      // not used up), the grace after that, and the first final job after it.
+      const runsMs = 90_000
+      const graceSec = 60
+      const settledWithinMs = minuteJobWaitMs(runsMs + graceSec * 1_000)
+      test.setTimeout(STEP_TIMEOUT_MS + settledWithinMs)
       const { sora, operator, map } = loop
       const restore = await rememberParams(request, [
         { key: 'qb.exposure.billing.enabled', absent: 'false' },
@@ -671,7 +674,7 @@ test.describe.serial('the first launch\'s loop', () => {
       try {
         await setControlledParam(request, 'qb.exposure.billing.enabled', 'true')
         await setControlledParam(request, 'qb.exposure.min-purchase', '2', { type: 'numeric', precision: 9, scale: 0 })
-        await setControlledParam(request, 'qb.exposure.final.end-grace-sec', '60',
+        await setControlledParam(request, 'qb.exposure.final.end-grace-sec', String(graceSec),
           { type: 'numeric', precision: 5, scale: 0 })
         // Her operator's lead prices an exposure at 20 yen (within the headquarters' range of 1 to 100): three bought set
         // aside 60 and tax 6, two used come to 40 and tax 4, so 22 comes back (a tax that is not 0, and not a whole
@@ -688,7 +691,7 @@ test.describe.serial('the first launch\'s loop', () => {
         }
         const before = await account()
         const made = await boundPublicationOf(request, sora.token, map!.treeId, map!.basics, unique('Video sprint '),
-          { reward: 0, endInMs: 90_000, sharedVideoId: videos.vertical, exposureRequested: 3 })
+          { reward: 0, endInMs: runsMs, sharedVideoId: videos.vertical, exposureRequested: 3 })
         const [held] = (await query(request, sora.token, 'qb.sponsor.publication-prepayments',
           { publicationId: made.publicationId })).filter((row) => row.purpose === 'EXPOSURE')
         expect(held).toEqual(expect.objectContaining({ status: 'OPEN', amount: 66 }))
@@ -704,15 +707,12 @@ test.describe.serial('the first launch\'s loop', () => {
           expect(reported.counted).toBe(1)
         }
 
-        // Ended by its time, then the final job charges the two exposures and gives back the rest. The job is asked again
-        // (D77) so that a run whose time was before the end does not leave it to the next day's.
+        // Ended by its time, then the final job (every minute here) charges the two exposures and gives back the rest.
         await expect.poll(async () => {
           const [row] = await query(request, sora.token, 'qb.sponsor.publication-exposure',
             { publicationId: made.publicationId })
-          if (row.finalSettled === true) return true
-          await runJobNow(request, 'qb.exposure-final')
-          return false
-        }, { message: 'the final settlement', timeout: 270_000, intervals: [10_000] }).toBe(true)
+          return row.finalSettled === true
+        }, { message: 'the final settlement', timeout: settledWithinMs, intervals: [5_000] }).toBe(true)
         const ended = await publicationOf(request, sora.token, made.publicationId)
         expect(ended).toEqual(expect.objectContaining({ status: 'ENDED', endReason: 'EXPIRED' }))
         const settlements = await query(request, sora.token, 'qb.sponsor.publication-exposure-settlements',
