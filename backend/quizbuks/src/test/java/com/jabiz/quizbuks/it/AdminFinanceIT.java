@@ -525,7 +525,8 @@ class AdminFinanceIT extends PayoutItSupport {
             .satisfies(r -> assertThat(r).containsKeys("lastRunStatus", "openTasks"));
         String readOnly = TestTokens.bearer(tokens, "f-read-only", "qb.admin.finance.read", "qb.admin.users.read");
         template(SUMMARY, readOnly, Map.of());
-        for (String id : List.of("qb.admin.recon-summary", "qb.admin.recon-runs", "qb.admin.recon-items")) {
+        for (String id : List.of("qb.admin.recon-summary", "qb.admin.recon-runs", "qb.admin.recon-items",
+            "qb.admin.recon-attention-days")) {
             for (String refused : List.of(readOnly, content)) {
                 client.post().uri("/api/queries/" + id).contentType(MediaType.APPLICATION_JSON)
                     .header(HttpHeaders.AUTHORIZATION, refused).bodyValue(Map.of()).exchange()
