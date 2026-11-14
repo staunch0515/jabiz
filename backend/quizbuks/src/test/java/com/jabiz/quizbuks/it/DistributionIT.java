@@ -385,6 +385,39 @@ class DistributionIT extends PrepaymentItSupport {
         assertThat(differences(sponsor)).isEmpty();
     }
 
+    /** The notes DISTRIBUTION_AT_FLOOR of the daily check about the sponsor: the count of its rows' actuals. */
+    long floorNotes(String sponsor) {
+        Map<String, Object> params = new java.util.HashMap<>(Map.of("at", clock.instant().toString(), "zone",
+            "Asia/Tokyo"));
+        params.put("unsettledHours", paramValue(QbParams.DISTRIBUTION_UNSETTLED_AFTER_HOURS));
+        params.put("missingHours", paramValue(QbParams.DISTRIBUTION_FINAL_MISSING_AFTER_HOURS));
+        return feeAccountItems(TestTokens.bearer(tokens, "fm14b-floor", QbPermissions.WALLET_SYSTEM),
+            Map.of("params", params)).stream()
+            .filter(r -> sponsor.equals(String.valueOf(r.get("sponsorId")))
+                && ReconChecks.DISTRIBUTION_AT_FLOOR.equals(r.get("checkCode")))
+            .mapToLong(r -> dec(r.get("actual")).longValue()).sum();
+    }
+
+    /** F-M14b sweep: a live publication charged its operator's floor is noted (a note, not a difference) until it ends. */
+    @Test
+    void theDailyCheckNotesALivePublicationChargedAtTheFloorUntilItEnds() {
+        autoApprove(true);
+        distribution(true);
+        String sponsor = distributionSponsor("fm14b-floor");
+        cash(sponsor, 1_000);
+        String charged = publication(sponsor, "FM14b above the floor", Map.of());
+        assertThat(row(charged)).containsEntry("distribution_at_floor", false);
+        assertThat(floorNotes(sponsor)).isZero();
+        // The floor above what a start comes to (0.05 × 100 = 5): the next publication is charged the floor.
+        execute("UPDATE qb_distribution_price SET unit_floor = 8 WHERE operator_id = ?", operatorOf(sponsor));
+        String floored = publication(sponsor, "FM14b at the floor", Map.of());
+        assertThat(row(floored)).containsEntry("distribution_at_floor", true);
+        assertThat(floorNotes(sponsor)).isEqualTo(1);
+        assertThat(ReconChecks.level(ReconChecks.DISTRIBUTION_AT_FLOOR)).isEqualTo(ReconChecks.Level.NOTE);
+        end(floored);
+        assertThat(floorNotes(sponsor)).isZero();
+    }
+
     @Test
     void anOperatorsLeadSetsItsPriceWithinTheRange() {
         String hq = TestTokens.bearer(tokens, "fm6-ops", QbPermissions.OPERATORS_WRITE, QbPermissions.OPERATORS_READ);
