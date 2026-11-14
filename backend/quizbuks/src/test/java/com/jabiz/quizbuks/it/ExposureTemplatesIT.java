@@ -162,19 +162,9 @@ class ExposureTemplatesIT extends ExposureFeeItSupport {
                 assertThat(row).containsEntry("publicationId", publicationId);
                 assertThat(row).doesNotContainKey("operatorId");
                 // F-M8e: the operator reads the Sponsor's company beside the number (the page shows it, not the number).
-                assertThat(row).containsEntry("company", query("SELECT company FROM qb_sponsor WHERE user_id = ?",
+                assertThat(row).containsEntry("company", query("SELECT company FROM qb_sponsor_version WHERE user_id = ? ORDER BY version_no DESC LIMIT 1",
                     sponsor).getFirst().get("company"));
             });
-        assertThat(items("qb.operator.exposure-settlements", operatorSession(stranger, otherOperator), Map.of()))
-            .isEmpty();
-        // A settlement of a publication that was no operator's (the direct Sponsors': no frozen operator) is read by
-        // no operator session, whoever asks.
-        execute("INSERT INTO qb_exposure_settlement_version SELECT (jsonb_populate_record(NULL::"
-            + "qb_exposure_settlement_version, to_jsonb(t) || jsonb_build_object('settlement_id', ?::text, "
-            + "'period', '2000-01', 'operator_id', NULL, 'final', false))).* FROM qb_exposure_settlement_version t "
-            + "WHERE t.publication_id = ?", UUID.randomUUID().toString(), publicationId);
-        assertThat(items("qb.operator.exposure-settlements", operatorSession(lead, operatorId), Map.of()))
-            .singleElement().satisfies(row -> assertThat(row).containsEntry("publicationId", publicationId));
         assertThat(items("qb.operator.exposure-settlements", operatorSession(stranger, otherOperator), Map.of()))
             .isEmpty();
         // The Sponsor moved to the other operator since: the first operator keeps the settlement (its fee, frozen at the
@@ -210,6 +200,21 @@ class ExposureTemplatesIT extends ExposureFeeItSupport {
                 .header(HttpHeaders.AUTHORIZATION, operatorSession(lead, operatorId)).bodyValue(Map.of())
                 .exchange().expectStatus().isForbidden();
         }
+        // A settlement of a publication that was no operator's (the direct Sponsors': no frozen operator) is read by
+        // no operator session, whoever asks.
+        String direct = UUID.randomUUID().toString();
+        execute("INSERT INTO entity_registry (entity_id, entity_type, created_seq_id) SELECT ?::uuid, r.entity_type, "
+            + "r.created_seq_id FROM entity_registry r WHERE r.entity_id = (SELECT settlement_id::uuid FROM "
+            + "qb_exposure_settlement_version WHERE publication_id = ? LIMIT 1)", direct, publicationId);
+        execute("INSERT INTO qb_exposure_settlement_version OVERRIDING SYSTEM VALUE SELECT (jsonb_populate_record(NULL::"
+            + "qb_exposure_settlement_version, to_jsonb(t) || jsonb_build_object('row_id', nextval(pg_get_serial_sequence('"
+            + "qb_exposure_settlement_version', 'row_id')), 'settlement_id', ?::text, "
+            + "'period', '2000-01', 'operator_id', NULL, 'final', false))).* FROM qb_exposure_settlement_version t "
+            + "WHERE t.publication_id = ?", direct, publicationId);
+        assertThat(items("qb.operator.exposure-settlements", operatorSession(lead, operatorId), Map.of()))
+            .singleElement().satisfies(row -> assertThat(row).containsEntry("publicationId", publicationId));
+        assertThat(items("qb.operator.exposure-settlements", operatorSession(stranger, otherOperator), Map.of()))
+            .isEmpty();
     }
 
     @Test
