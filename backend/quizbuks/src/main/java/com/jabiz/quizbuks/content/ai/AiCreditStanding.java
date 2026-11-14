@@ -56,6 +56,8 @@ public final class AiCreditStanding {
                 .description("Where the caller's AI credit stands: what a request can use, what may be given back, and "
                     + "whether it is low; writing nothing.")
                 .permissions(QbPermissions.AI_USE)
+                // As the AI's other processes (VerifiedEmailWritesIT): who uses AI credit has a verified address.
+                .requiresVerifiedEmail()
                 .contextFactory((start, input) -> new ProcessContext(start))
                 .outputMapper(ctx -> ctx.get(OUTPUT, StandingOutput.class))
                 .step("Load the parameters", LoadParams.<ProcessContext>optional(ProcessContext::opTime, PARAMS,
