@@ -6,6 +6,7 @@ import com.jabiz.quizbuks.fee.QbPrepayments;
 import com.jabiz.quizbuks.publishing.PublicationAdmin;
 import com.jabiz.quizbuks.publishing.PublisherKind;
 import com.jabiz.quizbuks.publishing.QbPublications;
+import com.jabiz.quizbuks.setup.QbParams;
 import com.jabiz.quizbuks.wallet.QbWallets;
 import com.jabiz.quizbuks.wallet.TopUpStatus;
 import com.jabiz.security.erasure.ErasureLoad;
@@ -152,6 +153,18 @@ class SponsorErasureTest {
             TopUpStatus.OPEN, TopUpStatus.AWAITING, TopUpStatus.REPORTED, TopUpStatus.REVIEW);
         assertThat(loads.values()).filteredOn(load -> load.kind() == ErasureLoad.Kind.ROWS)
             .extracting(ErasureLoad::name).containsExactly(SponsorErasure.WALLETS);
+    }
+
+    /**
+     * The postpaid notice reads only a billing mode written on the onboarding row: right only while the platform's
+     * default is PREPAID. Changing the default must change the load (SponsorErasure.POSTPAID) too.
+     */
+    @Test
+    void theDefaultBillingModeIsPrepaidAsThePostpaidLoadAssumes() {
+        Object declared = QbParams.ALL.stream().filter(param -> param.key().equals(QbParams.FEE_DEFAULT_BILLING_MODE))
+            .findFirst().orElseThrow().value();
+        assertThat(declared).isEqualTo(FeeRules.PREPAID);
+        assertThat(FeeRules.billingModeOf(null, null)).isEqualTo(FeeRules.PREPAID);
     }
 
     @Test

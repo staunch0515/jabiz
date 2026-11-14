@@ -75,7 +75,11 @@ public class SponsorErasure {
     static final String UNPAID_TOTAL = "feeUnpaidTotal";
     static final String UNPAID_CREDITED = "feeUnpaidCredited";
     static final String UNPAID_PAID = "feeUnpaidPaid";
-    /** Whether the sponsor pays afterwards (their own billing mode: one onboarding row at most). */
+    /**
+     * Whether the sponsor pays afterwards: only their own billing mode written on the onboarding row (a load cannot read
+     * the parameter {@code qb.fee.default-billing-mode}). Nothing is missed while that default is PREPAID (pinned by
+     * SponsorErasureTest); if it ever becomes POSTPAID, a sponsor without a mode of their own must be counted here too.
+     */
     static final String POSTPAID = "feePostpaid";
     /** The open prepayments of their publications that hold money: how many, and what is left of them. */
     static final String DEPOSITS = "feeDeposits";
