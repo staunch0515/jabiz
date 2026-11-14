@@ -18,7 +18,7 @@ spring:
     # PostgreSQL's JIT off on the application's connections (#701 re-review M-1, the coordinator's decision of
     # 2026-11-14): the daily check of the operators' settlements ran in 1.2 s and spent 10 s more compiling its plan
     # (its estimated cost passed jit_inline_above_cost and jit_optimize_above_cost), past the 5 s query timeout. The
-    # requests' queries are short and gain nothing from it. operations.md section 7.59 says how to see that it holds;
+    # requests' queries are short and gain nothing from it. operations.md section 7.60 says how to see that it holds;
     # AppConnectionsIT asserts it. Flyway's JDBC connection is not on the request path and keeps the server's setting.
     properties:
       options: jit=off

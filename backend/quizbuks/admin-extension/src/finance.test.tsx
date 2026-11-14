@@ -11,7 +11,7 @@ import { expectAccessible } from '@jabiz/admin/testing'
 import FinanceOverviewPage from './FinanceOverviewPage'
 import { byCheck, levelCounts, transferFilterOf } from './finance'
 import { monthPeriod, monthRange, previousMonth, type ReconItem } from './finance-api'
-import { DICTIONARY, TEMPLATE } from './ids'
+import { ATTENTION_CHECKS, DICTIONARY, NOTE_CHECKS, TEMPLATE } from './ids'
 import { messages } from './messages'
 import ReconciliationPage from './ReconciliationPage'
 import ReportsPage from './ReportsPage'
@@ -122,10 +122,19 @@ beforeEach(() => {
   ])
   server.datasets = new Map([['urn:jabiz:dataset:default:QbUserBan', []]])
   server.runQuery.mockReset().mockImplementation(async (id: string, options: { offset?: number; limit?: number;
-    count?: boolean } = {}) => {
+    count?: boolean; filters?: { field: string; op: string; value?: unknown; values?: unknown[] }[] } = {}) => {
     const rows = server.templates.get(id)
     if (rows instanceof Error) throw rows
-    const all = rows ?? []
+    // The list filters `in` and `ne` as the server applies them (F-M14b: the reconciliation's levels); any other
+    // operator is refused, as the server refuses one it does not know.
+    for (const filter of options.filters ?? []) {
+      if (!['in', 'ne', 'eq', 'like', 'gte', 'lte', 'between'].includes(filter.op)) {
+        throw new ApiError(400, { detail: `Unknown operator ${filter.op}` })
+      }
+    }
+    const all = (rows ?? []).filter((row: Record<string, unknown>) => (options.filters ?? []).every((filter) =>
+      filter.op === 'in' ? filter.values!.includes(row[filter.field])
+        : filter.op === 'ne' ? row[filter.field] !== filter.value : true))
     const offset = options.offset ?? 0
     const limit = options.limit ?? 100
     return { items: all.slice(offset, offset + limit), offset, limit, ...(options.count ? { total: all.length } : {}) }
@@ -197,8 +206,10 @@ describe('FinanceOverviewPage', () => {
     expect(screen.getByTestId('finance-tasks')).toHaveAttribute('href', '/tasks')
     // F-M14: the latest run's counts by level, from its summary, leading to that run.
     const levels = screen.getByTestId('finance-last-run-levels')
-    expect(levels).toHaveAttribute('href', `/qb/finance/reconciliation?run=${RUN}`)
     expect(levels).toHaveTextContent('Differences 3 / needs attention 4 / notes 5')
+    // F-M14 review L6: each count leads to the run's items of that level.
+    expect(within(levels).getAllByTestId('finance-last-run-level').map((link) => link.getAttribute('href'))).toEqual(
+      ['DIFFERENCE', 'ATTENTION', 'NOTE'].map((level) => `/qb/finance/reconciliation?run=${RUN}&level=${level}`))
     // The staleness is the server's: the page only says since when.
     expect(calledWith(TEMPLATE.financeSummary)[0][1].params.staleBefore).toMatch(/^\d{4}-\d{2}-\d{2}T/)
     const accounts = await screen.findAllByTestId('finance-account')
@@ -381,6 +392,43 @@ describe('ReconciliationPage by level (F-M14)', () => {
     ]
   }
 
+  it('shows only the level the overview links, and the whole run again (F-M14 review L6)', async () => {
+    server.templates.set(TEMPLATE.reconItems, items())
+    renderAt(`/qb/finance/reconciliation?run=${RUN}&level=ATTENTION`, '/qb/finance/reconciliation',
+      <ReconciliationPage />)
+    const groups = await screen.findAllByTestId('recon-group')
+    expect(groups.map((group) => group.dataset.check)).toEqual(
+      expect.arrayContaining(['DISTRIBUTION_PRICE_RANGE', 'CREDIT_UNUSED_WITH_DUE']))
+    expect(groups.every((group) => within(group).getByTestId('recon-level').dataset.level === 'ATTENTION')).toBe(true)
+    expect(screen.getByTestId('recon-level-filter')).toHaveTextContent('Showing only: Needs attention')
+    // Asked of the server: a page holds at most 100 items, so a level is not picked out of the first page.
+    expect(calledWith(TEMPLATE.reconItems).at(-1)![1].filters).toEqual([{ field: 'checkCode', op: 'in',
+      values: [...ATTENTION_CHECKS] }])
+    expect(screen.getByTestId('recon-show-all')).toHaveAttribute('href', `/qb/finance/reconciliation?run=${RUN}`)
+    await userEvent.setup().click(screen.getByTestId('recon-show-all'))
+    await waitFor(() => expect(screen.queryByTestId('recon-level-filter')).not.toBeInTheDocument())
+    expect((await screen.findAllByTestId('recon-group')).map((group) => group.dataset.check))
+      .toEqual(expect.arrayContaining(['LEDGER_ZERO', 'TAKER_WALLET_LAG']))
+  })
+
+  it('asks for the differences as every check that is neither for attention nor a note (one ne each)', async () => {
+    server.templates.set(TEMPLATE.reconItems, items())
+    renderAt(`/qb/finance/reconciliation?run=${RUN}&level=DIFFERENCE`, '/qb/finance/reconciliation',
+      <ReconciliationPage />)
+    const groups = await screen.findAllByTestId('recon-group')
+    expect(groups.every((group) => within(group).getByTestId('recon-level').dataset.level === 'DIFFERENCE')).toBe(true)
+    expect(calledWith(TEMPLATE.reconItems).at(-1)![1].filters).toEqual([...ATTENTION_CHECKS, ...NOTE_CHECKS]
+      .map((check) => ({ field: 'checkCode', op: 'ne', value: check })))
+  })
+
+  it('shows the whole run for a level it does not know', async () => {
+    server.templates.set(TEMPLATE.reconItems, items())
+    renderAt(`/qb/finance/reconciliation?run=${RUN}&level=SOMETHING`, '/qb/finance/reconciliation',
+      <ReconciliationPage />)
+    expect((await screen.findAllByTestId('recon-group')).length).toBeGreaterThan(2)
+    expect(screen.queryByTestId('recon-level-filter')).not.toBeInTheDocument()
+  })
+
   it('shows each group its level, what to do and, for attention, for how many days', async () => {
     server.templates.set(TEMPLATE.reconItems, items())
     renderAt(`/qb/finance/reconciliation?run=${RUN}`, '/qb/finance/reconciliation', <ReconciliationPage />)
@@ -432,6 +480,34 @@ describe('ReconciliationPage by level (F-M14)', () => {
     renderAt(`/qb/finance/reconciliation?run=${RUN}`, '/qb/finance/reconciliation', <ReconciliationPage />)
     await screen.findAllByTestId('recon-group')
     expect(calledWith(TEMPLATE.reconAttentionDays)).toHaveLength(0)
+  })
+
+  it('links a publication, a month of settlements, an invoice and a credit note (F-M14b)', async () => {
+    const row = (itemId: string, checkCode: string, reference: string): Row => ({ itemId, checkCode, partyId: null,
+      reference, expected: 0, actual: 1, difference: 1 })
+    server.templates.set(TEMPLATE.reconItems, [row('b1', 'EXPOSURE_SETTLED_OVER', 'pub-1'),
+      row('b2', 'DISTRIBUTION_UNSETTLED', '2031-03'), row('b3', 'EXPOSURE_UNSETTLED', '2031-04'),
+      row('b4', 'CREDIT_NOTE_USE_VOID', 'QBF-2031-00007'), row('b5', 'CREDIT_NOTE_USES', 'QBC-2031-00002')])
+    server.permissions = new Set(['qb.reconcile', 'qb.admin.finance.read', 'qb.admin.publication.read'])
+    renderAt(`/qb/finance/reconciliation?run=${RUN}`, '/qb/finance/reconciliation', <ReconciliationPage />)
+    const groups = await screen.findAllByTestId('recon-group')
+    const reference = (check: string) =>
+      within(groups.find((group) => group.dataset.check === check)!).getByTestId('recon-reference')
+    expect(reference('EXPOSURE_SETTLED_OVER')).toHaveAttribute('href', '/qb/reviews/publications/pub-1')
+    expect(reference('DISTRIBUTION_UNSETTLED')).toHaveAttribute('href',
+      '/qb/finance/distribution-settlements?period=2031-03')
+    expect(reference('DISTRIBUTION_UNSETTLED')).toHaveTextContent('Distribution fee settlements of 2031-03')
+    expect(reference('EXPOSURE_UNSETTLED')).toHaveAttribute('href', '/qb/finance/exposure-settlements?period=2031-04')
+    expect(reference('CREDIT_NOTE_USE_VOID')).toHaveAttribute('href', '/qb/finance/fees?tab=invoices&invoiceNo=QBF-2031-00007')
+    expect(reference('CREDIT_NOTE_USE_VOID')).toHaveTextContent('Invoice QBF-2031-00007')
+    expect(reference('CREDIT_NOTE_USES')).toHaveAttribute('href', '/qb/finance/fees?tab=creditNotes&creditNoteNo=QBC-2031-00002')
+    cleanup()
+    // Without finance's and the publications' reading: the same words, no link.
+    server.permissions = new Set(['qb.reconcile', 'task.read'])
+    renderAt(`/qb/finance/reconciliation?run=${RUN}`, '/qb/finance/reconciliation', <ReconciliationPage />)
+    const plain = await screen.findAllByTestId('recon-reference')
+    expect(plain).toHaveLength(5)
+    expect(plain.map((element) => element.tagName)).toEqual(['SPAN', 'SPAN', 'SPAN', 'SPAN', 'SPAN'])
   })
 
   it('links a reference or a user only to someone who may open the page it leads to', async () => {

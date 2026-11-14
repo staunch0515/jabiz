@@ -208,12 +208,12 @@
 
 ## 11. 运营商的月结算（F-M12；月初在真实时钟下人工核对一次）
 
-端到端测试做不出这一步（它每次用新库，运营商当天才建，没有已结束的月份可结），自动化的覆盖是 `OperatorSettlement*IT` 与场景回放 `scenarios/qb/operator-settlement-gift.yml`（固定时钟）。所以在 staging 上，**有费用的那个月结束之后**（每月 2 日 02:13 起，日本时间；该月的配送费、曝光费与后付账单都齐了才结，最多等到月末之后 `qb.operator.settlement.readiness-max-days` 天）人工看一次。规则见运维 §7.59，结算单各行见帮助 `help/operator-settlement.md`。
+端到端测试做不出这一步（它每次用新库，运营商当天才建，没有已结束的月份可结），自动化的覆盖是 `OperatorSettlement*IT` 与场景回放 `scenarios/qb/operator-settlement-gift.yml`（固定时钟）。所以在 staging 上，**有费用的那个月结束之后**（每月 2 日 02:13 起，日本时间；该月的配送费、曝光费与后付账单都齐了才结，最多等到月末之后 `qb.operator.settlement.readiness-max-days` 天）人工看一次。规则见运维 §7.60，结算单各行见帮助 `help/operator-settlement.md`。
 
 1. **运营商看自己的结算**：运营商负责人在运营商管理系统「结算」（`/operator/qb/operator/settlements`）找到上个月那一行：平台费（税前）、其中成本部分、其中赠送额度支付、分成、赠送额度扣回、扣回结转到下月各列有数；没有"抽成"列。点开这个月看明细：每笔费用、作废、赠送额度支付各一行，按发起方、种类，迟到的有标记；导出一次。下载结算单 PDF，各行与列表一致。
 2. **账户**：「账户」的余额 = 以前的余额 + 这张结算的应付金额；扣回没扣完时，页面提示下月继续扣。
 3. **平台管理系统**：财务在「运营商结算」看到同一行与同样的明细；"等待中的结算"里没有这个运营商（结算了就不在了）。
-4. **每日核对**：结算后的第二天，每日核对里没有 `OPERATOR_SETTLEMENT_*`、`GIFT_RECOVERY`、`OPERATOR_CHARGE_NO_OPERATOR` 的差异。有的照运维 §7.59 处理并记下。
+4. **每日核对**：结算后的第二天，每日核对里没有 `OPERATOR_SETTLEMENT_*`、`GIFT_RECOVERY`、`OPERATOR_CHARGE_NO_OPERATOR` 的差异。有的照运维 §7.60 处理并记下。
 5. **记录**：月份、运营商、应付金额、明细行数、核对结果、截图（列表、明细、PDF、账户）。
 
 ## 待确认的汇总
@@ -225,3 +225,23 @@
 1. staging 的邮件能不能发（第 2 步第 3 点的结果）。
 2. ~~`qb.reward.default-methods` 写两种是否被接受~~：已确定（F-S4b）——写两种即两种都开通；空即没有任何方式。（第 5 步第 3 点）
 3. 电子奖品：发起方装码的页面入口与操作；到店兑换、电子奖品争议在运营商管理系统里的处理步骤——文档里没有逐屏写。（第 7、8 步）
+
+## 12. 每日核对在大账本上的耗时（F-M14b；`plans/impl/F-M14.md` §7"核对耗时"）
+
+目的：账本长大之后，每日核对 `qb.reconcile` 的各个模板仍在数据视图的查询时限（5 秒，`DatasetDefinition` 的缺省）以内，整个任务在下一次运行之前结束。本地机器没有代表性，所以在 staging 上做，跟在一次压测之后（压测留下大量充值、答题、奖励与费用的过账）。
+
+1. staging 的数据库已开 `pg_stat_statements`（运维 §2.2）。
+2. 从另一台主机对 staging 跑压测：`LOAD_ALLOW_REMOTE=yes`，`LOAD_DB_URL` 等指向 staging 的库，其余 `LOAD_*` 参数照运维 §6。压测开始时会重置 `pg_stat_statements`，所以第 3 步的数字只含这次压测之后的语句。
+3. 压测结束后，用 `JOB_RUN_REQUEST`（`POST /api/jobs/qb.reconcile/runs`，带计划时刻与原因）补跑一次 `qb.reconcile`，补跑 2～3 次更好。核对页上该次运行的状态应为 `OK`；有差异先按 §7.55 处理，耗时照记。
+4. 在 staging 的库里记下各核对模板的耗时：
+
+   ```sql
+   SELECT left(query, 80) AS statement, calls, round(mean_exec_time) AS mean_ms, round(max_exec_time) AS max_ms, rows
+   FROM pg_stat_statements
+   WHERE query NOT LIKE '%pg_stat_statements%'
+   ORDER BY max_exec_time DESC LIMIT 30;
+   ```
+
+   核对任务的语句一般排在最前；对照模板（`qb.system.recon-*`，每个一条语句）的正文认出各行。整个任务的耗时看 Grafana 的 `jabiz_job_run_milliseconds{job="qb.reconcile"}`，或核对页上该次运行的计划时刻与检查时刻之差。
+5. **判断**：每个模板的 `max_ms` 低于 5,000（建议留一半余量，即 2,500 以下）；整个任务在 1 分钟以内。超过的模板记下来交开发（加索引或按领域再拆），不改时限。
+6. 结果写进 `perf/`（日期、账本的行数 `SELECT count(*) FROM ledger_entry_version`、各模板的 mean / max、任务耗时），并在 `launch-checklist.md`「性能」的对应一行签字。

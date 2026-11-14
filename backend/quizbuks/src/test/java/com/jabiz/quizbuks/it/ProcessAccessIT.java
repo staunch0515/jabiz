@@ -52,6 +52,11 @@ class ProcessAccessIT extends QbItSupport {
         // Q72: after a sponsor's account was erased (on jabiz.account.erased), and its sub-process.
         Map.entry("QB_SPONSOR_ERASED", ProcessAccess.INTERNAL),
         Map.entry("QB_PUBLICATION_ERASED_END", ProcessAccess.SUB_PROCESS_ONLY),
+        // F-M15 b: the wind-up of an erased sponsor's money.
+        Map.entry("QB_SPONSOR_CLOSURE_REGISTER", ProcessAccess.INTERNAL),
+        Map.entry("QB_FEE_CREDIT_VOID_LOT", ProcessAccess.SUB_PROCESS_ONLY),
+        Map.entry("QB_SPONSOR_MONEY_CLOSE", ProcessAccess.INTERNAL),
+        Map.entry("QB_SPONSOR_CLOSE_WITHDRAW", ProcessAccess.SUB_PROCESS_ONLY),
         Map.entry("QB_PUBLICATION_COMPLETION_MOVE", ProcessAccess.SUB_PROCESS_ONLY),
         Map.entry("QB_PUBLICATION_ADVANCE", ProcessAccess.INTERNAL),
         Map.entry("QB_QUIZ_RELEASE_FILES", ProcessAccess.SUB_PROCESS_ONLY),
@@ -183,6 +188,8 @@ class ProcessAccessIT extends QbItSupport {
         Map.entry("QB_FEE_CREDIT_REMIND", ProcessAccess.INTERNAL),
         Map.entry("QB_MAIL_FEE_CREDIT", ProcessAccess.INTERNAL),
         Map.entry("QB_MAIL_FEE_AUTO_PAID", ProcessAccess.INTERNAL),
+        Map.entry("QB_MAIL_FEE_PAID_DUE", ProcessAccess.INTERNAL),
+        Map.entry("QB_MAIL_FEE_INVOICE_VOIDED", ProcessAccess.INTERNAL),
         Map.entry("QB_FEE_MONTHLY_ITEM", ProcessAccess.INTERNAL),
         // Q88b: the daily settlement of the entry fees (job item).
         Map.entry("QB_ENTRY_FEE_SETTLE", ProcessAccess.INTERNAL),

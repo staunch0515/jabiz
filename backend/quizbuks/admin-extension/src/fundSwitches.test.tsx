@@ -171,8 +171,7 @@ describe('FundSwitches', () => {
     renderCard()
     await screen.findByTestId('fund-switches')
     await screen.findAllByTestId('fund-switch-proposal')
-    expect(KEY_BEFORE_MEANING_ROWS.map((r) => r.key)).toEqual(['qb.ai.fee.enabled', 'qb.ai.site-profile.enabled',
-      'qb.fee.auto-pay.enabled'])
+    expect(KEY_BEFORE_MEANING_ROWS.map((r) => r.key)).toEqual(['qb.ai.fee.enabled', 'qb.ai.site-profile.enabled'])
     // F-M9a-1: the AI fee's key exists before a-2 can charge the months.
     expect(within(stateOfRow('qb.ai.fee.enabled') as HTMLElement).getByTestId('fund-switch-note'))
       .toHaveTextContent('Waits for F-M9')

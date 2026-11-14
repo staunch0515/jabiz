@@ -87,6 +87,8 @@ export function FeeAccount({ wallet }: { wallet: SponsorWallet }) {
     <section aria-labelledby="wallet-fee-account" className="flex flex-col gap-3" data-testid="wallet-fee-account">
       <h2 id="wallet-fee-account" className="text-lg font-semibold">{t('wallet.feeAccount.title')}</h2>
       <p className="text-muted-foreground text-sm">{t('wallet.feeAccount.intro')}</p>
+      {wallet.autoPay
+        ? <p className="text-sm" data-testid="fee-account-auto-pay">{t('wallet.feeAccount.autoPay')}</p> : null}
       <DescriptionList columns={3} items={[
         { key: 'total', label: t('wallet.feeAccount.total'),
           value: <span data-testid="fee-account-total">{formatKudos(wallet.feeCreditBalance + cash)}</span> },

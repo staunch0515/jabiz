@@ -90,6 +90,9 @@ export const TEMPLATE = {
   sharedVideoUses: 'qb.admin.shared-video-uses',
   /** F-M3: the Sponsors' company verifications (headquarters every Sponsor's, an operator its own). */
   sponsorVerifications: 'qb.admin.sponsor-verifications',
+  /** F-M15 b: the wind-ups of erased Sponsors' platform fee accounts, and one's amounts (finance, read only). */
+  moneyClosures: 'qb.admin.money-closures',
+  moneyClosureAmounts: 'qb.admin.money-closure-amounts',
   /** Q60c-2: one sponsor's page views and product clicks in a period. */
   sponsorStats: 'qb.admin.sponsor-stats',
   /** The reward parameters in force (Q28): the default methods and the highest reward per attempt. */
@@ -201,6 +204,8 @@ export const TEMPLATE = {
   operatorSponsors: 'qb.operator.sponsors',
   /** Q87b: how the operator's sponsors pay the platform's fees. */
   operatorBilling: 'qb.operator.sponsor-billing',
+  /** F-M14b: the latest daily reconciliation's notes about the operator's own sponsors. */
+  operatorReconNotes: 'qb.operator.recon-notes',
   /** Q48c, AI prospecting: an operator's own (`qb.prospect.use`) and headquarters' for any owner (`qb.admin.prospect`). */
   operatorProspects: 'qb.operator.prospects',
   operatorProspectSetting: 'qb.operator.prospect-setting',
@@ -388,10 +393,30 @@ export const ACCOUNTS = ['2110', '2120', '2130', '1110', '1120', '4110', '5110',
 export const STALE_AFTER_MS = 60 * 60 * 1000
 
 /** What a reconciliation difference's reference names, by its check (backend `ReconChecks`). */
-export function referenceKind(check: string): 'topUp' | 'transfer' | null {
+export type ReferenceKind = 'topUp' | 'transfer' | 'publication' | 'distributionMonth' | 'exposureMonth' | 'invoice'
+  | 'creditNote'
+
+/**
+ * F-M14b: what a check's reference names (its template's third column), where the page can lead: a top-up, a transfer,
+ * a publication, a month of the distribution or the exposure fee's settlements, an invoice's or a credit note's number.
+ * Any other reference is shown as it is.
+ */
+const REFERENCE_KINDS: Readonly<Record<string, ReferenceKind>> = {
+  DISTRIBUTION_DEPOSITS: 'publication',
+  EXPOSURE_DEPOSITS: 'publication',
+  EXPOSURE_SETTLED_OVER: 'publication',
+  EXPOSURE_SETTLED_SHORT: 'publication',
+  EXPOSURE_AMOUNT_MISMATCH: 'publication',
+  DISTRIBUTION_UNSETTLED: 'distributionMonth',
+  EXPOSURE_UNSETTLED: 'exposureMonth',
+  CREDIT_NOTE_USE_VOID: 'invoice',
+  CREDIT_NOTE_USES: 'creditNote',
+}
+
+export function referenceKind(check: string): ReferenceKind | null {
   if (check.startsWith('TOPUP_')) return 'topUp'
   if (check.startsWith('TRANSFER_')) return 'transfer'
-  return null
+  return REFERENCE_KINDS[check] ?? null
 }
 
 /**
@@ -399,11 +424,20 @@ export function referenceKind(check: string): 'topUp' | 'transfer' | null {
  * `ReconChecks.NOTES` (a Vitest reads the Java and fails on a difference); every other check is a difference.
  */
 export const ATTENTION_CHECKS: ReadonlySet<string> = new Set(['DISTRIBUTION_PRICE_RANGE', 'AUDIENCE_REFUND_NO_PERIOD',
-  'CREDIT_UNUSED_WITH_DUE', 'HELP_USAGE_TOTAL', 'EXPOSURE_PRICE_RANGE'])
+  'CREDIT_UNUSED_WITH_DUE', 'AUTO_PAY_MISSED', 'HELP_USAGE_TOTAL', 'EXPOSURE_PRICE_RANGE', 'ERASED_CLOSE_OPEN',
+  'ERASED_NO_CLOSURE'])
 export const NOTE_CHECKS: ReadonlySet<string> = new Set(['TAKER_WALLET_LAG', 'DISTRIBUTION_AT_FLOOR',
-  'EXPOSURE_UNPURCHASED', 'OPERATOR_GIFT_CARRY_OPEN', 'AI_RESERVATION_SHORT'])
+  'EXPOSURE_UNPURCHASED', 'OPERATOR_GIFT_CARRY_OPEN', 'AI_RESERVATION_SHORT', 'ERASED_FEE_OWED'])
 
 export type ReconLevel = 'DIFFERENCE' | 'ATTENTION' | 'NOTE'
+
+/** The levels, most serious first. */
+export const RECON_LEVELS: readonly ReconLevel[] = ['DIFFERENCE', 'ATTENTION', 'NOTE']
+
+/** A level named in a link, or null for anything else (a hand-edited address shows the whole run). */
+export function parseReconLevel(text: string | null): ReconLevel | null {
+  return RECON_LEVELS.find((level) => level === text) ?? null
+}
 
 /** The level of a check (backend `ReconChecks.level`). */
 export function reconLevel(check: string): ReconLevel {
@@ -483,6 +517,9 @@ export const DICTIONARY = {
   feeInvoiceStatus: 'urn:jabiz:dict:quizbuks:fee-invoice-status',
   /** F-M1: the account's sub-accounts and where its lots came from. */
   feeSubAccount: 'urn:jabiz:dict:quizbuks:fee-sub-account',
+  /** F-M15 b: a wind-up's state and why its last run stopped. */
+  sponsorClosureStatus: 'urn:jabiz:dict:quizbuks:sponsor-closure-status',
+  sponsorClosureReason: 'urn:jabiz:dict:quizbuks:sponsor-closure-reason',
   feeCreditSource: 'urn:jabiz:dict:quizbuks:fee-credit-source',
   cashSource: 'urn:jabiz:dict:quizbuks:cash-source',
   feeRequestKind: 'urn:jabiz:dict:quizbuks:fee-request-kind',
@@ -756,7 +793,9 @@ export const PATH = {
   /** Bank withdrawals: reviewing, paying and returning them (Q13b). */
   bankWithdrawals: '/qb/finance/bank-withdrawals',
   reconciliation: '/qb/finance/reconciliation',
-  reconRun: (runId: string) => `/qb/finance/reconciliation?${new URLSearchParams({ run: runId })}`,
+  /** A run's items; with a level, only that level's (the overview's counts lead here, F-M14 review L6). */
+  reconRun: (runId: string, level?: ReconLevel) =>
+    `/qb/finance/reconciliation?${new URLSearchParams(level ? { run: runId, level } : { run: runId })}`,
   reports: '/qb/finance/reports',
   reportsOf: (month: string) => `/qb/finance/reports?${new URLSearchParams({ month })}`,
   /** The investors' figures by month (Q27). */
@@ -765,6 +804,8 @@ export const PATH = {
   journalMapping: '/qb/finance/journal/mapping',
   /** Q87: the platform's fees: charges, invoices and the requests waiting for approval. */
   fees: '/qb/finance/fees',
+  /** F-M15 b: the wind-ups of erased Sponsors' platform fee accounts. */
+  moneyClosures: '/qb/finance/money-closures',
   feesWhere: (filter: Record<string, string>) => `/qb/finance/fees?${new URLSearchParams(filter)}`,
   feeRequest: (requestId: string) => `/qb/finance/fees/requests/${encodeURIComponent(requestId)}`,
   /** The legal texts: publishing the drafts and withdrawing announced versions (Q7b). */
@@ -803,10 +844,14 @@ export const PATH = {
   distributionPrices: '/qb/distribution/prices',
   operatorDistributionPrice: '/qb/operator/distribution-price',
   distributionSettlements: '/qb/finance/distribution-settlements',
+  /** F-M14b: the distribution fee's settlements of a month (`YYYY-MM`). */
+  distributionSettlementsOf: (period: string) => `/qb/finance/distribution-settlements?${new URLSearchParams({ period })}`,
   /** F-M8: every operator's exposure price (headquarters), the operator's own, and the settlements (finance). */
   exposurePrices: '/qb/exposure-fee/prices',
   operatorExposurePrice: '/qb/operator/exposure-price',
   exposureSettlements: '/qb/finance/exposure-settlements',
+  /** F-M14b: the exposure fee's settlements of a month (`YYYY-MM`). */
+  exposureSettlementsOf: (period: string) => `/qb/finance/exposure-settlements?${new URLSearchParams({ period })}`,
   /** The platform's own pages. */
   tasks: '/tasks',
   /** F-C10c: the AI help's conversations handed to a person (headquarters every one, an operator its own). */

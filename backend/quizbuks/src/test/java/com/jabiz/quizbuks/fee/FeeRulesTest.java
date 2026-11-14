@@ -59,4 +59,53 @@ class FeeRulesTest {
         assertThat(new FeeRules.Standing("POSTPAID", null, new BigDecimal("1"), false).blocked()).isTrue();
         assertThat(new FeeRules.Standing("POSTPAID", null, null, false).blocked()).isFalse();
     }
+
+    @Test
+    void aPostpaidFeeNeverGoesOnAMonthWhoseInvoiceIsOut() {
+        // Its own month, when not invoiced.
+        assertThat(FeeRules.chargePeriod("2026-10", "2026-11", java.util.Set.of())).isEqualTo("2026-10");
+        assertThat(FeeRules.chargePeriod("2026-10", "2026-11", java.util.Set.of("2026-11"))).isEqualTo("2026-10");
+        // F-M6: its month invoiced, the month it is charged in.
+        assertThat(FeeRules.chargePeriod("2026-10", "2026-11", java.util.Set.of("2026-10"))).isEqualTo("2026-11");
+        // F-M15 b: that one invoiced too (a wind-up invoices the current month), the next.
+        assertThat(FeeRules.chargePeriod("2026-10", "2026-11", java.util.Set.of("2026-10", "2026-11")))
+            .isEqualTo("2026-12");
+        assertThat(FeeRules.chargePeriod("2026-11", "2026-11", java.util.Set.of("2026-11"))).isEqualTo("2026-12");
+        assertThat(FeeRules.chargePeriod("2026-12", "2026-12", java.util.Set.of("2026-12"))).isEqualTo("2027-01");
+    }
+
+    @Test
+    void aPostpaidFeeSkipsEveryMonthInARowWhoseInvoiceIsOut() {
+        // Fable's second look (H1): a wind-up invoices the current month, then the next ones as fees come.
+        assertThat(FeeRules.chargePeriod("2026-11", "2026-11", java.util.Set.of("2026-11", "2026-12")))
+            .isEqualTo("2027-01");
+        assertThat(FeeRules.chargePeriod("2026-11", "2026-11", java.util.Set.of("2026-11", "2026-12", "2027-01")))
+            .isEqualTo("2027-02");
+        assertThat(FeeRules.chargePeriod("2026-10", "2026-11", java.util.Set.of("2026-10", "2026-11", "2026-12")))
+            .isEqualTo("2027-01");
+        // A gap is used.
+        assertThat(FeeRules.chargePeriod("2026-11", "2026-11", java.util.Set.of("2026-11", "2027-01")))
+            .isEqualTo("2026-12");
+    }
+
+    @Test
+    void theMonthsSearchedForAPostpaidFeeRunFromTheEarlierToAheadOfTheLater() {
+        assertThat(FeeRules.monthsFrom("2026-11", "2026-12", 2))
+            .containsExactly("2026-11", "2026-12", "2027-01", "2027-02");
+        assertThat(FeeRules.monthsFrom("2026-12", "2026-11", 0)).containsExactly("2026-11", "2026-12");
+        assertThat(FeeRules.monthsFrom("2026-13", "2026-11", 2)).containsExactly("2026-13");
+    }
+
+    @Test
+    void aMonthPastTheMonthsReadIsNotGuessedAndAMonthLongGoneIsNotSearched() {
+        // Third re-review L2: every month read has its invoice out: the month found lies past them (the charge refuses).
+        java.util.List<String> read = FeeRules.monthsFrom("2026-11", "2026-11", 2);
+        String found = FeeRules.chargePeriod("2026-11", "2026-11", java.util.Set.copyOf(read));
+        assertThat(found).isEqualTo("2027-02");
+        assertThat(read).doesNotContain(found);
+        // Third re-review L3: more than 60 months before the current one.
+        assertThat(FeeRules.recentEnough("2021-11", "2026-11")).isTrue();
+        assertThat(FeeRules.recentEnough("2021-10", "2026-11")).isFalse();
+        assertThat(FeeRules.monthsFrom("2021-10", "2026-11", 24)).containsExactly("2021-10");
+    }
 }

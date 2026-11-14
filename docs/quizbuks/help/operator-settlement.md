@@ -4,7 +4,7 @@
 
 - 对象：运营商（负责人与看账单的成员）
 - 页面：运营商管理系统「结算」（结算列表、点开一个月看明细）与「账户」；结算单 PDF（`qb.operator_settlement`）
-- 规则：`docs/quizbuks/plans/impl/F-M12.md`；运维步骤：`docs/quizbuks/operations.md` §7.59
+- 规则：`docs/quizbuks/plans/impl/F-M12.md`；运维步骤：`docs/quizbuks/operations.md` §7.60
 - 发起方的帮助不变：发起方看不到运营商的结算。
 
 ## 帮助页

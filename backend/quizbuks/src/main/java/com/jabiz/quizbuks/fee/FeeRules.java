@@ -80,6 +80,57 @@ public final class FeeRules {
         }
     }
 
+    /**
+     * The month a postpaid fee is charged to (F-M6 §9.6; F-M15 b, Fable's re-reviews): its own month, unless that
+     * month's invoice is out; then from the month it is charged in (when later), the first month whose invoice is not
+     * out (a wind-up invoices the current month, then the next ones as late fees come). Never a month whose invoice is
+     * out: its fee would stay receivable without an invoice. {@code invoiced} holds every month from the earlier of
+     * the two on whose invoice is out.
+     */
+    public static String chargePeriod(String own, String now, java.util.Set<String> invoiced) {
+        if (!invoiced.contains(own)) {
+            return own;
+        }
+        YearMonth month = YearMonth.parse(now.compareTo(own) > 0 ? now : own, MONTH);
+        while (invoiced.contains(MONTH.format(month))) {
+            month = month.plusMonths(1);
+        }
+        return MONTH.format(month);
+    }
+
+    /**
+     * How many months before the current one a postpaid fee's own month may be (F-M15 b, third re-review L3): a fee
+     * older than that is refused, not searched for a month.
+     */
+    public static final int MAX_MONTHS_BACK = 60;
+
+    /** Whether a fee's own month is within {@link #MAX_MONTHS_BACK} of the current month. */
+    public static boolean recentEnough(String own, String now) {
+        return !period(own) || !period(now)
+            || !YearMonth.parse(own, MONTH).isBefore(YearMonth.parse(now, MONTH).minusMonths(MAX_MONTHS_BACK));
+    }
+
+    /**
+     * The months from the earlier of the two to {@code ahead} months past the later, in order; a text that is not a
+     * month, or a fee's month more than {@link #MAX_MONTHS_BACK} before the current one, only itself (the charge
+     * refuses it).
+     */
+    public static java.util.List<String> monthsFrom(String a, String b, int ahead) {
+        if (!period(a) || !period(b)) {
+            return java.util.List.of(String.valueOf(a));
+        }
+        if (YearMonth.parse(a, MONTH).isBefore(YearMonth.parse(b, MONTH).minusMonths(MAX_MONTHS_BACK))) {
+            return java.util.List.of(a);
+        }
+        YearMonth from = YearMonth.parse(a.compareTo(b) <= 0 ? a : b, MONTH);
+        YearMonth to = YearMonth.parse(a.compareTo(b) <= 0 ? b : a, MONTH).plusMonths(ahead);
+        java.util.List<String> months = new java.util.ArrayList<>();
+        for (YearMonth month = from; !month.isAfter(to); month = month.plusMonths(1)) {
+            months.add(MONTH.format(month));
+        }
+        return java.util.List.copyOf(months);
+    }
+
     public static Instant periodStart(String period, ZoneId zone) {
         return YearMonth.parse(period, MONTH).atDay(1).atStartOfDay(zone).toInstant();
     }
