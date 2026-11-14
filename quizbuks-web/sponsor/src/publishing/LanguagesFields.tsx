@@ -4,6 +4,7 @@ import { Languages } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { AI_QUERY } from '../ai/AiQuestionsPanel'
+import { AI_CREDIT_PROCESS } from '../aicredit/api'
 import { TranslateDialog, useAiPublicationTextsJob } from '../ai/AiTranslatePanel'
 import { acceptAiPublicationTexts, requestAiPublicationTexts, type AiJob } from '../ai/api'
 import type { VersionRow } from '../content/api'
@@ -219,6 +220,8 @@ export function LanguagesFields({ id, form, set, version, method, locked, proble
       {asking && publicationId && form.quizId && (
         <TranslateDialog language={asking} onOpenChange={(open) => !open && setAsking(null)}
           sent={t('publishing.languages.aiSent')}
+          quote={(all) => ({ process: AI_CREDIT_PROCESS.publicationTranslateQuote,
+            input: { quizId: form.quizId!, publicationId, language: asking, all } })}
           send={(all, aiNoticeVersionNo) => requestAiPublicationTexts({ quizId: form.quizId!, publicationId,
             language: asking, all, aiNoticeVersionNo })} />
       )}

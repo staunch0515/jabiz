@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
 import { useEffect } from 'react'
+import { AI_CREDIT_STANDING_QUERY, readAiCreditStanding } from '../aicredit/api'
 import { useUnreadConversations } from '../conversations/ConversationsPages'
 import { useChecklist } from '../profile/useChecklist'
 import { useMySponsor } from '../profile/api'
@@ -30,6 +31,18 @@ export function useTodoCounts(enabled = true): TodoCounts | undefined {
 }
 
 /**
+ * Whether the AI credit is running low (F-M9 b1): the credit's standing, read as the counts are (on entering, every five
+ * minutes, when the page comes back) and only for an approved sponsor. A failure shows nothing; the credit's page shares
+ * the query.
+ */
+function useAiCreditStanding(enabled: boolean) {
+  const standing = useQuery({ queryKey: AI_CREDIT_STANDING_QUERY, queryFn: readAiCreditStanding, enabled,
+    refetchInterval: TODO_INTERVAL, refetchIntervalInBackground: false, refetchOnWindowFocus: false, staleTime: 30_000,
+    retry: false })
+  return standing
+}
+
+/**
  * The home's list: the server's counts, the unread conversations, the application in review and what is missing of
  * the profile. Until the sponsor is approved only the application and the profile are asked about (the rest has
  * nothing to count yet). `ready` is true once the list is known, so "all done" is never said too early.
@@ -39,13 +52,15 @@ export function useTodoItems(): { items: TodoItem[]; ready: boolean } {
   const approved = sponsor.data?.reviewStatus === 'APPROVED'
   const counts = useTodoCounts(approved)
   const unread = useUnreadConversations(approved)
+  const credit = useAiCreditStanding(approved)
   const checklist = useChecklist()
   const missing = checklist.items.filter((item) => !item.optional && !item.done).length
   const items = todoItems({
     counts,
     unreadConversations: approved ? unread : 0,
+    aiCreditLow: approved && credit.data?.low === true,
     onboardingInReview: sponsor.data?.reviewStatus === 'PENDING',
     profileMissing: checklist.ready ? missing : 0,
   })
-  return { items, ready: sponsor.isSuccess && checklist.ready && (!approved || counts !== undefined) }
+  return { items, ready: sponsor.isSuccess && checklist.ready && (!approved || (counts !== undefined && !credit.isPending)) }
 }

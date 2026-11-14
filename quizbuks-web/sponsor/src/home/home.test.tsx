@@ -28,11 +28,14 @@ interface Options {
   unread?: number
   /** Every part of the hub's checklist that is needed, set up. */
   complete?: boolean
+  /** F-M9 b1: the AI credit's standing (`low`), or that it could not be read. */
+  low?: boolean | 'fail'
 }
 
 /** The server of an approved (or not) sponsor; what is not named answers "not found". Records the todo asks. */
-function server({ status = 'APPROVED', counts = NO_TODO, unread = 0, complete = true }: Options = {}) {
+function server({ status = 'APPROVED', counts = NO_TODO, unread = 0, complete = true, low = false }: Options = {}) {
   const asked: Record<string, unknown>[] = []
+  const standing: Record<string, unknown>[] = []
   vi.spyOn(globalThis, 'fetch').mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
     const request = input instanceof Request ? input : new Request(new URL(String(input), window.location.origin), init)
     const url = new URL(request.url, window.location.origin)
@@ -53,6 +56,10 @@ function server({ status = 'APPROVED', counts = NO_TODO, unread = 0, complete = 
       case '/api/queries/qb.sponsor.todo':
         asked.push((body?.params ?? {}) as Record<string, unknown>)
         return counts === 'fail' ? json(403, { title: 'Forbidden' }) : page([counts])
+      case '/api/processes/QB_AI_CREDIT_STANDING/latest':
+        standing.push(body ?? {})
+        return low === 'fail' ? json(403, { title: 'Forbidden' }) : json(200, { output: { feeOn: true, remaining: 100,
+          reserved: 0, unbilledWithTax: 0, available: 100, returnable: 100, minPurchase: 1000, lowAmount: 500, low } })
       case '/api/queries/qb.sponsor.conversations-unread':
         return page([{ unread }])
       case '/api/datasets/urn:jabiz:dataset:me:QbSponsorPage/query':
@@ -65,7 +72,7 @@ function server({ status = 'APPROVED', counts = NO_TODO, unread = 0, complete = 
         return json(404, {})
     }
   })
-  return { asked }
+  return { asked, standing }
 }
 
 beforeAll(() => configureClient({ entry: 'sponsor' }))
@@ -79,13 +86,17 @@ afterEach(() => {
 
 describe('the to-do items (F-F3b)', () => {
   it('leave out what has nothing to do, in the list\'s order', () => {
-    const none = { counts: NO_TODO, unreadConversations: 0, onboardingInReview: false, profileMissing: 0 }
+    const none = { counts: NO_TODO, unreadConversations: 0, onboardingInReview: false, profileMissing: 0,
+      aiCreditLow: false }
     expect(todoItems(none)).toEqual([])
     expect(todoItems({ ...none, counts: undefined })).toEqual([])
     expect(todoItems({ ...none, counts: { ...NO_TODO, invoicesOverdue: 2, claimsToConfirm: 1 }, unreadConversations: 7,
-      onboardingInReview: true, profileMissing: 2 }).map((item) => [item.key, item.count])).toEqual([
-      ['claimsToConfirm', 1], ['unreadConversations', 7], ['invoicesOverdue', 2], ['onboardingInReview', 1],
-      ['profileMissing', 2]])
+      onboardingInReview: true, profileMissing: 2, aiCreditLow: true }).map((item) => [item.key, item.count])).toEqual([
+      ['claimsToConfirm', 1], ['unreadConversations', 7], ['invoicesOverdue', 2], ['aiCreditLow', 1],
+      ['onboardingInReview', 1], ['profileMissing', 2]])
+    // It comes after the credits about to expire and before the publications' exposures.
+    expect(todoItems({ ...none, counts: { ...NO_TODO, creditsExpiring: 1, exposureLow: 1 }, aiCreditLow: true })
+      .map((item) => item.key)).toEqual(['creditsExpiring', 'aiCreditLow', 'exposureLow'])
   })
 
   it('have a place for every column and every one of them leads to a page of an area', () => {
@@ -118,7 +129,7 @@ describe('the to-do items (F-F3b)', () => {
 
 describe('the home\'s to-do list (F-F3b)', () => {
   it('shows every item with its count, leading straight to the page that handles it', async () => {
-    const { asked } = server({ counts: ALL, unread: 6, complete: false })
+    const { asked } = server({ counts: ALL, unread: 6, complete: false, low: true })
     window.history.replaceState(null, '', '/home')
     render(<App />)
     const todo = await screen.findByTestId('todo')
@@ -132,6 +143,7 @@ describe('the home\'s to-do list (F-F3b)', () => {
       ['invoicesOverdue', '1', '/money/bills'],
       ['feeInvoicesUncovered', '2', '/money/bills'],
       ['creditsExpiring', '1', '/money/account'],
+      ['aiCreditLow', '1', '/money/ai'],
       ['exposureLow', '2', '/publications?exposureLow=1'],
       ['publicationsInReview', '2', '/publications?status=PENDING_REVIEW'],
       ['pageInReview', '1', '/profile/page'],
@@ -153,6 +165,32 @@ describe('the home\'s to-do list (F-F3b)', () => {
     // The area of the prizes counts the claims and the digital prizes in its entry.
     await waitFor(() => expect(screen.getByTestId('menu-prizes')).toHaveTextContent('5'))
     await expectAccessible()
+  })
+
+  it('shows the AI credit running low only when the server says so, and a failure shows nothing', async () => {
+    server({ low: true })
+    window.history.replaceState(null, '', '/home')
+    const { unmount } = render(<App />)
+    const row = await screen.findByTestId('todo-aiCreditLow')
+    expect(row).toHaveTextContent('AI credit is running low')
+    expect(row).toHaveAttribute('href', expect.stringContaining('/money/ai'))
+    await expectAccessible()
+    unmount()
+    vi.restoreAllMocks()
+    server({ low: 'fail' })
+    render(<App />)
+    // Not reading the credit does not stop the rest of the list from being known.
+    expect(await screen.findByTestId('todo-empty')).toBeInTheDocument()
+    expect(screen.queryByTestId('todo-aiCreditLow')).toBeNull()
+  })
+
+  it('does not read the AI credit before the approval', async () => {
+    const { standing } = server({ status: 'PENDING', complete: false, low: true })
+    window.history.replaceState(null, '', '/home')
+    render(<App />)
+    await screen.findByTestId('todo-onboardingInReview')
+    expect(standing).toEqual([])
+    expect(screen.queryByTestId('todo-aiCreditLow')).toBeNull()
   })
 
   it('follows a link to the page it names', async () => {

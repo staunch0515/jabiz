@@ -6,6 +6,8 @@ import { useId, useState, type FormEvent } from 'react'
 import { useTranslation } from 'react-i18next'
 import { AI_NOTICE_QUERY, AiNoticeSection, useAiNotice } from '../../ai/AiQuestionsPanel'
 import { AI_CODE } from '../../ai/ids'
+import { AiCreditRefusal, AiQuoteNote, useAiQuote } from '../../aicredit/AiQuote'
+import { AI_CREDIT_PROCESS } from '../../aicredit/api'
 import { reasonsOf } from '../../content/QuizTransfer'
 import { SPONSOR } from '../../messages'
 import { CONTENT_LANGUAGES, contentLanguageOf, type ContentLanguage } from '../../qb/api'
@@ -56,10 +58,15 @@ export function SiteProfileDialog({ open, onClose, onReview, onPrompt }: {
   const [problems, setProblems] = useState<string[]>([])
 
   const refresh = () => queryClient.invalidateQueries({ queryKey: SITE_QUERY })
+  const input = () => ({ siteAddress: address.trim(), language: base,
+    otherLanguages: others.filter((language) => language !== base), profile, products, quiz, rightsDeclared: rights })
+  // The cost of the request as it stands, once an address is given and something is chosen (the form is shown). The
+  // declaration is the sponsor's to make on sending, not on asking the price: the quote is asked as if it were made.
+  const quote = useAiQuote(AI_CREDIT_PROCESS.siteProfileQuote, open && address.trim() !== '' && (profile || products || quiz)
+    && !running && !ready && latest?.status !== 'QUEUED' ? { ...input(), rightsDeclared: true } : null)
   const request = useMutation({
-    mutationFn: () => requestSiteProfile({ siteAddress: address.trim(), language: base,
-      otherLanguages: others.filter((language) => language !== base), profile, products, quiz,
-      rightsDeclared: rights, aiNoticeVersionNo: notice.data?.mustAccept ? notice.data.versionNo : null }),
+    mutationFn: () => requestSiteProfile({ ...input(),
+      aiNoticeVersionNo: notice.data?.mustAccept ? notice.data.versionNo : null }),
     onSuccess: async () => {
       setProblems([])
       await refresh()
@@ -204,6 +211,8 @@ export function SiteProfileDialog({ open, onClose, onReview, onPrompt }: {
               <Label htmlFor={`${id}-rights`} className="leading-snug">{t('site.form.rights')}</Label>
             </span>
             <AiNoticeSection notice={notice} agreed={agreed} onAgreed={setAgreed} />
+            <AiQuoteNote quote={quote} />
+            <AiCreditRefusal error={request.error} />
             {problems.length > 0 && (
               <Alert variant="destructive" data-testid="site-problems">
                 <AlertDescription>
@@ -213,7 +222,7 @@ export function SiteProfileDialog({ open, onClose, onReview, onPrompt }: {
             )}
             <DialogFooter>
               <Button type="button" variant="outline" onClick={onClose}>{t('site.close')}</Button>
-              <Button type="submit" disabled={request.isPending} data-testid="site-submit">{t('site.submit')}</Button>
+              <Button type="submit" disabled={request.isPending || quote.blocked} data-testid="site-submit">{t('site.submit')}</Button>
             </DialogFooter>
           </form>
         )}
