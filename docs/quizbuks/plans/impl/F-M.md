@@ -122,7 +122,7 @@
 - 月报 `OPERATOR_TRANSFER_TO_DIRECT`、`FEE_CREDIT_RECOVERED`，`OPERATOR_SHARE` 的科目组合随之改；核对"扣回累计 + 结转 = 被用的赠送"。
 
 ### M9 账单收尾、月报总扫与注销（F-M13 余下、F-M14、F-M15）
-- 账单与 PDF 写明"其中以平台费 Kudos 支付 X、预付款 Y、现金 Z、未付 W"；`qb.fee.auto-pay.enabled`（true，受控）：充值或赠送到账（事件）后自动付最早的未付账单。
+- 账单与 PDF 写明"其中以平台费 Kudos 支付 X、预付款 Y、现金 Z、未付 W"；`qb.fee.auto-pay.enabled`（受控，声明为关，发布 `true` 即打开）：充值或赠送到账（事件）后自动付最早的未付账单。
 - 月报：所有新类不落 `OTHER`（`AdminFinanceIT` 逐行）；核对全部新项与"发布状态与费用的一致"；差异给财务待办。
 - F-M15：封禁时拦提交、买 AI 额度、领赠送；注销前结清、作废全部赠送（含冻结部分）、现金照现有；新表登记 `PersonalDataEraser`（各 PR 加表时即登记，本 PR 让 `ErasureIT` 覆盖全部）；`erasure.notice.*` 提示余额与赠送将作废。
 

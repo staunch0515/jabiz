@@ -71,6 +71,7 @@ public final class FeeAutoPay {
     private static final String MORE = "more";
     private static final String ITEM_ID = "itemId";
     private static final String PAID = "paid";
+    private static final String CLOSURE = "closure";
 
     /**
      * @param sponsorId the sponsor whose unpaid invoices are paid
@@ -176,7 +177,13 @@ public final class FeeAutoPay {
                             ctx.opTime()), FeeProcesses.CREDITS),
                     QueryEntities.query(QbWallets.defaultDataset(QbWallets.WALLET),
                         ctx -> QbWallets.query(QbWallets.CASH, Boolean.TRUE.equals(ctx.get(ON)) ? sponsorId(ctx) : null),
-                        FeeProcesses.CASH_WALLET)))
+                        FeeProcesses.CASH_WALLET),
+                    // An erased sponsor's account is wound up by MoneyClose (it pays the invoices as far as it goes and
+                    // voids the credit): the automatic payment leaves it alone, whatever the event or the job says.
+                    QueryEntities.query(QbFees.defaultDataset(QbSponsorClosures.CLOSURE),
+                        ctx -> EntityQuery.builder().where(new QueryPredicate.In("sponsorId",
+                            Boolean.TRUE.equals(ctx.get(ON)) ? List.<Object>of(sponsorId(ctx)) : List.<Object>of()))
+                            .limit(1).build(), CLOSURE)))
                 .compute("Choose the invoice", (metadata, ctx) -> chooseInvoice(ctx))
                 .step("Pay it", CallProcess.<ProcessContext>when(ctx -> ctx.get(CHOSEN) != null, AUTO_PAY_ITEM, 1,
                     ctx -> new ItemInput(String.valueOf(chosen(ctx).id())), PAID))
@@ -213,6 +220,9 @@ public final class FeeAutoPay {
     static void chooseInvoice(ProcessContext ctx) {
         ctx.put(MORE, false);
         if (!Boolean.TRUE.equals(ctx.get(ON))) {
+            return;
+        }
+        if (FeeGate.first(ctx, CLOSURE) != null) {
             return;
         }
         BigDecimal available = FeeSettlement.spendable(FeeGate.list(ctx, FeeProcesses.CREDITS),

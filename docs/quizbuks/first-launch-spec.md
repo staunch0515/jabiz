@@ -1371,7 +1371,7 @@
   - 贷项凭证：由 F-M7 做（记录、版式、编号、预付退回与后付抵减、核对与月报 `FEE_CREDIT_NOTE`，2026-11-12 移去）；本项只在账单 PDF 与列表中照常显示。
   - 后付账单的信用额检查含未开账单的部分（照现状）。作废照现有四眼 `QB_FEE_REQUEST`，已付部分按分摊退回各子账户。
   - 赠送额度付款不开收据（不是收款）；卡与银行充值的收据照旧。
-- **参数**：`qb.fee.auto-pay.enabled`（true，受控）；沿用 `qb.fee.due-days`、`qb.fee.tax-rate`。
+- **参数**：`qb.fee.auto-pay.enabled`（受控，生效行、声明为关；首次上线不提议，发布 `true` 即打开，见 `launch-checklist.md`）；沿用 `qb.fee.due-days`、`qb.fee.tax-rate`。
 - **运营闭合**：钱包页账单列表与 PDF；逾期流程照 Q87b；总部作废与贷项列表；核对：1130 = 未付 + 未开账单 − 未用贷项；`operations.md` 写作废、贷项与部分付款；月报 `FEE_PAID` 按来源分列、`FEE_CREDIT_NOTE`。
 - **依赖**：F-M1、Q87b。
 - **验收**：一张账单三个来源付清、PDF 分开写明；部分付款；到账自动付；贷项抵下期；作废退回原分摊。
