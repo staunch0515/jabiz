@@ -1505,7 +1505,7 @@ Quiz 与发布有主题词（平台词表中的词与自定义词），学者可
 | `OPERATOR_SETTLEMENT_WAITING` | 运营商最早未结算的月份过了起算点之后 `qb.operator.settlement.waiting-after-hours` 小时（缺省 48）仍没有结算（引用 `<月>:<在等的步骤>`） | 差异 | 在等配送费或曝光费的结算、后付费用的月账单；只有月份时是结算任务失败 | 按引用中的步骤查前一步；只有月份时看任务记录与待办，修好后补跑 `qb.operator-settlement`（§7.59） | 财务 | OPERATOR_SETTLEMENT_COVERAGE |
 | `OPERATOR_SETTLEMENT_COVERAGE` | 新做法结算的各列 = 其明细；应已被两次结算算入的费用（`fee:`）与赠送付款（`gift:`）都有明细 | 差异 | 结算写错；连续被行数上限截断 | 不要改结算；被行数上限截断时（有待办）后面的结算会算入其余，否则报开发（§7.59） | 财务 / 报开发 | OPERATOR_SETTLEMENT_WAITING、GIFT_RECOVERY |
 | `GIFT_RECOVERY` | 结算的赠送扣回合计 = 来源为结算的 5140 净贷方；每月应扣 = 实扣 + 结转出 − 结转入；结转入 = 上月结转出 | 差异 | 结算或它的过账有误 | 报开发；不手工改分录（§7.59） | 报开发 | FEE_CREDIT_PROMOTION、OPERATOR_GIFT_CARRY_OPEN |
-| `OPERATOR_CHARGE_NO_OPERATOR` | 切换点之后记下、没有运营商的费用（没有结算会算入它） | 差异 | 记费时发起方没有运营商 | 查明它当时属于哪个运营商后报开发处理；不手工补（§7.59） | 报开发 | — |
+| `OPERATOR_CHARGE_NO_OPERATOR` | 切换点之后记下、没有运营商的费用（没有结算会算入它） | 差异 | 记费时发起方没有运营商 | 财务以四眼的"作废账单"（`QB_FEE_REQUEST`，种类 `VOID`）作废它的账单，作废后不再被问；已开过贷项凭证、不能作废的才报开发；不手工补（§7.59） | 财务 / 报开发 | — |
 | `OPERATOR_GIFT_CARRY_OPEN` | 已停用、最新结算仍结转着赠送扣回的运营商 | 提示 | 合同结束时分成不够扣回 | 不自动追缴；由财务与运营商商定（§7.59"合同结束"） | 财务 | GIFT_RECOVERY |
 | `EXPOSURE_DEPOSITS` | 2180 用途曝光费（按发布）= 未关闭的预付款剩余 | 差异 | 预付款被手工改过，或某次冻结 / 追加没有写全 | §7.54；报开发 | 财务 | EXPOSURE_UNIT_MISMATCH |
 | `EXPOSURE_SETTLED_OVER` | 某发布各结算行的次数之和超过已购 | 差异 | 有人改了已购，或重复结算 | §7.54；报开发 | 财务 | EXPOSURE_AMOUNT_MISMATCH |
@@ -1626,8 +1626,10 @@ FROM per_attempt WHERE calls > 0;
   - `OPERATOR_SETTLEMENT_WAITING`：某运营商最早未结算的月份过了起算点之后 `qb.operator.settlement.waiting-after-hours` 小时（缺省 48）仍没有结算。起算点：在等某一步时为期限（月末 + 等待天数），什么都不等时为月末与就绪时刻中较晚的一个（不晚于期限）。引用 `<月>:<步骤>` 说明它在等什么：`DISTRIBUTION` / `EXPOSURE` 去查该运营商发布的配送费或曝光费结算，`INVOICE` 去查后付费用的月账单任务；没有步骤只有月份时是结算任务本身失败，看任务记录与待办，修好后补跑。这一项会拦住分录导出，到结算完成为止。
   - `OPERATOR_SETTLEMENT_COVERAGE`：`<月>:<列>` 是结算单上的一列与它的明细不符（结算写错，交开发查）；`fee:<期间>` 是应当已被两次结算算入而没有明细的费用；`gift:<月>` 是应当已被两次结算算入而没有明细的赠送付款。后两种先看该运营商的结算是否连续被截（行数上限的待办），否则交开发查。
   - `GIFT_RECOVERY`：`recovered` 是结算上的扣回合计与来源为结算的 5140 净贷方不符（按 5140 核，不按 2140：还给运营商时先抵的成本记 4110）；`<月>` 是该月应扣 ≠ 实扣 + 结转出 − 结转入；`<月>:carried` 是本月结转入 ≠ 上月结转出。都交开发查，不手工改分录。
-  - `OPERATOR_CHARGE_NO_OPERATOR`：费用上没有运营商（按发起方、期间），从各运营商最早的切换点起都算，不看发起方现在归哪个运营商（改派不会让它消失）；查明它当时属于哪个运营商后交开发处理，不手工补。
+  - `OPERATOR_CHARGE_NO_OPERATOR`：费用上没有运营商（按发起方、期间），从各运营商最早的切换点起都算，不看发起方现在归哪个运营商（改派不会让它消失）；处理同上"怎么消除"：先由财务作废它的账单（四眼，`QB_FEE_REQUEST` 种类 `VOID`）；已开过贷项凭证、不能作废的才交开发；不手工补。
 - **等待中的结算**（平台管理系统「运营商结算」，财务）：每个运营商最早未结算的月份与它在等的步骤，全部列出、不截断。当前月份按服务器的时钟与 `jabiz.fiscal-year-zone` 算（流程 `QB_OPERATOR_SETTLEMENTS_WAITING`，不由浏览器给出）；步骤为空写"等每日结算任务运行"。
+- **数据库的 JIT 关闭**（#701 复核 M-1，总控 2026-11-14 的决定）：应用的连接带 `jit=off`（`application.yml` 的 `spring.r2dbc.properties.options`，测试配置相同）。原因：每日核对的运营商结算一项，查询本身约 1.2 s，PostgreSQL 为它的计划做 JIT 编译另花约 10 s（估算成本超过 `jit_inline_above_cost` 与 `jit_optimize_above_cost`），超过 5 s 的查询时限；关掉后分析过的库上 1.2 s。请求路径上的查询都短，JIT 没有好处。Flyway 的 JDBC 连接不在请求路径上，照服务器的设置。
+  - **怎样确认生效**：CI 的 `AppConnectionsIT` 在应用的连接上执行 `SHOW jit`，必须为 `off`。部署上，环境变量 `SPRING_R2DBC_PROPERTIES_OPTIONS` 不得覆盖它；数据库开着 `pg_stat_statements` 时，应用的语句 `jit_functions` 为 0。用 `psql` 直接连库看到的 `SHOW jit` 是那个会话自己的设置，不代表应用的连接。
 - **升级**：迁移 V129（费用按运营商与月份、赠送额度付款按付款时间的两个索引，`CONCURRENTLY` 建、不挡写入，同 V127；建到一半失败留下的 INVALID 索引按 V129 的注释处理）；部署后不需要运行 `QB_SETUP`。
   - `OPERATOR_GIFT_CARRY_OPEN`（提示）：见上"合同结束"。
 

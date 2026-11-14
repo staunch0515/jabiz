@@ -58,6 +58,18 @@ class OperatorSettlementWaitingIT extends CreditNoteItSupport {
     }
 
     @Test
+    void theTemplateLooksAtMostTenYearsBackWhateverMonthItIsGiven() {
+        newOperator(hq(), unique("Far"));
+        // With the system's permission (the process's), a month far ahead reads at most 120 months before it, quickly:
+        // a wrong value cannot make the series long (#701 re-review L-3).
+        List<Map<String, Object>> rows = items(TEMPLATE, TestTokens.bearer(tokens, "fm12d-system",
+            QbPermissions.OPERATOR_SETTLEMENT_SYSTEM), Map.of("params", Map.of("current", "9999-12", "zone",
+            TOKYO.getId()), "limit", 1000));
+        assertThat(rows).isNotEmpty().allSatisfy(row -> assertThat(String.valueOf(row.get("month")))
+            .isGreaterThanOrEqualTo("9989-12").isLessThan("9999-12"));
+    }
+
+    @Test
     void anOperatorWaitsForTheInvoiceOfItsSponsorsPostpaidFeeThenDropsOutOfTheList() {
         clock.set(Instant.parse("2041-03-10T01:00:00Z"));
         param(QbParams.FEE_MONTHLY, "1000");

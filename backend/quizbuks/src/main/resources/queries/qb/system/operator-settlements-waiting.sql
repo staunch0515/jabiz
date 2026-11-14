@@ -29,7 +29,9 @@ permissions: [qb.operator.settlement.system]
 -- the branches of qb.system.operator-settlement-readiness, written the same (OperatorReadinessTemplateTest compares
 -- them), with the month's bounds worked out here in the zone. steps is empty when nothing is pending (the daily run
 -- has not settled the month yet). :current and :zone come from the server (QB_OPERATOR_SETTLEMENTS_WAITING); the months
--- looked at are still capped at 120 before :current, so that a wrong value cannot make the series long.
+-- looked at are still capped at 120 before :current, so that a wrong value cannot make the series long. The edge that
+-- remains (#701 re-review L-5): an operator more than ten years behind is listed with the month 120 before the current
+-- one, not its earliest; the daily check (OPERATOR_SETTLEMENT_WAITING) still names the true one.
 WITH due_months AS (
     SELECT o.{{QbOperator.operatorId}} AS r_operator, m.start_of_month AS r_local_start
     FROM {{QbOperator}} o

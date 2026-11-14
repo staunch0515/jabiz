@@ -109,7 +109,8 @@ function PayDialog({ settlement, onClose }: { settlement: Settlement; onClose: (
  */
 function WaitingSettlements() {
   const { t } = useTranslation(EXTENSION_NAMESPACE)
-  const waiting = useQuery({ queryKey: [...WAITING_KEY], queryFn: readWaitingSettlements })
+  // The list changes about once a day (the daily run): kept five minutes before it is read again (#701 re-review L-6).
+  const waiting = useQuery({ queryKey: [...WAITING_KEY], queryFn: readWaitingSettlements, staleTime: 5 * 60_000 })
   const columns = useMemo<ColumnDef<WaitingSettlement, unknown>[]>(() => [
     { id: 'operator', header: t('settlement.waiting.operator'), cell: ({ row }) => row.original.operatorName },
     { id: 'month', header: t('settlement.waiting.month'), cell: ({ row }) => row.original.month },

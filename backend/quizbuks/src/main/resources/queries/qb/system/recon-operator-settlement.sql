@@ -221,12 +221,30 @@ credit_parts AS (
       -- A part paid on one fee is done once its GIFT line is written, as nearly all are: left out here (an anti-join on the
       -- unique index: a hash with statistics, a probe a part without), before it is resolved and its fee's CHARGE line looked up (#701 review M3: 100,000 such parts took
       -- the check past its budget). A part of an invoice or a credit note may pay several fees, counted by different
-      -- settlements: those go on and are checked fee by fee in unmatched_parts.
+      -- settlements: such a part on an invoice is left out when it has as many GIFT lines as the invoice has fees (one
+      -- line a fee: the unique index), its fees counted as resolved below (#701 re-review M-1: 24,000 of them on invoices
+      -- of five fees took the check past its timeout). The rest go on and are checked fee by fee in unmatched_parts.
+      -- What is left unbounded (re-review L-5): the parts on credit notes, and those on invoices not yet fully written,
+      -- are resolved on every run.
       AND NOT EXISTS (SELECT 1 FROM {{QbOperatorSettlementLine}} g
                       WHERE p.{{QbFeePayment.targetEntity}} = 'QbFeeCharge'
                         AND g.{{QbOperatorSettlementLine.lineKind}} = 'GIFT'
                         AND g.{{QbOperatorSettlementLine.sourceId}} = CAST(p.{{QbFeePayment.paymentId}} AS text)
                         AND g.{{QbOperatorSettlementLine.chargeId}} = p.{{QbFeePayment.targetId}})
+      AND NOT (p.{{QbFeePayment.targetEntity}} = 'QbFeeInvoice'
+               AND (SELECT count(*) FROM {{QbOperatorSettlementLine}} g
+                    WHERE g.{{QbOperatorSettlementLine.lineKind}} = 'GIFT'
+                      AND g.{{QbOperatorSettlementLine.sourceId}} = CAST(p.{{QbFeePayment.paymentId}} AS text))
+                   >= (SELECT CASE WHEN i.{{QbFeeInvoice.chargeId}} IS NOT NULL THEN 1 ELSE
+                              (SELECT count(*) FROM {{QbFeeCharge}} c
+                               WHERE c.{{QbFeeCharge.sponsorId}} = i.{{QbFeeInvoice.sponsorId}}
+                                 AND c.{{QbFeeCharge.period}} = i.{{QbFeeInvoice.period}}
+                                 AND c.{{QbFeeCharge.billingMode}} = 'POSTPAID'
+                                 AND c.{{QbFeeCharge.chargedAt}} <= i.{{QbFeeInvoice.issuedAt}}
+                                 AND NOT EXISTS (SELECT 1 FROM {{QbFeeInvoice}} o
+                                                 WHERE o.{{QbFeeInvoice.chargeId}} = CAST(c.{{QbFeeCharge.chargeId}} AS text)))
+                              END
+                       FROM {{QbFeeInvoice}} i WHERE i.{{QbFeeInvoice.invoiceId}} = p.{{QbFeePayment.targetId}}))
 ),
 resolved AS MATERIALIZED (
     -- Each part resolved to the fee(s) it paid, as qb.system.operator-settlement-gifts does: a fee directly, an invoice's
@@ -525,7 +543,11 @@ UNION ALL
 -- only when there is none). By time alone, not by the operator that looks after the sponsor now (#701 review L3): that
 -- changes when the sponsor moves, and a difference would go away with it, though nothing was put right; and a sponsor
 -- with no operator, or one whose operator has no settlement of the new kind yet, would never be asked about. Before the
--- earliest switch point every fee was the old rule's, which needed no operator on the fee.
+-- earliest switch point every fee was the old rule's, which needed no operator on the fee. The edges that remain
+-- (#701 re-review L-5): a fee with no operator charged before that point is never asked about; and a sponsor whose
+-- operator switched later than the earliest one is asked about its operator-less fees from the earliest point on,
+-- though its own operator's old settlements were still the rule then (such a fee has no operator, so no settlement of
+-- either rule counted it).
 SELECT CAST('OPERATOR_CHARGE_NO_OPERATOR' AS varchar(30)), CAST(c.{{QbFeeCharge.sponsorId}} AS varchar(128)),
        CAST(c.{{QbFeeCharge.period}} AS varchar(128)), CAST(0 AS numeric), sum(c.{{QbFeeCharge.amount}})
 FROM {{QbFeeCharge}} c
