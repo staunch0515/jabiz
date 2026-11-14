@@ -122,7 +122,7 @@ public final class CreditNoteGiveBack {
         return EntityQuery.builder().where(new QueryPredicate.And(List.of(
                 new QueryPredicate.Eq("sponsorId", input(ctx).sponsorId()),
                 new QueryPredicate.Or(either))))
-            .limit(FeeSettlement.MAX_PARTS).build();
+            .limit(FeeSettlement.MAX_PARTS + 1).build();
     }
 
     /** The parts aimed at the fee, its invoice and the notes on them. */
@@ -148,6 +148,11 @@ public final class CreditNoteGiveBack {
      * the latest paid first; what they cannot take is extra cash.
      */
     static void plan(ProcessContext ctx) {
+        // Review L-b: one more than is read means some were not; never give back on a part of them.
+        if (FeeGate.list(ctx, RELATED).size() > FeeSettlement.MAX_PARTS) {
+            throw new IllegalStateException("More credit notes on the fee than are read for credit note "
+                + input(ctx).creditNoteId());
+        }
         List<EntityInstance> parts = FeeGate.list(ctx, PARTS);
         if (parts.size() > FeeSettlement.MAX_PARTS) {
             throw new IllegalStateException("More payment parts than are read for credit note "

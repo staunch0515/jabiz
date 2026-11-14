@@ -937,6 +937,43 @@ class MoneyCloseIT extends MoneyCloseItSupport {
         assertThat(differences(sponsor)).isEmpty();
     }
 
+    @Test
+    void aJobStartedAfterTheFirstLookIsCancelledByALaterRunOfAWindUpNotClosed() {
+        // Review L-a: the first run's look found no job (cursor 0); a job of the sponsor's appears afterwards (one
+        // started in the moment between the erasure and that look). While the wind-up is not closed, each run looks
+        // again above the newest job seen, cancels it and moves up; once closed, no run looks again.
+        String sponsor = newSponsor(unique("s-fm15c-late"));
+        cash(sponsor, 100);
+        erase(sponsor);
+        clock.set(clock.instant().plus(Duration.ofDays(4)));
+        param(QbParams.ERASURE_CLOSE_ENABLED, "false");
+        try {
+            assertThat(close(sponsor).outcome()).isEqualTo(MoneyClose.SWITCHED_OFF);
+            assertThat(money(closure(sponsor).get("ai_jobs_before_seq"))).isZero();
+            assertThat(money(closure(sponsor).get("ai_jobs_seen_seq"))).isZero();
+            execute("INSERT INTO sys_external_job (job_id, job_type, input, requested_by, process_seq_id, "
+                + "created_time) VALUES (gen_random_uuid()::text, 'qb.ai.questions', '{}', ?, "
+                + "(SELECT max(process_seq_id) FROM op_process), now())", sponsor);
+            long seq = ((Number) query("SELECT max(job_seq) AS s FROM sys_external_job WHERE requested_by = ?",
+                sponsor).getFirst().get("s")).longValue();
+
+            assertThat(close(sponsor).outcome()).isEqualTo(MoneyClose.SWITCHED_OFF);
+            assertThat(cancelledJobs(sponsor)).isEqualTo(1);
+            assertThat(money(closure(sponsor).get("ai_jobs_seen_seq"))).isEqualByComparingTo(String.valueOf(seq));
+            // Above it there is nothing more: the job cancelled is not read again.
+            assertThat(close(sponsor).outcome()).isEqualTo(MoneyClose.SWITCHED_OFF);
+            assertThat(cancelledJobs(sponsor)).isEqualTo(1);
+        } finally {
+            param(QbParams.ERASURE_CLOSE_ENABLED, "true");
+        }
+        assertThat(close(sponsor).outcome()).isEqualTo(MoneyClose.CLOSED);
+        execute("INSERT INTO sys_external_job (job_id, job_type, input, requested_by, process_seq_id, created_time) "
+            + "VALUES (gen_random_uuid()::text, 'qb.ai.questions', '{}', ?, (SELECT max(process_seq_id) FROM op_process), "
+            + "now())", sponsor);
+        assertThat(close(sponsor).outcome()).isEqualTo(MoneyClose.CLOSED);
+        assertThat(cancelledJobs(sponsor)).as("closed: no run looks again").isEqualTo(1);
+    }
+
     private static int cancelledJobs(String sponsor) {
         return ((Number) query("SELECT count(*) AS n FROM sys_external_job_cancel c JOIN sys_external_job j "
             + "ON j.job_id = c.job_id WHERE j.requested_by = ?", sponsor).getFirst().get("n")).intValue();

@@ -55,8 +55,11 @@ public final class QbSponsorClosures {
         // When finance was given the task that it takes long (once).
         eb.field("alertedAt", f -> f.physicalColumn("alerted_at").processOnly().asTemporal(TemporalRole.EVENT_TIME));
         // F-M15c: where the cancelling of the erased sponsor's AI jobs goes on (below this platform job sequence); none:
-        // from the latest; 0: every job was looked at (none is started after the erasure).
+        // from the latest; 0: every job below the newest seen was looked at.
         eb.field("aiJobsBeforeSeq", f -> f.physicalColumn("ai_jobs_before_seq").processOnly().asNumeric(19, 0));
+        // Review L-a: the newest of the sponsor's jobs seen; once the look down is done, a wind-up not closed looks
+        // above it each run (a job started between the erasure and the first look) and moves it up.
+        eb.field("aiJobsSeenSeq", f -> f.physicalColumn("ai_jobs_seen_seq").processOnly().asNumeric(19, 0));
         eb.field("version", f -> f.physicalColumn("version").asVersion());
         eb.listView("default", lv -> lv
             .columns("sponsorId", "status", "reasonCode", "erasedAt", "lastRunAt", "closedAt")

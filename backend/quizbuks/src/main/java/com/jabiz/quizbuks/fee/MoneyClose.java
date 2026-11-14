@@ -328,7 +328,7 @@ public final class MoneyClose {
             // F-M15c: the sponsor's AI jobs still open are cancelled (QB_SPONSOR_ERASED did it already; again here,
             // whatever the switch, until none is left): a wind-up with more than one run reads waits for the next.
             .step("Cancel the AI jobs still open", CallProcess.<ProcessContext>when(MoneyClose::cancelsAiJobs,
-                ErasedAiJobs.CANCEL_ALL, 1, ctx -> new ErasedAiJobs.SponsorRef(sponsorId(ctx), aiJobsBefore(ctx)),
+                ErasedAiJobs.CANCEL_ALL, 1, MoneyClose::aiJobsLook,
                 AI_JOBS))
             // F-M15c: the AI lock before the wallet's (F-M9's order qb.ai:<sponsor> → qb.wallet), only when an AI
             // credit is to be closed; nothing this process calls takes qb.account or qb.quiz.
@@ -431,12 +431,33 @@ public final class MoneyClose {
     }
 
     /**
-     * Whether this run looks for the sponsor's AI jobs: a wind-up registered whose look is not done (its cursor 0). Once
-     * every job was looked at, none is looked at again: an erased sponsor starts none.
+     * Whether this run looks for the sponsor's AI jobs: a wind-up registered and not closed (review L-a: a job started in
+     * the moment between the erasure and the first look is found by a later run), or one whose look down is not done.
      */
     static boolean cancelsAiJobs(ProcessContext ctx) {
         EntityInstance closure = FeeGate.first(ctx, REGISTERED_CLOSURE);
-        return closure != null && !Long.valueOf(0).equals(aiJobsBefore(ctx));
+        return closure != null && (!Long.valueOf(0).equals(aiJobsBefore(ctx))
+            || !QbSponsorClosures.CLOSED.equals(closure.get("status")));
+    }
+
+    /**
+     * The look of this run: down from the closure's cursor (none: from the latest) until it is 0, then up from the
+     * newest job seen (none seen: from the first).
+     */
+    static ErasedAiJobs.SponsorRef aiJobsLook(ProcessContext ctx) {
+        Long before = aiJobsBefore(ctx);
+        if (Long.valueOf(0).equals(before)) {
+            Long seen = aiJobsSeen(ctx);
+            return new ErasedAiJobs.SponsorRef(sponsorId(ctx), null, seen == null ? 0 : seen);
+        }
+        return new ErasedAiJobs.SponsorRef(sponsorId(ctx), before);
+    }
+
+    /** The newest of the sponsor's AI jobs the wind-up has seen. */
+    static Long aiJobsSeen(ProcessContext ctx) {
+        EntityInstance closure = FeeGate.first(ctx, REGISTERED_CLOSURE);
+        Object seen = closure == null ? null : closure.get("aiJobsSeenSeq");
+        return seen == null ? null : ((Number) seen).longValue();
     }
 
     /** Where the look goes on (the closure's cursor); none from the latest. */
@@ -651,8 +672,20 @@ public final class MoneyClose {
         Map<String, Object> values = new LinkedHashMap<>();
         values.put("lastRunAt", ctx.opTime());
         if (ctx.get(AI_JOBS) instanceof ErasedAiJobs.CancelOutput jobs) {
-            // Where the next run goes on, or 0: every job was looked at.
-            values.put("aiJobsBeforeSeq", jobs.more() ? BigDecimal.valueOf(jobs.nextBeforeSeq()) : BigDecimal.ZERO);
+            Long before = aiJobsBefore(ctx);
+            Long seen = aiJobsSeen(ctx);
+            if (Long.valueOf(0).equals(before)) {
+                // The look up: the newest read is where the next one goes on (it read the oldest first).
+                values.put("aiJobsSeenSeq", BigDecimal.valueOf(Math.max(seen == null ? 0 : seen,
+                    jobs.newestSeq() == null ? 0 : jobs.newestSeq())));
+            } else {
+                // The look down: where the next run goes on, or 0 once every job below was looked at. The newest seen
+                // is the first run's (the top of the look down).
+                values.put("aiJobsBeforeSeq", jobs.more() ? BigDecimal.valueOf(jobs.nextBeforeSeq()) : BigDecimal.ZERO);
+                if (before == null) {
+                    values.put("aiJobsSeenSeq", BigDecimal.valueOf(jobs.newestSeq() == null ? 0 : jobs.newestSeq()));
+                }
+            }
         }
         if (CLOSED.equals(outcome)) {
             values.put("status", QbSponsorClosures.CLOSED);

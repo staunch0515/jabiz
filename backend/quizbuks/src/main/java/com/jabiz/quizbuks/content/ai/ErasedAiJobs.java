@@ -60,10 +60,17 @@ public final class ErasedAiJobs {
     /**
      * @param beforeSeq only the jobs before this one (the platform's {@code jobSeq}): where the last run that read a full
      *                  batch stopped; none from the latest
+     * @param afterSeq  only the jobs after this one, the oldest first (review L-a: the wind-up's look above the newest
+     *                  job it has seen, once the look down is done); none for a look down
      */
-    public record SponsorRef(@NotBlank @Size(max = 128) String sponsorId, @Min(1) Long beforeSeq) {
+    public record SponsorRef(@NotBlank @Size(max = 128) String sponsorId, @Min(1) Long beforeSeq,
+        @Min(0) Long afterSeq) {
         public SponsorRef(String sponsorId) {
-            this(sponsorId, null);
+            this(sponsorId, null, null);
+        }
+
+        public SponsorRef(String sponsorId, Long beforeSeq) {
+            this(sponsorId, beforeSeq, null);
         }
     }
 
@@ -71,9 +78,10 @@ public final class ErasedAiJobs {
      * @param cancelled     the jobs cancelled now
      * @param more          whether this run read a full batch: older jobs may be open still (the wind-up waits, and
      *                      goes on below {@code nextBeforeSeq} next run)
-     * @param nextBeforeSeq the oldest job this run read, when it read a full batch
+     * @param nextBeforeSeq the oldest job this run read, when a look down read a full batch
+     * @param newestSeq     the newest job this run read; none when it read none
      */
-    public record CancelOutput(int cancelled, boolean more, Long nextBeforeSeq) {}
+    public record CancelOutput(int cancelled, boolean more, Long nextBeforeSeq, Long newestSeq) {}
 
     public record JobRef(@NotBlank @Size(max = 128) String sponsorId, @NotBlank @Size(max = 36) String jobId) {}
 
@@ -93,7 +101,8 @@ public final class ErasedAiJobs {
                 .outputMapper(ErasedAiJobs::cancelOutput)
                 .step("Read the sponsor's AI jobs not ended", RunTemplate.<ProcessContext>of(TEMPLATE,
                     ctx -> Map.of("userId", sponsor(ctx), "types", List.copyOf(TYPES.keySet()), "open", open(),
-                        "beforeSeq", beforeSeq(ctx), "max", MAX_JOBS),
+                        "beforeSeq", beforeSeq(ctx), "afterSeq", afterSeq(ctx), "upward", upward(ctx),
+                        "max", MAX_JOBS),
                     JOBS))
                 .step("Cancel them", CallProcess.forEach(CANCEL_ONE, 1, ErasedAiJobs::jobs, CANCELLED)));
     }
@@ -142,8 +151,10 @@ public final class ErasedAiJobs {
         int cancelled = ctx.get(CANCELLED) instanceof List<?> outputs
             ? (int) outputs.stream().filter(o -> ((JobOutput) o).cancelled()).count() : 0;
         boolean more = rows.size() >= MAX_JOBS;
-        Long next = more ? rows.stream().mapToLong(row -> number(row.get("jobSeq"))).min().orElseThrow() : null;
-        return new CancelOutput(cancelled, more, next);
+        Long next = more && !upward(ctx)
+            ? rows.stream().mapToLong(row -> number(row.get("jobSeq"))).min().orElseThrow() : null;
+        Long newest = rows.stream().mapToLong(row -> number(row.get("jobSeq"))).boxed().max(Long::compare).orElse(null);
+        return new CancelOutput(cancelled, more, next, newest);
     }
 
     /**
@@ -165,6 +176,16 @@ public final class ErasedAiJobs {
     private static long beforeSeq(ProcessContext ctx) {
         Long before = ctx.get(INPUT, SponsorRef.class).beforeSeq();
         return before == null ? Long.MAX_VALUE : before;
+    }
+
+    /** The last job not to read: the input's, or none. */
+    private static long afterSeq(ProcessContext ctx) {
+        Long after = ctx.get(INPUT, SponsorRef.class).afterSeq();
+        return after == null ? 0 : after;
+    }
+
+    private static boolean upward(ProcessContext ctx) {
+        return ctx.get(INPUT, SponsorRef.class).afterSeq() != null;
     }
 
     private static String sponsor(ProcessContext ctx) {
