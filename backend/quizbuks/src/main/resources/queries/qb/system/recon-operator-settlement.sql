@@ -218,16 +218,15 @@ credit_parts AS (
     FROM {{QbFeePayment}} p
     WHERE p.{{QbFeePayment.subAccount}} = 'FEE_CREDIT'
       AND p.{{QbFeePayment.paidAt}} >= (SELECT min(n.r_at) FROM switch_points n)
-      -- A part paid on one fee is done once its GIFT line is written, as nearly all are: left out here, by one probe of the
-      -- unique index, before it is resolved and its fee's CHARGE line looked up (#701 review M3: 100,000 such parts took
+      -- A part paid on one fee is done once its GIFT line is written, as nearly all are: left out here (an anti-join on the
+      -- unique index: a hash with statistics, a probe a part without), before it is resolved and its fee's CHARGE line looked up (#701 review M3: 100,000 such parts took
       -- the check past its budget). A part of an invoice or a credit note may pay several fees, counted by different
       -- settlements: those go on and are checked fee by fee in unmatched_parts.
-      AND (p.{{QbFeePayment.targetEntity}} <> 'QbFeeCharge'
-           OR (SELECT 1 FROM {{QbOperatorSettlementLine}} g
-               WHERE g.{{QbOperatorSettlementLine.lineKind}} = 'GIFT'
-                 AND g.{{QbOperatorSettlementLine.sourceId}} = CAST(p.{{QbFeePayment.paymentId}} AS text)
-                 AND g.{{QbOperatorSettlementLine.chargeId}} = p.{{QbFeePayment.targetId}}
-               LIMIT 1) IS NULL)
+      AND NOT EXISTS (SELECT 1 FROM {{QbOperatorSettlementLine}} g
+                      WHERE p.{{QbFeePayment.targetEntity}} = 'QbFeeCharge'
+                        AND g.{{QbOperatorSettlementLine.lineKind}} = 'GIFT'
+                        AND g.{{QbOperatorSettlementLine.sourceId}} = CAST(p.{{QbFeePayment.paymentId}} AS text)
+                        AND g.{{QbOperatorSettlementLine.chargeId}} = p.{{QbFeePayment.targetId}})
 ),
 resolved AS MATERIALIZED (
     -- Each part resolved to the fee(s) it paid, as qb.system.operator-settlement-gifts does: a fee directly, an invoice's

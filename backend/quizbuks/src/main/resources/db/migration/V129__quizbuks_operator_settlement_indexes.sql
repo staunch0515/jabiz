@@ -9,7 +9,7 @@
 -- partial index holds the granted credit's only.
 --
 -- Built plainly, in the migration's transaction, as the application's other indexes: the application's Flyway
--- (spring.flyway) defines no ${concurrently} for production and takes its transactional lock, under which a
+-- (spring.flyway) defines no placeholder for CONCURRENTLY in production and takes its transactional lock, under which a
 -- CREATE INDEX CONCURRENTLY would wait for Flyway's own open transaction for ever (platform V66, decision D81). The
 -- fees and the payments are written a few times a month per Sponsor; the build holds their writes for its seconds.
 CREATE INDEX IF NOT EXISTS qb_fee_charge_version_operator_period_idx ON qb_fee_charge_version (operator_id, period);
