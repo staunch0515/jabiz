@@ -1508,10 +1508,10 @@ Quiz 与发布有主题词（平台词表中的词与自定义词），学者可
 | `CREDIT_NOTE_USE_VOID` | 贷项用在已作废的账单上 | 差异 | 作废与抵用并发 | 报开发 | 报开发 | — |
 | `CREDIT_UNUSED_WITH_DUE` | 有未用贷项的同时有未付账单 | 需关注 | 抵用尚未发生 | 通常下一次开账单或抵用时自行了结；持续则报开发 | 财务 | FEES_RECEIVABLE |
 | `HELP_USAGE_TOTAL` | 每个月 AI 帮助的全平台用量（提问数、Token、估算美元）不小于各人之和（F-M10，§7.53） | 需关注 | 全平台行少记（缺陷）；删除账号或保留期只会让全平台行更大 | 内容管理员在总部 AI 页（`/qb/ai`）看该月用量；持续则报开发 | 内容管理员（`qb.admin.help.gaps`） | — |
-| `ERASED_GIFT_LEFT` | 已完成收尾（`CLOSED`）的已注销发起方没有剩余的赠送额度（收尾时未到期的各笔） | 差异 | 收尾的作废漏了某笔 | 报开发（§7.57） | 报开发 | FEE_CREDIT、FEE_CREDIT_PROMOTION |
-| `ERASED_CLOSE_OPEN` | 收尾在注销后 `qb.erasure.close.alert-days` 天内完成 | 需关注 | 开关 `qb.erasure.close.enabled` 关着、预付款未释放，或任务失败 | §7.57 | 财务 | ERASED_NO_CLOSURE |
-| `ERASED_FEE_OWED` | 已完成收尾的已注销发起方仍欠的平台费（按发起方合计） | 提示 | 账户里的钱不够付 | 财务决定是否免除（§7.57）；不再有逾期提醒 | 财务 | FEES_RECEIVABLE |
-| `ERASED_NO_CLOSURE` | 注销超过 `qb.erasure.close.alert-days` 天、有平台费账户的用户都有收尾记录 | 需关注 | 注销的事件与每日登记任务都没有登记 | 补跑 `qb.sponsor-closure-register`；次日仍在则报开发（§7.57） | 财务 | ERASED_CLOSE_OPEN |
+| `ERASED_GIFT_LEFT` | 已完成收尾（`CLOSED`）的已注销发起方没有剩余的赠送额度（收尾时未到期的各笔） | 差异 | 收尾的作废漏了某笔 | 报开发（§7.58） | 报开发 | FEE_CREDIT、FEE_CREDIT_PROMOTION |
+| `ERASED_CLOSE_OPEN` | 收尾在注销后 `qb.erasure.close.alert-days` 天内完成 | 需关注 | 开关 `qb.erasure.close.enabled` 关着、预付款未释放，或任务失败 | §7.58 | 财务 | ERASED_NO_CLOSURE |
+| `ERASED_FEE_OWED` | 已完成收尾的已注销发起方仍欠的平台费（按发起方合计） | 提示 | 账户里的钱不够付 | 财务决定是否免除（§7.58）；不再有逾期提醒 | 财务 | FEES_RECEIVABLE |
+| `ERASED_NO_CLOSURE` | 注销超过 `qb.erasure.close.alert-days` 天、有平台费账户的用户都有收尾记录 | 需关注 | 注销的事件与每日登记任务都没有登记 | 补跑 `qb.sponsor-closure-register`；次日仍在则报开发（§7.58） | 财务 | ERASED_CLOSE_OPEN |
 | `AI_RESERVATION_SHORT` | 收费的 AI 作业结束时，费用超出它的预留（或当时的 AI 额度），超出部分由平台承担（F-M9；引用为作业编号，实际为平台承担的税前日元；月度记费收进后不再出现） | 提示 | 预留的上限（每次尝试的调用次数、页数、输出上限）低于该作业的实际用量，或期间额度被退回 | 发起方无需处理；同类作业经常出现时，按实际用量调高预留的受控参数（§7.56） | 总部（AI 设置） | — |
 
 **已知局限**
@@ -1553,7 +1553,19 @@ ORDER BY u.job_id, u.attempt_no, u.metric;
 
 - **待实测**：服务方文档没有说明一次请求的 `input_tokens` 是否累加服务端内部的多轮采样（动态过滤下的抓取不计入 `max_uses`）。若单次调用的输入超过 `qb.site-profile.max-pages` 对应的预留输入（约 20.5 万），在 `.pages` 的取值中体现。
 
-### 7.57 已注销发起方的平台费账户收尾（F-M15 b）
+### 7.57 账单的 PDF：付款来源、税与开具日（F-M13）
+
+账单的 PDF 是**签发那一刻的快照**：发起方第一次点"账单"时才签发（`QB_FEE_INVOICE_DOCUMENT`，任务不能签发），之后永远是同一份存档字节；改开具方名称、发起方公司名、版式都不影响已签发的。重印取存档，不重新排版。
+
+- **开具日**：账单有 `issued_on`（`jabiz.fiscal-year-zone` 的日期，迁移 V125 回填用 `Asia/Tokyo`，上线前只有测试数据）；PDF 写开具日，不再写 UTC 时刻，也不再写"状态"（它会过时）。账单号的年份仍取费用所属月份的年（12 月的月账单在次年 1 月开出，号码是上一年的）。
+- **明细**：每行写种类、月份、说明、税率、金额、税、合计；说明：手工费用写理由，受众规则费、配送费、曝光费写发布名（取自费用的来源键 `<种类>:<发布>[:<月份>]`），月费不写。另有"按税率的小计"（`qb.sponsor.fee-invoice-rates`）：每个税率一行，税是各笔税之和，不重算；中途改过税率的月账单会有两行。**不写"适格请求书"字样**：财务或法务书面确认后只改消息文字（`document.qb.fee_invoice.*`）。
+- **付款情况**（"截至 <开具日>"）：赠送额度、预付款（其中来自赠送额度）、现金、贷项凭证抵减、仍未付。**定义只有一处**：模板 `qb.sponsor.fee-invoice-sources`，管理员的 `qb.admin.fee-invoice-sources` 是同一段 SQL（改一处必须改两处；`InvoiceSourcesTextTest` 逐字比较两个文件头部以下的正文，`FeeAccountIT` 逐行比较结果）；它一条语句读付款行、贷项抵减与合计，恒等式 赠送额度 + 预付款 + 现金 + 贷项抵减 + 仍未付 = 合计（"其中来自赠送额度"含在预付款里）。归类：行带预付款编号的算预付款；否则子账户为赠送额度的算赠送额度；其余算现金。已作废的账单：付出的已退回，所以各项与仍未付都是 0。**仍未付取账单自己的数**（合计 − 已付额 − 贷项抵减，不低于 0，同 `QbFees.owed`），不是合计减付款行；F-M1 之前付清的旧账单没有付款行，付款行之和与已付额对不上时，赠送额度、预付款、现金三项为空（页面写"付款明细不可用"，PDF 对应行为空），只印账单自己有的数，绝不印错的数（PDF 永久存档）。**它不是运营商结算单上"赠送支付"那一行**（那一行折成税前、按累计取整、含凭证的负行，F-M12）。
+- **页面**：发起方的"账单"行与总部的账单行都可展开"付款情况"，读的是**现在**的（同一个模板）；PDF 写的是开具当天的，之后的付款在页面看。发起方问"PDF 上写着未付，其实已付清"——是这个原因，不出新的 PDF（要的话另出一份是另一件事）。
+- **权限**：账单 PDF 的版式与它读的全部模板（`fee-invoice-doc`、`-lines`、`-rates`、`-sources`）都只要 `qb.topup`（发起方持有）；页面的"付款情况"读的是同一个 `fee-invoice-sources`，总部读 `qb.admin.fee-invoice-sources`（`qb.admin.finance.read`）。付款明细不可用时，PDF 在"付款情况截至"一行后面写明（三语消息 `document.qb.fee_invoice.sourcesUnavailable`），该三项的数字为空。
+- **作废的账单**：已有 PDF 的仍可下载原件（保留期 10 年，做账可能要）；没有 PDF 的，`QB_FEE_INVOICE_DOCUMENT` 422 `QB_FEE_INVOICE_STATE`。页面写"<日期> 已作废"，不写作废的理由（理由只给总部）。
+- **升级**：迁移 V125（账单加 `issued_on`）；部署后不需要运行 `QB_SETUP`。
+
+### 7.58 已注销发起方的平台费账户收尾（F-M15 b）
 
 注销的发起方有平台费账户（现金或赠送钱包、赠送额度、账单、预付款、后付的费用、审核中的手工加币或平台费申请任一）时，由平台自动收尾，计划见 `docs/quizbuks/plans/impl/F-M15.md` §2、§5。
 
