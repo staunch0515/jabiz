@@ -345,6 +345,13 @@ describe('the automatic payment on the fee account (F-M13c)', () => {
     const view = render(<App />)
     expect(await screen.findByTestId('fee-account-auto-pay')).toHaveTextContent('Automatic payment is on')
     await expectAccessible(screen.getByTestId('wallet-fee-account'))
+    // The dark appearance too (the theme's class on the root).
+    document.documentElement.classList.add('dark')
+    try {
+      await expectAccessible(screen.getByTestId('wallet-fee-account'))
+    } finally {
+      document.documentElement.classList.remove('dark')
+    }
     view.unmount()
     vi.restoreAllMocks()
     server()

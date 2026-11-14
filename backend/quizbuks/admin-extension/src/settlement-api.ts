@@ -1,6 +1,6 @@
 import { ApiError, runProcess, runQuery, sessionFetch } from '@jabiz/admin'
 import type { Page } from './api'
-import { fileNameOf } from './finance-api'
+import { exportTemplate, fileNameOf, type ExportFormat } from './finance-api'
 import { SETTLEMENT_PROCESS, TEMPLATE } from './ids'
 import type { SortSpec } from './api'
 
@@ -26,9 +26,14 @@ export interface Settlement {
   plan: string | null
   /** The plan's fixed fee taken from the share (Q48e-2). */
   fixedFee: string
-  revenue: string
   /** Q87: the platform's fees charged to the operator's sponsors in the month; the share is on both. */
   platformFees: string
+  /** Of the platform fees, the cost and the kinds not shared (#701 review M4). */
+  costExcluded: string
+  /** F-M12: the part of the fees paid with granted credit (not shared), what was taken back of it, what is carried on. */
+  giftPaid: string
+  giftRecovered: string
+  giftCarriedOut: string
   platformShare: string
   operatorShare: string
   prospectingCost: string
@@ -54,8 +59,11 @@ function toSettlement(row: Row): Settlement {
     month: String(row.month ?? ''),
     plan: str(row.plan),
     fixedFee: amount(row.fixedFee),
-    revenue: amount(row.revenue),
     platformFees: amount(row.platformFees),
+    costExcluded: amount(row.costExcluded),
+    giftPaid: amount(row.giftPaid),
+    giftRecovered: amount(row.giftRecovered),
+    giftCarriedOut: amount(row.giftCarriedOut),
     platformShare: amount(row.platformShare),
     operatorShare: amount(row.operatorShare),
     prospectingCost: amount(row.prospectingCost),
@@ -109,3 +117,74 @@ export async function downloadStatement(runId: string, documentNo: string | null
 }
 
 export const SETTLEMENTS_KEY = ['qb-ext', 'settlements'] as const
+
+/** The kinds of a settlement's lines: a fee counted, a fee voided, a part of a payment made with granted credit. */
+export const LINE_KINDS = ['CHARGE', 'VOID', 'GIFT'] as const
+
+export interface SettlementLine {
+  lineId: string
+  lineKind: string
+  sponsorId: string
+  sponsorName: string | null
+  feeKind: string | null
+  period: string | null
+  /** Counted in a later settlement than the month it belongs to. */
+  late: boolean
+  amount: string
+  /** The part of the fee that is not shared (a cost, a kind outside the list). */
+  excluded: string
+  occurredAt: string | null
+}
+
+function toLine(row: Row): SettlementLine {
+  return {
+    lineId: String(row.lineId),
+    lineKind: String(row.lineKind ?? ''),
+    sponsorId: String(row.sponsorId ?? ''),
+    sponsorName: str(row.sponsorName),
+    feeKind: str(row.feeKind),
+    period: str(row.period),
+    late: row.late === true || row.late === 'true',
+    amount: amount(row.amount),
+    excluded: amount(row.excluded),
+    occurredAt: str(row.occurredAt),
+  }
+}
+
+const linesTemplate = (finance: boolean) => (finance ? TEMPLATE.adminSettlementLines : TEMPLATE.ownSettlementLines)
+
+/** One settlement's lines, the newest first (`qb.admin.settlement-lines`, or the operator's own limited to its scope). */
+export async function readSettlementLines(finance: boolean, settlementId: string, offset: number, limit: number,
+  sorts?: SortSpec[]): Promise<Page<SettlementLine>> {
+  const page = await runQuery<Row>(linesTemplate(finance), { params: { settlementId }, sorts, offset, limit, count: true })
+  return { total: page.total, items: page.items.map(toLine) }
+}
+
+/** Exports every line of the settlement through the platform's export. */
+export const exportSettlementLines = (finance: boolean, settlementId: string, format: ExportFormat) =>
+  exportTemplate(linesTemplate(finance), { settlementId }, format)
+
+/** An operator whose earliest month without a settlement is waiting, and the steps it waits for (empty: none). */
+export interface WaitingSettlement {
+  operatorId: string
+  operatorName: string
+  month: string
+  steps: string[]
+}
+
+export const WAITING_STEPS = ['DISTRIBUTION', 'INVOICE', 'EXPOSURE'] as const
+export const WAITING_KEY = ['qb-ext', 'settlements-waiting'] as const
+
+/**
+ * The operators whose earliest month without a settlement is before the current one, every one (one row each at
+ * most); the current month is the server's, in its fiscal year's zone (#701 review M2).
+ */
+export async function readWaitingSettlements(): Promise<{ current: string; operators: WaitingSettlement[] }> {
+  const output = await runProcess<{ current: string; operators: { operatorId: string; operatorName: string | null;
+    month: string; steps: string[] }[] }>(SETTLEMENT_PROCESS.waiting, {})
+  return {
+    current: output.current,
+    operators: output.operators.map((row) => ({ operatorId: row.operatorId,
+      operatorName: row.operatorName ?? row.operatorId, month: row.month, steps: row.steps })),
+  }
+}

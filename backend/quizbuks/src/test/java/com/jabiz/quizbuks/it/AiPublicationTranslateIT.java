@@ -122,8 +122,18 @@ class AiPublicationTranslateIT extends AiItSupport {
         // gauge moves as the check finishes (not at the next daily check). A small alert makes the cost show.
         setParam(com.jabiz.quizbuks.setup.QbParams.HELP_GLOBAL_MONTHLY_USD_ALERT, "0.01");
         long gaugeBefore = gauge.costValue();
-        Object aiJobId = run(AiProcesses.TRANSLATION_CHECK_REQUEST, reviewer(), body("publicationId", publicationId,
-            "language", "zh")).get("aiJobId");
+        // F-M9 (a-1's deferred test): with the AI fee on, the check is still the platform's: never charged, nothing
+        // reserved, no AI credit needed (neither the reviewer nor the sponsor has one).
+        param(com.jabiz.quizbuks.setup.QbParams.AI_FEE_ENABLED, "true");
+        Object aiJobId;
+        try {
+            aiJobId = run(AiProcesses.TRANSLATION_CHECK_REQUEST, reviewer(), body("publicationId", publicationId,
+                "language", "zh")).get("aiJobId");
+            assertThat(job(aiJobId)).containsEntry("fee_mode", QbAi.FEE_NONE);
+            assertThat(((Number) job(aiJobId).get("reserved_yen")).intValue()).isZero();
+        } finally {
+            param(com.jabiz.quizbuks.setup.QbParams.AI_FEE_ENABLED, "false");
+        }
         runJobs();
         assertThat(gauge.costValue()).isGreaterThan(gaugeBefore);
         long gaugeAfterCheck = gauge.costValue();
@@ -139,7 +149,12 @@ class AiPublicationTranslateIT extends AiItSupport {
         assertThat(verdicts).filteredOn(v -> Boolean.FALSE.equals(v.get("consistent")))
             .extracting(v -> v.get("key")).containsExactly("q1.o1.text");
         assertThat(verdicts).extracting(v -> v.get("key")).contains("title", "q1.stem", "publication.name");
-        // The sponsor's usage is untouched; the reviewer's counts it.
+        // The sponsor's usage is untouched; the reviewer's counts it. No fee: no AI credit, no AI charge.
+        assertThat(job(aiJobId)).containsEntry("fee_mode", QbAi.FEE_NONE).containsEntry("fee_charge_id", null);
+        assertThat(job(aiJobId).get("fee_yen")).satisfiesAnyOf(fee -> assertThat(fee).isNull(),
+            fee -> assertThat(((Number) fee).intValue()).isZero());
+        assertThat(query("SELECT 1 FROM qb_prepayment WHERE purpose = 'AI' AND sponsor_id IN (?, 'reviewer')", sponsor))
+            .isEmpty();
         assertThat(usage(sponsor)).isEmpty();
         assertThat(((Number) usage("reviewer").get("jobs")).intValue()).isPositive();
 

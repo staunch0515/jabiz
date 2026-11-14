@@ -1,7 +1,7 @@
 /*---
 id: qb.system.recon-credit-notes
 description: Whether the audience fees' refunds and the credit notes are consistent, by sponsor (F-M7) - the audience fees not decided, charged for a publication that never went on, and the credit notes' uses and limits against their fees and invoices (one of the four templates of the daily fee-account reconciliation, F-M14 G10)
-entities: [QbFeeCreditNote, QbFeeCreditNoteUse, QbFeeInvoice, QbFeePayment, QbFeeCreditGrant, QbCashLot, QbWallet, SysParam, QbFeeCharge, QbPrepayment, QbPublicationCard]
+entities: [QbFeeCreditNote, QbFeeCreditNoteUse, QbFeeInvoice, QbFeePayment, QbFeeCreditGrant, QbCashLot, QbWallet, QbSponsorClosure, SysParam, QbFeeCharge, QbPrepayment, QbPublicationCard]
 datasets:
   QbFeeCreditNote: urn:jabiz:dataset:default:QbFeeCreditNote
   QbFeeCreditNoteUse: urn:jabiz:dataset:default:QbFeeCreditNoteUse
@@ -10,6 +10,7 @@ datasets:
   QbFeeCreditGrant: urn:jabiz:dataset:default:QbFeeCreditGrant
   QbCashLot: urn:jabiz:dataset:default:QbCashLot
   QbWallet: urn:jabiz:dataset:default:QbWallet
+  QbSponsorClosure: urn:jabiz:dataset:default:QbSponsorClosure
   SysParam: urn:jabiz:dataset:now:SysParam
   QbFeeCharge: urn:jabiz:dataset:default:QbFeeCharge
   QbPrepayment: urn:jabiz:dataset:default:QbPrepayment
@@ -154,6 +155,8 @@ FROM {{QbFeeInvoice}} mi
 WHERE CAST(:at AS timestamptz) IS NOT NULL AND CAST(:missedHours AS int) IS NOT NULL
   AND (SELECT max(p.{{SysParam.value}}) FROM {{SysParam}} p WHERE p.{{SysParam.paramKey}} = 'qb.fee.auto-pay.enabled') = 'true'
   AND mi.{{QbFeeInvoice.status}} IN ('OPEN', 'PARTIAL', 'OVERDUE')
+  -- An erased sponsor's account is wound up by MoneyClose, not by the automatic payment (ERASED_* checks report it).
+  AND NOT EXISTS (SELECT 1 FROM {{QbSponsorClosure}} z WHERE z.{{QbSponsorClosure.sponsorId}} = CAST(mi.{{QbFeeInvoice.sponsorId}} AS text))
   AND mi.{{QbFeeInvoice.total}} - mi.{{QbFeeInvoice.paidAmount}} - mi.{{QbFeeInvoice.creditApplied}} > 0
   AND mi.{{QbFeeInvoice.issuedAt}} < CAST(:at AS timestamptz) - make_interval(hours => CAST(:missedHours AS int))
   -- Money that has been there for the hours: what came later (a prepayment given back, an ended publication's, a dispute

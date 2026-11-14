@@ -22,6 +22,8 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * The daily reconciliation (F-06; docs/quizbuks/plans/Q6-payments.md, D-Q6-8): {@value #RUN}, run by the job
@@ -32,6 +34,7 @@ import java.util.Map;
  * exports stop on a {@code DIFF} run).
  */
 public final class Reconciliation {
+    private static final Logger LOG = LoggerFactory.getLogger(Reconciliation.class);
 
     public static final String RUN = "QB_RECONCILE_RUN";
     public static final String JOB = "qb.reconcile";
@@ -77,6 +80,8 @@ public final class Reconciliation {
     static final String EXPOSURE_TEMPLATE = "qb.system.recon-exposure";
     /** F-M10: everybody's row of the AI help's usage against the people's rows. */
     static final String HELP_USAGE_TEMPLATE = "qb.system.recon-help-usage";
+    /** F-M9a-2b: the AI credit and the AI fee. */
+    static final String AI_CREDIT_TEMPLATE = "qb.system.recon-ai-credit";
     /** F-M15 b: the wind-ups of erased sponsors' platform fee accounts. */
     static final String ERASED_TEMPLATE = "qb.system.recon-erased";
 
@@ -146,6 +151,7 @@ public final class Reconciliation {
     static final String CREDIT_NOTES = "creditNotes";
     static final String EXPOSURE = "exposure";
     static final String HELP_USAGE = "helpUsage";
+    static final String AI_CREDIT = "aiCredit";
     static final String ERASED = "erased";
     static final String OPERATOR_SETTLEMENT = "operatorSettlement";
     static final String LAST_OK = "lastOk";
@@ -158,6 +164,13 @@ public final class Reconciliation {
     /** The least and the most hours the waiting check takes (the job does not run on the 1st: below this it would differ every month). */
     static final int WAITING_HOURS_MIN = 30;
     static final int WAITING_HOURS_MAX = 9999;
+    /**
+     * #702 review L3: the AI fee's two hours (qb.ai.fee.unbilled-after-hours, qb.ai.credit.expired-held-after-hours)
+     * are taken from 48 to 720 (the platform has no range for a parameter): under 48 a monthly job on the 1st, or a daily
+     * expiry, that ran late but within its day would be a difference; over 720 (30 days) a missed run hides for a month.
+     */
+    static final int AI_CHECK_HOURS_MIN = 48;
+    static final int AI_CHECK_HOURS_MAX = 720;
     static final String DISTRIBUTION_PARAMS = "distributionParams";
     static final String PREVIOUS = "previous";
     static final String PREVIOUS_TAKERS = "previousTakers";
@@ -210,7 +223,8 @@ public final class Reconciliation {
                     QbParams.DISTRIBUTION_FINAL_MISSING_AFTER_HOURS, QbParams.AUDIENCE_REFUND_MISSING_AFTER_HOURS,
                     QbParams.OPERATOR_SETTLEMENT_WAITING_AFTER_HOURS, QbParams.OPERATOR_SETTLEMENT_READINESS_MAX_DAYS,
                     QbParams.EXPOSURE_UNSETTLED_AFTER_HOURS, QbParams.EXPOSURE_FINAL_MISSING_AFTER_HOURS,
-                    QbParams.FEE_AUTO_PAY_MISSED_AFTER_HOURS, QbParams.ERASURE_CLOSE_ALERT_DAYS))
+                    QbParams.FEE_AUTO_PAY_MISSED_AFTER_HOURS, QbParams.ERASURE_CLOSE_ALERT_DAYS,
+                    QbParams.AI_FEE_UNBILLED_AFTER_HOURS, QbParams.AI_CREDIT_EXPIRED_HELD_AFTER_HOURS))
                 // The fee account's checks are four statements by domain (F-M14 G10), each with the parameters it declares.
                 .step("Compare the fee credit", RunTemplate.<ProcessContext>of(FEE_CREDIT_TEMPLATE,
                     ctx -> Map.of(), FEE_CREDIT))
@@ -227,8 +241,11 @@ public final class Reconciliation {
                     ctx -> EntityQuery.builder().where(new QueryPredicate.And(List.of(
                         new QueryPredicate.Eq("status", ReconChecks.OK),
                         // Only a run that held these checks counts: the summary of an earlier one has no such key (the first
-                        // run after the deploy reads all of the history).
-                        new QueryPredicate.Like("summary", "%" + ReconChecks.OPERATOR_SETTLEMENT_COVERAGE + "%"),
+                        // run after the deploy reads all of the history). A summary that names only what was found
+                        // (#702) is of a run that held them all.
+                        new QueryPredicate.Or(List.of(
+                            new QueryPredicate.Like("summary", "%" + ReconChecks.OPERATOR_SETTLEMENT_COVERAGE + "%"),
+                            new QueryPredicate.Like("summary", "%" + ReconChecks.SUMMARY_FORMAT + "%"))),
                         new QueryPredicate.Lt("scheduledTime", ctx.get(INPUT, ReconcileInput.class).scheduledTime()))))
                         .orderBy("scheduledTime", false).limit(1).build(), LAST_OK))
                 .step("Compare the operators' settlements", RunTemplate.<ProcessContext>of(OPERATOR_SETTLEMENT_TEMPLATE,
@@ -238,6 +255,9 @@ public final class Reconciliation {
                     Reconciliation::erasedParams, ERASED))
                 .step("Compare the AI help's usage", RunTemplate.<ProcessContext>of(HELP_USAGE_TEMPLATE,
                     ctx -> feeAccountParams(ctx, zone, "at", "zone"), HELP_USAGE))
+                // F-M9a-2b: the AI credit against the ledger and its movements, the AI charges against their jobs.
+                .step("Compare the AI credit", RunTemplate.<ProcessContext>of(AI_CREDIT_TEMPLATE,
+                    ctx -> feeAccountParams(ctx, zone, "at", "zone", "unbilledHours", "expiredHours"), AI_CREDIT))
                 // The takers' cache follows by events: one found behind counts only when the previous run found them.
                 .step("Find the previous run", QueryEntities.<ProcessContext>of(defaultDataset(RUN_ENTITY_NAME),
                     ctx -> EntityQuery.builder().where(new QueryPredicate.Lt("scheduledTime",
@@ -292,6 +312,7 @@ public final class Reconciliation {
         found.addAll(ReconChecks.coded(rows(ctx, OPERATOR_SETTLEMENT)));
         found.addAll(ReconChecks.coded(rows(ctx, EXPOSURE)));
         found.addAll(ReconChecks.coded(rows(ctx, HELP_USAGE)));
+        found.addAll(ReconChecks.coded(rows(ctx, AI_CREDIT)));
         found.addAll(ReconChecks.coded(rows(ctx, ERASED)));
         java.util.Set<String> foundBefore = new java.util.HashSet<>();
         TopUpCrediting.list(ctx, PREVIOUS_TAKERS).forEach(item -> foundBefore.add(item.get("partyId")));
@@ -302,6 +323,10 @@ public final class Reconciliation {
                 : List.copyOf(takers.resync().subList(0, WalletLimits.MAX_RECON_ITEMS)));
         }
         ReconChecks.Result result = ReconChecks.result(found, WalletLimits.MAX_RECON_ITEMS);
+        if (result.truncated()) {
+            LOG.warn("The reconciliation's summary was cut to fit its column: {} items found by {} checks (the run's "
+                + "item count holds them all; the items kept are in qb_recon_item)", result.total(), result.counts().values().stream().filter(n -> n > 0).count());
+        }
         ctx.put(RESULT, result);
         Map<String, Object> run = new LinkedHashMap<>();
         run.put("scheduledTime", ctx.get(INPUT, ReconcileInput.class).scheduledTime());
@@ -385,6 +410,9 @@ public final class Reconciliation {
         // Kept within 1 to 720 as the parameter says (the platform has no range for a parameter).
         values.put("missedHours", params.find(QbParams.FEE_AUTO_PAY_MISSED_AFTER_HOURS, java.math.BigDecimal.class)
             .map(hours -> hours.max(java.math.BigDecimal.ONE).min(java.math.BigDecimal.valueOf(720))).orElse(null));
+        // F-M9a-2b: the AI fee's unbilled jobs and the expired fee credit left in AI credits.
+        values.put("unbilledHours", aiCheckHours(params, QbParams.AI_FEE_UNBILLED_AFTER_HOURS));
+        values.put("expiredHours", aiCheckHours(params, QbParams.AI_CREDIT_EXPIRED_HELD_AFTER_HOURS));
         // F-M12 c: the hours after which a month without an operator's settlement is reported.
         // F-M12 b: how long a settlement waits for its steps; not published counts as 0 in the template (from the month's end).
         values.put("readinessDays", params.find(QbParams.OPERATOR_SETTLEMENT_READINESS_MAX_DAYS,
@@ -398,6 +426,16 @@ public final class Reconciliation {
         values.put("since", lastOk == null ? null : OperatorSettlementsWindow.since(lastOk.get("scheduledTime"), zone));
         values.keySet().retainAll(java.util.Set.of(names));
         return values;
+    }
+
+    /** One of the AI fee's two hours, within its range ({@link #AI_CHECK_HOURS_MIN}); none published: null. */
+    static java.math.BigDecimal aiCheckHours(com.jabiz.param.ParamValues params, String key) {
+        return params.find(key, java.math.BigDecimal.class).map(hours -> clampAiCheckHours(hours)).orElse(null);
+    }
+
+    static java.math.BigDecimal clampAiCheckHours(java.math.BigDecimal hours) {
+        return hours.max(java.math.BigDecimal.valueOf(AI_CHECK_HOURS_MIN))
+            .min(java.math.BigDecimal.valueOf(AI_CHECK_HOURS_MAX));
     }
 
     /** F-M15 b: the wind-up checks' parameters: when it runs and the alert days (none handed in: not checked by days). */

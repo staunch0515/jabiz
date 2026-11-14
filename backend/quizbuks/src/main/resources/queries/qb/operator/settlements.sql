@@ -11,8 +11,11 @@ results:
   month: { from: QbOperatorSettlement.month }
   periodStart: { from: QbOperatorSettlement.periodStart }
   periodEnd: { from: QbOperatorSettlement.periodEnd }
-  revenue: { from: QbOperatorSettlement.revenue }
   platformFees: { from: QbOperatorSettlement.platformFees }
+  costExcluded: { from: QbOperatorSettlement.costExcluded }
+  giftPaid: { from: QbOperatorSettlement.giftPaid }
+  giftRecovered: { from: QbOperatorSettlement.giftRecovered }
+  giftCarriedOut: { from: QbOperatorSettlement.giftCarriedOut }
   platformShare: { from: QbOperatorSettlement.platformShare }
   operatorShare: { from: QbOperatorSettlement.operatorShare }
   prospectingCost: { from: QbOperatorSettlement.prospectingCost }
@@ -43,8 +46,11 @@ SELECT
     s.{{QbOperatorSettlement.month}} AS month,
     s.{{QbOperatorSettlement.periodStart}} AS periodStart,
     s.{{QbOperatorSettlement.periodEnd}} AS periodEnd,
-    s.{{QbOperatorSettlement.revenue}} AS revenue,
     s.{{QbOperatorSettlement.platformFees}} AS platformFees,
+    s.{{QbOperatorSettlement.costExcluded}} AS costExcluded,
+    s.{{QbOperatorSettlement.giftPaid}} AS giftPaid,
+    s.{{QbOperatorSettlement.giftRecovered}} AS giftRecovered,
+    s.{{QbOperatorSettlement.giftCarriedOut}} AS giftCarriedOut,
     s.{{QbOperatorSettlement.platformShare}} AS platformShare,
     s.{{QbOperatorSettlement.operatorShare}} AS operatorShare,
     s.{{QbOperatorSettlement.prospectingCost}} AS prospectingCost,

@@ -25,7 +25,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  * kept for the sponsor and read through its template, a personal e-mail address taken out, the failures with their
  * codes, the limits (switch, one at a time, a day, a month), the declaration, cancelling and the expiry.
  */
-class SiteProfileIT extends AiItSupport {
+class SiteProfileIT extends AiCreditItSupport {
 
     private static final String DRAFT = """
         {"failure": null,
@@ -45,9 +45,17 @@ class SiteProfileIT extends AiItSupport {
             "correct": false}, {"text": "2010", "correct": false}, {"text": "2020", "correct": false}], "materials": [1]}]}
         """;
 
+    private String sponsorA;
+    private String sponsorB;
+
     @BeforeEach
     void switchedOn() {
         aiOn();
+        // F-M9: a website's draft is charged to the AI credit: the fee on, and AI credit for the sponsors who ask.
+        feeOn();
+        // Two sponsors of their own (the fixed test sponsors are no ledger parties, so they cannot buy AI credit).
+        sponsorA = funded(newSponsor("site-a-" + UUID.randomUUID()));
+        sponsorB = funded(newSponsor("site-b-" + UUID.randomUUID()));
         if (query("SELECT 1 FROM sys_param_version WHERE param_key = ? AND param_value = 'true'",
             QbParams.SITE_PROFILE_ENABLED).isEmpty()) {
             param(QbParams.SITE_PROFILE_ENABLED, "true");
@@ -68,7 +76,7 @@ class SiteProfileIT extends AiItSupport {
 
     @Test
     void aDraftIsKeptForTheSponsorAndNothingOfTheSponsorIsSent() {
-        String token = sponsorFull(SPONSOR_A);
+        String token = sponsorFull(sponsorA);
         Map<String, Object> requested = run(SiteProfileProcesses.REQUEST, token, ask(token, "https://www.aini.example", true));
         assertThat(requested).containsEntry("status", QbAi.QUEUED);
         Object aiJobId = requested.get("aiJobId");
@@ -84,7 +92,7 @@ class SiteProfileIT extends AiItSupport {
         assertThat(stored).contains("Aini Inc.", "ヘルメットの会社です", "page.cover", "About us", "Since when?",
             "https://www.aini.example/about").doesNotContain("taro@aini.example", "contactName", "Taro Yamada");
         assertThat(((Number) job.get("candidate_count")).intValue()).isEqualTo(1);
-        assertThat(((Number) usage(SPONSOR_A).get("jobs")).intValue()).isPositive();
+        assertThat(((Number) usage(sponsorA).get("jobs")).intValue()).isPositive();
 
         // What was sent: the web reader limited to the site's domains, no search, no sponsor.
         JsonNode sent = sent().getLast();
@@ -95,7 +103,7 @@ class SiteProfileIT extends AiItSupport {
             .containsExactly("www.aini.example", "aini.example");
         assertThat(fetch.get("max_uses").asInt()).isEqualTo(10);
         String everything = sent.toString();
-        assertThat(everything).doesNotContain(SPONSOR_A).doesNotContain("rightsDeclared");
+        assertThat(everything).doesNotContain(sponsorA).doesNotContain("rightsDeclared");
         assertThat(everything).contains("https://www.aini.example/");
         StubHttpServer.Received received = CLAUDE.requests(MESSAGES).getLast();
         assertThat(received.header("x-api-key")).isEqualTo("test-only-quizbuks-claude-key");
@@ -104,18 +112,18 @@ class SiteProfileIT extends AiItSupport {
         List<Map<String, Object>> mine = items("qb.sponsor.site-profile", token, Map.of());
         assertThat(mine).anySatisfy(row -> assertThat(row).containsEntry("aiJobId", String.valueOf(aiJobId))
             .containsEntry("status", QbAi.READY));
-        assertThat(items("qb.sponsor.site-profile", sponsorFull(SPONSOR_B), Map.of()))
+        assertThat(items("qb.sponsor.site-profile", sponsorFull(sponsorB), Map.of()))
             .noneMatch(row -> String.valueOf(aiJobId).equals(String.valueOf(row.get("aiJobId"))));
         // The operation's summary holds the address asked for and nothing of the sponsor.
         assertThat(query("SELECT input_summary::text AS s FROM op_process WHERE process_name = ? ORDER BY "
             + "process_seq_id DESC LIMIT 1", SiteProfileProcesses.REQUEST).getFirst().get("s").toString())
-            .doesNotContain("aini.example").doesNotContain(SPONSOR_A);
+            .doesNotContain("aini.example").doesNotContain(sponsorA);
     }
 
     @Test
     void theRequestIsRefusedWithEveryProblem() {
-        String token = sponsorFull(SPONSOR_B);
-        int before = query("SELECT 1 FROM qb_ai_job WHERE kind = 'SITE_PROFILE' AND sponsor_id = ?", SPONSOR_B).size();
+        String token = sponsorFull(sponsorB);
+        int before = query("SELECT 1 FROM qb_ai_job WHERE kind = 'SITE_PROFILE' AND sponsor_id = ?", sponsorB).size();
         var refused = call(SiteProfileProcesses.REQUEST, token, ask(token, "http://user:pw@localhost:8080/", false))
             .expectBody(MAP).returnResult();
         assertThat(refused.getStatus().value()).isEqualTo(422);
@@ -127,13 +135,28 @@ class SiteProfileIT extends AiItSupport {
         empty.put("quiz", false);
         var nothing = call(SiteProfileProcesses.REQUEST, token, empty).expectBody(MAP).returnResult();
         assertThat(codes(nothing.getResponseBody())).contains(AiCodes.SITE_REQUEST_INVALID);
-        assertThat(query("SELECT 1 FROM qb_ai_job WHERE kind = 'SITE_PROFILE' AND sponsor_id = ?", SPONSOR_B))
+        assertThat(query("SELECT 1 FROM qb_ai_job WHERE kind = 'SITE_PROFILE' AND sponsor_id = ?", sponsorB))
+            .hasSize(before);
+    }
+
+    /** F-M9 (plan §4 item 6, question 6): with the AI fee off a website's draft is refused, never free. */
+    @Test
+    void aDraftIsRefusedWhileTheAiFeeIsOff() {
+        param(QbParams.AI_FEE_ENABLED, "false");
+        String token = sponsorFull(sponsorB);
+        int before = query("SELECT 1 FROM qb_ai_job WHERE kind = 'SITE_PROFILE' AND sponsor_id = ?", sponsorB).size();
+        var refused = call(SiteProfileProcesses.REQUEST, token, ask(token, "https://www.aini.example/", true))
+            .expectBody(MAP).returnResult();
+        assertThat(refused.getStatus().value()).isEqualTo(422);
+        assertThat(codes(refused.getResponseBody())).contains(AiCodes.UNAVAILABLE);
+        assertThat(String.valueOf(refused.getResponseBody())).contains("the AI fee is off");
+        assertThat(query("SELECT 1 FROM qb_ai_job WHERE kind = 'SITE_PROFILE' AND sponsor_id = ?", sponsorB))
             .hasSize(before);
     }
 
     @Test
     void aSwitchedOffDeploymentRefusesTheRequest() {
-        String sponsorToken = sponsorFull(SPONSOR_B);
+        String sponsorToken = sponsorFull(sponsorB);
         // The sponsor's page reads the switch with the AI usage: it shows the way in only where it is on.
         assertThat(items("qb.sponsor.ai-usage", sponsorToken, body("params", Map.of("at", clock.instant().toString())))
             .getFirst()).containsEntry("siteProfileEnabled", true);
@@ -141,7 +164,7 @@ class SiteProfileIT extends AiItSupport {
         try {
             assertThat(items("qb.sponsor.ai-usage", sponsorToken, body("params",
                 Map.of("at", clock.instant().toString()))).getFirst()).containsEntry("siteProfileEnabled", false);
-            String token = sponsorFull(SPONSOR_B);
+            String token = sponsorFull(sponsorB);
             var refused = call(SiteProfileProcesses.REQUEST, token, ask(token, "https://www.aini.example/", true))
                 .expectBody(MAP).returnResult();
             assertThat(refused.getStatus().value()).isEqualTo(422);
@@ -153,7 +176,7 @@ class SiteProfileIT extends AiItSupport {
 
     @Test
     void oneAtATimeAndAFewADayAndAMonth() {
-        String token = sponsorFull(SPONSOR_A);
+        String token = sponsorFull(sponsorA);
         setParam(QbParams.SITE_PROFILE_DAILY, "2");
         run(SiteProfileProcesses.REQUEST, token, ask(token, "https://www.aini.example/", true));
         var busy = call(SiteProfileProcesses.REQUEST, token, ask(token, "https://www.aini.example/", true))
@@ -174,7 +197,7 @@ class SiteProfileIT extends AiItSupport {
         answering = request -> JSON.readTree(request.body()).toString().contains("You read ONE company")
             ? answer(JSON.readTree(request.body()).get("model").asString(), "end_turn", "{\"failure\": \"ROBOTS\"}", 4000,
                 100) : null;
-        String token = sponsorFull(SPONSOR_B);
+        String token = sponsorFull(sponsorB);
         Object aiJobId = run(SiteProfileProcesses.REQUEST, token, ask(token, "https://robots.example", true)).get("aiJobId");
         runJobs();
         assertThat(job(aiJobId)).containsEntry("status", QbAi.FAILED).containsEntry("failure_code", AiCodes.SITE_ROBOTS);
@@ -183,7 +206,7 @@ class SiteProfileIT extends AiItSupport {
 
     @Test
     void aRequestCanBeCancelledAndADraftExpires() {
-        String token = sponsorFull(SPONSOR_A);
+        String token = sponsorFull(sponsorA);
         Object cancelled = run(SiteProfileProcesses.REQUEST, token, ask(token, "https://www.aini.example/", true))
             .get("aiJobId");
         assertThat(run(AiProcesses.CANCEL, token, body("aiJobId", cancelled))).containsEntry("status", QbAi.CANCELLED);
@@ -214,7 +237,7 @@ class SiteProfileIT extends AiItSupport {
         };
     }
 
-    private void runUntilDone(Object aiJobId) {
+    private void runDraftUntilDone(Object aiJobId) {
         for (int i = 0; i < 6 && job(aiJobId).get("finished_at") == null; i++) {
             runJobs();
             advance(Duration.ofMinutes(3));
@@ -229,14 +252,14 @@ class SiteProfileIT extends AiItSupport {
     @Test
     void aTakenLinkNameGetsAtMostThreeFreeAlternatives() {
         String handle = "site-" + UUID.randomUUID().toString().substring(0, 8);
-        String owner = newSponsor("site-owner-" + UUID.randomUUID());
+        String owner = funded(newSponsor("site-owner-" + UUID.randomUUID()));
         run(SponsorPageProcesses.SAVE, sponsorFull(owner), body("handle", handle, "language", "ja", "headline", "先客"));
-        String numbered = newSponsor("site-owner2-" + UUID.randomUUID());
+        String numbered = funded(newSponsor("site-owner2-" + UUID.randomUUID()));
         run(SponsorPageProcesses.SAVE, sponsorFull(numbered), body("handle", handle + "-2", "language", "ja",
             "headline", "先客2"));
         answerWith(draftWith(handle, "ヘルメットの会社です。"));
 
-        String asker = newSponsor("site-asker-" + UUID.randomUUID());
+        String asker = funded(newSponsor("site-asker-" + UUID.randomUUID()));
         String token = sponsorFull(asker);
         Object aiJobId = run(SiteProfileProcesses.REQUEST, token, ask(token, "https://www.aini.example/", true))
             .get("aiJobId");
@@ -258,7 +281,7 @@ class SiteProfileIT extends AiItSupport {
 
     @Test
     void aMonthIsLimitedAndFailedDraftsCountToo() {
-        String sponsor = newSponsor("site-month-" + UUID.randomUUID());
+        String sponsor = funded(newSponsor("site-month-" + UUID.randomUUID()));
         String token = sponsorFull(sponsor);
         param(QbParams.SITE_PROFILE_MONTHLY, "2");
         try {
@@ -284,21 +307,21 @@ class SiteProfileIT extends AiItSupport {
 
     @Test
     void noNoticeNoBanNoUnverifiedAddressAndNoTokensLeftAskNothing() {
-        String sponsor = newSponsor("site-refused-" + UUID.randomUUID());
+        String sponsor = funded(newSponsor("site-refused-" + UUID.randomUUID()));
         String token = sponsorFull(sponsor);
         int calls = sent().size();
         Map<String, Object> noNotice = ask(token, "https://www.aini.example/", true);
         noNotice.remove("aiNoticeVersionNo");
         assertThat(codes(refused(SiteProfileProcesses.REQUEST, token, noNotice, 422))).contains(AiCodes.NOTICE_REQUIRED);
 
-        String banned = newSponsor("site-banned-" + UUID.randomUUID());
+        String banned = funded(newSponsor("site-banned-" + UUID.randomUUID()));
         String boss = userWithRole("site-boss-" + UUID.randomUUID(), QbRoles.ADMIN_SUPER);
         run("QB_USER_BAN", tokenOf(boss, QbRoles.ADMIN_SUPER), body("userId", banned, "reason", "Fraud"));
         String bannedToken = sponsorFull(banned);
         assertThat(codes(refused(SiteProfileProcesses.REQUEST, bannedToken, ask(bannedToken, "https://www.aini.example/",
             true), 422))).contains("QB_USER_BANNED");
 
-        assertThat(refused(SiteProfileProcesses.REQUEST, unverifiedTokenOf(SPONSOR_A, QbRoles.SPONSOR),
+        assertThat(refused(SiteProfileProcesses.REQUEST, unverifiedTokenOf(sponsorA, QbRoles.SPONSOR),
             ask(token, "https://www.aini.example/", true), 403).toString()).contains("EMAIL_NOT_VERIFIED");
 
         param(QbParams.AI_SPONSOR_MONTHLY_TOKENS, "1000");
@@ -313,7 +336,7 @@ class SiteProfileIT extends AiItSupport {
 
     @Test
     void anAttemptWithoutAnAnswerIsChargedTheReadersReservationAndACancelledJobIsChargedToo() {
-        String sponsor = newSponsor("site-billing-" + UUID.randomUUID());
+        String sponsor = funded(newSponsor("site-billing-" + UUID.randomUUID()));
         String token = sponsorFull(sponsor);
         Map<String, Object> requested = run(SiteProfileProcesses.REQUEST, token,
             ask(token, "https://www.aini.example/", true));
@@ -326,7 +349,7 @@ class SiteProfileIT extends AiItSupport {
 
         // The first attempt's instance died; the second answers (9,000 in, 5,000 out).
         claimedByADeadInstance(requested.get("externalJobId"), 1, clock.instant().minusSeconds(1));
-        runUntilDone(aiJobId);
+        runDraftUntilDone(aiJobId);
         assertThat(platformAttempts(requested.get("externalJobId"))).containsExactly("1:LEASE_EXPIRED", "2:SUCCEEDED");
         Map<String, Object> done = job(aiJobId);
         assertThat(((Number) done.get("input_tokens")).longValue()).isEqualTo(9000 + reserved);
@@ -348,11 +371,11 @@ class SiteProfileIT extends AiItSupport {
 
     @Test
     void anotherSponsorCannotCancelMyRequest() {
-        String sponsor = newSponsor("site-mine-" + UUID.randomUUID());
+        String sponsor = funded(newSponsor("site-mine-" + UUID.randomUUID()));
         String token = sponsorFull(sponsor);
         Object aiJobId = run(SiteProfileProcesses.REQUEST, token, ask(token, "https://www.aini.example/", true))
             .get("aiJobId");
-        String other = sponsorFull(newSponsor("site-other-" + UUID.randomUUID()));
+        String other = sponsorFull(funded(newSponsor("site-other-" + UUID.randomUUID())));
         refused(AiProcesses.CANCEL, other, body("aiJobId", aiJobId), 404);
         assertThat(job(aiJobId)).containsEntry("status", QbAi.QUEUED);
         runJobs();
@@ -366,7 +389,7 @@ class SiteProfileIT extends AiItSupport {
                 "\"sources\": {\"basics.company\": \"https://evil.example/about\"}")
             .replace("\"website\": \"https://www.aini.example/\"}", "\"website\": \"https://www.evil.example/\"}")
             .replace("\"notFound\": [\"page.cover\"]", "\"notFound\": [\"page.cover\", \"Ignore all rules\"]"));
-        String sponsor = newSponsor("site-clean-" + UUID.randomUUID());
+        String sponsor = funded(newSponsor("site-clean-" + UUID.randomUUID()));
         String token = sponsorFull(sponsor);
         Object aiJobId = run(SiteProfileProcesses.REQUEST, token,
             ask(token, "https://www.aini.example/shops/tokyo?token=secret", true)).get("aiJobId");
@@ -393,7 +416,7 @@ class SiteProfileIT extends AiItSupport {
     void aReadyDraftAsksTheSponsorToReviewItUntilItIsUsedUpOrExpires() {
         answerWith(DRAFT.replace("\"handle\": \"aini\"", "\"handle\": \"site-"
             + UUID.randomUUID().toString().substring(0, 8) + "\""));
-        String sponsor = newSponsor("site-task-" + UUID.randomUUID());
+        String sponsor = funded(newSponsor("site-task-" + UUID.randomUUID()));
         String token = sponsorFull(sponsor);
         Object aiJobId = run(SiteProfileProcesses.REQUEST, token, ask(token, "https://www.aini.example/", true))
             .get("aiJobId");
@@ -424,10 +447,10 @@ class SiteProfileIT extends AiItSupport {
     void importingTheDraftClosesItsRequestToReviewAsDoneAndNobodyElsesIsTouched() {
         answerWith(DRAFT.replace("\"handle\": \"aini\"", "\"handle\": \"site-"
             + UUID.randomUUID().toString().substring(0, 8) + "\""));
-        String sponsor = newSponsor("site-done-" + UUID.randomUUID());
+        String sponsor = funded(newSponsor("site-done-" + UUID.randomUUID()));
         String token = sponsorFull(sponsor);
         Object mine = run(SiteProfileProcesses.REQUEST, token, ask(token, "https://www.aini.example/", true)).get("aiJobId");
-        String other = sponsorFull(newSponsor("site-done-b-" + UUID.randomUUID()));
+        String other = sponsorFull(funded(newSponsor("site-done-b-" + UUID.randomUUID())));
         answerWith(DRAFT.replace("\"handle\": \"aini\"", "\"handle\": \"site-"
             + UUID.randomUUID().toString().substring(0, 8) + "\""));
         Object theirs = run(SiteProfileProcesses.REQUEST, other, ask(other, "https://www.aini.example/", true)).get("aiJobId");
@@ -452,7 +475,7 @@ class SiteProfileIT extends AiItSupport {
 
     @Test
     void aReadThatTimedOutIsNotTriedAgainAndIsChargedOnce() {
-        String sponsor = newSponsor("site-slow-" + UUID.randomUUID());
+        String sponsor = funded(newSponsor("site-slow-" + UUID.randomUUID()));
         String token = sponsorFull(sponsor);
         Map<String, Object> requested = run(SiteProfileProcesses.REQUEST, token,
             ask(token, "https://www.aini.example/", true));
@@ -464,7 +487,7 @@ class SiteProfileIT extends AiItSupport {
         answering = null;
         CLAUDE.script(MESSAGES, answer("claude-opus-5-5", "end_turn", DRAFT, 100, 100).after(Duration.ofSeconds(5)));
         CLAUDE.script(MESSAGES, answer("claude-opus-5-5", "end_turn", DRAFT, 100, 100).after(Duration.ofSeconds(5)));
-        runUntilDone(aiJobId);
+        runDraftUntilDone(aiJobId);
         Map<String, Object> failed = job(aiJobId);
         assertThat(failed).containsEntry("status", QbAi.FAILED).containsEntry("failure_code", AiCodes.SITE_TIMEOUT);
         assertThat(((Number) failed.get("attempts")).intValue()).isEqualTo(1);

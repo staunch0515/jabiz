@@ -47,8 +47,12 @@ import {
  * (certificates.spec), and mainland China's view of a publication with a foreign video (foreign-video.spec: the
  * end-to-end run has no address database, so that spec sets the region by parameter).
  *
- * To come with the money (the plan's table says where; no placeholder is written before the feature exists):
- *   8   F-M12: the monthly bill and the operator's settlement, each after the one before it
+ * Not written here, on purpose (F-M12 d, General Controller 2026-11-14): 8, the operator's monthly settlement. A
+ * settlement needs a month that has ended with the operator's fees in it, and this run starts from an empty database
+ * with an operator created today; re-running a job does not move the data's months, and the platform's clock is not
+ * moved for a test. It is covered by the ITs OperatorSettlementIT, OperatorSettlementGiftIT and OperatorSettlementRecon*IT,
+ * by the scenario replay scenarios/qb/operator-settlement-gift.yml (a fixed clock), and by a look by hand on staging in
+ * the first days of a month (docs/quizbuks/rehearsal-staging.md section 11).
  *
  * The verify page is cached by the browser for up to a minute, so every look at it is in a context of its own.
  */
@@ -763,6 +767,27 @@ test.describe.serial('the first launch\'s loop', () => {
         await accessibleInBoth(page, 'sponsor exposure fee: settled')
       } finally {
         await run(request, await adminToken(request), 'PARAM_SET', { key: 'qb.exposure.low-ratio', value: '0.1' })
+        await restore()
+      }
+    })
+
+  test('7d. F-M13 the automatic payment: the switch published, the fee account says so, and it is switched off again',
+    async ({ page, request }) => {
+      const { sora } = loop
+      const restore = await rememberParams(request, [{ key: 'qb.fee.auto-pay.enabled', absent: 'false' }])
+      try {
+        await signIn(page, '/sponsor/', sora.email)
+        await expect(page.getByTestId('dashboard-status')).toBeVisible()
+        await page.goto('/sponsor/money/account')
+        await expect(page.getByTestId('fee-account-total')).toBeVisible()
+        // Off at the first launch: nothing is said.
+        await expect(page.getByTestId('fee-account-auto-pay')).toHaveCount(0)
+        // Published as true (a controlled change, as everything of money): publishing is turning it on.
+        await setControlledParam(request, 'qb.fee.auto-pay.enabled', 'true')
+        await page.reload()
+        await expect(page.getByTestId('fee-account-auto-pay')).toBeVisible()
+        await accessibleInBoth(page, 'sponsor fee account: the automatic payment is on')
+      } finally {
         await restore()
       }
     })

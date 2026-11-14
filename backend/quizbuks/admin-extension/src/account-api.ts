@@ -73,6 +73,15 @@ export interface OperatorAccount {
   } | null
 }
 
+/**
+ * What the caller's operator's latest settlement carries to next month of the granted credit it still has to take back
+ * (F-M12 d); '0' without a settlement. The own settlements come newest month first.
+ */
+export async function readCarriedTakeBack(): Promise<string> {
+  const page = await runQuery<Row>(TEMPLATE.ownSettlements, { limit: 1 })
+  return amount(page.items[0]?.giftCarriedOut)
+}
+
 /** The caller's operator's account; null when the caller is no member. */
 export async function readAccount(): Promise<OperatorAccount | null> {
   const page = await runQuery<Row>(TEMPLATE.operatorAccount, { limit: 1 })

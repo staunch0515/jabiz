@@ -226,6 +226,11 @@ export const TEMPLATE = {
   /** Q48b: the operators' monthly settlements, every operator's (finance) and the caller operator's own. */
   operatorSettlements: 'qb.admin.operator-settlements',
   ownSettlements: 'qb.operator.settlements',
+  /** The help centre's questions for the operators (audience OPERATOR; `qb.operator.use`, signed in only). */
+  operatorFaq: 'qb.operator.faq',
+  /** F-M12 d: a settlement's lines (by Sponsor and kind), finance's and the caller operator's own. */
+  adminSettlementLines: 'qb.admin.settlement-lines',
+  ownSettlementLines: 'qb.operator.settlement-lines',
   /** Q48e-2, the operator's own (`qb.operator.use`): its account (balance, bank account), withdrawals and plans. */
   operatorAccount: 'qb.operator.account',
   ownWithdrawals: 'qb.operator.withdrawals',
@@ -241,6 +246,8 @@ export const TEMPLATE = {
 export const SETTLEMENT_PROCESS = {
   pay: 'QB_OPERATOR_SETTLEMENT_PAY',
   statement: 'QB_OPERATOR_SETTLEMENT_STATEMENT',
+  /** F-M12 d (#701 review M2): the operators whose settlement waits, by the server's month and zone. */
+  waiting: 'QB_OPERATOR_SETTLEMENTS_WAITING',
 } as const
 
 /**
@@ -444,6 +451,8 @@ export const TRANSFER_REVIEW = 'REVIEW'
 
 /** Dictionaries, labelled by the server in the request's language. */
 export const DICTIONARY = {
+  /** The help centre's categories of questions. */
+  faqCategory: 'urn:jabiz:dict:quizbuks:faq-category',
   /** F-S2: knowledge maps: whose, who lights them, their state and their versions' state, who lit a node. */
   treeOwner: 'urn:jabiz:dict:quizbuks:tree-owner',
   treeSubject: 'urn:jabiz:dict:quizbuks:tree-subject',
@@ -829,6 +838,8 @@ export const PATH = {
   operatorSettlements: '/qb/operator/settlements',
   /** Q48e-2: the operator's account (balance, bank account, withdrawals), and the withdrawals (finance). */
   operatorAccount: '/qb/operator/account',
+  /** The operators' help (the help centre's questions of their audience). */
+  operatorHelp: '/qb/operator/help',
   operatorWithdrawals: '/qb/finance/operator-withdrawals',
   referrals: '/qb/referrals',
   /** Q47c: the audience rules, every owner's price list (headquarters), and the operator's own. */

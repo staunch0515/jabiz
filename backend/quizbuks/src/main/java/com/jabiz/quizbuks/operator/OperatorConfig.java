@@ -364,6 +364,12 @@ public class OperatorConfig {
     }
 
     @Bean
+    ProcessDefinition<OperatorSettlements.WaitingInput, OperatorSettlements.WaitingOutput, ProcessContext>
+        qbOperatorSettlementsWaiting() {
+        return OperatorSettlements.waiting(zone);
+    }
+
+    @Bean
     ProcessDefinition<OperatorSettlements.StatementInput, OperatorSettlements.SettlementOutput, ProcessContext>
         qbOperatorSettlementStatement() {
         return OperatorSettlements.statement();
