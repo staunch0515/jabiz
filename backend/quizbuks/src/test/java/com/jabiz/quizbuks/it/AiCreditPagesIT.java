@@ -1,5 +1,10 @@
 package com.jabiz.quizbuks.it;
 
+import com.jabiz.quizbuks.content.ai.AiCreditReturns;
+import com.jabiz.quizbuks.content.ai.AiCreditStanding;
+import com.jabiz.quizbuks.content.ai.AiProcesses;
+import com.jabiz.quizbuks.fee.FeeCodes;
+import com.jabiz.quizbuks.setup.QbParams;
 import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;
@@ -69,5 +74,52 @@ class AiCreditPagesIT extends AiCreditItSupport {
         assertThat(items("qb.sponsor.ai-credit-lots", other, Map.of())).isEmpty();
         assertThat(items("qb.sponsor.ai-credit-jobs", other, Map.of())).isEmpty();
         assertThat(items("qb.sponsor.ai-credit-movements", other, Map.of())).isEmpty();
+    }
+
+    /**
+     * F-M9b: QB_AI_CREDIT_STANDING answers what a request can use (as its quote reads it), what may be given back (the
+     * most a return takes), and "low" only once qb.ai.credit.low-amount is set above what is available.
+     */
+    @Test
+    void theStandingIsWhatTheRequestsAndTheReturnReadAndSaysWhenItIsLow() {
+        feeOn();
+        String sponsor = newSponsor("ai-standing-" + UUID.randomUUID());
+        cash(sponsor, 3_000);
+        buy(sponsor, 2_000);
+        String token = sponsorFull(sponsor);
+        List<String> quiz = quizWithArticle(token, title(), "Material for the standing.");
+        request(token, quiz.get(0), List.of(quiz.get(1)), 2);
+
+        Map<String, Object> standing = run(AiCreditStanding.STANDING, token, Map.of());
+        assertThat(standing).containsEntry("feeOn", true).containsEntry("low", false);
+        BigDecimal available = money(standing.get("available"));
+        assertThat(money(standing.get("remaining"))).isEqualByComparingTo("2000");
+        assertThat(money(standing.get("reserved"))).isPositive();
+        assertThat(available).isEqualByComparingTo(money(standing.get("remaining"))
+            .subtract(money(standing.get("reserved"))));
+        Map<String, Object> quote = run(AiProcesses.QUOTE, token, requestInput(quiz.get(0), List.of(quiz.get(1)), 2));
+        assertThat(money(quote.get("availableYen"))).isEqualByComparingTo(available);
+
+        // The most a return takes is what may be given back.
+        BigDecimal returnable = money(standing.get("returnable"));
+        assertThat(codes(refused(AiCreditReturns.RETURN, token, body("amount", returnable.add(BigDecimal.ONE),
+            "requestKey", UUID.randomUUID().toString()), 422))).containsExactly(FeeCodes.AI_CREDIT_RETURN_ABOVE);
+
+        // Low: never while not set; once set above what is available, low; at or below it, not.
+        assertThat(standing.get("lowAmount")).isNull();
+        yenParam(QbParams.AI_CREDIT_LOW_AMOUNT, available.add(BigDecimal.ONE).toPlainString());
+        assertThat(run(AiCreditStanding.STANDING, token, Map.of())).containsEntry("low", true);
+        yenParam(QbParams.AI_CREDIT_LOW_AMOUNT, available.toPlainString());
+        assertThat(run(AiCreditStanding.STANDING, token, Map.of())).containsEntry("low", false);
+        // The fee off: never low.
+        yenParam(QbParams.AI_CREDIT_LOW_AMOUNT, available.add(BigDecimal.ONE).toPlainString());
+        param(QbParams.AI_FEE_ENABLED, "false");
+        try {
+            assertThat(run(AiCreditStanding.STANDING, token, Map.of())).containsEntry("feeOn", false)
+                .containsEntry("low", false);
+        } finally {
+            param(QbParams.AI_FEE_ENABLED, "true");
+            yenParam(QbParams.AI_CREDIT_LOW_AMOUNT, "0");
+        }
     }
 }

@@ -260,6 +260,13 @@ public class AiConfig {
         return AiProcesses.request(zone, userKeys, pdfs);
     }
 
+    /** F-M9b: where the caller's AI credit stands (read only). */
+    @Bean
+    ProcessDefinition<AiCreditStanding.StandingInput, AiCreditStanding.StandingOutput, ProcessContext>
+        qbAiCreditStanding() {
+        return AiCreditStanding.standing();
+    }
+
     /** F-M9b: the quotes of the charged requests (read only, a sponsor's own; rate limited per user). */
     @Bean
     ProcessDefinition<AiProcesses.RequestInput, AiProcesses.QuoteOutput, ProcessContext> qbAiQuestionsQuote(

@@ -238,6 +238,11 @@ final class AiFees {
             || !CHARGED_KINDS.contains((String) ctx.get(AiProcesses.KIND))) {
             return false;
         }
+        return holdsCredit(ctx);
+    }
+
+    /** Whether the sponsor's open AI credit holds something ({@link #queries} read it). */
+    static boolean holdsCredit(ProcessContext ctx) {
         List<EntityInstance> credit = rows(ctx, CREDIT_ROWS);
         return !credit.isEmpty() && money(credit.getFirst().get("remaining")).signum() > 0;
     }
