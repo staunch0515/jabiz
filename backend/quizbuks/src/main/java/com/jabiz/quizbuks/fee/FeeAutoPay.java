@@ -68,7 +68,6 @@ public final class FeeAutoPay {
     private static final String PARAMS = "params";
     private static final String ON = "on";
     private static final String UNPAID = "unpaid";
-    private static final String CLOSURE = "closure";
     private static final String CHOSEN = "chosen";
     private static final String MORE = "more";
     private static final String ITEM_ID = "itemId";
@@ -173,12 +172,7 @@ public final class FeeAutoPay {
                             ctx.opTime()), FeeProcesses.CREDITS),
                     QueryEntities.query(QbWallets.defaultDataset(QbWallets.WALLET),
                         ctx -> QbWallets.query(QbWallets.CASH, Boolean.TRUE.equals(ctx.get(ON)) ? sponsorId(ctx) : null),
-                        FeeProcesses.CASH_WALLET),
-                    // F-M15 b (re-review L3): an erased sponsor's account is the wind-up's; in the same statement.
-                    QueryEntities.query(QbFees.defaultDataset(QbSponsorClosures.CLOSURE), ctx -> EntityQuery.builder()
-                        .where(Boolean.TRUE.equals(ctx.get(ON))
-                            ? new QueryPredicate.Eq("sponsorId", sponsorId(ctx))
-                            : new QueryPredicate.In("sponsorId", List.of())).limit(1).build(), CLOSURE)))
+                        FeeProcesses.CASH_WALLET)))
                 .compute("Choose the invoice", (metadata, ctx) -> chooseInvoice(ctx))
                 .step("Pay it", CallProcess.<ProcessContext>when(ctx -> ctx.get(CHOSEN) != null, AUTO_PAY_ITEM, 1,
                     ctx -> new ItemInput(String.valueOf(chosen(ctx).id())), PAID))
@@ -213,7 +207,7 @@ public final class FeeAutoPay {
     /** The one invoice this run pays: the one named (when it is still owing), else the earliest owing; none when off. */
     static void chooseInvoice(ProcessContext ctx) {
         ctx.put(MORE, false);
-        if (!Boolean.TRUE.equals(ctx.get(ON)) || FeeGate.first(ctx, CLOSURE) != null) {
+        if (!Boolean.TRUE.equals(ctx.get(ON))) {
             return;
         }
         BigDecimal available = FeeSettlement.spendable(FeeGate.list(ctx, FeeProcesses.CREDITS),

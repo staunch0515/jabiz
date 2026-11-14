@@ -655,33 +655,6 @@ class MoneyCloseIT extends MoneyCloseItSupport {
     }
 
     @Test
-    void theAutomaticPaymentLeavesAnErasedSponsorsAccountToTheWindUp() {
-        // Re-review L3: with the wind-up's switch off it only records; F-M13's automatic payment (its own switch on)
-        // neither takes the erased sponsor's invoice as an item of its daily job nor pays it when an event asks.
-        String sponsor = newSponsor(unique("s-fm15b-l3"));
-        billing(sponsor, "POSTPAID", 50_000);
-        cash(sponsor, 1_000);
-        manualFee(sponsor, 300);
-        invoicePeriod(sponsor, clock.instant());
-        param(QbParams.ERASURE_CLOSE_ENABLED, "false");
-        erase(sponsor);
-        assertThat(close(sponsor).outcome()).isEqualTo(MoneyClose.SWITCHED_OFF);
-        param(QbParams.FEE_AUTO_PAY_ENABLED, "true");
-        try {
-            assertThat(items("qb.system.fee-auto-pay-due", com.jabiz.runtime.test.TestTokens.bearer(tokens,
-                "fm15b-job", "qb.fee.system"), Map.of("limit", 1000, "params", Map.of("at", clock.instant().toString()))))
-                .extracting(row -> row.get("sponsorId")).doesNotContain(sponsor);
-            com.jabiz.quizbuks.fee.FeeAutoPay.AutoPayOutput run = (com.jabiz.quizbuks.fee.FeeAutoPay.AutoPayOutput)
-                systemRun(com.jabiz.quizbuks.fee.FeeAutoPay.AUTO_PAY, body("sponsorId", sponsor));
-            assertThat(run.outcome()).isEqualTo("NONE");
-            assertThat(query("SELECT paid_amount FROM qb_fee_invoice WHERE sponsor_id = ?", sponsor)).singleElement()
-                .satisfies(row -> assertThat(money(row.get("paid_amount"))).isZero());
-        } finally {
-            param(QbParams.FEE_AUTO_PAY_ENABLED, "false");
-        }
-    }
-
-    @Test
     void financeIsToldOnceWhenItTakesLongAndTheTaskClosesWhenItIsDone() {
         param(QbParams.ERASURE_CLOSE_ENABLED, "false");
         String sponsor = newSponsor(unique("s-fm15b-slow"));
