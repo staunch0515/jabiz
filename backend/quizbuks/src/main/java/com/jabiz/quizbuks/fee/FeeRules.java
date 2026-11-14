@@ -33,7 +33,9 @@ public final class FeeRules {
     public static final String DISTRIBUTION = "DISTRIBUTION";
     /** F-M8: a publication's exposure fee, charged a month at a time for the exposures of a shared video not its own. */
     public static final String EXPOSURE = "EXPOSURE";
-    public static final List<String> KINDS = List.of(MONTHLY, MANUAL, AUDIENCE, DISTRIBUTION, EXPOSURE);
+    /** F-M9: the AI fee, charged from the sponsor's AI credit the month after its jobs ended. */
+    public static final String AI = "AI";
+    public static final List<String> KINDS = List.of(MONTHLY, MANUAL, AUDIENCE, DISTRIBUTION, EXPOSURE, AI);
 
     private static final DateTimeFormatter MONTH = DateTimeFormatter.ofPattern("yyyy-MM", Locale.ROOT);
 

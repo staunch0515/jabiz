@@ -81,6 +81,8 @@ export interface ExposureSettlementRow {
   settlementId: string
   publicationId: string
   sponsorId: string
+  /** The Sponsor's company where the caller's operator reads it (the operator's own list); else null. */
+  company: string | null
   operatorId: string | null
   period: string
   counted: number
@@ -112,6 +114,7 @@ export async function readExposureSettlements(filter: ExposureSettlementFilter, 
       settlementId: String(row.settlementId),
       publicationId: String(row.publicationId),
       sponsorId: String(row.sponsorId),
+      company: str(row.company),
       operatorId: str(row.operatorId),
       period: String(row.period),
       counted: num(row.counted),

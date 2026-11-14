@@ -17,6 +17,8 @@ class SealedColumnsMigrationIT {
     void noMigrationRenamesDropsOrRetypesASealedColumn() {
         SealedColumnsHistory.Result result = SealedColumnsHistory
             .application(PostgresTestDatabase.get(), "classpath:db/migration")
+            // V127 builds an index with ${concurrently}: empty, as other test classes migrate at the same time.
+            .flyway(c -> c.placeholders(java.util.Map.of("concurrently", "")))
             .neverReleased("29", "V29 renamed the sealed sponsor_id and V30 named it back; both ship in 1.3 and run in"
                 + " one upgrade with the application stopped, so no installation sealed at V29 (S0b)")
             .check();

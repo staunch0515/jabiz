@@ -118,15 +118,18 @@ export function PublicationListPage() {
     const asked = new URLSearchParams(locationSearch).get('status')
     return PUBLICATION_STATUSES.find((code) => code === asked) ?? null
   })
+  // ... and `?exposureLow=1` (F-M8): the running publications whose bought exposures are running low.
+  const [exposureLow, setExposureLow] = useState(() => new URLSearchParams(locationSearch).get('exposureLow') === '1')
   const [pagination, setPagination] = useState<PaginationState>({ pageIndex: 0, pageSize: PAGE_SIZE })
   const [sorting, setSorting] = useState<SortingState>([{ id: 'editedAt', desc: true }])
   const firstPage = () => setPagination((p) => (p.pageIndex === 0 ? p : { ...p, pageIndex: 0 }))
 
   const publications = useQuery({
-    queryKey: [...PUBLICATIONS_QUERY, 'list', q, status, pagination, sorting],
+    queryKey: [...PUBLICATIONS_QUERY, 'list', q, status, exposureLow, pagination, sorting],
     queryFn: () => searchPublications({
       q,
       status,
+      exposureLow,
       offset: pagination.pageIndex * pagination.pageSize,
       limit: pagination.pageSize,
       sorts: sorting.map((s) => ({ field: s.id, asc: !s.desc })),
@@ -229,7 +232,7 @@ export function PublicationListPage() {
   ], [t, regionsText, methodLabel])
 
   const rows = publications.data?.items ?? []
-  const empty = q || status ? t('publishing.list.noMatch')
+  const empty = q || status || exposureLow ? t('publishing.list.noMatch')
     : <EmptyState testId="publications-empty">{t('publishing.list.none')}</EmptyState>
 
   return (
@@ -265,6 +268,21 @@ export function PublicationListPage() {
             <SelectContent>
               <SelectItem value={ALL}>{t('publishing.list.allStates')}</SelectItem>
               {PUBLICATION_STATUSES.map((code) => <SelectItem key={code} value={code}>{statusLabel(code)}</SelectItem>)}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="flex flex-col gap-2">
+          <Label htmlFor={`${id}-exposure`}>{t('publishing.list.exposure')}</Label>
+          <Select value={exposureLow ? 'low' : ALL} onValueChange={(value) => {
+            setExposureLow(value === 'low')
+            firstPage()
+          }}>
+            <SelectTrigger id={`${id}-exposure`} className="w-56" data-testid="publication-exposure-filter">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value={ALL}>{t('publishing.list.exposureAll')}</SelectItem>
+              <SelectItem value="low">{t('publishing.list.exposureLow')}</SelectItem>
             </SelectContent>
           </Select>
         </div>
