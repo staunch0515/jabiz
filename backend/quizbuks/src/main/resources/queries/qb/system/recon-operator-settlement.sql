@@ -36,9 +36,13 @@ permissions: [qb.wallet.system]
 -- (the sponsor, for OPERATOR_CHARGE_NO_OPERATOR). Only the settlements of the new kind (covered_from is set) are
 -- checked, and only fees charged since their switch point: what is before it is the old rule's (§3.0).
 --
--- Work is bounded: the settlements issued, the fees charged and the payments made from :since on are read (the caller gives
---   the last clean run's time less three months, none: all of the history); a difference stays in the run until it is put
---   right, so the window does not let one age out. The waiting check does not read it.
+-- Work is bounded by :since (the caller gives the last clean run's time less three months, none: all of the history): the
+--   settlements issued from then on are checked against their lines, the payments made from then on are looked for, and an
+--   operator's credit taken back is compared over all of its history when it has a settlement or a posting inside it. What
+--   is counted over is not narrowed: the settlements two of which should have written a line (the later is inside the
+--   window), the fees nobody counted (a fee can stay uncounted for longer than the window), the settlement that counted a fee.
+--   A difference stays in the run until it is put right, so the window does not let one age out. The waiting check does not
+--   read it.
 -- OPERATOR_SETTLEMENT_WAITING (a difference on purpose: a month still unsettled this long after its deadline must hold the
 --   journal export back): an operator's earliest month without a settlement (head of the line: the months after it wait for
 --   it, they are not listed), as the daily job's items take it (qb.system.operator-settlements-due), is reported when the run
@@ -64,7 +68,22 @@ permissions: [qb.wallet.system]
 --   "<month>": what was due of the month against what was taken back and carried out less what was carried in.
 -- OPERATOR_CHARGE_NO_OPERATOR: by sponsor and period, fees with no operator (no settlement counts them).
 -- OPERATOR_GIFT_CARRY_OPEN (a note): a suspended operator whose latest settlement carries credit to take back.
-WITH new_settlements AS (
+WITH all_new_settlements AS (
+    -- Every settlement of the new kind, whatever its age: what is counted over (the two settlements that could have written a
+    -- line) and where the switch points are read is the whole of it; only the work on the settlements' own rows is windowed.
+    SELECT s.{{QbOperatorSettlement.settlementId}} AS r_id,
+           CAST(s.{{QbOperatorSettlement.settlementId}} AS text) AS r_id_text,
+           s.{{QbOperatorSettlement.operatorId}} AS r_operator,
+           s.{{QbOperatorSettlement.month}} AS r_month,
+           s.{{QbOperatorSettlement.issuedAt}} AS r_issued_at,
+           s.{{QbOperatorSettlement.coveredFrom}} AS r_covered_from,
+           s.{{QbOperatorSettlement.capped}} AS r_capped,
+           s.{{QbOperatorSettlement.watermarkChargedAt}} AS r_mark_at,
+           s.{{QbOperatorSettlement.watermarkChargeId}} AS r_mark_id
+    FROM {{QbOperatorSettlement}} s
+    WHERE s.{{QbOperatorSettlement.coveredFrom}} IS NOT NULL
+),
+new_settlements AS (
     SELECT s.{{QbOperatorSettlement.settlementId}} AS r_id,
            CAST(s.{{QbOperatorSettlement.settlementId}} AS text) AS r_id_text,
            s.{{QbOperatorSettlement.operatorId}} AS r_operator,
@@ -89,7 +108,7 @@ WITH new_settlements AS (
       AND s.{{QbOperatorSettlement.issuedAt}} >= coalesce(CAST(:since AS timestamptz), '-infinity')
 ),
 switch_points AS (
-    SELECT n.r_operator, min(n.r_covered_from) AS r_at FROM new_settlements n GROUP BY n.r_operator
+    SELECT n.r_operator, min(n.r_covered_from) AS r_at FROM all_new_settlements n GROUP BY n.r_operator
 ),
 line_sums AS (
     -- A credit-used line is "in the batch" when the settlement also counted its fee (a CHARGE line of its own).
@@ -145,8 +164,10 @@ uncounted_fees AS MATERIALIZED (
     FROM {{QbFeeCharge}} c
     JOIN switch_points sp ON sp.r_operator = c.{{QbFeeCharge.operatorId}}
                          AND c.{{QbFeeCharge.chargedAt}} >= sp.r_at
-    WHERE c.{{QbFeeCharge.chargedAt}} >= coalesce(CAST(:since AS timestamptz), '-infinity')
-      AND NOT EXISTS (SELECT 1 FROM {{QbOperatorSettlementLine}} l
+    -- Not narrowed by when it was charged: a fee can stay uncounted for more than the window (a capped settlement, an operator
+    -- long behind); the switch point and the lines already leave only the fees nobody counted. The window is of the
+    -- settlements below: one of the two that should have counted it is issued inside it.
+    WHERE NOT EXISTS (SELECT 1 FROM {{QbOperatorSettlementLine}} l
                       WHERE l.{{QbOperatorSettlementLine.lineKind}} = 'CHARGE'
                         AND l.{{QbOperatorSettlementLine.chargeId}} = CAST(c.{{QbFeeCharge.chargeId}} AS text))
       AND NOT EXISTS (SELECT 1 FROM {{QbFeeInvoice}} i
@@ -162,15 +183,20 @@ uncounted_fees AS MATERIALIZED (
 missed_fees AS (
     SELECT u.r_operator, u.r_period, sum(u.r_amount) AS r_amount
     FROM uncounted_fees u
-    WHERE (SELECT count(*) FROM new_settlements s
-           WHERE s.r_operator = u.r_operator
-             AND u.r_charged_at >= s.r_covered_from
-             AND s.r_month >= u.r_period
-             AND s.r_issued_at > u.r_charged_at
-             AND NOT (s.r_capped AND (s.r_mark_at IS NULL
-                      OR u.r_charged_at > s.r_mark_at
-                      OR (u.r_charged_at = s.r_mark_at
-                          AND u.r_charge_id COLLATE "C" > s.r_mark_id COLLATE "C")))) >= 2
+    CROSS JOIN LATERAL (
+        SELECT count(*) AS r_n, max(s.r_issued_at) AS r_last
+        FROM all_new_settlements s
+        WHERE s.r_operator = u.r_operator
+          AND u.r_charged_at >= s.r_covered_from
+          AND s.r_month >= u.r_period
+          AND s.r_issued_at > u.r_charged_at
+          AND NOT (s.r_capped AND (s.r_mark_at IS NULL
+                   OR u.r_charged_at > s.r_mark_at
+                   OR (u.r_charged_at = s.r_mark_at
+                       AND u.r_charge_id COLLATE "C" > s.r_mark_id COLLATE "C")))) q
+    -- Two settlements should have counted it, and the later of them is inside the window (an older one was checked by
+    -- the run that found it clean).
+    WHERE q.r_n >= 2 AND q.r_last >= coalesce(CAST(:since AS timestamptz), '-infinity')
     GROUP BY u.r_operator, u.r_period
 ),
 credit_parts AS (
@@ -223,7 +249,7 @@ unmatched_parts AS MATERIALIZED (
     JOIN {{QbFeeCharge}} c ON c.{{QbFeeCharge.chargeId}} = r.charge_uuid
     JOIN {{QbOperatorSettlementLine}} cl ON cl.{{QbOperatorSettlementLine.lineKind}} = 'CHARGE'
                                         AND cl.{{QbOperatorSettlementLine.chargeId}} = CAST(c.{{QbFeeCharge.chargeId}} AS text)
-    JOIN new_settlements s0 ON s0.r_id_text = cl.{{QbOperatorSettlementLine.settlementId}}
+    JOIN all_new_settlements s0 ON s0.r_id_text = cl.{{QbOperatorSettlementLine.settlementId}}
     WHERE c.{{QbFeeCharge.operatorId}} IS NOT NULL
       AND r.paid_at >= s0.r_covered_from
       AND NOT EXISTS (SELECT 1 FROM {{QbOperatorSettlementLine}} g
@@ -234,20 +260,36 @@ unmatched_parts AS MATERIALIZED (
 missed_parts AS (
     -- ... that two settlements of the operator that could have written it did not: those since the one that counted the fee,
     -- issued after the payment; a capped one did not have to for the fees counted before it (the credit used on the fees
-    -- counted is never cut).
+    -- counted is never cut). The payments are those inside the window (credit_parts), the settlements any (a fee counted
+    -- long ago may be paid with credit only now); the later of the two is inside the window.
     SELECT x.r_operator, x.r_month, sum(abs(x.r_amount)) AS r_amount
     FROM (
         SELECT DISTINCT u.r_operator, u.payment_id, u.r_amount,
                to_char(u.r_paid_at AT TIME ZONE coalesce(CAST(:zone AS text), 'UTC'), 'YYYY-MM') AS r_month
         FROM unmatched_parts u
-        WHERE (SELECT count(*) FROM new_settlements s
+        WHERE (SELECT count(*) FROM all_new_settlements s
                WHERE s.r_operator = u.r_operator
                  AND s.r_issued_at >= u.r_s0_issued_at AND s.r_issued_at > u.r_paid_at
                  AND (NOT s.r_capped OR s.r_id = u.r_s0_id)) >= 2) x
     GROUP BY x.r_operator, x.r_month
 ),
+recent_operators AS (
+    -- The operators with a settlement issued, or a posting made for one (a reversal keeps the source of what it reverses),
+    -- inside the window: what they took back is compared over all of their history.
+    SELECT n.r_operator FROM new_settlements n
+    UNION
+    SELECT st.{{QbOperatorSettlement.operatorId}}
+    FROM {{LedgerTransaction}} t
+    JOIN {{QbOperatorSettlement}} st ON CAST(st.{{QbOperatorSettlement.settlementId}} AS text) = t.{{LedgerTransaction.sourceId}}
+    WHERE t.{{LedgerTransaction.sourceEntity}} = 'QbOperatorSettlement'
+      AND t.{{LedgerTransaction.createdTime}} >= coalesce(CAST(:since AS timestamptz), '-infinity')
+),
 recovered_rows AS (
-    SELECT s.r_operator, sum(s.r_gift_recovered) AS r_sum FROM new_settlements s GROUP BY s.r_operator
+    SELECT s.{{QbOperatorSettlement.operatorId}} AS r_operator, sum(s.{{QbOperatorSettlement.giftRecovered}}) AS r_sum
+    FROM {{QbOperatorSettlement}} s
+    WHERE s.{{QbOperatorSettlement.coveredFrom}} IS NOT NULL
+      AND s.{{QbOperatorSettlement.operatorId}} IN (SELECT r.r_operator FROM recent_operators r)
+    GROUP BY s.{{QbOperatorSettlement.operatorId}}
 ),
 recovered_books AS (
     SELECT coalesce(s.{{QbOperatorSettlement.operatorId}}, '-') AS r_operator,
@@ -259,9 +301,9 @@ recovered_books AS (
     LEFT JOIN {{QbOperatorSettlement}} s ON CAST(s.{{QbOperatorSettlement.settlementId}} AS text) = t.{{LedgerTransaction.sourceId}}
     WHERE t.{{LedgerTransaction.sourceEntity}} = 'QbOperatorSettlement'
       AND a.{{LedgerAccount.accountCode}} = '5140'
-      -- The window is of the settlements (a posting of none is always read).
+      -- A posting of no settlement is always read; of one, when its operator has something inside the window.
       AND (s.{{QbOperatorSettlement.settlementId}} IS NULL
-           OR s.{{QbOperatorSettlement.issuedAt}} >= coalesce(CAST(:since AS timestamptz), '-infinity'))
+           OR s.{{QbOperatorSettlement.operatorId}} IN (SELECT r.r_operator FROM recent_operators r))
     GROUP BY coalesce(s.{{QbOperatorSettlement.operatorId}}, '-')
 ),
 due_months AS (
@@ -452,11 +494,22 @@ SELECT CAST('OPERATOR_CHARGE_NO_OPERATOR' AS varchar(30)), CAST(c.{{QbFeeCharge.
        CAST(c.{{QbFeeCharge.period}} AS varchar(128)), CAST(0 AS numeric), sum(c.{{QbFeeCharge.amount}})
 FROM {{QbFeeCharge}} c
 WHERE c.{{QbFeeCharge.operatorId}} IS NULL
-  AND c.{{QbFeeCharge.chargedAt}} >= greatest(
-      (SELECT coalesce(min(o.{{QbOperatorSettlement.coveredFrom}}) FILTER (WHERE o.{{QbOperatorSettlement.coveredFrom}} > '1970-01-02'),
-                       min(o.{{QbOperatorSettlement.coveredFrom}}))
-       FROM {{QbOperatorSettlement}} o WHERE o.{{QbOperatorSettlement.coveredFrom}} IS NOT NULL),
-      coalesce(CAST(:since AS timestamptz), '-infinity'))
+  -- (a comparison with no point at all is not true: with no settlement of the new kind nothing is asked)
+  AND c.{{QbFeeCharge.chargedAt}} >= (SELECT coalesce(min(o.{{QbOperatorSettlement.coveredFrom}})
+                                                      FILTER (WHERE o.{{QbOperatorSettlement.coveredFrom}} > '1970-01-02'),
+                                                      min(o.{{QbOperatorSettlement.coveredFrom}}))
+                                      FROM {{QbOperatorSettlement}} o WHERE o.{{QbOperatorSettlement.coveredFrom}} IS NOT NULL)
+  AND c.{{QbFeeCharge.chargedAt}} >= coalesce(CAST(:since AS timestamptz), '-infinity')
+  -- A fee whose invoice is voided is turned back and nothing is owed on it: it is not asked about (how a difference is put right).
+  AND NOT EXISTS (SELECT 1 FROM {{QbFeeInvoice}} i
+                  WHERE i.{{QbFeeInvoice.status}} = 'VOID'
+                    AND ((i.{{QbFeeInvoice.chargeId}} = CAST(c.{{QbFeeCharge.chargeId}} AS text))
+                         OR (i.{{QbFeeInvoice.chargeId}} IS NULL
+                             AND i.{{QbFeeInvoice.sponsorId}} = c.{{QbFeeCharge.sponsorId}}
+                             AND i.{{QbFeeInvoice.period}} = c.{{QbFeeCharge.period}}
+                             AND c.{{QbFeeCharge.billingMode}} = 'POSTPAID'
+                             AND NOT EXISTS (SELECT 1 FROM {{QbFeeInvoice}} o
+                                             WHERE o.{{QbFeeInvoice.chargeId}} = CAST(c.{{QbFeeCharge.chargeId}} AS text)))))
 GROUP BY c.{{QbFeeCharge.sponsorId}}, c.{{QbFeeCharge.period}}
 UNION ALL
 SELECT CAST('OPERATOR_GIFT_CARRY_OPEN' AS varchar(30)), CAST(k.r_operator AS varchar(128)), CAST(NULL AS varchar(128)),

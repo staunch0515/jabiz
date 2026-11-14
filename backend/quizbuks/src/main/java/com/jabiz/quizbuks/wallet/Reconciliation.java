@@ -215,6 +215,9 @@ public final class Reconciliation {
                 .step("Find the last clean run", QueryEntities.<ProcessContext>of(defaultDataset(RUN_ENTITY_NAME),
                     ctx -> EntityQuery.builder().where(new QueryPredicate.And(List.of(
                         new QueryPredicate.Eq("status", ReconChecks.OK),
+                        // Only a run that held these checks counts: the summary of an earlier one has no such key (the first
+                        // run after the deploy reads all of the history).
+                        new QueryPredicate.Like("summary", "%" + ReconChecks.OPERATOR_SETTLEMENT_COVERAGE + "%"),
                         new QueryPredicate.Lt("scheduledTime", ctx.get(INPUT, ReconcileInput.class).scheduledTime()))))
                         .orderBy("scheduledTime", false).limit(1).build(), LAST_OK))
                 .step("Compare the operators' settlements", RunTemplate.<ProcessContext>of(OPERATOR_SETTLEMENT_TEMPLATE,
