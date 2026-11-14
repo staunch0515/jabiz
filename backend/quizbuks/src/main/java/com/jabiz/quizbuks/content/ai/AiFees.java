@@ -141,19 +141,41 @@ final class AiFees {
     }
 
     /**
-     * At a request, under the sponsor's AI lock and everybody's: freezes the fee on the job to come. A kind the platform
-     * pays for, or the switch off, is {@code NONE}; otherwise the request reserves the most it may cost, refused when the
-     * credit cannot hold it or when its price is not known.
+     * F-M9b: what a request may cost and what the credit can hold for it, as the request reads them (its quote and its
+     * reservation are this one figure, coordinator 2026-11-14).
+     *
+     * @param charged      whether the request is charged (the fee on and a charged kind); the rest null when not
+     * @param maxYen       the most it may cost, with its tax rounded up: what it reserves
+     * @param available    what the credit can hold now (expired or voided fee credit left out)
+     * @param minPurchase  the least purchase (qb.ai.credit.min-purchase), null when not set
+     */
+    record Quote(boolean charged, BigDecimal maxYen, BigDecimal available, BigDecimal minPurchase) {
+
+        static final Quote FREE = new Quote(false, null, null, null);
+
+        boolean enough() {
+            return !charged || available.compareTo(maxYen) >= 0;
+        }
+
+        /** What the credit lacks for the request: 0 when it is enough. */
+        BigDecimal shortfall() {
+            return enough() ? BigDecimal.ZERO : maxYen.subtract(available);
+        }
+    }
+
+    /**
+     * The quote of a request about to be recorded: {@link Quote#FREE} for a kind the platform pays for or with the switch
+     * off; otherwise the most it may cost and what the credit can hold, refused only when the price is not known (or a
+     * fee parameter is not usable). It writes nothing and takes no lock: a request reads it again under its locks.
      *
      * @param attempt the most one attempt may use ({@link AiProcesses#unrecordedAttempt} of the job to come), read only
      *                for a charged request
      */
-    static void reserve(ProcessContext ctx, AiSettings settings, String kind,
+    static Quote quote(ProcessContext ctx, AiSettings settings, String kind,
         java.util.function.Supplier<ClaudeApi.Usage> attempt, int attempts, long searches, boolean mayFallBack) {
         AiSettings.Fee fee = settings.fee();
         if (!fee.enabled() || !CHARGED_KINDS.contains(kind)) {
-            ctx.put(FROZEN, new Frozen(QbAi.FEE_NONE, null, null, null, BigDecimal.ZERO));
-            return;
+            return Quote.FREE;
         }
         List<Violation> problems = new ArrayList<>(settings.feeProblems());
         BigDecimal maxUsd = problems.isEmpty() ? AiCost.maxOf(settings.model(), attempt.get(), attempts, searches,
@@ -174,21 +196,36 @@ final class AiFees {
             available = available.min(AiFeeRules.usable(Prepayments.aiLots(ctx), standing.occupied(fee.taxRate()),
                 ctx.opTime()));
         }
-        if (available.compareTo(reservation) < 0) {
+        return new Quote(true, reservation, available, fee.minPurchase());
+    }
+
+    /**
+     * At a request, under the sponsor's AI lock and everybody's: freezes the fee on the job to come, from its
+     * {@link #quote}. Not charged is {@code NONE}; otherwise the request reserves the most it may cost, refused when the
+     * credit cannot hold it.
+     */
+    static void reserve(ProcessContext ctx, AiSettings settings, Quote quote) {
+        if (!quote.charged()) {
+            ctx.put(FROZEN, new Frozen(QbAi.FEE_NONE, null, null, null, BigDecimal.ZERO));
+            return;
+        }
+        AiSettings.Fee fee = settings.fee();
+        if (!quote.enough()) {
             Map<String, Object> details = new LinkedHashMap<>();
-            details.put("needed", reservation);
-            details.put("available", available);
+            details.put("needed", quote.maxYen());
+            details.put("available", quote.available());
             if (fee.minPurchase() != null) {
                 // Not set (an optional parameter): no detail; a null one would fail the refusal itself (a 500).
                 details.put("minPurchase", fee.minPurchase());
             }
             throw new BusinessRuleViolationException(List.of(new Violation(null, AiCodes.CREDIT_SHORT,
-                "The AI credit holds " + available + " yen; this request may cost up to " + reservation, details)));
+                "The AI credit holds " + quote.available() + " yen; this request may cost up to " + quote.maxYen(),
+                details)));
         }
         List<EntityInstance> operator = rows(ctx, OPERATOR_ROWS);
         ctx.put(FROZEN, new Frozen(QbAi.FEE_CREDIT,
             operator.isEmpty() ? null : (String) operator.getFirst().get("operatorId"), fee.markup(), fee.usdJpy(),
-            reservation));
+            quote.maxYen()));
     }
 
     /**

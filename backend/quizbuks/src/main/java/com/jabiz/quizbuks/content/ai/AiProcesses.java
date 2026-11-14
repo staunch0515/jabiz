@@ -102,6 +102,10 @@ public final class AiProcesses {
     public static final String REQUEST = "QB_AI_QUESTIONS_REQUEST";
     /** Q73d-1: candidate translations of a quiz's text, and the sponsor's reviewed ones written. */
     public static final String TRANSLATE_REQUEST = "QB_AI_TRANSLATE_REQUEST";
+    /** F-M9b: the quotes of the three charged requests of a quiz (read only, a sponsor's own). */
+    public static final String QUOTE = "QB_AI_QUESTIONS_QUOTE";
+    public static final String TRANSLATE_QUOTE = "QB_AI_TRANSLATE_QUOTE";
+    public static final String PUBLICATION_TRANSLATE_QUOTE = "QB_AI_PUBLICATION_TRANSLATE_QUOTE";
     public static final String TRANSLATION_ACCEPT = "QB_AI_TRANSLATION_ACCEPT";
     /** Q73d-2: candidate translations of a publication's own texts, and their use recorded. */
     public static final String PUBLICATION_TRANSLATE_REQUEST = "QB_AI_PUBLICATION_TRANSLATE_REQUEST";
@@ -213,6 +217,8 @@ public final class AiProcesses {
     public record ExpireInput(@NotNull UUID aiJobId, @NotBlank @Size(max = 128) String sponsorId) {}
 
     static final String INPUT = "input";
+    /** F-M9b: the context of a quote (no notice asked for or recorded). */
+    static final String QUOTING = "quoting";
     static final String SETTINGS_ROWS = "settingsRows";
     static final String SETTINGS = "settings";
     static final String JOB_INPUT = "jobInput";
@@ -270,6 +276,29 @@ public final class AiProcesses {
             AiTranslateJob.TYPE, Loads.PUBLICATION, zone, ctx -> preparePublicationTexts(ctx, userKeys));
     }
 
+    /** F-M9b: what a request of questions would reserve, and what the credit can hold (no lock, no write). */
+    public static ProcessDefinition<RequestInput, QuoteOutput, ProcessContext> quote(ZoneId zone, AiUserKeys userKeys,
+        AiPdfs.Limits pdfs) {
+        return quoteProcess(QUOTE, RequestInput.class, "Prices a request of AI questions as the request would reserve "
+            + "it, writing nothing.", Loads.QUESTIONS, zone, ctx -> prepare(ctx, userKeys, pdfs));
+    }
+
+    /** F-M9b: the quote of {@link #translateRequest}. */
+    public static ProcessDefinition<TranslateRequestInput, QuoteOutput, ProcessContext> translateQuote(ZoneId zone,
+        AiUserKeys userKeys) {
+        return quoteProcess(TRANSLATE_QUOTE, TranslateRequestInput.class, "Prices an AI translation of a quiz as the "
+            + "request would reserve it, writing nothing.", Loads.TRANSLATION, zone,
+            ctx -> prepareTranslation(ctx, userKeys));
+    }
+
+    /** F-M9b: the quote of {@link #publicationTranslateRequest}. */
+    public static ProcessDefinition<PublicationTranslateRequestInput, QuoteOutput, ProcessContext>
+        publicationTranslateQuote(ZoneId zone, AiUserKeys userKeys) {
+        return quoteProcess(PUBLICATION_TRANSLATE_QUOTE, PublicationTranslateRequestInput.class, "Prices an AI "
+            + "translation of a publication's texts as the request would reserve it, writing nothing.",
+            Loads.PUBLICATION, zone, ctx -> preparePublicationTexts(ctx, userKeys));
+    }
+
     /** What a request reads of the quiz besides the quiz itself. */
     private enum Loads { NONE, QUESTIONS, TRANSLATION, PUBLICATION }
 
@@ -283,41 +312,8 @@ public final class AiProcesses {
         java.util.function.Consumer<ProcessContext> prepare) {
         return ProcessDefinition.define(name, 1, type, RequestOutput.class, ProcessContext.class, pb -> {
             pb.description(description)
-                .permissions(QbPermissions.AI_USE)
-                .requiresVerifiedEmail()
-                .steps(CallerChecks::refuseBanned)
-                .contextFactory((start, input) -> {
-                    ProcessContext ctx = new ProcessContext(start);
-                    ctx.put(INPUT, input);
-                    ctx.put(QuizEditing.QUIZ_ID, input.quizId());
-                    if (input instanceof PublicationTranslateRequestInput publication) {
-                        ctx.put(PUBLICATION_ID, publication.publicationId());
-                    }
-                    return ctx;
-                })
-                .outputMapper(ctx -> ctx.get(OUTPUT, RequestOutput.class))
-                .steps(SponsorChecks::load)
-                .steps(b -> ConsentChecks.load(b, "Load the AI notice", List.of(QbLegal.AI_NOTICE),
-                    ctx -> ctx.request().actorId()))
-                .step("Load the settings", loadSettings())
-                .step("Load the quiz", LoadEntity.by(QbContent.sponsorDataset(QbContent.QUIZ),
-                    QuizEditing.QUIZ_ID, QuizEditing.QUIZ));
-            if (loads == Loads.TRANSLATION) {
-                TranslationProcesses.loadTexts(pb, ctx -> ctx.get(INPUT, TranslateRequestInput.class).language());
-            }
-            if (loads == Loads.PUBLICATION) {
-                pb.step("Load the publication", LoadEntity.by(QbPublications.sponsorDataset(QbPublications.PUBLICATION),
-                    PUBLICATION_ID, PUBLICATION));
-            }
-            if (loads == Loads.QUESTIONS) {
-                pb.step("Load its materials and questions", QueryEntities.<ProcessContext>all(
-                        QueryEntities.query(QbContent.sponsorDataset(QbContent.MATERIAL),
-                            ctx -> QuizEditing.ofQuiz(ctx.get(QuizEditing.QUIZ_ID)), MATERIAL_ROWS),
-                        QueryEntities.query(QbContent.sponsorDataset(QbContent.QUESTION),
-                            ctx -> QuizEditing.ofQuiz(ctx.get(QuizEditing.QUIZ_ID)), QUESTION_ROWS)))
-                    .steps(b -> QuizEditing.loadFiles(b, AiProcesses::chosenPdfs));
-            }
-            pb.compute("Prepare the request", (metadata, ctx) -> prepare.accept(ctx));
+                .outputMapper(ctx -> ctx.get(OUTPUT, RequestOutput.class));
+            requestPrefix(pb, loads, prepare, false);
             limited(pb, zone);
             StartExternalJob.Spec<ProcessContext> start = StartExternalJob.<ProcessContext>of(jobType,
                     ctx -> ctx.get(JOB_INPUT))
@@ -330,6 +326,94 @@ public final class AiProcesses {
             pb.step("Start the job", start)
                 .compute("Record the job", (metadata, ctx) -> record(ctx, zone));
         });
+    }
+
+    /**
+     * F-M9b (coordinator 2026-11-14): the quote of a request: the same caller, checks and reads as the request and the
+     * same computation of what it reserves ({@link #feeQuote}), with no lock and no write (the AI notice is not asked
+     * for, nor recorded: the quote is what the sponsor reads before accepting it).
+     */
+    private static <I extends Requested> ProcessDefinition<I, QuoteOutput, ProcessContext> quoteProcess(
+        String name, Class<I> type, String description, Loads loads, ZoneId zone,
+        java.util.function.Consumer<ProcessContext> prepare) {
+        return ProcessDefinition.define(name, 1, type, QuoteOutput.class, ProcessContext.class, pb -> {
+            pb.description(description)
+                .outputMapper(ctx -> ctx.get(OUTPUT, QuoteOutput.class));
+            requestPrefix(pb, loads, prepare, true);
+            quoted(pb, zone);
+        });
+    }
+
+    /** What a quote reads of where the caller stands (no lock) and its answer. */
+    static <I> void quoted(com.jabiz.process.ProcessDefinitionBuilder<I, QuoteOutput, ProcessContext> pb,
+        ZoneId zone) {
+        pb.step("Load where the sponsor stands", QueryEntities.<ProcessContext>all(standingQueries(zone)))
+            .step("Read what the AI credit holds by lot", RunTemplate.<ProcessContext>when(AiFees::readsLots,
+                com.jabiz.quizbuks.fee.Prepayments.HELD_TEMPLATE, AiFees::lotsParams,
+                com.jabiz.quizbuks.fee.Prepayments.HELD_LOTS))
+            .compute("Answer", (metadata, ctx) -> ctx.put(OUTPUT, QuoteOutput.of(feeQuote(ctx))));
+    }
+
+    /** What a request and its quote share: who may, the caller's standing, the notice, the settings, the quiz. */
+    private static <I extends Requested, O> void requestPrefix(
+        com.jabiz.process.ProcessDefinitionBuilder<I, O, ProcessContext> pb, Loads loads,
+        java.util.function.Consumer<ProcessContext> prepare, boolean quote) {
+        pb.permissions(QbPermissions.AI_USE)
+            .requiresVerifiedEmail()
+            .steps(CallerChecks::refuseBanned)
+            .contextFactory((start, input) -> {
+                ProcessContext ctx = new ProcessContext(start);
+                ctx.put(INPUT, input);
+                ctx.put(QuizEditing.QUIZ_ID, input.quizId());
+                if (input instanceof PublicationTranslateRequestInput publication) {
+                    ctx.put(PUBLICATION_ID, publication.publicationId());
+                }
+                if (quote) {
+                    ctx.put(QUOTING, true);
+                }
+                return ctx;
+            })
+            .steps(SponsorChecks::load)
+            .steps(b -> ConsentChecks.load(b, "Load the AI notice", List.of(QbLegal.AI_NOTICE),
+                ctx -> ctx.request().actorId()))
+            .step("Load the settings", loadSettings())
+            .step("Load the quiz", LoadEntity.by(QbContent.sponsorDataset(QbContent.QUIZ),
+                QuizEditing.QUIZ_ID, QuizEditing.QUIZ));
+        if (loads == Loads.TRANSLATION) {
+            TranslationProcesses.loadTexts(pb, ctx -> ctx.get(INPUT, TranslateRequestInput.class).language());
+        }
+        if (loads == Loads.PUBLICATION) {
+            pb.step("Load the publication", LoadEntity.by(QbPublications.sponsorDataset(QbPublications.PUBLICATION),
+                PUBLICATION_ID, PUBLICATION));
+        }
+        if (loads == Loads.QUESTIONS) {
+            pb.step("Load its materials and questions", QueryEntities.<ProcessContext>all(
+                    QueryEntities.query(QbContent.sponsorDataset(QbContent.MATERIAL),
+                        ctx -> QuizEditing.ofQuiz(ctx.get(QuizEditing.QUIZ_ID)), MATERIAL_ROWS),
+                    QueryEntities.query(QbContent.sponsorDataset(QbContent.QUESTION),
+                        ctx -> QuizEditing.ofQuiz(ctx.get(QuizEditing.QUIZ_ID)), QUESTION_ROWS)))
+                .steps(b -> QuizEditing.loadFiles(b, AiProcesses::chosenPdfs));
+        }
+        pb.compute("Prepare the request", (metadata, ctx) -> prepare.accept(ctx));
+    }
+
+    /**
+     * F-M9b: a quote's answer, the numbers the page shows as they are (it works out none of its own).
+     *
+     * @param charged      false: the request is free (the fee off, or a kind the platform pays for); the rest null
+     * @param maxYen       the most the request may cost, with tax: what it would reserve
+     * @param availableYen what the AI credit can hold now
+     * @param enough       whether the credit holds the most it may cost
+     * @param shortYen     what is missing (0 when enough)
+     * @param minPurchase  the least purchase, null when none is set
+     */
+    public record QuoteOutput(boolean charged, BigDecimal maxYen, BigDecimal availableYen, boolean enough,
+        BigDecimal shortYen, BigDecimal minPurchase) {
+
+        static QuoteOutput of(AiFees.Quote quote) {
+            return quote.charged() ? new QuoteOutput(true, quote.maxYen(), quote.available(), quote.enough(),
+                quote.shortfall(), quote.minPurchase()) : new QuoteOutput(false, null, null, true, null, null);
+        }
     }
 
     /**
@@ -452,10 +536,16 @@ public final class AiProcesses {
     /** Refuses the request with every problem found; otherwise records the notice and what the next steps need. */
     static void prepared(ProcessContext ctx, Common common, String kind, Object job,
         Map<String, Object> params, int size, long estimate, List<UUID> pdfs) {
-        if (!common.problems().isEmpty()) {
-            throw new BusinessRuleViolationException(common.problems());
+        boolean quote = ctx.contains(QUOTING);
+        // F-M9b: a quote is read before the notice is accepted, and records nothing.
+        List<Violation> problems = quote ? common.problems().stream()
+            .filter(problem -> !AiCodes.NOTICE_REQUIRED.equals(problem.ruleCode())).toList() : common.problems();
+        if (!problems.isEmpty()) {
+            throw new BusinessRuleViolationException(problems);
         }
-        ConsentChecks.record(ctx, ctx.request().actorId(), common.accept(), QbLegal.SOURCE_AI);
+        if (!quote) {
+            ConsentChecks.record(ctx, ctx.request().actorId(), common.accept(), QbLegal.SOURCE_AI);
+        }
         ctx.put(JOB_INPUT, job);
         ctx.put(JOB_PARAMS, JSON.writeValueAsString(params));
         ctx.put(INPUT_BYTES, size);
@@ -831,9 +921,18 @@ public final class AiProcesses {
             throw new BusinessRuleViolationException(problems);
         }
         // F-M9: the AI fee, frozen on the job to come (a charged kind reserves the most it may cost of the credit).
+        AiFees.reserve(ctx, ctx.get(SETTINGS, AiSettings.class), feeQuote(ctx));
+    }
+
+    /**
+     * F-M9b: the fee's quote of the job to come, as {@link #prepared} left it: what the request reserves and what its
+     * quote answers, from the one computation.
+     */
+    static AiFees.Quote feeQuote(ProcessContext ctx) {
+        String kind = (String) ctx.get(KIND);
+        AiSettings settings = ctx.get(SETTINGS, AiSettings.class);
         boolean site = QbAi.KIND_SITE_PROFILE.equals(kind);
-        AiFees.reserve(ctx, ctx.get(SETTINGS, AiSettings.class), kind,
-            () -> mostOfAttempt(toCome(ctx), ctx.get(SETTINGS, AiSettings.class).fee()),
+        return AiFees.quote(ctx, settings, kind, () -> mostOfAttempt(toCome(ctx), settings.fee()),
             site ? SiteProfileJob.ATTEMPTS : AiQuestionsJob.ATTEMPTS, site ? AiFees.SITE_SEARCHES : 0,
             !ctx.contains(PDF_FILES) || ((List<?>) ctx.get(PDF_FILES)).isEmpty());
     }

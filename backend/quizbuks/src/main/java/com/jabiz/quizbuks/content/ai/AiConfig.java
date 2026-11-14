@@ -260,6 +260,31 @@ public class AiConfig {
         return AiProcesses.request(zone, userKeys, pdfs);
     }
 
+    /** F-M9b: the quotes of the charged requests (read only, a sponsor's own; rate limited per user). */
+    @Bean
+    ProcessDefinition<AiProcesses.RequestInput, AiProcesses.QuoteOutput, ProcessContext> qbAiQuestionsQuote(
+        AiUserKeys userKeys, AiPdfs.Limits pdfs) {
+        return AiProcesses.quote(zone, userKeys, pdfs);
+    }
+
+    @Bean
+    ProcessDefinition<AiProcesses.TranslateRequestInput, AiProcesses.QuoteOutput, ProcessContext> qbAiTranslateQuote(
+        AiUserKeys userKeys) {
+        return AiProcesses.translateQuote(zone, userKeys);
+    }
+
+    @Bean
+    ProcessDefinition<AiProcesses.PublicationTranslateRequestInput, AiProcesses.QuoteOutput, ProcessContext>
+        qbAiPublicationTranslateQuote(AiUserKeys userKeys) {
+        return AiProcesses.publicationTranslateQuote(zone, userKeys);
+    }
+
+    @Bean
+    ProcessDefinition<SiteProfileProcesses.RequestInput, AiProcesses.QuoteOutput, ProcessContext> qbSiteProfileQuote(
+        AiUserKeys userKeys) {
+        return SiteProfileProcesses.quote(zone, userKeys);
+    }
+
     /** Q73d-1: candidate translations of a quiz's text, asked for as questions are. */
     @Bean
     ProcessDefinition<AiProcesses.TranslateRequestInput, AiProcesses.RequestOutput, ProcessContext>

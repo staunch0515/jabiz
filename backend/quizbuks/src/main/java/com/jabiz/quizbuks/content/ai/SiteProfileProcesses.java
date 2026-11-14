@@ -55,6 +55,8 @@ import java.util.Map;
 public final class SiteProfileProcesses {
 
     public static final String REQUEST = "QB_SITE_PROFILE_REQUEST";
+    /** F-M9b: the quote of {@link #REQUEST} (read only). */
+    public static final String QUOTE = "QB_SITE_PROFILE_QUOTE";
 
     public static final String TASK_TYPE = "qb.ai.site-profile";
     public static final String TASK_TITLE = "task.qb.ai.site-profile";
@@ -97,25 +99,8 @@ public final class SiteProfileProcesses {
             ProcessContext.class, pb -> {
                 pb.description("Asks the AI to read the sponsor's website and draft a profile package and a quiz about "
                         + "the company, to review.")
-                    .permissions(QbPermissions.AI_USE)
-                    .requiresVerifiedEmail()
-                    .steps(CallerChecks::refuseBanned)
-                    .contextFactory((start, input) -> {
-                        ProcessContext ctx = new ProcessContext(start);
-                        ctx.put(AiProcesses.INPUT, input);
-                        return ctx;
-                    })
-                    .outputMapper(ctx -> ctx.get(AiProcesses.OUTPUT, AiProcesses.RequestOutput.class))
-                    .steps(SponsorChecks::load)
-                    .steps(b -> ConsentChecks.load(b, "Load the AI notice", List.of(QbLegal.AI_NOTICE),
-                        ctx -> ctx.request().actorId()))
-                    .step("Load the settings", AiProcesses.loadSettings())
-                    .step("Load the parameters", LoadParams.<ProcessContext>of(ProcessContext::opTime, PARAMS,
-                        QbParams.SITE_PROFILE_ENABLED, QbParams.SITE_PROFILE_MONTHLY, QbParams.SITE_PROFILE_DAILY,
-                        QbParams.SITE_PROFILE_MAX_PAGES, QbParams.SITE_PROFILE_QUESTIONS,
-                        QbParams.SITE_PROFILE_OPTIONS, QbParams.SITE_PROFILE_MATERIALS_MAX, QbParams.SITE_PROFILE_HANDLE_ALTERNATIVES,
-                        QbParams.PRODUCTS_MAX))
-                    .compute("Prepare the request", (metadata, ctx) -> prepare(ctx, userKeys));
+                    .outputMapper(ctx -> ctx.get(AiProcesses.OUTPUT, AiProcesses.RequestOutput.class));
+                prefix(pb, userKeys, false);
                 AiProcesses.limited(pb, zone);
                 pb.step("Load the sponsor's site requests", QueryEntities.<ProcessContext>of(
                         QbAi.defaultDataset(QbAi.JOB), ctx -> EntityQuery.builder()
@@ -131,6 +116,47 @@ public final class SiteProfileProcesses {
                         .outputKey(AiProcesses.EXTERNAL_JOB_ID))
                     .compute("Record the job", (metadata, ctx) -> AiProcesses.record(ctx, zone));
             });
+    }
+
+    /**
+     * F-M9b: what a website's draft would reserve and what the credit can hold, as {@link #request} reads them, with no
+     * lock and no write (the notice is not asked for).
+     */
+    public static ProcessDefinition<RequestInput, AiProcesses.QuoteOutput, ProcessContext> quote(ZoneId zone,
+        AiUserKeys userKeys) {
+        return ProcessDefinition.define(QUOTE, 1, RequestInput.class, AiProcesses.QuoteOutput.class,
+            ProcessContext.class, pb -> {
+                pb.description("Prices a website's draft as the request would reserve it, writing nothing.")
+                    .outputMapper(ctx -> ctx.get(AiProcesses.OUTPUT, AiProcesses.QuoteOutput.class));
+                prefix(pb, userKeys, true);
+                AiProcesses.quoted(pb, zone);
+            });
+    }
+
+    /** What the request and its quote share: who may, the standing, the notice, the settings and the parameters. */
+    private static <O> void prefix(com.jabiz.process.ProcessDefinitionBuilder<RequestInput, O, ProcessContext> pb,
+        AiUserKeys userKeys, boolean quote) {
+        pb.permissions(QbPermissions.AI_USE)
+            .requiresVerifiedEmail()
+            .steps(CallerChecks::refuseBanned)
+            .contextFactory((start, input) -> {
+                ProcessContext ctx = new ProcessContext(start);
+                ctx.put(AiProcesses.INPUT, input);
+                if (quote) {
+                    ctx.put(AiProcesses.QUOTING, true);
+                }
+                return ctx;
+            })
+            .steps(SponsorChecks::load)
+            .steps(b -> ConsentChecks.load(b, "Load the AI notice", List.of(QbLegal.AI_NOTICE),
+                ctx -> ctx.request().actorId()))
+            .step("Load the settings", AiProcesses.loadSettings())
+            .step("Load the parameters", LoadParams.<ProcessContext>of(ProcessContext::opTime, PARAMS,
+                QbParams.SITE_PROFILE_ENABLED, QbParams.SITE_PROFILE_MONTHLY, QbParams.SITE_PROFILE_DAILY,
+                QbParams.SITE_PROFILE_MAX_PAGES, QbParams.SITE_PROFILE_QUESTIONS,
+                QbParams.SITE_PROFILE_OPTIONS, QbParams.SITE_PROFILE_MATERIALS_MAX,
+                QbParams.SITE_PROFILE_HANDLE_ALTERNATIVES, QbParams.PRODUCTS_MAX))
+            .compute("Prepare the request", (metadata, ctx) -> prepare(ctx, userKeys));
     }
 
     static java.time.Instant monthStart(java.time.Instant at, ZoneId zone) {
