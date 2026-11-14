@@ -827,7 +827,7 @@ public final class AiProcesses {
         }
         // F-M9: the AI fee, frozen on the job to come (a charged kind reserves the most it may cost of the credit).
         boolean site = QbAi.KIND_SITE_PROFILE.equals(kind);
-        AiFees.reserve(ctx, ctx.get(SETTINGS, AiSettings.class), kind, () -> unrecordedAttempt(toCome(ctx)),
+        AiFees.reserve(ctx, ctx.get(SETTINGS, AiSettings.class), kind, () -> mostOfAttempt(toCome(ctx)),
             site ? SiteProfileJob.ATTEMPTS : AiQuestionsJob.ATTEMPTS, site ? AiFees.SITE_SEARCHES : 0);
     }
 
@@ -1232,6 +1232,23 @@ public final class AiProcesses {
             ? AiCoverJob.maxTokens(String.valueOf(params.getOrDefault("style", AiCoverJob.GRAPHIC)))
             : ClaudeApi.maxTokens(((Number) params.getOrDefault("count", AiQuestionsJob.MAX_COUNT)).intValue());
         return ClaudeCalls.priced(job.get("model"), ClaudeApi.unrecorded(input, maxTokens));
+    }
+
+    /**
+     * F-M9 (#692 review M1): the most one attempt of the job may use, which a charged request reserves: the web reader's
+     * every call ({@link ClaudeWebResearch#mostOfAttempt}); for the other kinds one attempt is the calls
+     * {@link #unrecordedAttempt} counts.
+     */
+    static ClaudeApi.Usage mostOfAttempt(EntityInstance job) {
+        if (!QbAi.KIND_SITE_PROFILE.equals(job.get("kind"))) {
+            return unrecordedAttempt(job);
+        }
+        Map<String, Object> params = params(job);
+        long input = params.get("reservedInputTokens") instanceof Number reserved ? reserved.longValue()
+            : AiLimits.reservedInput(QuizEditing.number(job.get("inputBytes")), 0);
+        int output = params.get("maxOutputTokens") instanceof Number asked ? asked.intValue()
+            : SiteProfileJob.MAX_OUTPUT_TOKENS;
+        return ClaudeWebResearch.mostOfAttempt(job.get("model"), input, output);
     }
 
     static Map<String, Object> finished(ClaudeApi.Usage usage, BigDecimal cost, Integer attempts,

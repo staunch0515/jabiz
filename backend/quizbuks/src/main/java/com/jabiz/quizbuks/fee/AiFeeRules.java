@@ -46,9 +46,15 @@ public final class AiFeeRules {
         return amount.add(FeeRules.tax(amount, taxRate));
     }
 
-    /** What a request holds of the credit: the most it may cost, as a fee, with its tax. */
+    /**
+     * What a request holds of the credit: the most it may cost, as a fee, with its tax rounded up (review M1 of #692: a
+     * strict bound). The job's end takes its {@link #increment} within its group, whose tax is the group's rounded down:
+     * {@code floor((b + f) t) - floor(b t)} is at most {@code ceil(f t)}, so the increment of any fee up to the most it
+     * may cost never exceeds the reservation.
+     */
     public static BigDecimal reservation(BigDecimal maxUsd, BigDecimal markup, BigDecimal usdJpy, BigDecimal taxRate) {
-        return withTax(fee(maxUsd, markup, usdJpy), taxRate);
+        BigDecimal fee = fee(maxUsd, markup, usdJpy);
+        return fee.add(fee.multiply(taxRate).setScale(0, RoundingMode.CEILING));
     }
 
     /**

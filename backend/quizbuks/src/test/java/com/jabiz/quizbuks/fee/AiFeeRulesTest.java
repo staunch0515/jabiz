@@ -52,6 +52,8 @@ class AiFeeRulesTest {
     void theReservationIsTheMostItMayCostWithItsTax() {
         // $2 at most: 2 x 1.5 x 150 = 450, with its 45 of tax.
         assertThat(AiFeeRules.reservation(new BigDecimal("2"), MARKUP, RATE, TAX)).isEqualByComparingTo("495");
+        // Its tax is rounded up (#692 review M1): $0.123456 at most is a fee of 28, 2.8 of tax -> 3.
+        assertThat(AiFeeRules.reservation(new BigDecimal("0.123456"), MARKUP, RATE, TAX)).isEqualByComparingTo("31");
     }
 
     @Test
@@ -122,6 +124,29 @@ class AiFeeRulesTest {
             assertThat(AiFeeRules.increment(yen(before), settled.fee().add(BigDecimal.ONE), rate))
                 .isGreaterThan(yen(room));
         }
+    }
+
+    /**
+     * #692 review M1: the reservation is a strict bound. Whatever the job actually used (at most the dollars reserved
+     * for) and whatever its group held before it, what its end takes of the credit is never above its reservation.
+     */
+    @Property
+    void whatAJobTakesIsNeverAboveItsReservation(@ForAll @IntRange(min = 1, max = 5_000_000) int mostMicros,
+        @ForAll @IntRange(max = 1_000_000) int usedPerMillion, @ForAll @IntRange(max = 100_000) int before,
+        @ForAll @IntRange(min = 100, max = 1_000) int markupHundredths,
+        @ForAll @IntRange(min = 5_000, max = 50_000) int rateHundredths, @ForAll @IntRange(max = 20) int taxPercent) {
+        BigDecimal most = BigDecimal.valueOf(mostMicros, 6);
+        BigDecimal used = most.multiply(BigDecimal.valueOf(usedPerMillion, 6)).setScale(6, java.math.RoundingMode.DOWN);
+        BigDecimal markup = BigDecimal.valueOf(markupHundredths, 2);
+        BigDecimal rate = BigDecimal.valueOf(rateHundredths, 2);
+        BigDecimal tax = BigDecimal.valueOf(taxPercent, 2);
+        BigDecimal reservation = AiFeeRules.reservation(most, markup, rate, tax);
+        BigDecimal taken = AiFeeRules.increment(yen(before), AiFeeRules.fee(used, markup, rate), tax);
+        assertThat(taken).isLessThanOrEqualTo(reservation);
+        // And settled against the reservation alone, the job is charged all of its fee.
+        AiFeeRules.Settled settled = AiFeeRules.settle(yen(before), AiFeeRules.fee(used, markup, rate), reservation,
+            tax);
+        assertThat(settled.absorbed()).isEqualByComparingTo("0");
     }
 
     @Test
