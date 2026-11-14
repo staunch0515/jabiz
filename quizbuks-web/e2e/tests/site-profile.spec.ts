@@ -1,4 +1,4 @@
-import { aiReady } from './ai'
+import { aiCredit, aiReady } from './ai'
 import { approvedSponsor } from './publishing'
 import { expect, expectAccessible, openArea, prepareQuizbuks, rows, setAppearance, setControlledParam, signIn, test,
   unique } from './support'
@@ -30,6 +30,7 @@ for (const appearance of ['light', 'dark'] as const) {
       test.setTimeout(240_000)
       await setAppearance(page, appearance)
       const { email, token } = await approvedSponsor(request, 'Ada')
+      await aiCredit(request, token)
       const label = unique('site').toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 24)
       await signIn(page, '/sponsor/', email)
       await openArea(page, 'hub')
@@ -108,7 +109,8 @@ for (const appearance of ['light', 'dark'] as const) {
   test(`a website that cannot be read says why, and the sponsor can try again (${appearance})`, async ({ page, request }) => {
     test.setTimeout(180_000)
     await setAppearance(page, appearance)
-    const { email } = await approvedSponsor(request, 'Beth')
+    const { email, token } = await approvedSponsor(request, 'Beth')
+    await aiCredit(request, token)
     const label = unique('site').toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 24)
     await signIn(page, '/sponsor/', email)
     await openArea(page, 'hub')

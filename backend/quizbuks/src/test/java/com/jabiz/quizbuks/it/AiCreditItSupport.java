@@ -115,6 +115,15 @@ abstract class AiCreditItSupport extends AiItSupport {
         run("CONTROL_CHANGE_PUBLISH", financeAdmin(), body("changeId", change.get("changeId")));
     }
 
+    /** The sponsor with AI credit enough for a few requests, bought once (cash, then the purchase). */
+    String funded(String sponsor) {
+        if (aiCredit(sponsor).isEmpty()) {
+            cash(sponsor, 100_000);
+            buy(sponsor, 100_000);
+        }
+        return sponsor;
+    }
+
     Map<String, Object> buy(String sponsor, long amount) {
         return run(AiCredits.BUY, sponsorToken(sponsor), body("amount", amount, "requestKey",
             UUID.randomUUID().toString()));

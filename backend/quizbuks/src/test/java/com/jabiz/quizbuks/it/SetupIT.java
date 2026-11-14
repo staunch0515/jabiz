@@ -593,6 +593,8 @@ class SetupIT extends QbItSupport {
         expected.put(QbParams.AI_FEE_ENABLED, "false");
         expected.put(QbParams.AI_FEE_MARKUP, "1.50");
         expected.put(QbParams.AI_FEE_USD_JPY, "150.00");
+        expected.put(QbParams.AI_FEE_UNBILLED_AFTER_HOURS, "48");
+        expected.put(QbParams.AI_CREDIT_EXPIRED_HELD_AFTER_HOURS, "48");
         // F-M3: how long the company verification's link is good (not controlled).
         expected.put(QbParams.VERIFICATION_LINK_HOURS, "48");
         // F-M5: when an ended publication's open prepayment is a difference (controlled since F-M14).

@@ -161,6 +161,22 @@ public final class ReconChecks {
      * whose fee was lowered to nothing is never taken in by the month's charge, so the charge cannot end the note).
      */
     public static final String AI_RESERVATION_SHORT = "AI_RESERVATION_SHORT";
+    /**
+     * F-M9a-2b (plan §8): by sponsor, the open AI credit's remaining against 2180 of the purpose AI ({@code ledger}),
+     * against its movements ({@code movements}), and what it bought in all against the movements BUY ({@code bought}).
+     */
+    public static final String AI_CREDIT = "AI_CREDIT";
+    /** F-M9a-2b (plan §8, #699 review L3): an AI charge's amount against its jobs' fees as charged (the reference). */
+    public static final String AI_FEE_MONTH = "AI_FEE_MONTH";
+    /** F-M9a-2b: jobs with a fee not charged {@code qb.ai.fee.unbilled-after-hours} after their month ended. */
+    public static final String AI_FEE_UNBILLED = "AI_FEE_UNBILLED";
+    /** F-M9a-2b: finished charged jobs still holding a reservation. */
+    public static final String AI_FEE_RESERVED = "AI_FEE_RESERVED";
+    /**
+     * F-M9a-2b: expired (or voided) granted credit still in an AI credit {@code qb.ai.credit.expired-held-after-hours}
+     * after it expired, beyond what the jobs still holding credit hold (#702 review L1; the daily expiry did not void it).
+     */
+    public static final String AI_CREDIT_EXPIRED_HELD = "AI_CREDIT_EXPIRED_HELD";
     /** Account 2110 in all against all sponsors' cached balances. */
     public static final String TOTAL_2110 = "TOTAL_2110";
     /** Every posted line's debit less credit: 0. */
@@ -210,7 +226,8 @@ public final class ReconChecks {
         GIFT_RECOVERY, OPERATOR_CHARGE_NO_OPERATOR, OPERATOR_GIFT_CARRY_OPEN, EXPOSURE_DEPOSITS,
         EXPOSURE_SETTLED_OVER, EXPOSURE_UNSETTLED, EXPOSURE_FINAL_MISSING, EXPOSURE_PRICE_RANGE,
         EXPOSURE_UNIT_MISMATCH, EXPOSURE_UNPURCHASED, EXPOSURE_SETTLED_SHORT, EXPOSURE_AMOUNT_MISMATCH,
-        AI_RESERVATION_SHORT, ERASED_GIFT_LEFT, ERASED_CLOSE_OPEN, ERASED_FEE_OWED, ERASED_NO_CLOSURE);
+        AI_RESERVATION_SHORT, AI_CREDIT, AI_FEE_MONTH, AI_FEE_UNBILLED, AI_FEE_RESERVED, AI_CREDIT_EXPIRED_HELD,
+        ERASED_GIFT_LEFT, ERASED_CLOSE_OPEN, ERASED_FEE_OWED, ERASED_NO_CLOSURE);
 
     /** Codes no longer reported that runs written before may still name: readable, never written. */
     public static final List<String> RETIRED = List.of(DISTRIBUTION_PRICE_OUT_OF_RANGE);
@@ -291,9 +308,14 @@ public final class ReconChecks {
      *
      * @param items   the differences, at most the given maximum
      * @param counts  the differences of each check, all of them
-     * @param summary {@code counts} as canonical JSON (keys sorted)
+     * @param summary the non-zero {@code counts} as canonical JSON ({@link #summary(Map)})
      */
     public record Result(String status, List<Item> items, Map<String, Integer> counts, String summary) {
+        /** Whether the summary had to be cut to fit its column ({@link #SUMMARY_TRUNCATED}). */
+        public boolean truncated() {
+            return summary.contains(SUMMARY_TRUNCATED);
+        }
+
         /** Every item found, notes included. */
         public int total() {
             return counts.values().stream().mapToInt(Integer::intValue).sum();
@@ -420,8 +442,6 @@ public final class ReconChecks {
         Map<String, Integer> counts = new TreeMap<>();
         ALL.forEach(check -> counts.put(check, 0));
         found.forEach(item -> counts.merge(item.check(), 1, Integer::sum));
-        StringJoiner json = new StringJoiner(",", "{", "}");
-        counts.forEach((check, count) -> json.add("\"" + check + "\":" + count));
         List<Item> ordered = new ArrayList<>(found.stream().filter(i -> TAKER_CHECKS.contains(i.check())).toList());
         for (Level level : Level.values()) {
             found.stream().filter(i -> !TAKER_CHECKS.contains(i.check()) && level(i.check()) == level)
@@ -429,7 +449,67 @@ public final class ReconChecks {
         }
         List<Item> kept = List.copyOf(ordered.size() <= maxItems ? ordered : ordered.subList(0, maxItems));
         boolean differs = found.stream().anyMatch(item -> level(item.check()) == Level.DIFFERENCE);
-        return new Result(differs ? DIFF : OK, kept, Map.copyOf(counts), json.toString());
+        return new Result(differs ? DIFF : OK, kept, Map.copyOf(counts), summary(counts));
+    }
+
+    /**
+     * The summary's first entry: it names only the checks that found something, a check not named found nothing (#702
+     * with #701, the coordinator's option B: 69 checks no longer fitted the sealed column at every count). A string, so
+     * the pages that add the counts by level skip it; the operators' settlement window also finds a clean run by it.
+     */
+    public static final String SUMMARY_FORMAT = "\"_format\":\"nonzero\"";
+    /** Marks a summary cut to fit its column (the run's item count still holds every item; the summary is for showing). */
+    public static final String SUMMARY_TRUNCATED = "\"_truncated\":true";
+    /** The summary's column, {@code qb_recon_run_version.summary varchar(2000)} (V7). */
+    public static final int SUMMARY_MAX = 2_000;
+
+    /** The summary of these counts within {@link #SUMMARY_MAX}. */
+    public static String summary(Map<String, Integer> counts) {
+        return summary(counts, SUMMARY_MAX);
+    }
+
+    /**
+     * The non-zero counts as JSON, keys sorted, after {@link #SUMMARY_FORMAT}. Should they not fit in {@code max}
+     * characters, the differences are kept first, then those for attention, then the notes (each by code), as many as fit
+     * with {@link #SUMMARY_TRUNCATED}: the run is written whatever its summary, never failing on the column.
+     */
+    static String summary(Map<String, Integer> counts, int max) {
+        TreeMap<String, Integer> found = new TreeMap<>();
+        counts.forEach((check, count) -> {
+            if (count != null && count != 0) {
+                found.put(check, count);
+            }
+        });
+        String whole = json(found, false);
+        if (whole.length() <= max) {
+            return whole;
+        }
+        TreeMap<String, Integer> kept = new TreeMap<>();
+        int length = json(kept, true).length();
+        for (Level level : Level.values()) {
+            for (Map.Entry<String, Integer> entry : found.entrySet()) {
+                if (level(entry.getKey()) != level) {
+                    continue;
+                }
+                int more = entry.getKey().length() + 4 + String.valueOf(entry.getValue()).length();
+                if (length + more > max) {
+                    return json(kept, true);
+                }
+                kept.put(entry.getKey(), entry.getValue());
+                length += more;
+            }
+        }
+        return json(kept, true);
+    }
+
+    private static String json(TreeMap<String, Integer> counts, boolean truncated) {
+        StringJoiner json = new StringJoiner(",", "{", "}");
+        json.add(SUMMARY_FORMAT);
+        if (truncated) {
+            json.add(SUMMARY_TRUNCATED);
+        }
+        counts.forEach((check, count) -> json.add("\"" + check + "\":" + count));
+        return json.toString();
     }
 
     private static void add(List<Item> items, String check, String party, String reference, Object expected,

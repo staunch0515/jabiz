@@ -248,6 +248,11 @@ public final class SiteProfileProcesses {
         if (!on(params, QbParams.SITE_PROFILE_ENABLED)) {
             problems.add(new Violation(null, AiCodes.UNAVAILABLE, "Drafting from a website is unavailable: switched off",
                 Map.of("enabled", false)));
+        } else if (!common.settings().fee().enabled()) {
+            // F-M9 (plan §4 item 6, question 6): a website's draft is charged to the AI credit, never free: with the AI
+            // fee off it is refused, and the startup check warns of the two switches so set (FirstLaunchSwitchesCheck).
+            problems.add(new Violation(null, AiCodes.UNAVAILABLE, "Drafting from a website is unavailable: the AI fee "
+                + "is off", Map.of("enabled", false)));
         }
         if (!Boolean.TRUE.equals(input.rightsDeclared())) {
             problems.add(new Violation("rightsDeclared", AiCodes.SITE_RIGHTS_REQUIRED, "Declare that the website is "

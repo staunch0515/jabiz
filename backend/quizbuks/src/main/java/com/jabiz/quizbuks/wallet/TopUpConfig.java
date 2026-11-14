@@ -281,6 +281,16 @@ class TopUpConfig {
                 "zh", "AI 帮助某月用量：全平台行小于各人之和", "ja", "AIヘルプの月間利用量：全体の行が個人の合計を下回る")
             .item(ReconChecks.AI_RESERVATION_SHORT, "en", "AI jobs whose fee went beyond their reservation (a note)",
                 "zh", "AI 费用超出预留的作业（仅提示）", "ja", "AI 利用料が予約額を超えたジョブ（お知らせのみ）")
+            .item(ReconChecks.AI_CREDIT, "en", "AI credit against the ledger (2180, purpose AI) and its movements",
+                "zh", "AI 额度与账（2180，用途 AI）及其变动", "ja", "AI クレジットと元帳（2180、用途 AI）・変動")
+            .item(ReconChecks.AI_FEE_MONTH, "en", "AI fees against the fees of the jobs they took in",
+                "zh", "AI 费与其收进的作业费用", "ja", "AI 利用料と取り込んだジョブの料金")
+            .item(ReconChecks.AI_FEE_UNBILLED, "en", "AI jobs not charged after their month",
+                "zh", "月份结束后仍未记费的 AI 作业", "ja", "月の終了後も請求されていない AI ジョブ")
+            .item(ReconChecks.AI_FEE_RESERVED, "en", "Finished AI jobs still holding a reservation",
+                "zh", "已结束仍有预留的 AI 作业", "ja", "終了したのに予約が残る AI ジョブ")
+            .item(ReconChecks.AI_CREDIT_EXPIRED_HELD, "en", "Expired granted credit still in an AI credit",
+                "zh", "AI 额度中仍有已到期的赠送额度", "ja", "AI クレジットに残る期限切れの付与クレジット")
             .item(ReconChecks.EXPOSURE_DEPOSITS, "en", "Exposure fee deposits (2180, by publication)",
                 "zh", "曝光费预付（2180，按发布）", "ja", "露出料の前払い（2180、掲載ごと）")
             .item(ReconChecks.EXPOSURE_SETTLED_OVER, "en", "Exposures charged beyond what was bought",

@@ -69,6 +69,12 @@ class AiCreditStatementBudgetIT extends AiItSupport {
             runJobs();
             List<String> on = counted(() -> request(token, quizzes.get(3).get(0), List.of(quizzes.get(3).get(1)), 2));
             List<String> onLocks = SqlStatementLog.locks();
+            // a-1's deferred lock test: the job's outcome (charged, under the fee) takes the AI locks only, never a
+            // wallet lock (plan §4 item 7: inside the AI locks no wallet lock is taken).
+            SqlStatementLog.clear();
+            runJobs();
+            assertThat(SqlStatementLog.locks()).contains("qb.ai:" + sponsor)
+                .noneMatch(lock -> lock.startsWith("qb.wallet:"));
             System.out.println("[statement-budget] AI request, fee off: " + off.size() + "\n" + listing(off));
             System.out.println("[statement-budget] AI request, fee on: " + on.size() + "\n" + listing(on));
             System.out.println("[statement-budget] AI credit purchase: " + buying.size() + "\n" + listing(buying));
