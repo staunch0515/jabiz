@@ -356,4 +356,21 @@ class FeeAccountIT extends PlayItSupport {
         assertThat(balance(sponsor, QbWallets.FEE_CREDIT)).isEqualByComparingTo("0");
         assertThat(differences(sponsor)).isEmpty();
     }
+
+    /** F-M13c (review M3): an invoice voided with nothing paid says so, and does not speak of money given back. */
+    @Test
+    void anInvoiceVoidedUnpaidSaysNothingWasPaidAndNothingWentBack() {
+        String sponsor = newSponsor(unique("s-fm13c-void-unpaid"));
+        assertThat(monthly(sponsor)).isEqualTo("CHARGED");
+        String invoiceId = String.valueOf(invoice(sponsor).get("invoice_id"));
+        assertThat(invoice(sponsor)).containsEntry("status", QbFees.OPEN);
+        Map<String, Object> voiding = run(FeeRequests.RECORD, finance(), body("kind", "VOID", "invoiceId", invoiceId,
+            "reason", "Charged by mistake"));
+        run("APPROVAL_DECIDE", content(), body("requestId", voiding.get("approvalRequestId"), "decision", "APPROVE"));
+        deliverEvents();
+        deliverEvents();
+        assertThat(mailTo(sponsor)).filteredOn(row -> "qb.fee.invoice-voided".equals(row.get("template")))
+            .singleElement().satisfies(row -> assertThat(String.valueOf(row.get("params")))
+                .contains("Nothing had been paid").doesNotContain("went back").doesNotContain("Charged by mistake"));
+    }
 }

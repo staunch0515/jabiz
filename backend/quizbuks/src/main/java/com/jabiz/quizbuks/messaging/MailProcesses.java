@@ -384,7 +384,8 @@ public final class MailProcesses {
                 .step("Load the payments, the ban and the sponsor", QueryEntities.<ProcessContext>all(
                     QueryEntities.query(com.jabiz.quizbuks.fee.QbFeeAccount.defaultDataset(
                         com.jabiz.quizbuks.fee.QbFeeAccount.PAYMENT), ctx -> EntityQuery.builder().where(
-                        new QueryPredicate.In("targetId", paidTargets(ctx))).limit(PAYMENT_ROWS).build(),
+                        new QueryPredicate.And(List.of(new QueryPredicate.In("targetId", paidTargets(ctx)),
+                            new QueryPredicate.Eq("sponsorId", sponsorOf(ctx))))).limit(PAYMENT_ROWS).build(),
                         VOIDED_PAYMENTS),
                     QueryEntities.query(QbAccounts.defaultDataset(QbAccounts.BAN), ctx -> byId("userId",
                         uuid(sponsorOf(ctx))), BAN),
@@ -398,16 +399,26 @@ public final class MailProcesses {
                     || ban != null && BanRules.banned(ban.attributes())) {
                     return;
                 }
-                // What went back is read from the invoice's payment rows given back (negative), not from the event.
+                // What went back is read from the payment rows given back (negative) of the sponsor's, not from the event; an
+                // invoice paid before the parts existed has none and went back as it was paid. Unpaid when voided: nothing
+                // is said of money.
                 java.math.BigDecimal refunded = java.math.BigDecimal.ZERO;
+                boolean parts = false;
                 for (EntityInstance payment : list(ctx, VOIDED_PAYMENTS)) {
+                    parts = true;
                     java.math.BigDecimal amount = new java.math.BigDecimal(String.valueOf((Object) payment.get("amount")));
                     if (amount.signum() < 0) {
                         refunded = refunded.add(amount.negate());
                     }
                 }
+                if (!parts && invoice.get("paidAmount") != null) {
+                    refunded = new java.math.BigDecimal(String.valueOf((Object) invoice.get("paidAmount")));
+                }
+                String detail = refunded.signum() > 0
+                    ? text(messages, ctx, "qb.mail.invoice-voided.refunded").replace("{refunded}", MailValues.amount(refunded))
+                    : text(messages, ctx, "qb.mail.invoice-voided.unpaid");
                 decide(ctx, NotificationMails.FEE_INVOICE_VOIDED, Map.of("invoiceNo",
-                    String.valueOf((Object) invoice.get("invoiceNo")), "refunded", MailValues.amount(refunded)));
+                    String.valueOf((Object) invoice.get("invoiceNo")), "detail", detail));
             }, messages, NotificationMails.FEE_INVOICE_VOIDED);
     }
 

@@ -91,9 +91,9 @@ public final class NotificationMails {
      * speaks of money given back); the internal reason of the void is never in it.
      */
     public static final MailTemplate FEE_INVOICE_VOIDED = MailTemplate.define("qb.fee.invoice-voided", t -> t
-        .category(MailCategory.TRANSACTIONAL).param("invoiceNo", "refunded")
+        .category(MailCategory.TRANSACTIONAL).param("invoiceNo", "detail")
             .sample("invoiceNo", "INV-0001")
-            .sample("refunded", "1,100")
+            .sample("detail", "1,100 yen that had been paid toward it went back to your platform fee account.")
             .protectedText());
 
     /**

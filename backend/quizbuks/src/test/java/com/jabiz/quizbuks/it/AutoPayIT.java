@@ -155,7 +155,8 @@ class AutoPayIT extends PlayItSupport {
         assertThat(row(a)).containsEntry("status", QbFees.PAID);
         assertThat(row(b)).containsEntry("status", QbFees.PAID);
         assertThat(mailTo(sponsor)).filteredOn(row -> "qb.fee.auto-paid".equals(row.get("template")))
-            .singleElement().satisfies(row -> assertThat(String.valueOf(row.get("params"))).contains("2"));
+            .singleElement().satisfies(row -> assertThat(String.valueOf(row.get("params")))
+                .contains("\"count\":\"2\"").contains("\"paid\":\"2,200\""));
         // Nothing to pay it with: not an item.
         assertThat(row(unpaid)).containsEntry("status", "OPEN");
     }
