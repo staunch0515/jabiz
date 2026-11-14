@@ -225,10 +225,13 @@ final class AiFees {
         BigDecimal fee = AiFeeRules.fee(billable, money(job.get("feeMarkup")), money(job.get("feeUsdJpy")));
         // The month in the deployment's zone, as the job's other months (its zone is the fiscal year's, kept on it).
         String period = FeeRules.period(finished, ZoneId.of((String) job.get("zone")));
-        // What the job may take: the credit less everything else outstanding (its own reservation is part of the
-        // credit's remaining, so the rest's availability is its room; adding the reservation would count it twice).
+        // What the job may take: at most its own reservation (#692 re-review, the coordinator's decision: a job that
+        // overruns never takes what the sponsor's other requests hold or may still use; the rest is the platform's and
+        // reported by the daily reconciliation, AI_RESERVATION_SHORT), and no more than the credit less everything
+        // else outstanding (its reservation is part of the credit's remaining, so the rest's availability is its room;
+        // adding the reservation would count it twice).
         Standing standing = standing(ctx, job.id());
-        BigDecimal room = standing.available(taxRate);
+        BigDecimal room = standing.available(taxRate).min(money(job.get("reservedYen")));
         AiFeeRules.Settled settled = AiFeeRules.settle(standing.group((String) job.get("feeOperatorId"), period),
             fee, room, taxRate);
         values.put("feeYen", settled.fee());
@@ -237,7 +240,7 @@ final class AiFees {
         values.put("feePeriod", period);
         if (settled.absorbed().signum() > 0) {
             // No sponsor in the log (D16): the job is enough to find it.
-            log.warn("AI fee above what the credit holds: {} yen of job {} taken on by the platform",
+            log.warn("AI fee above its reservation or what the credit holds: {} yen of job {} taken on by the platform",
                 settled.absorbed(), job.id());
         }
     }

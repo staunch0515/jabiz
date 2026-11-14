@@ -494,4 +494,40 @@ class AiCreditIT extends AiItSupport {
             param(QbParams.AI_FEE_USD_JPY, "150");
         }
     }
+
+    /**
+     * #692 re-review (the coordinator's decision): a job's end takes at most its own reservation, whatever else the
+     * credit holds, so an overrun never eats into the sponsor's other requests; the rest is the platform's and the daily
+     * reconciliation notes it (AI_RESERVATION_SHORT: the job, what the platform took on), a note that leaves the run OK.
+     */
+    @Test
+    void aJobThatOverrunsItsReservationIsChargedTheReservationAndTheRestIsNoted() {
+        feeOn();
+        List<String> s = charged("ai-overrun-");
+        Object aiJobId = request(s.get(1), s.get(2), List.of(s.get(3)), 2).get("aiJobId");
+        // As if the reservation had come out low (a model's price raised at the provider): 1 yen, the credit full.
+        execute("UPDATE qb_ai_job SET reserved_yen = 1 WHERE ai_job_id = ?", String.valueOf(aiJobId));
+        runUntilDone(aiJobId);
+        Map<String, Object> done = job(aiJobId);
+        BigDecimal fee = feeOf(done);
+        assertThat(fee).isGreaterThan(BigDecimal.ONE);
+        // Its increment with tax is within the 1 yen: a fee of 1 (no tax on 1 yen at 10%).
+        assertThat(money(done.get("fee_yen"))).isEqualByComparingTo("1");
+        assertThat(money(done.get("absorbed_yen"))).isEqualByComparingTo(fee.subtract(BigDecimal.ONE));
+        assertThat(money(done.get("reserved_yen"))).isZero();
+        // The credit held 5,000: the cap is the reservation, not what was free.
+        assertThat(money(aiCredit(s.get(0)).get("remaining"))).isEqualByComparingTo("5000");
+
+        java.time.Instant at = clock.instant().plus(Duration.ofMinutes(7));
+        Object output = systemRun("QB_RECONCILE_RUN", body("scheduledTime", at.toString()));
+        Object runId = query("SELECT run_id FROM qb_recon_run_version WHERE scheduled_time = ?", Timestamp.from(at))
+            .getFirst().get("run_id");
+        List<Map<String, Object>> noted = query("SELECT * FROM qb_recon_item_version WHERE run_id = ?::uuid AND "
+            + "check_code = 'AI_RESERVATION_SHORT' AND reference = ?", String.valueOf(runId), String.valueOf(aiJobId));
+        assertThat(noted).singleElement().satisfies(item -> {
+            assertThat(money(item.get("expected"))).isZero();
+            assertThat(money(item.get("actual"))).isEqualByComparingTo(money(done.get("absorbed_yen")));
+        });
+        assertThat(String.valueOf(output)).as("a note alone leaves the run as it was").doesNotContain("AI_RESERVATION");
+    }
 }
