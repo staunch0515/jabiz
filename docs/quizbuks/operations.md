@@ -1514,6 +1514,11 @@ Quiz 与发布有主题词（平台词表中的词与自定义词），学者可
 | `INVOICE_PAID_SUM` | 每张未作废账单：已付金额 = 付款明细之和（`:paid`），抵用额 = 贷项凭证使用之和（`:credit`） | 差异 | 账单的数字被流程以外改动；漏写付款行或使用行 | 打开该账单，对照它的付款与凭证，报开发；不要手工改账单。**已知局限：记了已付金额却没写付款行的账单查不出（只查有付款行的）** | 报开发 | AUTO_PAY_MISSED |
 | `AUTO_PAY_MISSED` | 开关为 true，账户有（在账上超过 `qb.fee.auto-pay.missed-after-hours` 小时、未被冻结的）钱，账单开出已超过这些小时仍未付 | 需关注 | 夜间任务 `qb.fee-auto-pay` 没有运行或失败；发起方账单特别多（每次最多 `max-invoices` 张）；预付款释放、争议解除的钱可能多报一晚 | 看任务 `qb.fee-auto-pay` 与该账单；必要时手工付 | `qb.reconcile` | INVOICE_PAID_SUM |
 | `HELP_USAGE_TOTAL` | 每个月 AI 帮助的全平台用量（提问数、Token、估算美元）不小于各人之和（F-M10，§7.53） | 需关注 | 全平台行少记（缺陷）；删除账号或保留期只会让全平台行更大 | 内容管理员在总部 AI 页（`/qb/ai`）看该月用量；持续则报开发 | 内容管理员（`qb.admin.help.gaps`） | — |
+| `ERASED_GIFT_LEFT` | 已完成收尾（`CLOSED`）的已注销发起方没有剩余的赠送额度（收尾时未到期的各笔） | 差异 | 收尾的作废漏了某笔 | 报开发（§7.59） | 报开发 | FEE_CREDIT、FEE_CREDIT_PROMOTION |
+| `ERASED_CLOSE_OPEN` | 收尾在注销后 `qb.erasure.close.alert-days` 天内完成 | 需关注 | 开关 `qb.erasure.close.enabled` 关着、预付款未释放，或任务失败 | §7.59 | 财务 | ERASED_NO_CLOSURE |
+| `ERASED_FEE_OWED` | 已完成收尾的已注销发起方仍欠的平台费（按发起方合计） | 提示 | 账户里的钱不够付 | 财务决定是否免除（§7.59）；不再有逾期提醒 | 财务 | FEES_RECEIVABLE |
+| `ERASED_NO_CLOSURE` | 注销超过 `qb.erasure.close.alert-days` 天、有平台费账户的用户都有收尾记录 | 需关注 | 注销的事件与每日登记任务都没有登记 | 补跑 `qb.sponsor-closure-register`；次日仍在则报开发（§7.59） | 财务 | ERASED_CLOSE_OPEN |
+| `AI_RESERVATION_SHORT` | 收费的 AI 作业结束时，费用超出它的预留（或当时的 AI 额度），超出部分由平台承担（F-M9；引用为作业编号，实际为平台承担的税前日元；月度记费收进后不再出现） | 提示 | 预留的上限（每次尝试的调用次数、页数、输出上限）低于该作业的实际用量，或期间额度被退回 | 发起方无需处理；同类作业经常出现时，按实际用量调高预留的受控参数（§7.56） | 总部（AI 设置） | — |
 | `AI_RESERVATION_SHORT` | 收费的 AI 作业结束时，费用超出它的预留（或当时的 AI 额度），超出部分由平台承担（F-M9；引用为作业编号，实际为平台承担的税前日元；在作业结束的当月与下一月列出，之后不再出现） | 提示 | 预留的上限（每次尝试的调用次数、页数、输出上限）低于该作业的实际用量，或期间额度被退回 | 发起方无需处理；同类作业经常出现时，按实际用量调高预留的受控参数（§7.56） | 总部（AI 设置） | — |
 
 **已知局限**
@@ -1605,6 +1610,23 @@ FROM per_attempt WHERE calls > 0;
 - **作废**：正在申请作废的账单照付，作废批准后按原分摊退回；发起方会先后收到"付款"与"已作废"两封邮件。
 - **作废通知**（F-M13c）：作废批准后发事件 `qb.fee.invoice-voided`（载荷只带账单号），消费者 `QB_MAIL_FEE_INVOICE_VOIDED` 发 `qb.fee.invoice-voided`（交易类、受保护的文字）：写账单号与退回账户的金额（读该账单已退回的负数付款行，不信事件），**不写作废的内部理由**；过时的事件（账单不是作废状态）、被封禁与没有邮箱的收件人不发。
 - **核对项**（F-M13c，`ReconChecks`）：`INVOICE_PAID_SUM`（差异：未作废账单的已付金额 + 抵用额，与它的付款明细和贷项凭证使用之和不符；F-M1 以前只有已付金额没有明细的账单不查）；`AUTO_PAY_MISSED`（需关注：开关为 `true`，账单开出已超过 `qb.fee.auto-pay.missed-after-hours`（受控，缺省 48，1–720，读取时夹在此范围内；第一次核对读的是现值，所以刚打开开关后的第一个夜里之前可能报出，付清后自行消失），而发起方账户里的钱（赠送额度的 `grantedAt`、现金批次的 `arrivedAt`）也已在账上超过这些小时——无事件到账的钱（预付款释放等）要等夜里的任务，不算漏付；每次运行至多付 `qb.fee.auto-pay.max-invoices` 张，账单特别多的发起方会在第二天继续，报出时先看这个数；现金被争议或冻结占住的部分不算可用；最近 `missed-after-hours` 小时内有付款被退回（作废退回原批次、凭证退现金）的发起方暂不报出；预付款释放、争议解除这类没有事件到账的钱可能被多报一个夜晚（付清后自行消失）；由 `qb.reconcile` 的持有人处理：先看夜间任务 `qb.fee-auto-pay` 是否运行，必要时手工付）。计划里曾定"不加阈值参数、读任务运行记录"，改为参数：应用不读平台的内部运行表（总控 2026-11-14）。
+
+### 7.59 已注销发起方的平台费账户收尾（F-M15 b）
+
+注销的发起方有平台费账户（现金或赠送钱包、赠送额度、账单、预付款、后付的费用、审核中的手工加币或平台费申请任一）时，由平台自动收尾，计划见 `docs/quizbuks/plans/impl/F-M15.md` §2、§5。
+
+- **登记**：注销（`jabiz.account.erased`）的消费者 `qb.account-erased-money` 运行 `QB_SPONSOR_CLOSURE_REGISTER`，写一行 `QbSponsorClosure`（`WAITING`）并发 `qb.sponsor.money-close-due`。事件丢失时由每日任务 `qb.sponsor-closure-register`（03:47，`quizbuks.erasure-close.register-cron`，模板 `qb.system.money-close-unregistered`）补登，只看最近 `qb.erasure.close.register-days`（普通参数，缺省 30）天内的注销；更早的仍由核对 `ERASED_NO_CLOSURE` 报出，可调大参数后由任务补登。第 0 步只撤回在注销的个人信息清除（`ERASURE_PURGE`，随注销事件运行一次）完成之前提出的申请：清除会覆盖当时所有指向该发起方的行的理由，审批就落不了；清除完成之后财务提出的照常审批；清除尚未运行时审核中的全部撤回。清除未完成期间，对该发起方提出平台费申请会被拒（422 `QB_FEE_ERASURE_PENDING`；手工加币本来就因入驻已抹除而被拒）：先查明并修好清除（任务与事件 `jabiz.account.erased` 的投递），完成后再提。收尾提前开出的未来月份账单按其账期的年度取号（与普通月账单相同），开具日可能在前一年。
+- **收尾** `QB_SPONSOR_MONEY_CLOSE`（事件 `qb.sponsor-money-close` 与每日任务 `qb.sponsor-money-close`，03:53，`quizbuks.erasure-close.cron`，每次至多 `quizbuks.erasure-close.max-items` 项）：撤回审核中的手工加币与平台费申请（`ended_code = ERASED`；手工加币另给财务待办 `qb.erasure-close.withdrawn`，钱怎么处理由财务与发起方另行联系）→ 钱包锁内：开关 `qb.erasure.close.enabled` 关着即停（`SWITCH_OFF`）→ 有未关闭的预付款即等（`DEPOSIT_OPEN`，预付款由结束与释放的任务退回）→ 后付的未开账单按月开出（含当月）→ 付款：F-M13 的单项 `QB_FEE_AUTO_PAY_ITEM`（经 `QB_FEE_SETTLE`，先赠送后现金），按开具先后、每次至多 `qb.fee.auto-pay.max-invoices` 张；由收尾自己的开关决定，不看 `qb.fee.auto-pay.enabled` → 仍有欠费且还有钱可付（张数超过上限）即等下次（`TO_PAY`，每日任务再取）；否则完成（`CLOSED`，仍欠即原因 `FEE_OWED`；要作废的笔数多于一次能读的即作废读到的、留在 `WAITING` 等次日），作废未到期的赠送额度（借 2190 / 贷 5140，`QB_FEE_CREDIT_VOID_LOT`）。现金余额不退回，留在账户（法务说明见上线检查清单）。
+- **完成后又进账**（迟到的充值、作废账单退回现金）：每日任务把 `CLOSED` + `FEE_OWED` 且现金钱包可用（余额 − 争议冻结）大于 0 的再跑一次，付到欠费上。
+- **完成后又记了后付费用**：记到一个还没开账单的月份（自己的月份已开即从当月起、跳过所有已开账单的月份），每日任务把有未开账单的后付费用的 `CLOSED` 收尾再跑一次，开出并付；在此之前 `ERASED_FEE_OWED` 已把它算进欠额。这一支不看开关与未关闭的预付款：开关关着或只剩 AI 额度的预付款时，该发起方每天被取出、空跑一次（`SWITCH_OFF` / `DEPOSIT_OPEN`），不出错，也不改收尾的状态，属预期。
+- **慢了**：注销后 `qb.erasure.close.alert-days`（普通参数，缺省 3；须是 1～60 的整数，否则当即提醒）天仍未完成，给财务一次待办 `qb.erasure-close.slow`（标题写明原因，完成时关闭）；同时每日核对报 `ERASED_CLOSE_OPEN`。按原因处理：`SWITCH_OFF` 由财务与另一位管理员经受控变更打开开关；`DEPOSIT_OPEN` 看该发起方的预付款为何未释放（§7.47、§7.48、§7.54）；只剩 AI 额度的预付款（待办标题单独写明）在 F-M15c 合并之前会一直停在 `DEPOSIT_OPEN`，属预期：AI 额度的关闭随 F-M15c，F-M15c 合并之前不打开 `qb.ai.fee.enabled`（首次上线本来就关着）；没有原因的看任务 `qb.sponsor-money-close` 的失败，修好后用 `JOB_RUN_REQUEST` 补跑。
+- **欠费**：已注销发起方的过期账单不再变为 `OVERDUE`、不发提醒、不建逾期待办；财务看核对的提示 `ERASED_FEE_OWED`，决定是否以平台费申请（`QB_FEE_REQUEST`，种类 `CREDIT_NOTE`，四眼）免除。
+- **页面**：平台管理系统"QuizBuks 财务 → 注销收尾"（`/qb/finance/money-closures`，模板 `qb.admin.money-closures`，`qb.admin.finance.read`，只读，可导出 CSV / Excel；筛选未完成、已完成但仍欠费、超期、全部）；发起方详情页另有"注销后的收尾"一块（状态、原因与各项金额，模板 `qb.admin.money-closure-amounts`：删除后用赠送与现金付了多少、作废了多少、仍欠多少、留下多少现金，按付款分摊、额度明细与账本汇总）。
+- **管理员安排注销前先看钱**：管理员安排的注销不显示注销前的提示；安排之前先在发起方详情看平台费账户、账单、预付款与在途的充值，必要时先联系本人。运营商成员（含负责人）持受保护的权限，平台拒绝其注销：总部先撤掉其角色、换人，之后才能注销；运营商的钱属于运营商，不受影响。
+- **封禁时的钱**（不经收尾）：平台费账户的现金冻结（不能充值、提现），不没收；赠送额度不再发放、本人不能使用、照原有效期到期；暂停的发布到结束后照常结算，预付款按原分摊退回；未付的平台费照常计入、账单照常到期，到期提醒不寄给被封禁者；学者的学分保留。帮助"账户被暂停时，我的钱怎么办？"（`help/fee-account.md`）是客服口径。
+- **账单 PDF**：注销前开出的账单 PDF 在保留期内保留公司名；注销后才开出的账单没有收件方名称（个人信息已抹除），编号、日期、金额照常存档（上线检查清单有财务与法务的确认项）。
+- **与运营商分成（F-M12）的关系**：收尾中用来付欠费的赠送额度照 F-M12 从运营商分成里扣回，作废的部分由平台承担、不扣运营商；赠送额度最后才作废，所以冻结在预付款里的部分退回后也先付欠费，扣回因此多于"先作废"的做法。
+- **核对**：`ERASED_GIFT_LEFT`、`ERASED_CLOSE_OPEN`、`ERASED_FEE_OWED`、`ERASED_NO_CLOSURE`（模板 `qb.system.recon-erased`，见 §7.55 的总表）；收尾中的每一笔仍经 `FEE_CREDIT`、`FEE_CREDIT_PROMOTION`、`FEE_PAYMENTS`、`FEES_RECEIVABLE` 核对。
 
 ## 8. 升级到线 1.3（S0 的迁移 V29、V30）
 
