@@ -211,6 +211,11 @@ final class AiFees {
         if (!QbAi.FEE_CREDIT.equals(job.get("feeMode"))) {
             return;
         }
+        if (cost == null) {
+            // #692 review L1: the request knew the price (it refuses one it does not); unknown at the end (the model's
+            // price parameters removed since), the job is charged nothing: no sponsor in the log (D16).
+            log.warn("AI fee of job {} settled at 0: the price of model {} is not known", job.id(), job.get("model"));
+        }
         BigDecimal taxRate = settings.fee().taxRate();
         if (taxRate == null) {
             // Removed since the request (which checked it): the month's charge works the tax out again.

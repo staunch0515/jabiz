@@ -305,6 +305,11 @@ public final class Prepayments {
 
     static void raise(ProcessContext ctx) {
         TopUpInput input = topUpInput(ctx);
+        if (!QbPrepayments.AI.equals(input.purpose()) && input.publicationId() == null) {
+            // #692 review L4: only the AI credit has no publication; a top-up of another purpose without one would
+            // have read a prepayment of no publication.
+            throw new IllegalStateException("A " + input.purpose() + " top-up names no publication");
+        }
         EntityInstance prepayment = FeeGate.first(ctx, OPEN_PREPAYMENT);
         if (prepayment == null) {
             throw new IllegalStateException((input.publicationId() == null ? "Sponsor " + input.sponsorId()

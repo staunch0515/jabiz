@@ -8,6 +8,7 @@ import com.jabiz.quizbuks.fee.AiFeeRules;
 import com.jabiz.quizbuks.fee.FeeCodes;
 import com.jabiz.quizbuks.setup.QbParams;
 import com.jabiz.quizbuks.wallet.KudosExchanges;
+import com.jabiz.runtime.test.StubHttpServer;
 import com.jabiz.runtime.test.TestTokens;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -21,6 +22,8 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.TimeUnit;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -368,5 +371,127 @@ class AiCreditIT extends AiItSupport {
         assertThat(query("SELECT count(*) AS n FROM qb_ai_job WHERE sponsor_id = ? AND fee_mode = 'CREDIT' AND "
             + "fee_charge_id IS NULL AND (fee_yen IS NULL OR fee_yen > 0)", sponsor).getFirst().get("n"))
             .hasToString("1");
+    }
+
+    /** A sponsor with 5,000 yen of AI credit, their token and a quiz with an article. */
+    private List<String> charged(String prefix) {
+        String sponsor = newSponsor(prefix + UUID.randomUUID());
+        cash(sponsor, 5_000);
+        buy(sponsor, 5_000);
+        String token = sponsorFull(sponsor);
+        List<String> quiz = quizWithArticle(token, title(), "Material for " + prefix);
+        return List.of(sponsor, token, quiz.get(0), quiz.get(1));
+    }
+
+    /** The fee of the job's answered dollars at the frozen markup and rate. */
+    private static BigDecimal feeOf(Map<String, Object> job) {
+        return AiFeeRules.fee(money(job.get("billable_usd")), money(job.get("fee_markup")), money(job.get("fee_usd_jpy")));
+    }
+
+    /**
+     * #692 review M3: a failed job is charged what the provider answered (here a cut answer, billed in full), and nothing
+     * when no call was answered (a key the provider refuses); with no fee it holds nothing more of the credit.
+     */
+    @Test
+    void aFailedJobIsChargedItsAnsweredUsageOnly() {
+        feeOn();
+        List<String> s = charged("ai-failed-answered-");
+        CLAUDE.script(MESSAGES, answer("claude-opus-5-5", "max_tokens", null, 900, 600));
+        Object answered = request(s.get(1), s.get(2), List.of(s.get(3)), 1).get("aiJobId");
+        runUntilDone(answered);
+        Map<String, Object> cut = job(answered);
+        assertThat(cut).containsEntry("status", QbAi.FAILED);
+        // Opus 5.5 at $4 / $20 a million: 900 in and 600 out are $0.0156, all answered.
+        assertThat(money(cut.get("billable_usd"))).isEqualByComparingTo("0.015600");
+        assertThat(money(cut.get("unrecorded_usd"))).isZero();
+        assertThat(money(cut.get("fee_yen"))).isEqualByComparingTo(feeOf(cut)).isEqualByComparingTo("4");
+        assertThat(money(cut.get("reserved_yen"))).isZero();
+
+        List<String> t = charged("ai-failed-unanswered-");
+        CLAUDE.script(MESSAGES, StubHttpServer.Answer.json(401, "{\"type\":\"error\",\"error\":"
+            + "{\"type\":\"authentication_error\",\"message\":\"invalid x-api-key\"}}"));
+        Object refused = request(t.get(1), t.get(2), List.of(t.get(3)), 1).get("aiJobId");
+        runUntilDone(refused);
+        Map<String, Object> none = job(refused);
+        assertThat(none).containsEntry("status", QbAi.FAILED);
+        assertThat(money(none.get("billable_usd"))).isZero();
+        assertThat(money(none.get("fee_yen"))).isZero();
+        assertThat(money(none.get("reserved_yen"))).isZero();
+    }
+
+    /**
+     * #692 review M3: an attempt whose instance died (recorded {@code LEASE_EXPIRED}, nothing reported) is the
+     * platform's: its estimate goes into the job's cost as {@code unrecordedUsd}, never into the sponsor's fee.
+     */
+    @Test
+    void anAttemptWhoseInstanceDiedIsThePlatformsAndNotInTheFee() {
+        feeOn();
+        List<String> s = charged("ai-died-");
+        Map<String, Object> requested = request(s.get(1), s.get(2), List.of(s.get(3)), 2);
+        Object aiJobId = requested.get("aiJobId");
+        claimedByADeadInstance(requested.get("externalJobId"), 1, clock.instant().minusSeconds(1));
+        runUntilDone(aiJobId);
+        assertThat(platformAttempts(requested.get("externalJobId"))).containsExactly("1:LEASE_EXPIRED",
+            "2:SUCCEEDED");
+        Map<String, Object> done = job(aiJobId);
+        assertThat(done).containsEntry("status", QbAi.READY);
+        // The stub's answer bills 1,200 in and 800 out: $0.0208 at Opus 5.5's price, the sponsor's.
+        assertThat(money(done.get("billable_usd"))).isEqualByComparingTo("0.020800");
+        assertThat(money(done.get("unrecorded_usd"))).isPositive();
+        assertThat(money(done.get("billable_usd")).add(money(done.get("unrecorded_usd"))))
+            .isEqualByComparingTo(money(done.get("cost_usd")));
+        assertThat(money(done.get("fee_yen"))).isEqualByComparingTo(feeOf(done)).isEqualByComparingTo("5");
+    }
+
+    /** #692 review M3: cancelled while its attempt ran, the job is charged what that attempt was answered. */
+    @Test
+    void aJobCancelledWhileItRanIsChargedWhatWasAnswered() throws Exception {
+        feeOn();
+        List<String> s = charged("ai-cancel-running-");
+        CLAUDE.script(MESSAGES, answer("claude-opus-5-5", "end_turn", questions(1), 700, 300)
+            .after(Duration.ofMillis(1200)));
+        Object aiJobId = request(s.get(1), s.get(2), List.of(s.get(3)), 1).get("aiJobId");
+        CompletableFuture<Integer> running = runningAttempt();
+        assertThat(run(AiProcesses.CANCEL, s.get(1), body("aiJobId", aiJobId))).containsEntry("status",
+            QbAi.CANCELLED);
+        assertThat(running.get(30, TimeUnit.SECONDS)).isEqualTo(1);
+        runJobs();
+        Map<String, Object> done = job(aiJobId);
+        assertThat(done).containsEntry("status", QbAi.CANCELLED);
+        assertThat(done.get("finished_at")).isNotNull();
+        // 700 in and 300 out at $4 / $20 a million.
+        assertThat(money(done.get("billable_usd"))).isEqualByComparingTo("0.008800");
+        assertThat(money(done.get("fee_yen"))).isEqualByComparingTo(feeOf(done)).isEqualByComparingTo("2");
+        assertThat(money(done.get("reserved_yen"))).isZero();
+    }
+
+    /**
+     * #692 review M3: the markup, the rate and the switch are frozen on the job at its request: changed or turned off
+     * before it ends, the job is still charged as it was asked.
+     */
+    @Test
+    void aJobIsSettledAtTheValuesFrozenAtItsRequest() {
+        feeOn();
+        List<String> s = charged("ai-frozen-");
+        Object aiJobId = request(s.get(1), s.get(2), List.of(s.get(3)), 2).get("aiJobId");
+        BigDecimal reserved = money(job(aiJobId).get("reserved_yen"));
+        param(QbParams.AI_FEE_MARKUP, "3");
+        param(QbParams.AI_FEE_USD_JPY, "300");
+        param(QbParams.AI_FEE_ENABLED, "false");
+        try {
+            runUntilDone(aiJobId);
+            Map<String, Object> done = job(aiJobId);
+            assertThat(done).containsEntry("status", QbAi.READY).containsEntry("fee_mode", QbAi.FEE_CREDIT);
+            assertThat(money(done.get("fee_markup"))).isEqualByComparingTo(MARKUP);
+            assertThat(money(done.get("fee_usd_jpy"))).isEqualByComparingTo(RATE);
+            BigDecimal fee = money(done.get("billable_usd")).multiply(MARKUP).multiply(RATE)
+                .setScale(0, RoundingMode.UP);
+            assertThat(money(done.get("fee_yen"))).isEqualByComparingTo(fee).isPositive();
+            assertThat(AiFeeRules.withTax(fee, TAX)).isLessThanOrEqualTo(reserved);
+            assertThat(money(done.get("reserved_yen"))).isZero();
+        } finally {
+            param(QbParams.AI_FEE_MARKUP, "1.5");
+            param(QbParams.AI_FEE_USD_JPY, "150");
+        }
     }
 }
