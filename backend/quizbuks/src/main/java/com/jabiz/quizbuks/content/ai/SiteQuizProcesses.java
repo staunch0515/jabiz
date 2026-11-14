@@ -239,6 +239,9 @@ public final class SiteQuizProcesses {
             values.put("finishedAt", ctx.opTime());
             values.put("expiresAt", job.get("expiresAt"));
             values.put("zone", String.valueOf((Object) job.get("zone")));
+            // F-M9 (plan §3, review M4): not a request of the AI (no provider, no outcome): never charged.
+            values.put("feeMode", QbAi.FEE_NONE);
+            values.put("reservedYen", BigDecimal.ZERO);
             questionsJob = String.valueOf(ctx.changes().insert(QbAi.JOB, values));
         }
         // The draft is used once for a quiz (the profile's review of it goes on).

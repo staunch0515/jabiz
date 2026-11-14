@@ -289,7 +289,10 @@ public final class HelpOutcomes {
      * What a finished job is charged: the usage its attempts recorded, and for each attempt that recorded none the
      * question's reserved input and all the output one attempt asks for ({@link ClaudeApi#unrecorded}).
      */
-    static ClaudeApi.Usage charged(Map<String, Long> metrics, int unrecordedAttempts, String model, long reserved) {
+    static ClaudeApi.Usage charged(Map<String, Long> recordedMetrics, int unrecordedAttempts, String model,
+        long reserved) {
+        // The estimates of the calls that got no answer have names of their own (F-M9); the help counts them as before.
+        Map<String, Long> metrics = com.jabiz.quizbuks.content.ai.AiUsageMetrics.merged(recordedMetrics);
         ClaudeApi.Usage recorded = new ClaudeApi.Usage(metrics.getOrDefault(AiQuestionsJob.INPUT_TOKENS, 0L),
             metrics.getOrDefault(AiQuestionsJob.OUTPUT_TOKENS, 0L),
             metrics.getOrDefault(AiQuestionsJob.FALLBACK_INPUT_TOKENS, 0L),

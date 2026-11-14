@@ -254,6 +254,22 @@ public class FeeConfig {
         return DistributionPrices.operatorSet();
     }
 
+    /** F-M9: the AI credit's movements (written only by the AI credit's processes) and its purchase. */
+    @Bean
+    EntityDefinition qbAiCreditMovementEntity() {
+        return AiCredits.MOVEMENT_ENTITY;
+    }
+
+    @Bean
+    DatasetDefinition qbAiCreditMovementDataset() {
+        return processOnly(AiCredits.MOVEMENT);
+    }
+
+    @Bean
+    ProcessDefinition<AiCredits.BuyInput, AiCredits.BuyOutput, ProcessContext> qbAiCreditBuy() {
+        return AiCredits.buy();
+    }
+
     /** F-M8: the operators' exposure prices, the publications' settlements and the reminders. */
     @Bean
     EntityDefinition qbExposurePriceEntity() {

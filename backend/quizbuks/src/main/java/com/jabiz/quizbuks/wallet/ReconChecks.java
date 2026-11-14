@@ -151,6 +151,11 @@ public final class ReconChecks {
     public static final String EXPOSURE_AMOUNT_MISMATCH = "EXPOSURE_AMOUNT_MISMATCH";
     /** F-M8 (a note): running publications of another's video that bought nothing. */
     public static final String EXPOSURE_UNPURCHASED = "EXPOSURE_UNPURCHASED";
+    /**
+     * F-M9 (#692 re-review, a note): a charged AI job whose fee went beyond its reservation (or what the credit held),
+     * the rest taken on by the platform; until the month's charge takes the job in.
+     */
+    public static final String AI_RESERVATION_SHORT = "AI_RESERVATION_SHORT";
     /** Account 2110 in all against all sponsors' cached balances. */
     public static final String TOTAL_2110 = "TOTAL_2110";
     /** Every posted line's debit less credit: 0. */
@@ -190,14 +195,15 @@ public final class ReconChecks {
         CREDIT_UNUSED_WITH_DUE, HELP_USAGE_TOTAL, OPERATOR_SETTLEMENT_WAITING, OPERATOR_SETTLEMENT_COVERAGE,
         GIFT_RECOVERY, OPERATOR_CHARGE_NO_OPERATOR, OPERATOR_GIFT_CARRY_OPEN, EXPOSURE_DEPOSITS,
         EXPOSURE_SETTLED_OVER, EXPOSURE_UNSETTLED, EXPOSURE_FINAL_MISSING, EXPOSURE_PRICE_RANGE,
-        EXPOSURE_UNIT_MISMATCH, EXPOSURE_UNPURCHASED, EXPOSURE_SETTLED_SHORT, EXPOSURE_AMOUNT_MISMATCH);
+        EXPOSURE_UNIT_MISMATCH, EXPOSURE_UNPURCHASED, EXPOSURE_SETTLED_SHORT, EXPOSURE_AMOUNT_MISMATCH,
+        AI_RESERVATION_SHORT);
 
     /** Codes no longer reported that runs written before may still name: readable, never written. */
     public static final List<String> RETIRED = List.of(DISTRIBUTION_PRICE_OUT_OF_RANGE);
 
     /** The checks that only note something: a run with notes alone is {@code OK}, and nobody is asked. */
     public static final Set<String> NOTES = Set.of(TAKER_WALLET_LAG, DISTRIBUTION_AT_FLOOR, EXPOSURE_UNPURCHASED,
-        OPERATOR_GIFT_CARRY_OPEN);
+        OPERATOR_GIFT_CARRY_OPEN, AI_RESERVATION_SHORT);
 
     /**
      * F-M14 (docs/quizbuks/plans/impl/F-M14.md §1.2): the checks that need someone to look or decide while the books

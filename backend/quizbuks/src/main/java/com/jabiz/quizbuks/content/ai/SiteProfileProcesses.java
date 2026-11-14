@@ -486,8 +486,13 @@ public final class SiteProfileProcesses {
     static void completeSite(ProcessContext ctx, ExternalJobCompletion completion, EntityInstance job,
         ClaudeApi.Usage usage, String month) {
         SiteProfileJob.Result result = completion.result(SiteProfileJob.Result.class);
-        BigDecimal cost = AiCost.of(job.get("model"), result.servedModel(), usage, AiProcesses.settings(ctx).price());
+        // F-M9 (plan §3): with the searches the reader made, at their price (none while it only reads the pages given).
+        BigDecimal searches = AiCost.searches(completion.usage().getOrDefault(ClaudeWebResearch.SEARCHES, 0L));
+        BigDecimal tokens = AiCost.of(job.get("model"), result.servedModel(), usage, AiProcesses.settings(ctx).price());
+        BigDecimal cost = tokens == null ? null : tokens.add(searches);
         Map<String, Object> values = AiProcesses.finished(usage, cost, completion.attempts(), completion.finishedTime());
+        AiFees.settle(ctx, job, values, AiProcesses.usage(completion.usage()), result.servedModel(), cost, searches,
+            completion.finishedTime());
         boolean failed = false;
         if (QbAi.QUEUED.equals(job.get("status"))) {
             values.put("servedModel", result.servedModel());

@@ -3,6 +3,7 @@ package com.jabiz.quizbuks.content.ai;
 import com.jabiz.entity.Violation;
 import com.jabiz.quizbuks.setup.QbParams;
 
+import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -15,18 +16,49 @@ import java.util.regex.Pattern;
  * guess. So does the switch while it is off.
  */
 public record AiSettings(boolean enabled, String model, String effort, Integer dailyJobs, Long monthlyTokens,
-    Long globalMonthlyTokens, int expireDays, AiCost.Price price) {
+    Long globalMonthlyTokens, int expireDays, AiCost.Price price, Fee fee) {
 
     /**
      * @param price the price of a model {@link AiCost} does not know (the parameters {@code qb.ai.price.*}), or null
      *              while either is not a number
+     * @param fee   F-M9: the AI fee's parameters
      */
     public AiSettings {}
+
+    /**
+     * F-M9 (docs/quizbuks/plans/impl/F-M9.md §6): the AI fee's parameters as stored; a value that is not a number, or
+     * out of its range, is null.
+     *
+     * @param enabled     whether sponsors' requests are charged ({@code qb.ai.fee.enabled})
+     * @param markup      the multiple of the list price, 1 to 10
+     * @param usdJpy      the yen of a dollar, 50 to 500
+     * @param taxRate     the platform fees' tax rate ({@code qb.fee.tax-rate}), 0 to below 1
+     * @param minPurchase the least purchase of credit; null: none (not set)
+     * @param siteCalls   the calls a website draft's attempt reserves ({@code qb.ai.fee.site-profile.calls}); null: the
+     *                    web reader's most
+     * @param sitePages   the pages it reserves; null: the job's own
+     * @param siteOutput  the output tokens it reserves; null: the job's own
+     */
+    public record Fee(boolean enabled, BigDecimal markup, BigDecimal usdJpy, BigDecimal taxRate,
+        BigDecimal minPurchase, Integer siteCalls, Integer sitePages, Integer siteOutput) {
+
+        /** The fee's parameters without a website draft's own limits. */
+        public Fee(boolean enabled, BigDecimal markup, BigDecimal usdJpy, BigDecimal taxRate, BigDecimal minPurchase) {
+            this(enabled, markup, usdJpy, taxRate, minPurchase, null, null, null);
+        }
+    }
 
     /** The keys a request reads. */
     public static final List<String> KEYS = List.of(QbParams.AI_ENABLED, QbParams.AI_MODEL, QbParams.AI_EFFORT,
         QbParams.AI_SPONSOR_DAILY_JOBS, QbParams.AI_SPONSOR_MONTHLY_TOKENS, QbParams.AI_GLOBAL_MONTHLY_TOKENS,
-        QbParams.AI_EXPIRE_DAYS, QbParams.AI_PRICE_INPUT, QbParams.AI_PRICE_OUTPUT);
+        QbParams.AI_EXPIRE_DAYS, QbParams.AI_PRICE_INPUT, QbParams.AI_PRICE_OUTPUT, QbParams.AI_FEE_ENABLED,
+        QbParams.AI_FEE_MARKUP, QbParams.AI_FEE_USD_JPY, QbParams.FEE_TAX_RATE, QbParams.AI_CREDIT_MIN_PURCHASE,
+        QbParams.AI_FEE_SITE_CALLS, QbParams.AI_FEE_SITE_PAGES, QbParams.AI_FEE_SITE_OUTPUT);
+
+    private static final BigDecimal MARKUP_MIN = BigDecimal.ONE;
+    private static final BigDecimal MARKUP_MAX = BigDecimal.TEN;
+    private static final BigDecimal USD_JPY_MIN = BigDecimal.valueOf(50);
+    private static final BigDecimal USD_JPY_MAX = BigDecimal.valueOf(500);
 
     private static final Pattern PRICE = Pattern.compile("[0-9]{1,4}(\\.[0-9]{1,4})?");
 
@@ -44,8 +76,53 @@ public record AiSettings(boolean enabled, String model, String effort, Integer d
             values.get(QbParams.AI_EFFORT), daily == null ? null : (int) Math.min(10_000, daily),
             whole(values.get(QbParams.AI_SPONSOR_MONTHLY_TOKENS)), whole(values.get(QbParams.AI_GLOBAL_MONTHLY_TOKENS)),
             days == null || days < 1 ? DEFAULT_EXPIRE_DAYS : days,
-            price(values.get(QbParams.AI_PRICE_INPUT), values.get(QbParams.AI_PRICE_OUTPUT)));
+            price(values.get(QbParams.AI_PRICE_INPUT), values.get(QbParams.AI_PRICE_OUTPUT)),
+            new Fee("true".equals(values.get(QbParams.AI_FEE_ENABLED)),
+                within(decimal(values.get(QbParams.AI_FEE_MARKUP)), MARKUP_MIN, MARKUP_MAX),
+                within(decimal(values.get(QbParams.AI_FEE_USD_JPY)), USD_JPY_MIN, USD_JPY_MAX),
+                rate(decimal(values.get(QbParams.FEE_TAX_RATE))),
+                whole(values.get(QbParams.AI_CREDIT_MIN_PURCHASE)) == null ? null
+                    : BigDecimal.valueOf(whole(values.get(QbParams.AI_CREDIT_MIN_PURCHASE))),
+                limit(values.get(QbParams.AI_FEE_SITE_CALLS), ClaudeWebResearch.MAX_CALLS),
+                limit(values.get(QbParams.AI_FEE_SITE_PAGES), Integer.MAX_VALUE),
+                limit(values.get(QbParams.AI_FEE_SITE_OUTPUT), Integer.MAX_VALUE)));
     }
+
+    /**
+     * F-M9: why a sponsor's request cannot be charged while the fee is on (a markup, rate or tax rate not usable), as
+     * {@link AiCodes#UNAVAILABLE}; none when the fee is off or can be worked out. A reviewer's check is never charged and
+     * does not ask.
+     */
+    public List<Violation> feeProblems() {
+        if (!fee.enabled() || fee.markup() != null && fee.usdJpy() != null && fee.taxRate() != null) {
+            return List.of();
+        }
+        return List.of(new Violation(null, AiCodes.UNAVAILABLE, "AI generation is unavailable: the AI fee's markup, "
+            + "exchange rate or tax rate is not set within its range", Map.of("enabled", enabled)));
+    }
+
+    private static BigDecimal decimal(String text) {
+        if (text == null || !DECIMAL.matcher(text.strip()).matches()) {
+            return null;
+        }
+        return new BigDecimal(text.strip());
+    }
+
+    /** A whole number from 1 to {@code max}; null otherwise (the job's own limit applies). */
+    private static Integer limit(String text, int max) {
+        Long value = whole(text);
+        return value == null || value < 1 || value > max ? null : value.intValue();
+    }
+
+    private static BigDecimal within(BigDecimal value, BigDecimal min, BigDecimal max) {
+        return value == null || value.compareTo(min) < 0 || value.compareTo(max) > 0 ? null : value;
+    }
+
+    private static BigDecimal rate(BigDecimal value) {
+        return value == null || value.signum() < 0 || value.compareTo(BigDecimal.ONE) >= 0 ? null : value;
+    }
+
+    private static final Pattern DECIMAL = Pattern.compile("[0-9]{1,6}(\\.[0-9]{1,6})?");
 
     private static AiCost.Price price(String input, String output) {
         if (input == null || output == null || !PRICE.matcher(input.strip()).matches()
