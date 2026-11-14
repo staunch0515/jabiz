@@ -182,6 +182,8 @@
 
 在正式系统上、对外开放之前做。平台的步骤（设置文件、部署、恢复演练、安全的最后几项）照 `launch-day-platform-steps.md` 的顺序；本节把对应的项放在相应的位置。
 
+**先跑只读干跑**：`tools/quizbuks/ops/launch-day-check.sh`（`operations.md` §4「部署当天的只读干跑」）。它逐项核对本节中能从数据库、站点、`.env` 与启动日志读出来的项，结果可贴在各项的「依据」里；它列出的人工项仍按本节逐项确认。前一天对 staging 跑一次，当天对正式系统跑一次。
+
 ### 2.1 部署之前
 
 - [ ] **配送费价目都在总部的范围内**（核对项 `DISTRIBUTION_PRICE_RANGE` 第一次真正运行）：部署之前在 staging 库与正式库上各执行一次 `psql "$DATABASE_URL" -f tools/quizbuks/sql/distribution-price-range.sql`，结果为空；有行时先改价目或范围（`operations.md` §4 检查清单、§7.48）

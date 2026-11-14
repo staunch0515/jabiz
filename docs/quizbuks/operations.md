@@ -303,6 +303,15 @@ FROM pg_stat_statements ORDER BY total_exec_time DESC LIMIT 20;
 | `AiPdfLimitsCheck`（Q8b） | `QB_AI_PDF_MAX_PAGES` × 5 000 加上最大的文字输入与输出须放得进模型的上下文窗口（100 万 Token：至多约 179 页），且不超过提供方每次请求的 600 页（§7.8；不论模式都查） |
 | `LiveModeDataCheck`（Q7b，告警） | 正式模式下没有已生效的学者条款、发起方条款或隐私政策即告警（不能报错：要先启动才能发布）；上线前必须消除 |
 
+**部署当天的只读干跑**：`tools/quizbuks/ops/launch-day-check.sh` 把上线检查清单第 2 部分中能读出来的项逐项核对（数据库、站点、`.env` 与启动日志，缺哪个就跳过对应的项），其余的列为人工项。它只读：数据库会话为只读、只执行 SELECT，站点只用 GET 与 HEAD，不启动任何流程、不打开任何开关；不输出秘密与个人信息（管理员只报人数）。期望值取自代码与数据：首次上线开关取自模板 `qb.admin.first-launch-switches`，科目取自账本的科目表，并发建的索引取自迁移，脚本里不写业务数字。前一天在 staging 跑一次（`EXPECT_ENVIRONMENT=staging`），当天在正式系统跑一次：
+
+```sh
+DATABASE_URL=postgres://<只读账号>@<库>/quizbuks BASE_URL=https://quizbuks.com ENV_FILE=/opt/apps/quizbuks/.env \
+  LOG_CMD='docker compose logs app' EXPECT_ENVIRONMENT=production tools/quizbuks/ops/launch-day-check.sh
+```
+
+每行 `OK | WARN | FAIL | SKIP`，最后一行 `n error(s), m warning(s)`，有 FAIL 时退出码为 1。待发布的受控变更与还未生效的首次上线开关是 WARN：第 3 部分各开关的前提满足之前本来就待发布。
+
 **检查清单**（按顺序）：
 
 - [ ] 法务意见已取得（资金決済法：Q6b 的转账），收据措辞、隐私政策与条款已确认（`launch-checklist.md`）
