@@ -138,6 +138,13 @@ class ExposureSettleIT extends ExposureFeeItSupport {
         assertThat(query("SELECT coalesce(sum(total), 0) AS t FROM qb_fee_charge_version WHERE sponsor_id = ? AND "
             + "kind = 'EXPOSURE'", sponsor).getFirst().get("t")).satisfies(t -> assertThat(dec(t))
             .isEqualByComparingTo("110"));
+        // F-M13: the invoice of an exposure fee names the publication ('exposure:<publication>:<month>').
+        String exposureInvoice = String.valueOf(query("SELECT i.invoice_id FROM qb_fee_invoice i JOIN "
+            + "qb_fee_charge_version c ON CAST(c.charge_id AS text) = i.charge_id WHERE c.sponsor_id = ? AND c.kind = "
+            + "'EXPOSURE' ORDER BY i.issued_at", sponsor).getFirst().get("invoice_id"));
+        assertThat(items("qb.sponsor.fee-invoice-lines", sponsorToken(sponsor), Map.of("params",
+            Map.of("invoiceId", exposureInvoice)))).singleElement().satisfies(line -> assertThat(line)
+            .containsEntry("description", String.valueOf(row(publicationId).get("name"))));
         assertThat(differences(sponsor)).isEmpty();
         noUpdatesOrDeletes("qb_exposure_settlement_version");
     }

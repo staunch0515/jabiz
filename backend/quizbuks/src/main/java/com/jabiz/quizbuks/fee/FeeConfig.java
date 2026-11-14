@@ -628,8 +628,10 @@ public class FeeConfig {
     }
 
     @Bean
-    ProcessDefinition<FeeProcesses.DocumentInput, FeeProcesses.InvoiceOutput, ProcessContext> qbFeeInvoiceDocument() {
-        return FeeProcesses.document();
+    ProcessDefinition<FeeProcesses.DocumentInput, FeeProcesses.InvoiceOutput, ProcessContext> qbFeeInvoiceDocument(
+        com.jabiz.runtime.document.Documents documents, com.jabiz.i18n.MessageCatalog messages) {
+        return FeeProcesses.document(zone, (language, request) -> messages.find(
+            "document.qb.fee_invoice.sourcesUnavailable", documents.language(language, request)).orElse(""));
     }
 
     @Bean

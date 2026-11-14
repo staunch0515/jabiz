@@ -603,7 +603,7 @@ FROM pg_stat_statements ORDER BY total_exec_time DESC LIMIT 20;
 - **现金奖励的争议**（F-S1）：平台不处理。学者提出争议只通知发起方；双方解决后由发起方再次"标记已支付"（确认期限重新起算），或学者直接确认。平台的现金奖励列表只读、可按运营商筛选，没有裁决。
 - **已有安装的授权**（F-S1）：`QB_SETUP` 只补、不收回。F-S1 之前已执行过 `QB_SETUP` 的安装，在「用户与角色」中从角色 `QB_ADMIN_CONTENT` 去掉 `qb.review.sponsor`、`qb.review.publication`、`qb.admin.reward-methods`、`qb.redemption.void`、`qb.digital.resolve`、`qb.prospect.use`、`qb.certification.manage`（`approval.decide` 保留，财务四眼要它），并去掉已删除的 `qb.cash.resolve`（任何角色上都去掉）；超级管理员角色补上 `approval.scope.move`（不是受保护的权限：再执行一次 `QB_SETUP` 即补）。原来由内容管理员做审核的人，改为某个运营商（通常是默认运营商）的成员并取得 `QB_OPERATOR`。测试系统直接重置数据库。
 - **方案**（Q48e-2）：五种方案（每月固定费、平台分成；受控参数 `qb.operator.plan.<1..5>.fee|share`，`QB_SETUP` 提出 0/50%、20,000/40%、40,000/30%、60,000/20%、100,000/10%）。新运营商为方案 1；总部在运营商页面提出从以后某月起的方案，另一位管理员（`qb.topup.bank.approve`）在待办中批准后生效。
-- **月结算**（Q48b、Q48e-2、F-M12）：每天 02:13（日本时间，1 日除外）任务 `qb.operator-settlement` 为每个运营商结算它最早的、已结束而还没有结算的月份：它的发起方的平台费（税前，种类在 `qb.operator.share.kinds` 中的，去掉成本部分）减去用平台承担的赠送额度付的部分，×（1 − 当月方案的平台分成），再减去当月方案的固定费（停用的运营商不收）、获客费用与扣除，余下的分成扣回运营商承担的赠送额度，记入运营商的账户（不够扣的结转到下月），并可签发结算单。发起方发布的奖励抽成不再进运营商的结算（需求方 2026-11-13 同意）。规则、就绪条件与核对见 §7.57。前提：分录导出的 `qb.journal.account.2140` / `5130` / `5140` / `4110` 已设。
+- **月结算**（Q48b、Q48e-2、F-M12）：每天 02:13（日本时间，1 日除外）任务 `qb.operator-settlement` 为每个运营商结算它最早的、已结束而还没有结算的月份：它的发起方的平台费（税前，种类在 `qb.operator.share.kinds` 中的，去掉成本部分）减去用平台承担的赠送额度付的部分，×（1 − 当月方案的平台分成），再减去当月方案的固定费（停用的运营商不收）、获客费用与扣除，余下的分成扣回运营商承担的赠送额度，记入运营商的账户（不够扣的结转到下月），并可签发结算单。发起方发布的奖励抽成不再进运营商的结算（需求方 2026-11-13 同意）。规则、就绪条件与核对见 §7.58。前提：分录导出的 `qb.journal.account.2140` / `5130` / `5140` / `4110` 已设。
 - **提现**（Q48e-2）：钱都在平台。运营商负责人在运营商管理系统「账户」设银行账户（改后 `qb.operator.withdrawal.cooldown-hours` 小时内不能提现）、申请提现（至少 `qb.operator.withdrawal.min`，至多余额，同时一笔）；财务在「运营商提现」银行付款后点"登记付款"，另一位管理员在待办中批准后才过账（2140 / 1120），驳回即回到"已申请"；财务也可驳回申请并写理由。手续费由平台承担。Q48e-2 之前签发的结算单照旧逐张付款。
 - **平台运营商不开放提现**（F-M12 a0，需求方 2026-11-13）：平台运营商（`defaultForNew` 为真的那一个，即自助注册的发起方所归的默认运营商）的账户不能提现：负责人申请即 422 `QB_OPERATOR_WITHDRAWAL_PLATFORM`，什么也不写；「账户」页不显示提现表单，改为一行说明。结算照常记入它的账户，转给直营发起方照常可用。默认运营商改为另一家后，以申请时的标志为准：新的默认运营商被拒，原来的可以申请。**部署本项前**查一次有没有平台运营商未结的提现申请：`SELECT w.withdrawal_id, w.amount, w.status FROM qb_operator_withdrawal w JOIN qb_operator o ON o.operator_id = w.operator_id WHERE o.default_for_new AND w.status IN ('REQUESTED', 'PAYING')`；有的照现有流程由财务处理（驳回或登记付款），本项不自动改它们。
 
@@ -1482,11 +1482,11 @@ Quiz 与发布有主题词（平台词表中的词与自定义词），学者可
 | `LIGHT_VOIDS` | 撤销点亮后赠送剩余未作废 | 差异 | 结算任务失败 | 补跑 qb.tree-grant-retry；仍在则报开发 | 财务 | LIGHT_GRANTS |
 | `CERTIFIED_GRANTS` | 企业认证补发与认证或额度不符 | 差异 | 补发条件判断有误 | §7.42 | 报开发 | — |
 | `OPERATOR_ACCOUNT` | 2140（按运营商）= 结算 − 提现 − 转出 | 差异 | 结算、提现或转出漏过账 | §7.13、§7.43 | 报开发 | — |
-| `OPERATOR_SETTLEMENT_WAITING` | 运营商最早未结算的月份过了起算点之后 `qb.operator.settlement.waiting-after-hours` 小时（缺省 48）仍没有结算（引用 `<月>:<在等的步骤>`） | 差异 | 在等配送费或曝光费的结算、后付费用的月账单；只有月份时是结算任务失败 | 按引用中的步骤查前一步；只有月份时看任务记录与待办，修好后补跑 `qb.operator-settlement`（§7.57） | 财务 | OPERATOR_SETTLEMENT_COVERAGE |
-| `OPERATOR_SETTLEMENT_COVERAGE` | 新做法结算的各列 = 其明细；应已被两次结算算入的费用（`fee:`）与赠送付款（`gift:`）都有明细 | 差异 | 结算写错；连续被行数上限截断 | 先看行数上限的待办；否则报开发（§7.57） | 财务 / 报开发 | OPERATOR_SETTLEMENT_WAITING、GIFT_RECOVERY |
-| `GIFT_RECOVERY` | 结算的赠送扣回合计 = 来源为结算的 5140 净贷方；每月应扣 = 实扣 + 结转出 − 结转入；结转入 = 上月结转出 | 差异 | 结算或它的过账有误 | 报开发；不手工改分录（§7.57） | 报开发 | FEE_CREDIT_PROMOTION、OPERATOR_GIFT_CARRY_OPEN |
-| `OPERATOR_CHARGE_NO_OPERATOR` | 切换点之后记下、没有运营商的费用（没有结算会算入它） | 差异 | 记费时发起方没有运营商 | 查明它当时属于哪个运营商后报开发处理；不手工补（§7.57） | 报开发 | — |
-| `OPERATOR_GIFT_CARRY_OPEN` | 已停用、最新结算仍结转着赠送扣回的运营商 | 提示 | 合同结束时分成不够扣回 | 不自动追缴；由财务与运营商商定（§7.57"合同结束"） | 财务 | GIFT_RECOVERY |
+| `OPERATOR_SETTLEMENT_WAITING` | 运营商最早未结算的月份过了起算点之后 `qb.operator.settlement.waiting-after-hours` 小时（缺省 48）仍没有结算（引用 `<月>:<在等的步骤>`） | 差异 | 在等配送费或曝光费的结算、后付费用的月账单；只有月份时是结算任务失败 | 按引用中的步骤查前一步；只有月份时看任务记录与待办，修好后补跑 `qb.operator-settlement`（§7.58） | 财务 | OPERATOR_SETTLEMENT_COVERAGE |
+| `OPERATOR_SETTLEMENT_COVERAGE` | 新做法结算的各列 = 其明细；应已被两次结算算入的费用（`fee:`）与赠送付款（`gift:`）都有明细 | 差异 | 结算写错；连续被行数上限截断 | 先看行数上限的待办；否则报开发（§7.58） | 财务 / 报开发 | OPERATOR_SETTLEMENT_WAITING、GIFT_RECOVERY |
+| `GIFT_RECOVERY` | 结算的赠送扣回合计 = 来源为结算的 5140 净贷方；每月应扣 = 实扣 + 结转出 − 结转入；结转入 = 上月结转出 | 差异 | 结算或它的过账有误 | 报开发；不手工改分录（§7.58） | 报开发 | FEE_CREDIT_PROMOTION、OPERATOR_GIFT_CARRY_OPEN |
+| `OPERATOR_CHARGE_NO_OPERATOR` | 切换点之后记下、没有运营商的费用（没有结算会算入它） | 差异 | 记费时发起方没有运营商 | 查明它当时属于哪个运营商后报开发处理；不手工补（§7.58） | 报开发 | — |
+| `OPERATOR_GIFT_CARRY_OPEN` | 已停用、最新结算仍结转着赠送扣回的运营商 | 提示 | 合同结束时分成不够扣回 | 不自动追缴；由财务与运营商商定（§7.58"合同结束"） | 财务 | GIFT_RECOVERY |
 | `PREPAYMENTS` | 2180（按发起方）= 未关闭预付款剩余 | 差异 | 预付款与过账不一致 | §7.47 | 报开发 | PREPAYMENT_PARTS |
 | `PREPAYMENT_STALE` | 应退而未退的预付款 | 差异 | 退回任务失败或没跑 | 补跑 qb.prepayment-release | 财务 | PREPAYMENTS |
 | `PREPAYMENT_PARTS` | 预付款的分摊之和 = 剩余 | 差异 | 分摊行漏写 | §7.47 | 报开发 | PREPAYMENTS |
@@ -1554,7 +1554,19 @@ ORDER BY u.job_id, u.attempt_no, u.metric;
 
 - **待实测**：服务方文档没有说明一次请求的 `input_tokens` 是否累加服务端内部的多轮采样（动态过滤下的抓取不计入 `max_uses`）。若单次调用的输入超过 `qb.site-profile.max-pages` 对应的预留输入（约 20.5 万），在 `.pages` 的取值中体现。
 
-### 7.57 运营商结算：不分成与扣回（F-M12）
+### 7.57 账单的 PDF：付款来源、税与开具日（F-M13）
+
+账单的 PDF 是**签发那一刻的快照**：发起方第一次点"账单"时才签发（`QB_FEE_INVOICE_DOCUMENT`，任务不能签发），之后永远是同一份存档字节；改开具方名称、发起方公司名、版式都不影响已签发的。重印取存档，不重新排版。
+
+- **开具日**：账单有 `issued_on`（`jabiz.fiscal-year-zone` 的日期，迁移 V125 回填用 `Asia/Tokyo`，上线前只有测试数据）；PDF 写开具日，不再写 UTC 时刻，也不再写"状态"（它会过时）。账单号的年份仍取费用所属月份的年（12 月的月账单在次年 1 月开出，号码是上一年的）。
+- **明细**：每行写种类、月份、说明、税率、金额、税、合计；说明：手工费用写理由，受众规则费、配送费、曝光费写发布名（取自费用的来源键 `<种类>:<发布>[:<月份>]`），月费不写。另有"按税率的小计"（`qb.sponsor.fee-invoice-rates`）：每个税率一行，税是各笔税之和，不重算；中途改过税率的月账单会有两行。**不写"适格请求书"字样**：财务或法务书面确认后只改消息文字（`document.qb.fee_invoice.*`）。
+- **付款情况**（"截至 <开具日>"）：赠送额度、预付款（其中来自赠送额度）、现金、贷项凭证抵减、仍未付。**定义只有一处**：模板 `qb.sponsor.fee-invoice-sources`，管理员的 `qb.admin.fee-invoice-sources` 是同一段 SQL（改一处必须改两处；`InvoiceSourcesTextTest` 逐字比较两个文件头部以下的正文，`FeeAccountIT` 逐行比较结果）；它一条语句读付款行、贷项抵减与合计，恒等式 赠送额度 + 预付款 + 现金 + 贷项抵减 + 仍未付 = 合计（"其中来自赠送额度"含在预付款里）。归类：行带预付款编号的算预付款；否则子账户为赠送额度的算赠送额度；其余算现金。已作废的账单：付出的已退回，所以各项与仍未付都是 0。**仍未付取账单自己的数**（合计 − 已付额 − 贷项抵减，不低于 0，同 `QbFees.owed`），不是合计减付款行；F-M1 之前付清的旧账单没有付款行，付款行之和与已付额对不上时，赠送额度、预付款、现金三项为空（页面写"付款明细不可用"，PDF 对应行为空），只印账单自己有的数，绝不印错的数（PDF 永久存档）。**它不是运营商结算单上"赠送支付"那一行**（那一行折成税前、按累计取整、含凭证的负行，F-M12）。
+- **页面**：发起方的"账单"行与总部的账单行都可展开"付款情况"，读的是**现在**的（同一个模板）；PDF 写的是开具当天的，之后的付款在页面看。发起方问"PDF 上写着未付，其实已付清"——是这个原因，不出新的 PDF（要的话另出一份是另一件事）。
+- **权限**：账单 PDF 的版式与它读的全部模板（`fee-invoice-doc`、`-lines`、`-rates`、`-sources`）都只要 `qb.topup`（发起方持有）；页面的"付款情况"读的是同一个 `fee-invoice-sources`，总部读 `qb.admin.fee-invoice-sources`（`qb.admin.finance.read`）。付款明细不可用时，PDF 在"付款情况截至"一行后面写明（三语消息 `document.qb.fee_invoice.sourcesUnavailable`），该三项的数字为空。
+- **作废的账单**：已有 PDF 的仍可下载原件（保留期 10 年，做账可能要）；没有 PDF 的，`QB_FEE_INVOICE_DOCUMENT` 422 `QB_FEE_INVOICE_STATE`。页面写"<日期> 已作废"，不写作废的理由（理由只给总部）。
+- **升级**：迁移 V125（账单加 `issued_on`）；部署后不需要运行 `QB_SETUP`。
+
+### 7.58 运营商结算：不分成与扣回（F-M12）
 
 §7.13 "月结算"的细节。设计见 `plans/impl/F-M12.md`；结算单上每一行的意思见帮助 `help/operator-settlement.md`。
 

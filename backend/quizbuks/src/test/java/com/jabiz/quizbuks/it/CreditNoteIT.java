@@ -130,6 +130,12 @@ class CreditNoteIT extends CreditNoteItSupport {
             sponsor).getFirst();
         assertThat(invoice).containsEntry("status", QbFees.PARTIAL);
         assertThat((BigDecimal) invoice.get("credit_applied")).isEqualByComparingTo("550");
+        // F-M13: the invoice's payment sources: 550 by the credit note, nothing paid, 550 owed.
+        assertThat(items("qb.sponsor.fee-invoice-sources", sponsorToken(sponsor), Map.of("params",
+            Map.of("invoiceId", String.valueOf(invoice.get("invoice_id")))))).singleElement().satisfies(sources ->
+            assertThat(sources).containsEntry("sourceCreditNote", 550).containsEntry("sourceCash", 0)
+                .containsEntry("sourceGift", 0).containsEntry("sourcePrepayment", 0).containsEntry("sourcePrepaymentGift", 0)
+                .containsEntry("sourceUnpaid", 550));
         assertThat(query("SELECT amount FROM qb_fee_credit_note_use_version WHERE invoice_id = ?",
             String.valueOf(invoice.get("invoice_id")))).singleElement()
             .satisfies(use -> assertThat((BigDecimal) use.get("amount")).isEqualByComparingTo("550"));
