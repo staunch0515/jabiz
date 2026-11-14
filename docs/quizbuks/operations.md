@@ -1152,7 +1152,7 @@ Quiz 与发布有主题词（平台词表中的词与自定义词），学者可
   2. **另一位管理员发布**这些提案；`qb.journal.account.5140` 是会计系统中"推广费（平台费 Kudos）"的科目代码，未发布之前分录导出会被拒。
   3. 活动开始时，以受控变更把 `qb.fee-credit.grant.enabled` 改为 `true`（另一位管理员发布）；关掉即不再能确认入驻赠送（已发的照旧可用、照旧到期）。追加赠送不受这个开关影响。
 - **到期作废**：任务 `qb.fee-credit-expire`（每天 02:47，`jabiz.fiscal-year-zone`），逐笔（`QB_FEE_CREDIT_EXPIRE`，`internal()`）在发起方钱包锁内重读，把**到期时剩余的部分**作废：借 2190 / 贷 5140，`remaining` 归零、记 `voided_amount` 与 `voided_at`，钱包 `FEE_CREDIT` 减少。已用掉的部分不受影响。错过的运行以 `JOB_RUN_REQUEST` 补跑（同一时刻幂等）。冻结在预付中的赠送部分随 M4。
-- **到期前提醒**：任务 `qb.fee-credit-remind`（每天 10:13，同一时区）选出有一笔将在 `qb.fee-credit.expiry-notice-days` 天内到期、还有剩余、尚未提醒过的发起方；逐个（`QB_FEE_CREDIT_REMIND`）在钱包锁内把这些笔记上 `reminded_at`（每笔只提醒一次），距上一封不足 24 小时的不发（下一天再发），发出事件 `qb.fee-credit.expiring`，由 `QB_MAIL_FEE_CREDIT` 寄邮件 `qb.fee-credit.expiring`（通知类，可退订，只在发起方入口的偏好中）。
+- **到期前提醒**：任务 `qb.fee-credit-remind`（每天 10:13，同一时区）选出有一笔将在 `qb.fee-credit.expiry-notice-days` 天内到期、还有剩余、尚未提醒过的发起方（"剩余"含已转进 AI 额度、仍在额度中的部分，包括进行中的 AI 作业预留占着的：它在 AI 额度中同样到期作废，F-M9c；作废过的一笔不算。邮件写明其中多少在 AI 额度中并链接到 AI 额度页；金额是提醒时读到的值，之后的费用与请求还会用掉一部分）；逐个（`QB_FEE_CREDIT_REMIND`）在钱包锁内把这些笔记上 `reminded_at`（每笔只提醒一次），距上一封不足 24 小时的不发（下一天再发），发出事件 `qb.fee-credit.expiring`，由 `QB_MAIL_FEE_CREDIT` 寄邮件 `qb.fee-credit.expiring`（通知类，可退订，只在发起方入口的偏好中）。
 - **页面**：发起方钱包页的"平台费账户"各笔显示来源、金额、已用、剩余与到期；运营商的发起方页显示入驻赠送是否已发与"确认"按钮（只有持权限者看得到，负责人之外的成员由服务器拒绝）；平台管理系统"平台费"页的"平台费 Kudos"标签（财务只读）按运营商（发放时）、发起方或来源汇总，并列出每一笔的赠送、已用、剩余与到期作废。
 - **每日核对**（`qb.system.recon-fee-credit`）：新项 `FEE_CREDIT_PROMOTION`——按运营商（发放时记在笔上的；`-` 为无），以赠送为来源的分录在 5140 上的借减贷 = 各笔金额 − 到期作废之和（`sponsorId` 一列此处是运营商）。`FEE_CREDIT`（2190 = 钱包 = 各笔剩余）照旧覆盖赠送与作废。
 - **月报**（`qb.admin.monthly`）：两个新种类 `FEE_CREDIT_GRANTED`（借 5140 / 贷 2190）与 `FEE_CREDIT_VOIDED`（借 2190 / 贷 5140），新列 `feeCreditPromotion`（5140）；用赠送支付的平台费照旧在 `FEE_PAID` 的 `feeCredit` 一列。余额表多 5140 一行。
@@ -1389,7 +1389,7 @@ Quiz 与发布有主题词（平台词表中的词与自定义词），学者可
 
 - **差异**：已结束月份的账会因此错或不全。运行为 `DIFF`，告警 `qb-reconcile-diff`，月末分录导出被拒（`QB_JOURNAL_RECON_NOT_OK`）；财务（`qb.reconcile`）每天至多一个待办"核对发现差异"，标题写明差异条数与涉及几项核对。
 - **需关注**：账是平的、已结束月份不受影响，只需要有人看或做一个决定。运行仍为 `OK`，不告警、不拦导出；每个（核对项, 对象）给负责的人一个待办"核对需关注"，标题写明核对项、对象、应为与实际。现在的五项：`DISTRIBUTION_PRICE_RANGE`（运营商的配送费价目超出总部范围：改价目或改范围）、`EXPOSURE_PRICE_RANGE`（运营商的曝光费价目超出总部范围，同上，§7.54）、`AUDIENCE_REFUND_NO_PERIOD`（财务决定开凭证或用 `QB_AUDIENCE_REFUND_CLOSE` 记下不开，§7.50）、`CREDIT_UNUSED_WITH_DUE`（下一次开账单或抵用时自行了结）、`HELP_USAGE_TOTAL`（AI 帮助的月用量，由内容管理员负责，见 §7.53）。
-- **提示**：只是信息（`TAKER_WALLET_LAG`、`DISTRIBUTION_AT_FLOOR`、`EXPOSURE_UNPURCHASED`、`AI_RESERVATION_SHORT`），不建待办。
+- **提示**：只是信息（`TAKER_WALLET_LAG`、`DISTRIBUTION_AT_FLOOR`、`EXPOSURE_UNPURCHASED`、`AI_RESERVATION_SHORT`），不建待办。平台承担 AI 费用的明细（含没有回答的尝试按估计记下的美元）看总部 AI 费报表（`qb.admin.ai-fees`，F-M9 b2）；每月合计超过 `qb.ai.fee.absorbed-alert-yen` 时由 `QB_AI_ABSORBED_CHECK` 给财务待办（§7.56"平台承担"），不是核对项。
   其中 `DISTRIBUTION_AT_FLOOR` 与 `EXPOSURE_UNPURCHASED` 也给运营商看（F-M14b）：运营商管理系统「发起方的计费方式」页下方的「每日核对的提示」块，列出最近一次核对中关于**现在分配给本运营商的**发起方的这两种提示（发起方、发布个数），每种一句说明。块只读，不建待办，运营商不需要处理。它读模板 `qb.operator.recon-notes`，按会话的运营商限定（D64）；其他核对项的条目与金额运营商都看不到。**改派之后**：提示按读取时发起方的分配显示，与核对何时运行无关。发起方改派到另一个运营商，连同它在原运营商时提交的发布，立即出现在新运营商的块里，原运营商不再看到；"按运营商的配送费下限计费"指的是发布提交时的运营商的下限（发布的卡片冻结了当时的运营商），不一定是新运营商的。没有提示时块里写「最近一次核对没有关于这些发起方的提示」并给出核对时刻，从未运行过时写「每日核对还没有运行过」。
 - **待办的建立与关闭**：任务 `qb.recon-attention` 与 `qb.recon-tasks-close`，每天 UTC 18:52（日本时间 03:52，核对之后 15 分钟），每次至多 200 项，剩下的次日继续；补跑用 `JOB_RUN_REQUEST`。
   - **关注待办**：同一对象只要有一个未办的就不再建；不再出现即以完成关闭。人手工关了而条件还在，次日会重建：要处理的是条件，不是待办。
