@@ -31,7 +31,13 @@ import static org.assertj.core.api.Assertions.assertThat;
 class OperatorSettlementReconBudgetIT extends CreditNoteItSupport {
 
     static final int OPERATORS = 50;
-    static final Duration LIMIT = Duration.ofSeconds(5);
+    /**
+     * What the check may take (the platform's query timeout is 5 s): measured on the test database at 2.4 s the longest
+     * with no statistics and 0.8 s analyzed (50 operators, 60 months, 3,000 settlements, 18,000 lines, 15,000 fees,
+     * 100,000 cash payments); the limits leave the room a slower machine needs.
+     */
+    static final Duration NO_STATISTICS = Duration.ofMillis(4_000);
+    static final Duration ANALYZED = Duration.ofMillis(2_000);
 
     private static final List<String> OPERATOR_IDS = new ArrayList<>();
 
@@ -96,15 +102,15 @@ class OperatorSettlementReconBudgetIT extends CreditNoteItSupport {
 
         seed(0, 24, settlementId, chargeLine, giftLine, fee, payment);
         clock.set(Instant.parse("2032-01-02T00:00:00Z"));
-        Duration all24 = measure("24 months, all history, no statistics", null, true);
-        Duration window24 = measure("24 months, the window of 3 months, no statistics", Instant.parse("2031-10-01T00:00:00Z"), true);
+        Duration all24 = measure("24 months, all history, no statistics", null, NO_STATISTICS);
+        Duration window24 = measure("24 months, the window of 3 months, no statistics", Instant.parse("2031-10-01T00:00:00Z"), NO_STATISTICS);
 
         seed(24, 60, settlementId, chargeLine, giftLine, fee, payment);
         clock.set(Instant.parse("2035-01-02T00:00:00Z"));
-        // Straight after the bulk load, with no statistics (autovacuum off): the window must hold, all of the history may not.
-        Duration all60 = measure("60 months, all history, no statistics", null, false);
+        // Straight after the bulk load, with no statistics (autovacuum off).
+        Duration all60 = measure("60 months, all history, no statistics", null, NO_STATISTICS);
         Duration window60 = measure("60 months, the window of 3 months, no statistics", Instant.parse("2034-10-01T00:00:00Z"),
-            true);
+            NO_STATISTICS);
         // Money paid in cash is most of the payments: 100,000 of them (the check reads those with granted credit only).
         cashPayments(100_000, payment);
         // With statistics, as autovacuum leaves a table in use: all of the history is within the timeout too.
@@ -112,10 +118,10 @@ class OperatorSettlementReconBudgetIT extends CreditNoteItSupport {
             "qb_operator_settlement_line_version", "qb_operator_settlement", "entity_registry")) {
             execute("ANALYZE " + table);
         }
-        Duration all60Analyzed = measure("60 months, all history, analyzed", null, true);
+        Duration all60Analyzed = measure("60 months, all history, analyzed", null, ANALYZED);
         System.out.println("[recon-budget] 60 months analyzed " + all60Analyzed.toMillis() + " ms");
         System.out.println("[recon-budget] " + OPERATORS + " operators: 24 months " + all24.toMillis() + " ms (window "
-            + window24.toMillis() + "), 60 months " + (all60 == null ? "over the timeout" : all60.toMillis() + " ms")
+            + window24.toMillis() + "), 60 months " + all60.toMillis() + " ms"
             + " (window " + window60.toMillis() + ")");
     }
 
@@ -219,7 +225,7 @@ class OperatorSettlementReconBudgetIT extends CreditNoteItSupport {
         execute("DROP TABLE it_seed");
     }
 
-    private Duration measure(String label, Instant since, boolean mustPass) {
+    private Duration measure(String label, Instant since, Duration limit) {
         Map<String, Object> params = new HashMap<>();
         params.put("at", clock.instant().toString());
         params.put("zone", "Asia/Tokyo");
@@ -237,10 +243,7 @@ class OperatorSettlementReconBudgetIT extends CreditNoteItSupport {
         } catch (AssertionError timedOut) {
             System.out.println("[recon-budget] " + label + ": NOT WITHIN THE QUERY TIMEOUT after "
                 + Duration.ofNanos(System.nanoTime() - start).toMillis() + " ms");
-            if (mustPass) {
-                throw timedOut;
-            }
-            return null;
+            throw timedOut;
         }
         Duration took = Duration.ofNanos(System.nanoTime() - start);
         long statements = SqlStatementLog.STATEMENTS.stream().filter(sql -> sql.contains("new_settlements")).count();
@@ -251,7 +254,7 @@ class OperatorSettlementReconBudgetIT extends CreditNoteItSupport {
         assertThat(rows.stream().filter(row -> OPERATOR_IDS.contains(String.valueOf(row.get("sponsorId")))
             && !OPERATOR_IDS.getFirst().equals(row.get("sponsorId")))).as(label).isEmpty();
         assertThat(statements).as(label + ": one statement").isEqualTo(1);
-        assertThat(took).as(label + ": within the query timeout").isLessThan(LIMIT);
+        assertThat(took).as(label + ": within " + limit.toMillis() + " ms").isLessThan(limit);
         return took;
     }
 }

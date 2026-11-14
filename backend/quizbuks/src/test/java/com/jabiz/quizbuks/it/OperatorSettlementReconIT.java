@@ -91,7 +91,7 @@ class OperatorSettlementReconIT extends CapItSupport {
      * A fee of no amount like the template, charged as it was: corrupt data, which the table's check (amount above 0)
      * refuses, so the check is dropped in this test's schema first. A payment on it cannot be cut over its fees.
      */
-    private static void zeroFee(String template, String id) {
+    static void zeroFee(String template, String id) {
         execute("ALTER TABLE qb_fee_charge_version DROP CONSTRAINT IF EXISTS qb_fee_charge_version_amount_check");
         execute("INSERT INTO entity_registry (entity_id, entity_type, created_seq_id) SELECT ?::uuid, entity_type, "
             + "created_seq_id FROM entity_registry WHERE entity_id = ?::uuid", id, template);
@@ -104,7 +104,7 @@ class OperatorSettlementReconIT extends CapItSupport {
     }
 
     /** A fee like the template with no operator (as the fees of before F-M11 are). */
-    private static void looseFee(String template, String id) {
+    static void looseFee(String template, String id) {
         execute("INSERT INTO entity_registry (entity_id, entity_type, created_seq_id) SELECT ?::uuid, entity_type, "
             + "created_seq_id FROM entity_registry WHERE entity_id = ?::uuid", id, template);
         execute("INSERT INTO qb_fee_charge_version (charge_id, version_no, effect_start_time, created_time, "
@@ -116,18 +116,23 @@ class OperatorSettlementReconIT extends CapItSupport {
     }
 
     /** A part of a payment made with granted credit like the template's, aimed at the fee {@code target}. */
-    private static void paymentOn(String templatePayment, String id, String target, long amount) {
+    static void paymentOn(String templatePayment, String id, String target, long amount) {
+        paymentOn(templatePayment, id, target, amount, null);
+    }
+
+    /** As above, paid at {@code paidAt} (none: when the template was). */
+    static void paymentOn(String templatePayment, String id, String target, long amount, java.sql.Timestamp paidAt) {
         execute("INSERT INTO entity_registry (entity_id, entity_type, created_seq_id) SELECT ?::uuid, entity_type, "
             + "created_seq_id FROM entity_registry WHERE entity_id = ?::uuid", id, templatePayment);
         execute("INSERT INTO qb_fee_payment_version (payment_id, version_no, effect_start_time, created_time, "
             + "process_seq_id, sponsor_id, target_entity, target_id, sub_account, grant_id, cash_lot_id, amount, "
             + "paid_at, transaction_id, prepayment_id) SELECT ?::uuid, 1, effect_start_time, created_time, "
-            + "process_seq_id, sponsor_id, 'QbFeeCharge', ?, sub_account, grant_id, cash_lot_id, ?, paid_at, "
-            + "transaction_id, prepayment_id FROM qb_fee_payment_version WHERE payment_id = ?::uuid", id, target, amount,
-            templatePayment);
+            + "process_seq_id, sponsor_id, 'QbFeeCharge', ?, sub_account, grant_id, cash_lot_id, ?, "
+            + "coalesce(CAST(? AS timestamptz), paid_at), transaction_id, prepayment_id FROM qb_fee_payment_version WHERE payment_id = ?::uuid",
+            id, target, amount, paidAt, templatePayment);
     }
 
-    private static String paymentOf(String chargeId) {
+    static String paymentOf(String chargeId) {
         return String.valueOf(query("SELECT payment_id FROM qb_fee_payment_version WHERE target_id = ? "
             + "AND sub_account = 'FEE_CREDIT'", chargeId).getFirst().get("payment_id"));
     }
@@ -424,6 +429,16 @@ class OperatorSettlementReconIT extends CapItSupport {
         looseFee(fresh, UUID.randomUUID().toString());
         settle(who[0], "2032-03", "2032-04-02T00:00:00Z");
         // From the switch point on only: the fee of February is the old rule's, the one of March is reported.
+        assertThat(of(who[1])).singleElement().satisfies(row -> assertRow(row,
+            ReconChecks.OPERATOR_CHARGE_NO_OPERATOR, "2032-03", "0", "100"));
+        // Put right: a fee with no operator whose invoice is voided is turned back and no longer asked about.
+        String voided = String.valueOf(manualFee(who[1], 100));
+        String voidedLoose = UUID.randomUUID().toString();
+        looseFee(voided, voidedLoose);
+        // (Charged in April: after the settlement of March.)
+        assertThat(of(who[1])).extracting(row -> row.get("reference")).containsExactly("2032-03", "2032-04");
+        voidInvoice(invoiceOf(voided).get("invoice_id"));
+        execute("UPDATE qb_fee_invoice SET charge_id = ? WHERE charge_id = ?", voidedLoose, voided);
         assertThat(of(who[1])).singleElement().satisfies(row -> assertRow(row,
             ReconChecks.OPERATOR_CHARGE_NO_OPERATOR, "2032-03", "0", "100"));
         // A sponsor whose fees all have their operator's is not reported.
