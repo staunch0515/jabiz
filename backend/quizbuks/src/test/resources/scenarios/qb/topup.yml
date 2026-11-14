@@ -622,6 +622,7 @@ steps:
         - { category: AI_CREDIT_USED, transactionCount: 0 }
         - { category: AI_CREDIT_RETURNED, transactionCount: 0 }
         - { category: AI_CREDIT_VOIDED, transactionCount: 0 }
+        - { category: AUDIENCE_CHARGED, transactionCount: 0 }
         - { category: OTHER, transactionCount: 1, amount: 100, stripeBalance: 100, sponsorWallets: -100 }
   - expect:
       query: qb.admin.balances
