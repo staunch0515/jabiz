@@ -1564,6 +1564,9 @@ Quiz 与发布有主题词（平台词表中的词与自定义词），学者可
 
 平台承担的金额不入账：按月看用模板 `qb.admin.ai-fee-monthly`（按作业结束的月份 `fee_period`：收费作业数、向发起方收的费用、平台承担 `absorbed_yen`，都是**含加价的税前日元**）；记费本身在月报的 `AI_CHARGED`、从额度付的在 `AI_CREDIT_USED`。
 
+- **平台承担**（F-M9 b2-1，#717）：平台承担的 AI 费用有两部分，口径不同，**合计只在这里定义一次**：按作业的 `feePeriod`（作业结果被记录的月，财年时区），**平台承担合计 = `absorbedYen`（税前，含加价）＋ ⌈`unrecordedUsd` × 该作业冻结的汇率⌉（没有回答的调用的估算成本，不含加价）**，每个作业先各自取整再相加。`qb.ai-fee-monthly` 月度记费里的 `absorbedYen`（`qb.admin.ai-fee-monthly` 的"平台承担"列）**不含 `unrecordedUsd`**，而这个合计含；财务看数字只看 `qb.admin.ai-fees`（总部"AI"页的 AI 费报表，按月、发起方、运营商，`qb.admin.finance.read`：`absorbedYen`、`unrecordedUsd` 分列，`absorbedTotalYen` 是合计；`month` 必填，多个月用 `month` 加 `toMonth`，至多 12 个月，超出或格式不对没有行；只有给了 `sponsorId` 才显示该发起方现在的 AI 额度；可导出 CSV、XLSX、PDF）。总部页 `qb.admin.ai-jobs` 的内容管理员只看到是否收费与运营商，不含金额。
+  - **提醒**：普通参数 `qb.ai.fee.absorbed-alert-yen`（整数日元，缺省 1000，范围 0 至 10 000 000，**0 即不提醒**，不是受控参数，经 `PARAM_SET` 改）。每日任务 `qb.ai-absorbed-check`（每天 04:17，财年时区；cron 可用 `quizbuks.ai-absorbed-check.cron` 覆盖；漏跑用 `JOB_RUN_REQUEST` 补跑）运行 `QB_AI_ABSORBED_CHECK`（`internal()`，取锁 `qb.ai-absorbed`，使两次运行不会各建一个待办），读本月与前两个月（三个月；漏跑一两个月也能补上），合计**大于**提醒值（等于不算）且该月还没有待办时，给持有 `qb.reconcile` 的财务建待办（`task.qb.ai.absorbed-high`，链接 `/qb/ai`）。**每月至多一个**：来源键 `qb.ai-absorbed:<月>`，由人关闭之后也不会再建，更早的月不再看。
+  - **财务怎么做**：打开待办的链接 `/qb/ai`，在 AI 费报表 `qb.admin.ai-fees`（按该月，必要时加 `sponsorId`）看是哪些发起方与运营商、`absorbedYen` 与 `unrecordedUsd` 各占多少；与提供方（Anthropic 控制台）该月的账单对照：`unrecordedUsd` 是估算，迟到的用量只表现为差额；确认后关闭待办并记原因。多出的原因通常是预留不够（`AI_RESERVATION_SHORT`）或提供方没有回答的调用；不要用关收费开关止损。
 - **出题与翻译**：按预留的输入与输出上限、尝试次数计；可回退的模型再加回退模型全部跑一遍（提供方 `fallbacks: "default"` 只回退到一个推荐模型）；带 PDF 的请求不回退，不加这一遍。
 - **官网生成**：网页读取器一次尝试至多 4 次调用（`pause_turn` 续接 3 次），第 k 次的输入为预留输入加此前的输出。三个可选的受控参数把预留压到多数情况够用：
   - `qb.ai.fee.site-profile.calls`：每次尝试计几次调用，1–4；
