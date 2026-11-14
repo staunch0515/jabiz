@@ -124,9 +124,11 @@ class ReconcileIT extends TopUpItSupport {
         Instant at = now().plus(Duration.ofMinutes(3));
         assertThat(reconcile(at)).isEqualTo(JobRunner.Outcome.SUCCEEDED);
         Map<String, Object> current = run(at);
-        assertThat((String) current.get("summary")).contains("\"DISTRIBUTION_PRICE_RANGE\":0")
+        // A summary now names only the checks that found something (#702): a run that found nothing names none.
+        assertThat((String) current.get("summary")).startsWith("{" + ReconChecks.SUMMARY_FORMAT)
             .doesNotContain(ReconChecks.DISTRIBUTION_PRICE_OUT_OF_RANGE);
-        // The old run as it was written (inserted, as the sealed rows are never changed): its summary names the old code.
+        // The old run as it was written (inserted, as the sealed rows are never changed): its summary, in the old form of
+        // every check's count, names the old code.
         String oldRun = UUID.randomUUID().toString();
         execute("INSERT INTO entity_registry (entity_id, entity_type, created_seq_id) SELECT ?::uuid, entity_type, "
             + "created_seq_id FROM entity_registry WHERE entity_id = ?::uuid", oldRun, String.valueOf(current.get("run_id")));
@@ -134,7 +136,7 @@ class ReconcileIT extends TopUpItSupport {
             + "scheduled_time, status, checked_at, item_count, summary) SELECT ?::uuid, version_no, "
             + "effect_start_time - interval '1000 days', created_time - interval '1000 days', process_seq_id, "
             + "scheduled_time - interval '1000 days', status, checked_at - interval '1000 days', item_count, "
-            + "replace(summary, 'DISTRIBUTION_PRICE_RANGE', 'DISTRIBUTION_PRICE_OUT_OF_RANGE') "
+            + "'{\"CASH_ACCOUNT\":0,\"DISTRIBUTION_PRICE_OUT_OF_RANGE\":0,\"LEDGER_ZERO\":0}' "
             + "FROM qb_recon_run_version WHERE run_id = ?::uuid", oldRun, String.valueOf(current.get("run_id")));
         String finance = tokenOf("recon-retired", com.jabiz.quizbuks.setup.QbRoles.ADMIN_FINANCE);
         assertThat(items("qb.admin.recon-runs", finance, Map.of("limit", 500)))
@@ -187,7 +189,7 @@ class ReconcileIT extends TopUpItSupport {
             assertThat(diff).containsEntry("status", "DIFF");
             assertThat(gauge()).isEqualTo(4.0);
             assertThat((String) diff.get("summary")).contains("\"SPONSOR_WALLET\":1", "\"TOTAL_2110\":1",
-                "\"SPONSOR_PENDING_COUNT\":1", "\"TOPUP_REFUNDS\":1", "\"LEDGER_ZERO\":0");
+                "\"SPONSOR_PENDING_COUNT\":1", "\"TOPUP_REFUNDS\":1").doesNotContain("LEDGER_ZERO");
             List<Map<String, Object>> found = items(diff.get("run_id"));
             assertThat(found).extracting(i -> i.get("check_code")).containsExactlyInAnyOrder("SPONSOR_WALLET",
                 "SPONSOR_PENDING_COUNT", "TOTAL_2110", "TOPUP_REFUNDS");

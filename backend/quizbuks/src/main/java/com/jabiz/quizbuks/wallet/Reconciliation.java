@@ -22,6 +22,8 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * The daily reconciliation (F-06; docs/quizbuks/plans/Q6-payments.md, D-Q6-8): {@value #RUN}, run by the job
@@ -32,6 +34,7 @@ import java.util.Map;
  * exports stop on a {@code DIFF} run).
  */
 public final class Reconciliation {
+    private static final Logger LOG = LoggerFactory.getLogger(Reconciliation.class);
 
     public static final String RUN = "QB_RECONCILE_RUN";
     public static final String JOB = "qb.reconcile";
@@ -238,8 +241,11 @@ public final class Reconciliation {
                     ctx -> EntityQuery.builder().where(new QueryPredicate.And(List.of(
                         new QueryPredicate.Eq("status", ReconChecks.OK),
                         // Only a run that held these checks counts: the summary of an earlier one has no such key (the first
-                        // run after the deploy reads all of the history).
-                        new QueryPredicate.Like("summary", "%" + ReconChecks.OPERATOR_SETTLEMENT_COVERAGE + "%"),
+                        // run after the deploy reads all of the history). A summary that names only what was found
+                        // (#702) is of a run that held them all.
+                        new QueryPredicate.Or(List.of(
+                            new QueryPredicate.Like("summary", "%" + ReconChecks.OPERATOR_SETTLEMENT_COVERAGE + "%"),
+                            new QueryPredicate.Like("summary", "%" + ReconChecks.SUMMARY_FORMAT + "%"))),
                         new QueryPredicate.Lt("scheduledTime", ctx.get(INPUT, ReconcileInput.class).scheduledTime()))))
                         .orderBy("scheduledTime", false).limit(1).build(), LAST_OK))
                 .step("Compare the operators' settlements", RunTemplate.<ProcessContext>of(OPERATOR_SETTLEMENT_TEMPLATE,
@@ -317,6 +323,10 @@ public final class Reconciliation {
                 : List.copyOf(takers.resync().subList(0, WalletLimits.MAX_RECON_ITEMS)));
         }
         ReconChecks.Result result = ReconChecks.result(found, WalletLimits.MAX_RECON_ITEMS);
+        if (result.truncated()) {
+            LOG.warn("The reconciliation's summary was cut to fit its column: {} items found by {} checks (the run's "
+                + "item count holds them all; the items kept are in qb_recon_item)", result.total(), result.counts().values().stream().filter(n -> n > 0).count());
+        }
         ctx.put(RESULT, result);
         Map<String, Object> run = new LinkedHashMap<>();
         run.put("scheduledTime", ctx.get(INPUT, ReconcileInput.class).scheduledTime());

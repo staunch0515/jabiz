@@ -377,6 +377,12 @@ describe('levelCounts', () => {
     expect(levelCounts(null)).toEqual({ differences: 0, attention: 0, notes: 0 })
     expect(levelCounts('not json')).toEqual({ differences: 0, attention: 0, notes: 0 })
   })
+
+  it('reads a summary that names only the checks that found something, cut or not (#702)', () => {
+    expect(levelCounts('{"_format":"nonzero"}')).toEqual({ differences: 0, attention: 0, notes: 0 })
+    expect(levelCounts('{"_format":"nonzero","_truncated":true,"LEDGER_ZERO":2,"DISTRIBUTION_AT_FLOOR":1}'))
+      .toEqual({ differences: 2, attention: 0, notes: 1 })
+  })
 })
 
 describe('ReconciliationPage by level (F-M14)', () => {

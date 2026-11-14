@@ -133,19 +133,10 @@ class ReconChecksTest {
         ReconChecks.Result result = ReconChecks.result(List.of(), 10);
         assertThat(result.status()).isEqualTo(ReconChecks.OK);
         assertThat(result.total()).isZero();
-        // Every check by name, the F-M6 notes (DISTRIBUTION_AT_FLOOR) and the F-M7 checks among them.
-        assertThat(result.summary()).startsWith("{\"AI_CREDIT\":0,\"AI_CREDIT_EXPIRED_HELD\":0,\"AI_FEE_MONTH\":0,"
-            + "\"AI_FEE_RESERVED\":0,\"AI_FEE_UNBILLED\":0,\"AI_RESERVATION_SHORT\":0,\"AUDIENCE_FEE_NOT_LIVE\":0,\"AUDIENCE_REFUND_MISSING\":0,"
-            + "\"AUDIENCE_REFUND_NO_PERIOD\":0,\"AUTO_PAY_MISSED\":0,\"CASH_ACCOUNT\":0,\"CASH_LOTS\":0,\"CERTIFIED_GRANTS\":0,"
-            + "\"CREDIT_NOTE_LIMITS\":0,\"CREDIT_NOTE_USES\":0,\"CREDIT_NOTE_USE_VOID\":0,\"CREDIT_UNUSED_WITH_DUE\":0,"
-            + "\"DISTRIBUTION_AT_FLOOR\":0,\"DISTRIBUTION_DEPOSITS\":0,\"DISTRIBUTION_FINAL_MISSING\":0,"
-            + "\"DISTRIBUTION_PRICE_RANGE\":0,\"DISTRIBUTION_UNSETTLED\":0,\"ENTRY_FEES_UNSETTLED\":0,"
-            + "\"ERASED_CLOSE_OPEN\":0,\"ERASED_FEE_OWED\":0,\"ERASED_GIFT_LEFT\":0,\"ERASED_NO_CLOSURE\":0,"
-            + "\"EXPOSURE_AMOUNT_MISMATCH\":0,\"EXPOSURE_DEPOSITS\":0,\"EXPOSURE_FINAL_MISSING\":0,"
-            + "\"EXPOSURE_PRICE_RANGE\":0,\"EXPOSURE_SETTLED_OVER\":0,\"EXPOSURE_SETTLED_SHORT\":0,"
-            + "\"EXPOSURE_UNIT_MISMATCH\":0,\"EXPOSURE_UNPURCHASED\":0,"
-            + "\"EXPOSURE_UNSETTLED\":0,\"FEES_RECEIVABLE\":0,\"FEE_CREDIT\":0,\"FEE_CREDIT_PROMOTION\":0,\"FEE_PAYMENTS\":0,")
-            .contains("\"LEDGER_ZERO\":0").contains("\"TOPUP_FEE\":0");
+        // Every check by name in the counts (none in the summary: it names only what was found, #702 option B).
+        assertThat(result.counts()).hasSize(ReconChecks.ALL.size()).containsEntry("AI_CREDIT", 0)
+            .containsEntry("ERASED_NO_CLOSURE", 0).containsEntry("LEDGER_ZERO", 0).containsEntry("TOPUP_FEE", 0);
+        assertThat(result.summary()).isEqualTo("{" + ReconChecks.SUMMARY_FORMAT + "}");
     }
 
     @Test
@@ -325,22 +316,75 @@ class ReconChecksTest {
     }
 
     /**
-     * The summary is every check's count as JSON in a column of 2,000 characters (V7): a run whose summary does not
-     * fit fails. With every count at seven digits it fits, with 150 characters to spare (F-M14 §2: the next check
-     * added sees this first).
+     * The summary is the counts of the checks that found something, as JSON, in a column of 2,000 characters (V7, sealed:
+     * its type cannot change, D58). With every check at five digits it fits with 150 characters to spare (F-M14 §2: the
+     * next check added sees this first; #702 with #701: 69 checks at seven digits no longer had that room).
      */
     @Test
     void theSummaryFitsItsColumnWithRoomToSpare() {
-        List<ReconChecks.Item> found = new ArrayList<>();
+        Map<String, Integer> counts = new java.util.TreeMap<>();
+        ReconChecks.ALL.forEach(code -> counts.put(code, 99_999));
+        String summary = ReconChecks.summary(counts);
+        assertThat(summary).as("the summary with every check found at five digits").doesNotContain(
+            ReconChecks.SUMMARY_TRUNCATED);
+        assertThat(summary.length()).isLessThanOrEqualTo(ReconChecks.SUMMARY_MAX - 150);
+    }
+
+    /** Only the checks that found something are named; a reader counts a check not named as 0 (#702, option B). */
+    @Test
+    void theSummaryNamesOnlyTheChecksThatFoundSomething() {
+        assertThat(ReconChecks.result(List.of(), 10).summary()).isEqualTo("{" + ReconChecks.SUMMARY_FORMAT + "}");
+        ReconChecks.Result result = ReconChecks.result(List.of(
+            new ReconChecks.Item(ReconChecks.SPONSOR_WALLET, "u1", null, BigDecimal.ONE, BigDecimal.TEN),
+            new ReconChecks.Item(ReconChecks.SPONSOR_WALLET, "u2", null, BigDecimal.ONE, BigDecimal.TEN),
+            new ReconChecks.Item(ReconChecks.CASH_ACCOUNT, "u1", null, BigDecimal.ONE, BigDecimal.TEN)), 10);
+        assertThat(result.summary()).isEqualTo("{" + ReconChecks.SUMMARY_FORMAT + ",\"CASH_ACCOUNT\":1,"
+            + "\"SPONSOR_WALLET\":2}");
+        assertThat(result.truncated()).isFalse();
+        // The counts in the result are still every check's (the run's item count and levels come from them).
+        assertThat(result.counts()).containsEntry(ReconChecks.TOTAL_2110, 0).hasSize(ReconChecks.ALL.size());
+    }
+
+    /**
+     * A summary that would not fit is cut, never failing the insert: the differences first, then those for attention,
+     * then the notes, with the truncated mark (the run's item count holds every item; the summary is only for showing).
+     */
+    @Test
+    void aSummaryTooLongIsCutKeepingTheDifferencesFirst() {
+        Map<String, Integer> counts = new java.util.TreeMap<>();
+        ReconChecks.ALL.forEach(code -> counts.put(code, Integer.MAX_VALUE));
+        String summary = ReconChecks.summary(counts);
+        assertThat(summary.length()).isLessThanOrEqualTo(ReconChecks.SUMMARY_MAX);
+        assertThat(summary).startsWith("{" + ReconChecks.SUMMARY_FORMAT + "," + ReconChecks.SUMMARY_TRUNCATED + ",");
+        java.util.Set<String> kept = ReconChecks.ALL.stream().filter(code -> summary.contains("\"" + code + "\":"))
+            .collect(java.util.stream.Collectors.toSet());
+        assertThat(kept).isNotEmpty().hasSizeLessThan(ReconChecks.ALL.size());
+        // Every difference is kept before any attention or note is.
+        boolean someLowerKept = kept.stream().anyMatch(code -> ReconChecks.level(code) != ReconChecks.Level.DIFFERENCE);
+        if (someLowerKept) {
+            assertThat(ReconChecks.ALL.stream().filter(code -> ReconChecks.level(code) == ReconChecks.Level.DIFFERENCE))
+                .allSatisfy(code -> assertThat(kept).contains(code));
+        }
+        boolean someNoteKept = kept.stream().anyMatch(code -> ReconChecks.level(code) == ReconChecks.Level.NOTE);
+        if (someNoteKept) {
+            assertThat(ReconChecks.ALL.stream().filter(code -> ReconChecks.level(code) != ReconChecks.Level.NOTE))
+                .allSatisfy(code -> assertThat(kept).contains(code));
+        }
+        // Still JSON the pages read, the kept codes in order.
+        assertThat(summary).endsWith("}");
+        ReconChecks.Result result = new ReconChecks.Result(ReconChecks.DIFF, List.of(), Map.copyOf(counts), summary);
+        assertThat(result.truncated()).isTrue();
+    }
+
+    /** A cut summary keeps the differences when only the differences fit, and cuts within them by code. */
+    @Test
+    void aCutWithinTheDifferencesKeepsTheEarliestCodes() {
         Map<String, Integer> counts = new java.util.TreeMap<>();
         ReconChecks.ALL.forEach(code -> counts.put(code, 9_999_999));
-        StringBuilder json = new StringBuilder("{");
-        counts.forEach((code, n) -> json.append(json.length() > 1 ? "," : "").append('"').append(code).append("\":")
-            .append(n));
-        json.append('}');
-        assertThat(json.length()).as("the summary with every count at seven digits")
-            .isLessThanOrEqualTo(2_000 - 150);
-        assertThat(ReconChecks.result(found, 1).summary().length()).isLessThan(json.length());
+        String summary = ReconChecks.summary(counts, 400);
+        assertThat(summary.length()).isLessThanOrEqualTo(400);
+        assertThat(ReconChecks.ALL.stream().filter(code -> summary.contains("\"" + code + "\":")))
+            .isNotEmpty().allSatisfy(code -> assertThat(ReconChecks.level(code)).isEqualTo(ReconChecks.Level.DIFFERENCE));
     }
 
     /**
