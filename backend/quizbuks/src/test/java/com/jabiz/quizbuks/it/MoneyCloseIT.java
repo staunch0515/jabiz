@@ -880,7 +880,9 @@ class MoneyCloseIT extends MoneyCloseItSupport {
             .filter(row -> note.get("credit_note_id").toString().equals(String.valueOf(row.get("creditNoteId"))))
             .toList()).singleElement().satisfies(row -> {
                 assertThat(money(row.get("creditLeft"))).isZero();
-                assertThat(money(row.get("used"))).isEqualByComparingTo("1100");
+                // What paid an invoice and what went back to the cash are told apart (review L5).
+                assertThat(money(row.get("used"))).isEqualByComparingTo("330");
+                assertThat(money(row.get("givenBack"))).isEqualByComparingTo("770");
             });
         assertThat(items(com.jabiz.quizbuks.fee.CreditNotes.LEFT_TEMPLATE, com.jabiz.runtime.test.TestTokens.bearer(
             tokens, "fm15c-system", com.jabiz.quizbuks.QbPermissions.FEE_SYSTEM),

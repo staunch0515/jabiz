@@ -51,6 +51,18 @@ class ErasureCloseRulesTest {
     }
 
     @Test
+    void aWindUpWaitingOnAiJobsSaysSoUnlessItIsDoneWithFeesOwed() {
+        // F-M15c (review L3): AI jobs still open hold a wind-up not done; a closure done keeps its FEE_OWED.
+        assertThat(ErasureCloseRules.reasonOf(MoneyClose.WAITING_AI_JOBS, null, false))
+            .isEqualTo(QbSponsorClosures.AI_JOBS_OPEN);
+        assertThat(ErasureCloseRules.reasonOf(MoneyClose.WAITING_AI_JOBS, QbSponsorClosures.DEPOSIT_OPEN, false))
+            .isEqualTo(QbSponsorClosures.AI_JOBS_OPEN);
+        assertThat(ErasureCloseRules.reasonOf(MoneyClose.WAITING_AI_JOBS, QbSponsorClosures.FEE_OWED, true))
+            .isEqualTo(QbSponsorClosures.FEE_OWED);
+        assertThat(ErasureCloseRules.slowReason(MoneyClose.WAITING_AI_JOBS)).isEqualTo("AI_JOBS_OPEN");
+    }
+
+    @Test
     void theSlowTaskSaysWhyInWords() {
         assertThat(ErasureCloseRules.slowReason(MoneyClose.SWITCHED_OFF)).isEqualTo("SWITCH_OFF");
         assertThat(ErasureCloseRules.slowReason(MoneyClose.WAITING_DEPOSITS)).isEqualTo("DEPOSIT_OPEN");

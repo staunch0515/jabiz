@@ -40,7 +40,8 @@ import java.util.Map;
 import java.util.Set;
 
 /**
- * F-M15 b (docs/quizbuks/plans/impl/F-M15.md §4.1, §5): what becomes of an erased sponsor's platform fee account.
+ * F-M15 b and c (docs/quizbuks/plans/impl/F-M15.md §4.1, §5, §9): what becomes of an erased sponsor's platform fee
+ * account, its AI credit and AI jobs, and the credit left on its credit notes.
  *
  * <p>{@value #REGISTER} answers the platform's {@code jabiz.account.erased} on a subscription of its own (not in
  * {@code QB_SPONSOR_ERASED}, whose sub-processes may fail and exhaust the event's retries): a sponsor who had any of the
@@ -171,8 +172,9 @@ public final class MoneyClose {
     public record CloseInput(@NotBlank @Size(max = 128) String sponsorId) {}
 
     /**
-     * @param outcome {@code NONE} (no closure, or nothing to do), {@code SWITCH_OFF}, {@code DEPOSIT_OPEN},
-     *                {@code TO_PAY}, {@code MORE} or {@code CLOSED}
+     * @param outcome {@code NONE} (no closure, or nothing to do), {@code SWITCH_OFF}, {@code AI_JOBS_OPEN} (c: AI
+     *                jobs still open, cancelled up to a run's batch), {@code DEPOSIT_OPEN}, {@code TO_PAY}, {@code MORE}
+     *                or {@code CLOSED}
      * @param invoicesPaid the invoices this run paid something of
      * @param owed    what the unpaid invoices still owe after the run
      */
@@ -260,18 +262,28 @@ public final class MoneyClose {
     /**
      * Winds up an erased sponsor's platform fee account (§5.2), again and again until it is done: the daily job's item
      * and the consumer of {@value #DUE_EVENT}. It never takes {@code qb.account} or {@code qb.quiz} (the account will not
-     * change any more); its only lock is the sponsor's wallet lock, after step 0's withdrawals (an approval's lock comes
-     * before a wallet's).
+     * change any more); its locks are the sponsor's AI lock (only when it has AI credit) and then its wallet lock, after
+     * step 0's withdrawals (an approval's lock comes before a wallet's) and the AI jobs' cancellation (c: it locks the
+     * platform's job rows before the AI lock, the other way round from {@code QB_AI_CANCEL}; an erased sponsor can no
+     * longer run that, and the platform claims jobs with {@code SKIP LOCKED}).
      * <ol start="0">
      *   <li>whatever the switch, a manual credit or a fee request still under review is withdrawn ({@value #WITHDRAW});
+     *   <li>(c) the AI jobs still open are cancelled ({@value ErasedAiJobs#CANCEL_ALL}, at most a batch a run below
+     *       the closure's cursor {@code aiJobsBeforeSeq}; a full batch records {@code AI_JOBS_OPEN} and the next run
+     *       goes on below it);
      *   <li>the switch {@code qb.erasure.close.enabled} off: only {@code SWITCH_OFF} is recorded;
+     *   <li>(c) with no AI job left, the AI credit is given back whole and closed ({@value AiCreditGiveBack#GIVE_BACK},
+     *       kind {@code CLOSE}), under the AI lock and then the wallet lock;
      *   <li>a prepayment still held: {@code DEPOSIT_OPEN}, nothing else (it is released a day after its end);
      *   <li>every month with postpaid fees not invoiced yet is invoiced (the month's own item, re-entering the lock);
+     *   <li>(c) the credit left on credit notes pays the unpaid invoices first;
      *   <li>the unpaid invoices are paid as far as the account goes, earliest first, through F-M13's
      *       {@value FeeAutoPay#AUTO_PAY_ITEM} (at most {@code qb.fee.auto-pay.max-invoices} a run; fees still owed while
      *       the account can pay record {@code TO_PAY} and the next run goes on);
-     *   <li>last, what is left of every lot of granted credit not voided and not expired is voided
-     *       ({@value #VOID_LOT}), and the closure is {@code CLOSED} ({@code FEE_OWED} when fees are still owed).
+     *   <li>what is left of every lot of granted credit not voided and not expired is voided ({@value #VOID_LOT}), and
+     *       the closure is {@code CLOSED} ({@code FEE_OWED} when fees are still owed);
+     *   <li>(c) last, the credit still left on a credit note goes back by its fee's own payment parts
+     *       ({@value CreditNoteGiveBack#GIVE_BACK}: granted credit back to its grant and voided again, cash to its lot).
      * </ol>
      * A run that does not finish within {@code qb.erasure.close.alert-days} of the erasure gives finance one task, closed
      * when the wind-up is done.

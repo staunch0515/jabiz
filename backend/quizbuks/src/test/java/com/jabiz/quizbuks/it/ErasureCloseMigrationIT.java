@@ -1,5 +1,6 @@
 package com.jabiz.quizbuks.it;
 
+import com.jabiz.runtime.integrity.IntegrityStore;
 import com.jabiz.runtime.test.PostgresTestDatabase;
 import org.flywaydb.core.Flyway;
 import org.junit.jupiter.api.AfterEach;
@@ -75,6 +76,38 @@ class ErasureCloseMigrationIT {
         }
     }
 
+    /**
+     * Review L2: the seal's digests. A use sealed before V131 is verified after it over the columns of its own block
+     * (the platform's {@link IntegrityStore#digest}): the added column is not among them and every other value is the
+     * same, so it still verifies. A use of the new shape (no invoice, a posting given back by) is sealed over all the
+     * columns now, and its digest over the column list is the whole row's (what verifying a later block compares).
+     */
+    @Test
+    void aUseSealedBeforeStillVerifiesAndOneOfTheNewShapeSealsAndVerifies() throws Exception {
+        String schema = schemaBefore();
+        String oldUse;
+        String sealedDigest;
+        String[] sealedColumns;
+        try (Connection c = DB.connect(schema)) {
+            oldUse = use(c, process(c), "'inv-1'", "NULL");
+            sealedColumns = columns(c);
+            sealedDigest = digestOf(c, oldUse, null);
+        }
+
+        migrate(schema, null);
+
+        try (Connection c = DB.connect(schema)) {
+            assertThat(columns(c)).contains("back_transaction_id").hasSize(sealedColumns.length + 1);
+            assertThat(digestOf(c, oldUse, sealedColumns)).as("verified over its block's columns")
+                .isEqualTo(sealedDigest);
+            String newUse = use(c, process(c), "NULL", "'tx-1'");
+            String sealedNow = digestOf(c, newUse, null);
+            assertThat(digestOf(c, newUse, columns(c))).as("over all the columns now").isEqualTo(sealedNow);
+            assertThat(digestOf(c, newUse, sealedColumns)).as("the given-back posting is digested")
+                .isNotEqualTo(sealedNow);
+        }
+    }
+
     // ---- schemas -----------------------------------------------------------------------------------------------------
 
     private String schemaBefore() {
@@ -126,6 +159,32 @@ class ErasureCloseMigrationIT {
             + "VALUES (?, 1, now(), now(), ?, 'note-1', 's', " + invoice + (migrated ? ", " + lot : "")
             + ", 100, now())", id, process);
         return id.toString();
+    }
+
+    /** The use table's columns now, by name (what a seal now records). */
+    private static String[] columns(Connection c) throws SQLException {
+        return rows(c, "SELECT a.attname::text AS n FROM pg_attribute a WHERE a.attrelid = "
+            + "'qb_fee_credit_note_use_version'::regclass AND a.attnum > 0 AND NOT a.attisdropped ORDER BY 1").stream()
+            .map(row -> row.get("n").toString()).toArray(String[]::new);
+    }
+
+    /** The use's digest as the platform seals it (whole row) or verifies it over a block's {@code columns}. */
+    private static String digestOf(Connection c, String useId, String[] columns) throws SQLException {
+        String expression = columns == null
+            ? "encode(pg_catalog.sha256(convert_to(to_jsonb(t.*)::text, 'UTF8')), 'hex')"
+            : IntegrityStore.digest("t", "?::text[]");
+        try (PreparedStatement statement = c.prepareStatement("SELECT " + expression
+            + " AS d FROM qb_fee_credit_note_use_version t WHERE t.use_id = ?::uuid")) {
+            int i = 1;
+            if (columns != null) {
+                statement.setArray(i++, c.createArrayOf("text", columns));
+            }
+            statement.setString(i, useId);
+            try (ResultSet result = statement.executeQuery()) {
+                result.next();
+                return result.getString("d");
+            }
+        }
     }
 
     private static void execute(Connection c, String sql, Object... values) throws SQLException {
