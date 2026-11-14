@@ -38,7 +38,7 @@ steps:
         qb.fee-credit.expiry-notice-days, qb.sponsor.bottom-bar,
         qb.ai.site-profile.daily, qb.ai.site-profile.max-pages, qb.ai.site-profile.questions,
         qb.ai.site-profile.options, qb.ai.site-profile.materials-max, qb.ai.site-profile.handle-alternatives,
-        qb.exposure.low-ratio,
+        qb.exposure.low-ratio, qb.erasure.close.alert-days,
         qb.sponsor-verification.link-hours, qb.content.import.batch-bytes]
       paramsProposed: [qb.creator-fee-rate, qb.transfer.threshold, qb.transfer.review-above, qb.transfer.enabled,
         qb.review.sponsor.auto, qb.review.publication.auto, qb.topup.min, qb.topup.max, qb.transfer.fee,
@@ -70,7 +70,8 @@ steps:
         qb.distribution.final.end-grace-sec, qb.distribution.unsettled-after-hours, qb.distribution.final-missing-after-hours,
         qb.exposure.billing.enabled, qb.exposure.unit.min, qb.exposure.unit.max, qb.exposure.min-purchase,
         qb.exposure.final.end-grace-sec, qb.exposure.unsettled-after-hours, qb.exposure.final-missing-after-hours,
-        qb.exposure.top-up.max, qb.reward.kudos.enabled, qb.prepayment.release.overdue-days,
+        qb.exposure.top-up.max, qb.erasure.close.enabled, qb.reward.kudos.enabled,
+        qb.prepayment.release.overdue-days,
         qb.audience.refund.missing-after-hours, qb.help.user-daily,
         qb.operator.share.kinds, qb.operator.share.ai-cost-in-base, qb.operator.credit-recovery.rate,
         qb.operator.gift.treatment.onboarding, qb.operator.gift.treatment.certified-top-up,
@@ -101,7 +102,7 @@ steps:
       p59: "$.proposals[58]", p60: "$.proposals[59]", p61: "$.proposals[60]", p62: "$.proposals[61]", p63: "$.proposals[62]", p64: "$.proposals[63]", p65: "$.proposals[64]",
       p66: "$.proposals[65]", p67: "$.proposals[66]", p68: "$.proposals[67]", p69: "$.proposals[68]", p70: "$.proposals[69]", p71: "$.proposals[70]", p72: "$.proposals[71]",
       p73: "$.proposals[72]", p74: "$.proposals[73]", p75: "$.proposals[74]", p76: "$.proposals[75]", p77: "$.proposals[76]", p78: "$.proposals[77]", p79: "$.proposals[78]", p80: "$.proposals[79]", p81: "$.proposals[80]", p82: "$.proposals[81]", p83: "$.proposals[82]", p84: "$.proposals[83]", p85: "$.proposals[84]", p86: "$.proposals[85]", p87: "$.proposals[86]", p88: "$.proposals[87]", p89: "$.proposals[88]", p90: "$.proposals[89]",
-      p91: "$.proposals[90]", p92: "$.proposals[91]", p93: "$.proposals[111]", rt1: "$.proposals[112]", rt2: "$.proposals[113]", p94: "$.proposals[124]", p95: "$.proposals[125]", p96: "$.proposals[126]", p97: "$.proposals[127]" }
+      p91: "$.proposals[90]", p92: "$.proposals[91]", p93: "$.proposals[112]", rt1: "$.proposals[113]", rt2: "$.proposals[114]", p94: "$.proposals[125]", p95: "$.proposals[126]", p96: "$.proposals[127]", p97: "$.proposals[128]" }
   - note: A second administrator publishes the parameters (the journal mapping and issuer empty) and the review rules.
     process: CONTROL_CHANGE_PUBLISH@latest
     actor: { id: publisher, permissions: [control.publish] }
