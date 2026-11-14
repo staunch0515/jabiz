@@ -3,16 +3,28 @@ package com.jabiz.quizbuks.it;
 import com.jabiz.quizbuks.reward.CashRewardStatus;
 import com.jabiz.quizbuks.reward.RedemptionStatus;
 import com.jabiz.quizbuks.wallet.TransferStatus;
+import com.jabiz.quizbuks.QbPermissions;
+import com.jabiz.quizbuks.publishing.PublicationAdmin;
+import com.jabiz.quizbuks.setup.QbRoles;
+import com.jabiz.runtime.test.TestTokens;
+import com.jabiz.runtime.context.Actor;
 import com.jabiz.runtime.erasure.ErasureNotices;
 import com.jabiz.security.erasure.ErasureNotice;
 import com.jabiz.security.erasure.ErasureSubject;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
+import org.springframework.test.context.DynamicPropertyRegistry;
+import org.springframework.test.context.DynamicPropertySource;
+import org.springframework.test.web.reactive.server.WebTestClient;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import java.util.function.Function;
 import java.util.stream.Collectors;
@@ -34,6 +46,15 @@ class ErasureLoadLimitIT extends PlayItSupport {
 
     @Autowired
     ErasureNotices notices;
+
+    @DynamicPropertySource
+    static void deletion(DynamicPropertyRegistry registry) {
+        // Sponsors may ask here (off by default: it needs the maintenance connection, given as in the erasure ITs).
+        registry.add("jabiz.security.entries.sponsor.account-deletion", () -> "true");
+        registry.add("jabiz.erasure.datasource.url", () -> DB.r2dbcUrl() + "?schema=" + schema());
+        registry.add("jabiz.erasure.datasource.username", DB::username);
+        registry.add("jabiz.erasure.datasource.password", DB::password);
+    }
 
     @Test
     void aSponsorWithManyPublicationsAndCashRewardsCanStillAsk() {
@@ -116,6 +137,89 @@ class ErasureLoadLimitIT extends PlayItSupport {
             .containsEntry("amount", "1500");
         assertThat(found).containsKey("qb.gift-frozen");
         assertThat(found.get("qb.topup-pending").params()).containsEntry("count", (long) waiting);
+    }
+
+    /**
+     * Review L4: through the real processes (submitted and live, paused by the Sponsor, ended by an administrator, a
+     * draft), the cards follow the publications' states, so counting running cards counts running publications.
+     */
+    @Test
+    void theCardsFollowThePublicationsThroughTheirProcesses() {
+        String sponsor = newSponsor(unique("s-fm15a-cards"));
+        String token = sponsorToken(sponsor);
+        livePublication(sponsor, "FM15a live");
+        String paused = livePublication(sponsor, "FM15a paused");
+        String ended = livePublication(sponsor, "FM15a ended");
+        run("QB_PUBLICATION_PAUSE", token, body("publicationId", paused));
+        run("QB_PUBLICATION_ADMIN_END", TestTokens.bearer(tokens, "fm15a-content", QbPermissions.ADMIN_CONTENT_WRITE),
+            body("publicationId", ended, "reason", "F-M15 a"));
+        String draft = (String) run("QB_PUBLICATION_SAVE", token, body("name", "FM15a draft"))
+            .get("publicationId");
+
+        List<Map<String, Object>> publications = latest("qb_publication_version", "publication_id",
+            "sponsor_id = " + text(sponsor));
+        assertThat(publications).hasSize(4);
+        for (Map<String, Object> publication : publications) {
+            List<Map<String, Object>> card = query("SELECT status FROM qb_publication_card WHERE publication_id = "
+                + "CAST(? AS uuid)", String.valueOf(publication.get("publication_id")));
+            if (String.valueOf(publication.get("publication_id")).equals(draft)) {
+                assertThat(card).as("a draft has no card").isEmpty();
+            } else {
+                assertThat(card).singleElement().satisfies(row -> assertThat(row.get("status"))
+                    .isEqualTo(publication.get("status")));
+            }
+        }
+        long running = publications.stream()
+            .filter(publication -> PublicationAdmin.ENDABLE.contains(String.valueOf(publication.get("status"))))
+            .count();
+        assertThat(running).isEqualTo(2);
+        assertThat(noticesOf(sponsor).get("qb.publications-end").params()).containsEntry("count", running);
+    }
+
+    /**
+     * Review L5: through the Sponsor's own session, as the page asks: the state lists the notices; asking without
+     * acknowledging them is refused (422, one violation per notice), with all of them acknowledged it is accepted.
+     */
+    @Test
+    @SuppressWarnings("unchecked")
+    void aSponsorWithManyPublicationsAsksThroughTheirSessionAndAcknowledgesTheNotices() {
+        String name = unique("s-fm15a-asks");
+        String sponsor = newSponsor(name);
+        rows("qb_publication_version", "QbPublication", HISTORY, null, n -> Map.of("publication_id", "ids.id",
+            "publisher_kind", "'SPONSOR'", "sponsor_id", text(sponsor), "reward_method", "'SPONSOR_CASH'",
+            "audience", "'PUBLIC'", "status", "CASE WHEN n = 1 THEN 'LIVE' ELSE 'ENDED' END"));
+        rows("qb_publication_card", null, HISTORY, "SELECT row_number() OVER () AS n, publication_id AS id "
+            + "FROM qb_publication_version WHERE sponsor_id = " + text(sponsor), n -> Map.of(
+            "publisher_kind", "'SPONSOR'", "publisher_id", text(sponsor), "reward_method", "'SPONSOR_CASH'",
+            "audience", "'PUBLIC'", "status", "(SELECT p.status FROM qb_publication_version p "
+                + "WHERE p.publication_id = ids.id)"));
+        // A session at the Sponsor entry (as the page has); the request still checks the password.
+        String bearer = "Bearer " + tokens.issue(new Actor(sponsor, null, Set.of(),
+            Set.copyOf(QbRoles.of(QbRoles.SPONSOR).permissions()), clock.instant(), null, "sponsor", true)).token();
+
+        Map<String, Object> status = client.get().uri("/api/auth/account/deletion")
+            .header(HttpHeaders.AUTHORIZATION, bearer).exchange().expectStatus().isOk().expectBody(MAP)
+            .returnResult().getResponseBody();
+        assertThat(status).containsEntry("available", true);
+        List<String> codes = ((List<Map<String, Object>>) status.get("notices")).stream()
+            .map(notice -> String.valueOf(notice.get("code"))).toList();
+        assertThat(codes).contains("qb.publications-end");
+
+        Map<String, Object> unread = ask(bearer, List.of()).expectStatus().isEqualTo(422).expectBody(MAP)
+            .returnResult().getResponseBody();
+        assertThat(codes(unread)).contains("ACCOUNT_DELETION_NOTICES", "erasure.notice.qb.publications-end");
+        assertThat(query("SELECT * FROM sys_account_deletion WHERE user_id = CAST(? AS uuid)", sponsor)).isEmpty();
+
+        ask(bearer, codes).expectStatus().isOk();
+        assertThat(query("SELECT * FROM sys_account_deletion WHERE user_id = CAST(? AS uuid)", sponsor)).hasSize(1);
+    }
+
+    private WebTestClient.ResponseSpec ask(String bearer, List<String> acknowledged) {
+        Map<String, Object> body = new HashMap<>();
+        body.put("currentPassword", PASSWORD);
+        body.put("acknowledgedNotices", acknowledged);
+        return client.post().uri("/api/auth/account/deletion").header(HttpHeaders.AUTHORIZATION, bearer)
+            .contentType(MediaType.APPLICATION_JSON).bodyValue(body).exchange();
     }
 
     /** The notices the user is shown before asking, by code (the same read the request makes). */
