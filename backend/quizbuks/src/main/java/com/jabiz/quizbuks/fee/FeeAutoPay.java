@@ -59,7 +59,7 @@ public final class FeeAutoPay {
     public static final String DUE_TEMPLATE = "qb.system.fee-auto-pay-due";
     /** Money reached the sponsor's platform fee account (it carries the sponsor, no amount): {@value AUTO_PAY} runs. */
     public static final String FUNDED_EVENT = "qb.fee-account.funded";
-    /** An invoice was paid by it: the payments, from which the mail tells and reads the figures again. */
+    /** An invoice was paid by it ({sponsorId, invoiceId, transactionId}): the mail gathers them and reads the figures again. */
     public static final String PAID_EVENT = "qb.fee.auto-paid";
 
     static final int DEFAULT_MAX = 20;
@@ -74,18 +74,14 @@ public final class FeeAutoPay {
     private static final String PAID = "paid";
 
     /**
-     * @param sponsorId      the sponsor whose unpaid invoices are paid
-     * @param n              how many this chain has paid already (0 at its start: the daily job or the first event)
-     * @param paidInvoiceIds the invoices this chain has paid so far (the mail, at its end, tells them all)
-     * @param paidTransactionIds the payments of those, from which the mail reads the figures again
+     * @param sponsorId the sponsor whose unpaid invoices are paid
+     * @param n         how many this chain has paid already (0 at its start: the daily job or the first event)
      */
-    public record AutoPayInput(@NotBlank @Size(max = 128) String sponsorId, @Min(0) @Max(1000) Integer n,
-        @Size(max = 60) List<@Size(max = 36) String> paidInvoiceIds,
-        @Size(max = 60) List<@Size(max = 64) String> paidTransactionIds) {
+    public record AutoPayInput(@NotBlank @Size(max = 128) String sponsorId, @Min(0) @Max(1000) Integer n) {
 
         /** The start of a chain: nothing paid yet. */
         public static AutoPayInput start(String sponsorId) {
-            return new AutoPayInput(sponsorId, 0, List.of(), List.of());
+            return new AutoPayInput(sponsorId, 0);
         }
     }
 
@@ -185,12 +181,13 @@ public final class FeeAutoPay {
                 .compute("Choose the invoice", (metadata, ctx) -> chooseInvoice(ctx))
                 .step("Pay it", CallProcess.<ProcessContext>when(ctx -> ctx.get(CHOSEN) != null, AUTO_PAY_ITEM, 1,
                     ctx -> new ItemInput(String.valueOf(chosen(ctx).id())), PAID))
-                // One mail for the whole chain: the run that ends it tells every invoice the chain paid (a chain that
-                // stops on a failure leaves what it paid untold: the payments stand, the mail is a courtesy).
                 .step("Go on", PublishEvent.<ProcessContext>when(FeeAutoPay::goesOn, FUNDED_EVENT,
-                    ctx -> chainPayload(ctx, next(ctx))))
-                .step("Ask the mail to tell the sponsor", PublishEvent.<ProcessContext>when(
-                    ctx -> !goesOn(ctx) && !paidInvoices(ctx).isEmpty(), PAID_EVENT, ctx -> chainPayload(ctx, null))));
+                    ctx -> Map.of("sponsorId", sponsorId(ctx), "n", next(ctx))))
+                // Every payment is told in its own transaction (so none is left untold when a later run of the chain
+                // fails); the mail gathers a sponsor's payments over a window and sends one (MailProcesses.feeAutoPaid).
+                .step("Ask the mail to tell the sponsor", PublishEvent.<ProcessContext>when(FeeAutoPay::paidSomething,
+                    PAID_EVENT, ctx -> Map.of("sponsorId", sponsorId(ctx), "invoiceId", String.valueOf(chosen(ctx).id()),
+                        "transactionId", String.valueOf(ctx.get(PAID, ItemPaid.class).transactionId())))));
     }
 
     /** Paid one in full, more are owing and the chain is within the limit: the next one is asked for. A part paid means
@@ -198,36 +195,6 @@ public final class FeeAutoPay {
     private static boolean goesOn(ProcessContext ctx) {
         return paidInFull(ctx) && Boolean.TRUE.equals(ctx.get(MORE))
             && next(ctx) < max(ctx.get(PARAMS, ParamValues.class));
-    }
-
-    private static List<String> paidInvoices(ProcessContext ctx) {
-        List<String> ids = new ArrayList<>(ctx.get(INPUT, AutoPayInput.class).paidInvoiceIds() == null ? List.<String>of()
-            : ctx.get(INPUT, AutoPayInput.class).paidInvoiceIds());
-        if (paidSomething(ctx)) {
-            ids.add(String.valueOf(chosen(ctx).id()));
-        }
-        return ids;
-    }
-
-    private static List<String> paidTransactions(ProcessContext ctx) {
-        List<String> ids = new ArrayList<>(ctx.get(INPUT, AutoPayInput.class).paidTransactionIds() == null
-            ? List.<String>of() : ctx.get(INPUT, AutoPayInput.class).paidTransactionIds());
-        if (paidSomething(ctx)) {
-            ids.add(ctx.get(PAID, ItemPaid.class).transactionId());
-        }
-        return ids;
-    }
-
-    /** The sponsor, how many were paid, and what they were (the invoices and the payments, no amount). */
-    private static Map<String, Object> chainPayload(ProcessContext ctx, Integer n) {
-        Map<String, Object> payload = new LinkedHashMap<>();
-        payload.put("sponsorId", sponsorId(ctx));
-        if (n != null) {
-            payload.put("n", n);
-        }
-        payload.put("invoiceIds", paidInvoices(ctx));
-        payload.put("transactionIds", paidTransactions(ctx));
-        return payload;
     }
 
     private static String sponsorId(ProcessContext ctx) {
@@ -342,15 +309,10 @@ public final class FeeAutoPay {
                 : String.valueOf((Object) invoice.get("status")));
     }
 
-    /** The input of the consumer: the sponsor the event names, how many the chain has paid, and what they were. */
+    /** The input of the consumer: the sponsor the event names and how many the chain has paid. */
     static AutoPayInput input(DomainEvent event) {
         Object n = event.payload().get("n");
         return new AutoPayInput(String.valueOf(event.payload().get("sponsorId")),
-            n == null ? 0 : Integer.valueOf(String.valueOf(n)), strings(event, "invoiceIds"),
-            strings(event, "transactionIds"));
-    }
-
-    private static List<String> strings(DomainEvent event, String key) {
-        return event.payload().get(key) instanceof List<?> list ? list.stream().map(String::valueOf).toList() : List.of();
+            n == null ? 0 : Integer.valueOf(String.valueOf(n)));
     }
 }

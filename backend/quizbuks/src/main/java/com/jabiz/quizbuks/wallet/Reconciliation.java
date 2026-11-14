@@ -368,8 +368,9 @@ public final class Reconciliation {
         values.put("refundHours", params.find(QbParams.AUDIENCE_REFUND_MISSING_AFTER_HOURS,
             java.math.BigDecimal.class).orElse(null));
         // F-M13c: the hours after which an unpaid invoice with money on the account is reported (none: not checked).
+        // Kept within 1 to 720 as the parameter says (the platform has no range for a parameter).
         values.put("missedHours", params.find(QbParams.FEE_AUTO_PAY_MISSED_AFTER_HOURS, java.math.BigDecimal.class)
-            .orElse(null));
+            .map(hours -> hours.max(java.math.BigDecimal.ONE).min(java.math.BigDecimal.valueOf(720))).orElse(null));
         // F-M12 c: the hours after which a month without an operator's settlement is reported.
         // F-M12 b: how long a settlement waits for its steps; not published counts as 0 in the template (from the month's end).
         values.put("readinessDays", params.find(QbParams.OPERATOR_SETTLEMENT_READINESS_MAX_DAYS,

@@ -189,6 +189,30 @@ class MessagingConfig {
     }
 
     @Bean
+    ProcessDefinition<MailProcesses.FeePaidDueInput, MailProcesses.MailOutput, ProcessContext> qbMailFeePaidDue(
+        MessageCatalog messages) {
+        return MailProcesses.feePaidDue(messages);
+    }
+
+    /**
+     * Every few minutes, each sponsor with invoices paid from their account that no mail told yet and whose last mail
+     * went before the window: one mail lists everything paid up to {@code now - grace} (the grace outlasts a payment
+     * still being committed). Both are properties; a sponsor's payments over a window are one mail.
+     */
+    @Bean
+    JobDefinition<MailProcesses.FeePaidDueInput> qbMailFeePaidDueJob(
+        @Value("${quizbuks.mail.fee-paid-due-cron:0 */10 * * * *}") String cron,
+        @Value("${quizbuks.mail.fee-paid-window:PT10M}") java.time.Duration window,
+        @Value("${quizbuks.mail.fee-paid-grace:PT2M}") java.time.Duration grace,
+        ProcessDefinition<MailProcesses.FeePaidDueInput, MailProcesses.MailOutput, ProcessContext> qbMailFeePaidDue) {
+        return JobDefinition.forEach(MailProcesses.FEE_PAID_JOB, cron, ZoneOffset.UTC,
+            JobItems.template(MailProcesses.FEE_PAID_DUE_TEMPLATE, scheduledTime -> Map.of("before",
+                scheduledTime.minus(window)), "sponsorId"),
+            qbMailFeePaidDue, (scheduledTime, row) -> new MailProcesses.FeePaidDueInput(
+                String.valueOf(row.get("sponsorId")), scheduledTime.minus(grace)));
+    }
+
+    @Bean
     EventSubscription<MailProcesses.FeeAutoPaidMailInput> qbMailFeeAutoPaidSubscription(
         ProcessDefinition<MailProcesses.FeeAutoPaidMailInput, MailProcesses.MailOutput, ProcessContext> qbMailFeeAutoPaid) {
         return EventSubscription.of(MailProcesses.FEE_AUTO_PAID_CONSUMER,

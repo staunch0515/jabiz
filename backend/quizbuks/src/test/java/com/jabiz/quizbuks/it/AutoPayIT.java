@@ -67,6 +67,16 @@ class AutoPayIT extends PlayItSupport {
     @Autowired
     JobDefinition<FeeAutoPay.AutoPayInput> qbFeeAutoPayJob;
 
+    @Autowired
+    JobDefinition<com.jabiz.quizbuks.messaging.MailProcesses.FeePaidDueInput> qbMailFeePaidDueJob;
+
+    /** The job that mails what was paid, run twelve minutes on (a window of ten and a grace of two have passed). */
+    void mailDue() {
+        execute("UPDATE jabiz_shedlock SET lock_until = locked_at");
+        assertThat(jobRunner.execute(qbMailFeePaidDueJob, clock.instant().plus(java.time.Duration.ofMinutes(12))).outcome())
+            .isEqualTo(JobRunner.Outcome.SUCCEEDED);
+    }
+
     @Test
     void nothingIsPaidUntilTheSwitchIsPublishedThenOneInvoiceIsPaidAsFarAsTheAccountGoes() {
         String sponsor = newSponsor(unique("s-fm13b-pay"));
@@ -121,6 +131,7 @@ class AutoPayIT extends PlayItSupport {
         assertThat(balance(sponsor, QbWallets.CASH)).isEqualByComparingTo("300");
         // The chain ended at the limit: the mail told both invoices at once, not one mail each.
         deliverEvents();
+        mailDue();
         assertThat(mailTo(sponsor)).filteredOn(row -> "qb.fee.auto-paid".equals(row.get("template"))).hasSize(1);
         run("PARAM_SET", admin(), body("key", QbParams.FEE_AUTO_PAY_MAX_INVOICES, "value", "20"));
     }
@@ -152,6 +163,7 @@ class AutoPayIT extends PlayItSupport {
         deliverEvents();
         deliverEvents();
         deliverEvents();
+        mailDue();
         assertThat(row(a)).containsEntry("status", QbFees.PAID);
         assertThat(row(b)).containsEntry("status", QbFees.PAID);
         assertThat(mailTo(sponsor)).filteredOn(row -> "qb.fee.auto-paid".equals(row.get("template")))
@@ -169,19 +181,21 @@ class AutoPayIT extends PlayItSupport {
         cash(sponsor, 400);
         autoPay(sponsor);
         deliverEvents();
+        // Within the window nothing is mailed yet; the job after it tells it.
+        assertThat(mailTo(sponsor)).filteredOn(row -> "qb.fee.auto-paid".equals(row.get("template"))).isEmpty();
+        mailDue();
         // Paid 400 of 1,100 (a part): the mail says 400 paid and 700 still owed, never "paid" for the invoice.
         assertThat(mailTo(sponsor)).filteredOn(row -> "qb.fee.auto-paid".equals(row.get("template")))
             .singleElement().satisfies(row -> {
                 String params = String.valueOf(row.get("params"));
                 assertThat(params).contains("\"paid\"").contains("400").contains("\"owed\"").contains("700");
             });
-        // What the mail says is read again: a payment that is not the sponsor's is told to nobody.
-        String transaction = String.valueOf(query("SELECT transaction_id FROM qb_fee_payment_version WHERE sponsor_id = ?",
-            sponsor).getFirst().get("transaction_id"));
+        // Told once: a second run of the job has nothing pending.
+        mailDue();
+        assertThat(mailTo(sponsor)).filteredOn(row -> "qb.fee.auto-paid".equals(row.get("template"))).hasSize(1);
+        // The invoice, not the event, says what is owed: a sponsor nobody paid for is told nothing.
         String other = newSponsor(unique("s-fm13b-else"));
-        Object told = systemRun("QB_MAIL_FEE_AUTO_PAID", body("sponsorId", other, "transactionIds", List.of(transaction),
-            "invoiceIds", List.of(invoiceId), "occurredAt", clock.instant().toString()));
-        assertThat(String.valueOf(told)).doesNotContain("qb.fee.auto-paid");
+        systemRun("QB_MAIL_FEE_PAID_DUE", body("sponsorId", other, "cut", clock.instant().plus(java.time.Duration.ofMinutes(10)).toString()));
         assertThat(mailTo(other)).filteredOn(row -> "qb.fee.auto-paid".equals(row.get("template"))).isEmpty();
     }
 
@@ -196,8 +210,12 @@ class AutoPayIT extends PlayItSupport {
             body("userId", sponsor, "reason", "Fraud"));
         assertThat(autoPay(sponsor).outcome()).isEqualTo("PAID");
         deliverEvents();
+        mailDue();
         assertThat(row(invoiceId)).containsEntry("status", QbFees.PAID);
         assertThat(mailTo(sponsor)).filteredOn(row -> "qb.fee.auto-paid".equals(row.get("template"))).isEmpty();
+        // Told nothing, yet the window moved on: nothing is left pending.
+        assertThat(query("SELECT pending FROM qb_mail_notice WHERE recipient_id = ? AND kind = 'FEE_AUTO_PAID'", sponsor))
+            .singleElement().satisfies(row -> assertThat(row.get("pending")).isEqualTo(false));
     }
 
     BigDecimal balance(String sponsor, String kind) {
