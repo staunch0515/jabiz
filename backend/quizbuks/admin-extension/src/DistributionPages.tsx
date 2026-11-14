@@ -1,6 +1,7 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useId, useMemo, useState, type FormEvent } from 'react'
 import { useTranslation } from 'react-i18next'
+import { useSearchParams } from 'react-router'
 import {
   ApiError,
   Button,
@@ -255,7 +256,9 @@ export function DistributionSettlementsPage() {
 function SettlementsList({ own }: { own: boolean }) {
   const { t } = useTranslation(EXTENSION_NAMESPACE)
   const id = useId()
-  const [periodText, setPeriodText] = useState('')
+  // F-M14b: the reconciliation page links a month here (`?period=2026-11`).
+  const [search] = useSearchParams()
+  const [periodText, setPeriodText] = useState(() => search.get('period') ?? '')
   const [floorOnly, setFloorOnly] = useState(false)
   const filter: SettlementFilter = { period: PERIOD.test(periodText.trim()) ? periodText.trim() : null,
     atFloor: floorOnly ? true : null }

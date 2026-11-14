@@ -52,11 +52,11 @@ beforeEach(() => {
         ? server.settlements : server.own }))
 })
 
-function renderPage(page: React.ReactNode) {
+function renderPage(page: React.ReactNode, entry = '/') {
   return render(
     <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
       <AppearanceProvider>
-        <MemoryRouter>{page}</MemoryRouter>
+        <MemoryRouter initialEntries={[entry]}>{page}</MemoryRouter>
         <Toaster />
       </AppearanceProvider>
     </QueryClientProvider>,
@@ -154,5 +154,12 @@ describe('the exposure fee pages (F-M8)', () => {
     await userEvent.type(screen.getByTestId('exposure-fee-period'), '2026-10')
     await waitFor(() => expect(server.runQuery).toHaveBeenLastCalledWith(EXPOSURE_FEE.settlementsTemplate,
       expect.objectContaining({ params: expect.objectContaining({ period: '2026-10' }) })))
+  })
+
+  it('opens on the month the reconciliation page links (?period=, F-M14b)', async () => {
+    renderPage(<ExposureSettlementsPage />, '/settlements?period=2031-03')
+    expect(await screen.findByTestId('exposure-fee-period')).toHaveValue('2031-03')
+    await waitFor(() => expect(server.runQuery).toHaveBeenLastCalledWith(EXPOSURE_FEE.settlementsTemplate,
+      expect.objectContaining({ params: expect.objectContaining({ period: '2031-03' }) })))
   })
 })

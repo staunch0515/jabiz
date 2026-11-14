@@ -383,10 +383,30 @@ export const ACCOUNTS = ['2110', '2120', '2130', '1110', '1120', '4110', '5110',
 export const STALE_AFTER_MS = 60 * 60 * 1000
 
 /** What a reconciliation difference's reference names, by its check (backend `ReconChecks`). */
-export function referenceKind(check: string): 'topUp' | 'transfer' | null {
+export type ReferenceKind = 'topUp' | 'transfer' | 'publication' | 'distributionMonth' | 'exposureMonth' | 'invoice'
+  | 'creditNote'
+
+/**
+ * F-M14b: what a check's reference names (its template's third column), where the page can lead: a top-up, a transfer,
+ * a publication, a month of the distribution or the exposure fee's settlements, an invoice's or a credit note's number.
+ * Any other reference is shown as it is.
+ */
+const REFERENCE_KINDS: Readonly<Record<string, ReferenceKind>> = {
+  DISTRIBUTION_DEPOSITS: 'publication',
+  EXPOSURE_DEPOSITS: 'publication',
+  EXPOSURE_SETTLED_OVER: 'publication',
+  EXPOSURE_SETTLED_SHORT: 'publication',
+  EXPOSURE_AMOUNT_MISMATCH: 'publication',
+  DISTRIBUTION_UNSETTLED: 'distributionMonth',
+  EXPOSURE_UNSETTLED: 'exposureMonth',
+  CREDIT_NOTE_USE_VOID: 'invoice',
+  CREDIT_NOTE_USES: 'creditNote',
+}
+
+export function referenceKind(check: string): ReferenceKind | null {
   if (check.startsWith('TOPUP_')) return 'topUp'
   if (check.startsWith('TRANSFER_')) return 'transfer'
-  return null
+  return REFERENCE_KINDS[check] ?? null
 }
 
 /**
@@ -798,10 +818,14 @@ export const PATH = {
   distributionPrices: '/qb/distribution/prices',
   operatorDistributionPrice: '/qb/operator/distribution-price',
   distributionSettlements: '/qb/finance/distribution-settlements',
+  /** F-M14b: the distribution fee's settlements of a month (`YYYY-MM`). */
+  distributionSettlementsOf: (period: string) => `/qb/finance/distribution-settlements?${new URLSearchParams({ period })}`,
   /** F-M8: every operator's exposure price (headquarters), the operator's own, and the settlements (finance). */
   exposurePrices: '/qb/exposure-fee/prices',
   operatorExposurePrice: '/qb/operator/exposure-price',
   exposureSettlements: '/qb/finance/exposure-settlements',
+  /** F-M14b: the exposure fee's settlements of a month (`YYYY-MM`). */
+  exposureSettlementsOf: (period: string) => `/qb/finance/exposure-settlements?${new URLSearchParams({ period })}`,
   /** The platform's own pages. */
   tasks: '/tasks',
   /** F-C10c: the AI help's conversations handed to a person (headquarters every one, an operator its own). */

@@ -23,7 +23,8 @@ import { attentionKey, readAttentionDays, readReconItems, readReconRuns, type Re
 import { EmptyState, LoadFailed, Section } from './components'
 import { money, useLabels, usePaged, when } from './hooks'
 import { useMoreFilters } from './moreFilters'
-import { DICTIONARY, isUserId, PAGE_LIMIT, PATH, PERMISSION, reconLevel, referenceKind, type ReconLevel } from './ids'
+import { DICTIONARY, isUserId, PAGE_LIMIT, PATH, PERMISSION, reconLevel, referenceKind, type ReconLevel,
+  type ReferenceKind } from './ids'
 
 /** The columns sorted on the server, by the template's `list.sorts` field (Q53a). */
 const SORTS = { scheduledTime: 'scheduledTime' } as const
@@ -31,27 +32,26 @@ const SORTS = { scheduledTime: 'scheduledTime' } as const
 const linkClass = 'text-primary font-medium underline-offset-4 hover:underline'
 
 /**
- * What a difference is about: its top-up or transfer, and its party's summary. A link is shown only to someone who
- * holds the permission of the page it leads to (the server decides all the same; this only spares a dead link): the
- * top-ups and transfers are finance's, a user's summary the users'.
+ * What a difference is about: what its reference names (a top-up, a transfer, a publication, a month's settlements,
+ * an invoice, a credit note: `referenceKind`) and its party's summary. A link is shown only to someone who holds the
+ * permission of the page it leads to (the server decides all the same; this only spares a dead link): the top-ups,
+ * transfers, settlements and fees are finance's, a publication the publications' readers', a user's summary the users'.
  */
 function Subject({ item }: { item: ReconItem }) {
   const { t } = useTranslation(EXTENSION_NAMESPACE)
   const { can } = useAuth()
   const kind = referenceKind(item.checkCode)
   const parts: ReactNode[] = []
-  if (item.reference && kind === 'topUp') {
-    parts.push(can(PERMISSION.financeRead)
-      ? <Link key="ref" to={PATH.topUpsWhere({ topUp: item.reference })} className={linkClass}
-          data-testid="recon-reference" data-kind="topUp">{t('finance.recon.topUp')}</Link>
-      : <span key="ref" data-testid="recon-reference" data-kind="topUp">{t('finance.recon.topUp')}</span>)
-  } else if (item.reference && kind === 'transfer') {
-    parts.push(can(PERMISSION.financeRead)
-      ? <Link key="ref" to={PATH.transfersWhere({ transfer: item.reference })} className={linkClass}
-          data-testid="recon-reference" data-kind="transfer">{t('finance.recon.transfer')}</Link>
-      : <span key="ref" data-testid="recon-reference" data-kind="transfer">{t('finance.recon.transfer')}</span>)
-  } else if (item.reference) {
-    parts.push(<code key="ref" className="text-xs">{item.reference}</code>)
+  const reference = item.reference
+  if (reference && kind) {
+    const target = REFERENCE_TARGET[kind](reference)
+    const label = t(`finance.recon.${kind}`, { month: reference, no: reference })
+    parts.push(can(target.permission)
+      ? <Link key="ref" to={target.path} className={linkClass} data-testid="recon-reference" data-kind={kind}>
+          {label}</Link>
+      : <span key="ref" data-testid="recon-reference" data-kind={kind}>{label}</span>)
+  } else if (reference) {
+    parts.push(<code key="ref" className="text-xs">{reference}</code>)
   }
   if (item.partyId && isUserId(item.partyId)) {
     parts.push(can(PERMISSION.usersRead)
@@ -61,6 +61,17 @@ function Subject({ item }: { item: ReconItem }) {
       : <span key="party" data-testid="recon-party"><UserName id={item.partyId} /></span>)
   }
   return parts.length > 0 ? <span className="flex flex-wrap gap-x-3">{parts}</span> : <>{t('finance.recon.whole')}</>
+}
+
+/** Where each kind of reference leads, and who may open it. */
+const REFERENCE_TARGET: Record<ReferenceKind, (reference: string) => { path: string; permission: string }> = {
+  topUp: (ref) => ({ path: PATH.topUpsWhere({ topUp: ref }), permission: PERMISSION.financeRead }),
+  transfer: (ref) => ({ path: PATH.transfersWhere({ transfer: ref }), permission: PERMISSION.financeRead }),
+  publication: (ref) => ({ path: PATH.publication(ref), permission: PERMISSION.publicationRead }),
+  distributionMonth: (ref) => ({ path: PATH.distributionSettlementsOf(ref), permission: PERMISSION.financeRead }),
+  exposureMonth: (ref) => ({ path: PATH.exposureSettlementsOf(ref), permission: PERMISSION.financeRead }),
+  invoice: () => ({ path: PATH.feesWhere({ tab: 'invoices' }), permission: PERMISSION.financeRead }),
+  creditNote: () => ({ path: PATH.feesWhere({ tab: 'creditNotes' }), permission: PERMISSION.financeRead }),
 }
 
 /** The badge variant of a level: a difference warns, the others are quieter (nothing is an error here). */

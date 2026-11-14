@@ -408,6 +408,34 @@ describe('ReconciliationPage by level (F-M14)', () => {
     expect(calledWith(TEMPLATE.reconAttentionDays)).toHaveLength(0)
   })
 
+  it('links a publication, a month of settlements, an invoice and a credit note (F-M14b)', async () => {
+    const row = (itemId: string, checkCode: string, reference: string): Row => ({ itemId, checkCode, partyId: null,
+      reference, expected: 0, actual: 1, difference: 1 })
+    server.templates.set(TEMPLATE.reconItems, [row('b1', 'EXPOSURE_SETTLED_OVER', 'pub-1'),
+      row('b2', 'DISTRIBUTION_UNSETTLED', '2031-03'), row('b3', 'EXPOSURE_UNSETTLED', '2031-04'),
+      row('b4', 'CREDIT_NOTE_USE_VOID', 'QBF-2031-00007'), row('b5', 'CREDIT_NOTE_USES', 'QBC-2031-00002')])
+    server.permissions = new Set(['qb.reconcile', 'qb.admin.finance.read', 'qb.admin.publication.read'])
+    renderAt(`/qb/finance/reconciliation?run=${RUN}`, '/qb/finance/reconciliation', <ReconciliationPage />)
+    const groups = await screen.findAllByTestId('recon-group')
+    const reference = (check: string) =>
+      within(groups.find((group) => group.dataset.check === check)!).getByTestId('recon-reference')
+    expect(reference('EXPOSURE_SETTLED_OVER')).toHaveAttribute('href', '/qb/reviews/publications/pub-1')
+    expect(reference('DISTRIBUTION_UNSETTLED')).toHaveAttribute('href',
+      '/qb/finance/distribution-settlements?period=2031-03')
+    expect(reference('DISTRIBUTION_UNSETTLED')).toHaveTextContent('Distribution fee settlements of 2031-03')
+    expect(reference('EXPOSURE_UNSETTLED')).toHaveAttribute('href', '/qb/finance/exposure-settlements?period=2031-04')
+    expect(reference('CREDIT_NOTE_USE_VOID')).toHaveAttribute('href', '/qb/finance/fees?tab=invoices')
+    expect(reference('CREDIT_NOTE_USE_VOID')).toHaveTextContent('Invoice QBF-2031-00007')
+    expect(reference('CREDIT_NOTE_USES')).toHaveAttribute('href', '/qb/finance/fees?tab=creditNotes')
+    cleanup()
+    // Without finance's and the publications' reading: the same words, no link.
+    server.permissions = new Set(['qb.reconcile', 'task.read'])
+    renderAt(`/qb/finance/reconciliation?run=${RUN}`, '/qb/finance/reconciliation', <ReconciliationPage />)
+    const plain = await screen.findAllByTestId('recon-reference')
+    expect(plain).toHaveLength(5)
+    expect(plain.map((element) => element.tagName)).toEqual(['SPAN', 'SPAN', 'SPAN', 'SPAN', 'SPAN'])
+  })
+
   it('links a reference or a user only to someone who may open the page it leads to', async () => {
     server.permissions = new Set(['qb.reconcile', 'task.read'])
     renderAt(`/qb/finance/reconciliation?run=${RUN}`, '/qb/finance/reconciliation', <ReconciliationPage />)

@@ -52,11 +52,11 @@ beforeEach(() => {
         ? server.settlements : server.own }))
 })
 
-function renderPage(page: React.ReactNode) {
+function renderPage(page: React.ReactNode, entry = '/') {
   return render(
     <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
       <AppearanceProvider>
-        <MemoryRouter>{page}</MemoryRouter>
+        <MemoryRouter initialEntries={[entry]}>{page}</MemoryRouter>
         <Toaster />
       </AppearanceProvider>
     </QueryClientProvider>,
@@ -145,5 +145,12 @@ describe('the distribution fee pages (F-M6)', () => {
     await userEvent.click(screen.getByTestId('distribution-floor-only'))
     await waitFor(() => expect(server.runQuery).toHaveBeenLastCalledWith(DISTRIBUTION.settlementsTemplate,
       expect.objectContaining({ params: expect.objectContaining({ period: '2026-10', atFloor: true }) })))
+  })
+
+  it('opens on the month the reconciliation page links (?period=, F-M14b)', async () => {
+    renderPage(<DistributionSettlementsPage />, '/settlements?period=2031-03')
+    expect(await screen.findByTestId('distribution-period')).toHaveValue('2031-03')
+    await waitFor(() => expect(server.runQuery).toHaveBeenLastCalledWith(DISTRIBUTION.settlementsTemplate,
+      expect.objectContaining({ params: expect.objectContaining({ period: '2031-03' }) })))
   })
 })
