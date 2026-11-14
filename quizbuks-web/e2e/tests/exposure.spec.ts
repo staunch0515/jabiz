@@ -70,6 +70,25 @@ async function figures(request: APIRequestContext, token: string, publicationId:
   return { successes: Number(row.successes ?? 0), opens: Number(row.opens ?? 0), purchased: row.purchased ?? null }
 }
 
+/** Past the seconds that count: the App's tick (a second) and a second more for the player to be on the screen. */
+const WATCH_MARGIN_MS = 2_000
+/** How long a page that is left has to send what it gathered (as it goes) before the test looks at what was sent. */
+const LEAVE_MS = 1_000
+
+/**
+ * The App's own settings of the exposures (`qb.app.exposure-settings`, filled by QB_SETUP), so that the test's waits
+ * follow the parameters: how long a screen is watched to count one (`qb.exposure.seconds`, and the margin), and the
+ * longest the App holds the reports it gathered before it sends them (`qb.exposure.report.interval-sec`).
+ */
+async function exposureTimes(request: APIRequestContext, token: string) {
+  const [row] = await query(request, token, 'qb.app.exposure-settings', {})
+  const seconds = Number(row?.seconds)
+  const intervalSec = Number(row?.reportIntervalSec)
+  expect(seconds, 'qb.exposure.seconds (QB_SETUP)').toBeGreaterThan(0)
+  expect(intervalSec, 'qb.exposure.report.interval-sec (QB_SETUP)').toBeGreaterThan(0)
+  return { watchMs: seconds * 1_000 + WATCH_MARGIN_MS, reportMs: intervalSec * 1_000 }
+}
+
 /** The reports of exposures the page sends, as they go. */
 function watchReports(page: Page) {
   const sent: { publicationId: string; kind: string; surface: string }[] = []
@@ -109,6 +128,9 @@ test('the home does not count; the vertical mode and the start page do; used up 
     // 1. The home's preview never counts: another taker (a browser of their own) stays on the home, then leaves it
     // (what waits is sent as the page goes).
     const onlooker = await taker(request, 'Kai')
+    const times = await exposureTimes(request, onlooker.token)
+    // A report is sent within its interval, or as the page goes; the server's figures follow it.
+    const counted = { timeout: 2 * times.reportMs }
     for (const id of [own, limited, unlimited, wide]) await untilLive(request, onlooker.token, id)
     const elsewhere = await browser.newContext({ baseURL: test.info().project.use.baseURL })
     const home = await elsewhere.newPage()
@@ -119,9 +141,10 @@ test('the home does not count; the vertical mode and the start page do; used up 
     await searchHome(home, base)
     await expect(home.getByTestId('feed-card')).toHaveCount(4)
     await expect(home.getByTestId('shorts-shelf')).toHaveCount(1)
-    await home.waitForTimeout(12_000)
+    // Longer than a screen counts: the preview still does not.
+    await home.waitForTimeout(times.watchMs)
     await home.goto('/taker/account/preferences')
-    await home.waitForTimeout(1_000)
+    await home.waitForTimeout(LEAVE_MS)
     await elsewhere.close()
     expect(homeReports).toEqual([])
     for (const id of [limited, unlimited, wide]) {
@@ -153,16 +176,16 @@ test('the home does not count; the vertical mode and the start page do; used up 
       await viewer.getByTestId('shorts-next').click()
       await expect(current).toHaveAttribute('data-publication', limited)
     }
-    await page.waitForTimeout(12_000)
+    await page.waitForTimeout(times.watchMs)
     if (order[2] !== limited) {
       await viewer.getByTestId('shorts-next').click()
       await expect(current).toHaveAttribute('data-publication', order[2]!)
     }
-    // The reports go within the interval (30 s), or as soon as the page goes.
+    // The reports go within the interval, or as soon as the page goes.
     await expect.poll(async () => (await figures(request, sponsor.token, limited)).successes,
-      { message: 'the vertical mode counted the exposure', timeout: 60_000 }).toBe(1)
+      { message: 'the vertical mode counted the exposure', ...counted }).toBe(1)
     await expect.poll(async () => (await figures(request, sponsor.token, unlimited)).opens,
-      { message: 'the other push was opened', timeout: 60_000 }).toBe(1)
+      { message: 'the other push was opened', ...counted }).toBe(1)
     expect((await figures(request, sponsor.token, unlimited)).successes).toBe(0)
     expect(sent.filter((r) => r.kind === 'EXPOSURE' && r.publicationId === limited)).toHaveLength(1)
 
@@ -190,10 +213,10 @@ test('the home does not count; the vertical mode and the start page do; used up 
     await page.goto(`/taker/p/${wide}`)
     await expect(page.getByTestId('exposure-start')).toBeVisible()
     await expectAccessible(page, 'app start page of a shared video')
-    await page.waitForTimeout(12_000)
+    await page.waitForTimeout(times.watchMs)
     await page.goto('/taker/account/preferences')
     await expect.poll(async () => (await figures(request, sponsor.token, wide)).successes,
-      { message: 'the start page counted the exposure', timeout: 60_000 }).toBe(1)
+      { message: 'the start page counted the exposure', ...counted }).toBe(1)
     await setAppearance(page, 'dark')
     await page.goto(`/taker/p/${wide}`)
     await expect(page.getByTestId('exposure-start')).toBeVisible()
