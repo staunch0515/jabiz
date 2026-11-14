@@ -392,4 +392,19 @@ class OperatorTransferIT extends PlayItSupport {
             assertThat(new BigDecimal(String.valueOf(row.get("actual")))).isEqualByComparingTo("1000");
         });
     }
+
+    /** F-M13b: money moved by the operator's lead pays the Sponsor's unpaid invoice by itself. */
+    @Test
+    void theMovedMoneyPaysAnUnpaidInvoiceByItself() {
+        autoPayOn();
+        NewOperator op = newOperatorWithLead(operatorsAdmin(), unique("FM13b Auto"), null);
+        String sponsor = op.leadId();
+        String invoiceId = unpaidInvoice(sponsor, 1100);
+        creditOperator(op.operatorId(), 3_000, "2026-09");
+        transfer(memberSession(sponsor, op.operatorId()), 3_000, UUID.randomUUID().toString());
+        deliverEvents();
+        assertThat(invoiceStatus(invoiceId)).isEqualTo("PAID");
+        assertThat(balance(sponsor, QbWallets.CASH)).isEqualByComparingTo("1900");
+        assertThat(differences(op.operatorId(), sponsor)).isEmpty();
+    }
 }

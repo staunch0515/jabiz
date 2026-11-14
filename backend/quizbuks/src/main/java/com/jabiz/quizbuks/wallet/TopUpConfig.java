@@ -289,8 +289,8 @@ class TopUpConfig {
                 "zh", "月份结束后仍未记费的 AI 作业", "ja", "月の終了後も請求されていない AI ジョブ")
             .item(ReconChecks.AI_FEE_RESERVED, "en", "Finished AI jobs still holding a reservation",
                 "zh", "已结束仍有预留的 AI 作业", "ja", "終了したのに予約が残る AI ジョブ")
-            .item(ReconChecks.AI_CREDIT_EXPIRED_HELD, "en", "Expired fee credit still in an AI credit",
-                "zh", "AI 额度中仍有已到期的赠送", "ja", "AI クレジットに残る期限切れの付与分")
+            .item(ReconChecks.AI_CREDIT_EXPIRED_HELD, "en", "Expired granted credit still in an AI credit",
+                "zh", "AI 额度中仍有已到期的赠送额度", "ja", "AI クレジットに残る期限切れの付与クレジット")
             .item(ReconChecks.EXPOSURE_DEPOSITS, "en", "Exposure fee deposits (2180, by publication)",
                 "zh", "曝光费预付（2180，按发布）", "ja", "露出料の前払い（2180、掲載ごと）")
             .item(ReconChecks.EXPOSURE_SETTLED_OVER, "en", "Exposures charged beyond what was bought",

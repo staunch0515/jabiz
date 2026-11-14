@@ -151,6 +151,13 @@ public final class Reconciliation {
     /** The least and the most hours the waiting check takes (the job does not run on the 1st: below this it would differ every month). */
     static final int WAITING_HOURS_MIN = 30;
     static final int WAITING_HOURS_MAX = 9999;
+    /**
+     * #702 review L3: the AI fee's two hours (qb.ai.fee.unbilled-after-hours, qb.ai.credit.expired-held-after-hours)
+     * are taken from 48 to 720 (the platform has no range for a parameter): under 48 a monthly job on the 1st, or a daily
+     * expiry, that ran late but within its day would be a difference; over 720 (30 days) a missed run hides for a month.
+     */
+    static final int AI_CHECK_HOURS_MIN = 48;
+    static final int AI_CHECK_HOURS_MAX = 720;
     static final String DISTRIBUTION_PARAMS = "distributionParams";
     static final String PREVIOUS = "previous";
     static final String PREVIOUS_TAKERS = "previousTakers";
@@ -375,10 +382,8 @@ public final class Reconciliation {
         values.put("refundHours", params.find(QbParams.AUDIENCE_REFUND_MISSING_AFTER_HOURS,
             java.math.BigDecimal.class).orElse(null));
         // F-M9a-2b: the AI fee's unbilled jobs and the expired fee credit left in AI credits.
-        values.put("unbilledHours", params.find(QbParams.AI_FEE_UNBILLED_AFTER_HOURS, java.math.BigDecimal.class)
-            .orElse(null));
-        values.put("expiredHours", params.find(QbParams.AI_CREDIT_EXPIRED_HELD_AFTER_HOURS,
-            java.math.BigDecimal.class).orElse(null));
+        values.put("unbilledHours", aiCheckHours(params, QbParams.AI_FEE_UNBILLED_AFTER_HOURS));
+        values.put("expiredHours", aiCheckHours(params, QbParams.AI_CREDIT_EXPIRED_HELD_AFTER_HOURS));
         // F-M12 c: the hours after which a month without an operator's settlement is reported.
         // F-M12 b: how long a settlement waits for its steps; not published counts as 0 in the template (from the month's end).
         values.put("readinessDays", params.find(QbParams.OPERATOR_SETTLEMENT_READINESS_MAX_DAYS,
@@ -392,6 +397,16 @@ public final class Reconciliation {
         values.put("since", lastOk == null ? null : OperatorSettlementsWindow.since(lastOk.get("scheduledTime"), zone));
         values.keySet().retainAll(java.util.Set.of(names));
         return values;
+    }
+
+    /** One of the AI fee's two hours, within its range ({@link #AI_CHECK_HOURS_MIN}); none published: null. */
+    static java.math.BigDecimal aiCheckHours(com.jabiz.param.ParamValues params, String key) {
+        return params.find(key, java.math.BigDecimal.class).map(hours -> clampAiCheckHours(hours)).orElse(null);
+    }
+
+    static java.math.BigDecimal clampAiCheckHours(java.math.BigDecimal hours) {
+        return hours.max(java.math.BigDecimal.valueOf(AI_CHECK_HOURS_MIN))
+            .min(java.math.BigDecimal.valueOf(AI_CHECK_HOURS_MAX));
     }
 
     /** F-M8: the exposure fee's checks' parameters: when it runs and the two hours (none handed in: not checked). */

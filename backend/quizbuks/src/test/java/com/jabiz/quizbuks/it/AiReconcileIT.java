@@ -9,6 +9,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
 
+import java.math.BigDecimal;
 import java.sql.Timestamp;
 import java.time.Duration;
 import java.time.Instant;
@@ -129,6 +130,62 @@ class AiReconcileIT extends AiCreditItSupport {
             "AI_CREDIT movements " + money(aiCredit(sponsor).get("remaining")).toPlainString() + "/"
                 + money(aiCredit(sponsor).get("remaining")).subtract(java.math.BigDecimal.valueOf(3)).toPlainString());
         execute("UPDATE qb_prepayment SET remaining = remaining - 3 WHERE sponsor_id = ? AND purpose = 'AI'", sponsor);
+    }
+
+    /**
+     * #702 review M4: AI_FEE_MONTH looks at the charges of the last 40 days, and at those the latest run reported: a
+     * difference found stays (day 41 too) until it is resolved; once resolved, the charge is out of the window.
+     */
+    @Test
+    void aChargesDifferenceIsStillReportedAfterItsFortyDays() {
+        feeOn();
+        String sponsor = newSponsor("ai-recon-old-" + UUID.randomUUID());
+        cash(sponsor, 5_000);
+        buy(sponsor, 4_000);
+        Map<String, Object> charged = finishedJob(sponsorFull(sponsor));
+        YearMonth next = YearMonth.from(clock.instant().atZone(ZONE)).plusMonths(1);
+        Instant monthly = next.atDay(1).atTime(0, 27).atZone(ZONE).toInstant();
+        clock.set(monthly.plusSeconds(60));
+        assertThat(run(qbAiFeeMonthlyJob, monthly)).isEqualTo(JobRunner.Outcome.SUCCEEDED);
+        String jobId = String.valueOf(charged.get("ai_job_id"));
+        String chargeId = String.valueOf(job(jobId).get("fee_charge_id"));
+        execute("UPDATE qb_ai_job SET fee_yen = fee_yen + 1 WHERE ai_job_id = ?", jobId);
+        assertThat(monthItems(sponsor)).as("day 1").singleElement().asString().startsWith("AI_FEE_MONTH " + chargeId);
+
+        advance(Duration.ofDays(41));
+        assertThat(monthItems(sponsor)).as("day 41, carried from the run before").singleElement().asString()
+            .startsWith("AI_FEE_MONTH " + chargeId);
+
+        execute("UPDATE qb_ai_job SET fee_yen = fee_yen - 1 WHERE ai_job_id = ?", jobId);
+        assertThat(monthItems(sponsor)).as("resolved").isEmpty();
+        // Out of the window and not reported by the run before: a change now is not seen (the known limit, §7.55).
+        execute("UPDATE qb_ai_job SET fee_yen = fee_yen + 1 WHERE ai_job_id = ?", jobId);
+        assertThat(monthItems(sponsor)).as("old and not reported before").isEmpty();
+        execute("UPDATE qb_ai_job SET fee_yen = fee_yen - 1 WHERE ai_job_id = ?", jobId);
+    }
+
+    /**
+     * #702 review L2: a finished charged job with a fee and no month is reported at once (no charge would take it in).
+     */
+    @Test
+    void aJobWithAFeeAndNoMonthIsReported() {
+        feeOn();
+        String sponsor = newSponsor("ai-recon-period-" + UUID.randomUUID());
+        cash(sponsor, 5_000);
+        buy(sponsor, 4_000);
+        Map<String, Object> done = finishedJob(sponsorFull(sponsor));
+        String jobId = String.valueOf(done.get("ai_job_id"));
+        BigDecimal fee = money(done.get("fee_yen"));
+        assertThat(fee).isPositive();
+        execute("UPDATE qb_ai_job SET fee_period = NULL WHERE ai_job_id = ?", jobId);
+        assertThat(reconcile(sponsor)).filteredOn(item -> item.startsWith("AI_FEE_UNBILLED"))
+            .containsExactly("AI_FEE_UNBILLED none 0/" + fee.toPlainString());
+        execute("UPDATE qb_ai_job SET fee_period = ? WHERE ai_job_id = ?", done.get("fee_period"), jobId);
+        assertThat(reconcile(sponsor)).filteredOn(item -> item.startsWith("AI_FEE_UNBILLED")).isEmpty();
+    }
+
+    private List<String> monthItems(String sponsor) {
+        return reconcile(sponsor).stream().filter(item -> item.startsWith("AI_FEE_MONTH")).toList();
     }
 
     /**

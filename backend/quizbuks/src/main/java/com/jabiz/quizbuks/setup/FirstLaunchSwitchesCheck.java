@@ -27,7 +27,8 @@ import java.util.Map;
 
 /**
  * The money switches of the first launch (F-F10a, docs/quizbuks/plans/impl/F-F10.md section 1.5), at startup and in
- * {@code platformCheck} (category {@value CountryCatalog#CATEGORY}). On the real system ({@code jabiz.web.environment}
+ * {@code platformCheck} (category {@value CountryCatalog#CATEGORY}). The AI fee's warnings ({@link #aiFeeProblems}) are
+ * given on staging too. On the real system ({@code jabiz.web.environment}
  * {@code production}) it warns for each of the switches that must be off at the first launch while it is on, and while
  * the Kudos reward switch has no value at all (a Kudos reward is then refused: not there counts as off); a warning only, since the application
  * has to start for the finance administrators to publish the proposals. It does not warn for a value that is not
@@ -35,7 +36,7 @@ import java.util.Map;
  * say it is production: that system proposes the declared values, not the first launch's.
  *
  * <p>Reads the database itself, as {@link SetupParamsCheck} does (JDBC with Flyway's connection settings, never on the
- * request path); skipped without a database address and outside production.
+ * request path); skipped without a database address and outside production and staging.
  */
 @Component
 public class FirstLaunchSwitchesCheck implements PlatformCheck {
@@ -82,7 +83,8 @@ public class FirstLaunchSwitchesCheck implements PlatformCheck {
     @Override
     public List<CheckProblem> check() {
         List<CheckProblem> problems = new ArrayList<>(liveModeProblems(web.environment(), web.production(), stripe.livemode()));
-        if (!web.production()) {
+        Reads reads = reads(web.environment(), web.production());
+        if (reads == Reads.NONE) {
             return List.copyOf(problems);
         }
         String url = environment.getProperty("spring.flyway.url");
@@ -97,13 +99,29 @@ public class FirstLaunchSwitchesCheck implements PlatformCheck {
             }
             connection.setReadOnly(true);
             Map<String, String> values = values(connection);
-            problems.addAll(problems(values));
+            if (reads == Reads.ALL) {
+                problems.addAll(problems(values));
+            }
             problems.addAll(aiFeeProblems(values));
         } catch (SQLException | RuntimeException e) {
             problems.add(CheckProblem.warning(CountryCatalog.CATEGORY, LOCATION,
                 "the first launch's switches could not be read: " + e.getMessage()));
         }
         return List.copyOf(problems);
+    }
+
+    /** What a system reads: nothing, the AI fee's warnings only, or those and the money switches. */
+    enum Reads { NONE, AI_FEE, ALL }
+
+    /**
+     * The money switches are the real system's; the AI fee's warnings are staging's too (#702 review M2), where the
+     * reservation's limits are measured before production turns the AI fee on.
+     */
+    static Reads reads(String environment, boolean production) {
+        if (production) {
+            return Reads.ALL;
+        }
+        return FirstLaunchSwitches.appliesTo(environment) ? Reads.AI_FEE : Reads.NONE;
     }
 
     /**
@@ -150,11 +168,13 @@ public class FirstLaunchSwitchesCheck implements PlatformCheck {
     }
 
     /**
-     * F-M9a-2b, the warnings of the AI fee (values in effect, by key): the website draft on while the AI fee is off (a
-     * draft is then refused, plan question 6); and with both on, each of the website draft's reservation limits not
-     * set or not usable (a whole number from 1, the calls at most {@value #SITE_CALLS_MAX}): the reservation is then the
-     * job's worst case, and requests are refused more often than they need be (#692 re-review L-b; set them from the
-     * P95 of real jobs, operations.md 7.56).
+     * F-M9a-2b, the warnings of the AI fee (values in effect, by key; production and staging): the website draft on
+     * while the AI fee is off (a draft is then refused, plan question 6); and with the AI fee on, whether the website
+     * draft is on yet or not (#702 review M2: the limits are published before the AI fee), each of the website draft's
+     * reservation limits not set or not usable (a whole number from 1, the calls at most {@value #SITE_CALLS_MAX}): the
+     * reservation is then the job's worst case, and requests are refused more often than they need be (#692 re-review
+     * L-b; set them from the P95 of real jobs, operations.md §7.56). A warning only: refusing to start is a later item
+     * (F-M9.md).
      */
     static List<CheckProblem> aiFeeProblems(Map<String, String> values) {
         List<CheckProblem> problems = new ArrayList<>();
@@ -164,9 +184,9 @@ public class FirstLaunchSwitchesCheck implements PlatformCheck {
             problems.add(CheckProblem.warning(CountryCatalog.CATEGORY, "parameter " + QbParams.SITE_PROFILE_ENABLED,
                 "is on while " + QbParams.AI_FEE_ENABLED + " is off: drafting from a website is charged to the AI "
                     + "credit, so every request is refused (QB_AI_UNAVAILABLE). Turn the AI fee on first, or the "
-                    + "website draft off (operations.md 7.56)"));
+                    + "website draft off (operations.md §7.56)"));
         }
-        if (site && fee) {
+        if (fee) {
             for (String key : List.of(QbParams.AI_FEE_SITE_CALLS, QbParams.AI_FEE_SITE_PAGES,
                 QbParams.AI_FEE_SITE_OUTPUT)) {
                 String value = values.get(key);
@@ -174,11 +194,11 @@ public class FirstLaunchSwitchesCheck implements PlatformCheck {
                 if (value == null) {
                     problems.add(CheckProblem.warning(CountryCatalog.CATEGORY, "parameter " + key, "is not set: the "
                         + "website draft reserves the job's worst case, so requests are refused more often than they "
-                        + "need be. Set it from the P95 of real jobs (operations.md 7.56)"));
+                        + "need be. Set it from the P95 of real jobs (operations.md §7.56)"));
                 } else if (!usable(value, max)) {
                     problems.add(CheckProblem.warning(CountryCatalog.CATEGORY, "parameter " + key, "is '" + value
                         + "', not a whole number from 1" + (max == Integer.MAX_VALUE ? "" : " to " + max)
-                        + ": it is ignored and the website draft reserves the job's worst case (operations.md 7.56)"));
+                        + ": it is ignored and the website draft reserves the job's worst case (operations.md §7.56)"));
                 }
             }
         }
