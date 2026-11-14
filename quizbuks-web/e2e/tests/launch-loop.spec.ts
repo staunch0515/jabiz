@@ -735,6 +735,8 @@ test.describe.serial('the first launch\'s loop', () => {
         }
         await run(request, await adminToken(request), 'PARAM_SET', { key: 'qb.exposure.low-ratio', value: '0.5' })
         await signIn(page, '/sponsor/', sora.email)
+        // Signed in first (the sign-in is not over when the form is sent), as step 7b does.
+        await expect(page.getByTestId('dashboard-status')).toBeVisible()
         await page.goto(`/sponsor/publications/${slow.publicationId}/fees`)
         await expect(page.getByTestId('exposure-fee-price')).toContainText('20')
         await expect(page.getByTestId('exposure-fee-left')).toContainText('1 of 3 left')
