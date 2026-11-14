@@ -11,6 +11,7 @@ results:
   lastRunAt:     { from: QbReconRun.scheduledTime }
   lastRunStatus: { from: QbReconRun.status }
   lastRunItems:  { from: QbReconRun.itemCount }
+  lastRunSummary: { from: QbReconRun.summary }
   openTasks:     { kind: { type: numeric, precision: 12, scale: 0 } }
 permissions: [qb.reconcile, task.read]
 ---*/
@@ -23,6 +24,7 @@ SELECT
     r.last_at     AS lastRunAt,
     r.last_status AS lastRunStatus,
     r.last_items  AS lastRunItems,
+    r.last_summary AS lastRunSummary,
     k.open_tasks  AS openTasks
 FROM (
     SELECT count(*) AS open_tasks
@@ -30,7 +32,7 @@ FROM (
     WHERE s.{{SysTask.assigneePermission}} = 'qb.reconcile' AND s.{{SysTask.status}} = 'OPEN') k
 LEFT JOIN (
     SELECT q.{{QbReconRun.runId}} AS last_id, q.{{QbReconRun.scheduledTime}} AS last_at,
-           q.{{QbReconRun.status}} AS last_status, q.{{QbReconRun.itemCount}} AS last_items
+           q.{{QbReconRun.status}} AS last_status, q.{{QbReconRun.itemCount}} AS last_items, q.{{QbReconRun.summary}} AS last_summary
     FROM {{QbReconRun}} q
     ORDER BY q.{{QbReconRun.scheduledTime}} DESC
     LIMIT 1) r ON true

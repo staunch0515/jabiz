@@ -14,52 +14,73 @@ import {
   TableHead,
   TableHeader,
   TableRow,
+  useAuth,
   UserName,
   type ColumnDef,
 } from '@jabiz/admin'
-import { byCheck } from './finance'
-import { readReconItems, readReconRuns, type ReconItem, type ReconRun } from './finance-api'
+import { byCheck, levelCounts } from './finance'
+import { attentionKey, readAttentionDays, readReconItems, readReconRuns, type ReconItem, type ReconRun } from './finance-api'
 import { EmptyState, LoadFailed, Section } from './components'
 import { money, useLabels, usePaged, when } from './hooks'
 import { useMoreFilters } from './moreFilters'
-import { DICTIONARY, isUserId, PAGE_LIMIT, PATH, referenceKind } from './ids'
+import { DICTIONARY, isUserId, PAGE_LIMIT, PATH, PERMISSION, reconLevel, referenceKind, type ReconLevel } from './ids'
 
 /** The columns sorted on the server, by the template's `list.sorts` field (Q53a). */
 const SORTS = { scheduledTime: 'scheduledTime' } as const
 
 const linkClass = 'text-primary font-medium underline-offset-4 hover:underline'
 
-/** What a difference is about: its top-up or transfer, and its party's summary. */
+/**
+ * What a difference is about: its top-up or transfer, and its party's summary. A link is shown only to someone who
+ * holds the permission of the page it leads to (the server decides all the same; this only spares a dead link): the
+ * top-ups and transfers are finance's, a user's summary the users'.
+ */
 function Subject({ item }: { item: ReconItem }) {
   const { t } = useTranslation(EXTENSION_NAMESPACE)
+  const { can } = useAuth()
   const kind = referenceKind(item.checkCode)
   const parts: ReactNode[] = []
   if (item.reference && kind === 'topUp') {
-    parts.push(<Link key="ref" to={PATH.topUpsWhere({ topUp: item.reference })} className={linkClass}
-      data-testid="recon-reference" data-kind="topUp">{t('finance.recon.topUp')}</Link>)
+    parts.push(can(PERMISSION.financeRead)
+      ? <Link key="ref" to={PATH.topUpsWhere({ topUp: item.reference })} className={linkClass}
+          data-testid="recon-reference" data-kind="topUp">{t('finance.recon.topUp')}</Link>
+      : <span key="ref" data-testid="recon-reference" data-kind="topUp">{t('finance.recon.topUp')}</span>)
   } else if (item.reference && kind === 'transfer') {
-    parts.push(<Link key="ref" to={PATH.transfersWhere({ transfer: item.reference })} className={linkClass}
-      data-testid="recon-reference" data-kind="transfer">{t('finance.recon.transfer')}</Link>)
+    parts.push(can(PERMISSION.financeRead)
+      ? <Link key="ref" to={PATH.transfersWhere({ transfer: item.reference })} className={linkClass}
+          data-testid="recon-reference" data-kind="transfer">{t('finance.recon.transfer')}</Link>
+      : <span key="ref" data-testid="recon-reference" data-kind="transfer">{t('finance.recon.transfer')}</span>)
   } else if (item.reference) {
     parts.push(<code key="ref" className="text-xs">{item.reference}</code>)
   }
   if (item.partyId && isUserId(item.partyId)) {
-    parts.push(<Link key="party" to={PATH.user(item.partyId)} className={linkClass} data-testid="recon-party">
-      <UserName id={item.partyId} />
-    </Link>)
+    parts.push(can(PERMISSION.usersRead)
+      ? <Link key="party" to={PATH.user(item.partyId)} className={linkClass} data-testid="recon-party">
+          <UserName id={item.partyId} />
+        </Link>
+      : <span key="party" data-testid="recon-party"><UserName id={item.partyId} /></span>)
   }
   return parts.length > 0 ? <span className="flex flex-wrap gap-x-3">{parts}</span> : <>{t('finance.recon.whole')}</>
 }
+
+/** The badge variant of a level: a difference warns, the others are quieter (nothing is an error here). */
+const LEVEL_VARIANT = { DIFFERENCE: 'warning', ATTENTION: 'secondary', NOTE: 'outline' } as const satisfies
+  Record<ReconLevel, 'warning' | 'secondary' | 'outline'>
 
 /**
  * One run's differences, grouped by check (the first {@link PAGE_LIMIT}: a run that finds more says so); read only
  * (C-3: a difference is handled through the money tasks and by hand).
  */
 function Items({ runId }: { runId: string }) {
-  const { t } = useTranslation(EXTENSION_NAMESPACE)
+  const { t, i18n } = useTranslation(EXTENSION_NAMESPACE)
   const checkLabel = useLabels(DICTIONARY.reconCheck)
+  const levelLabel = useLabels(DICTIONARY.reconLevel)
   const query = useQuery({ queryKey: ['qb-ext', 'finance', 'recon-items', runId],
     queryFn: () => readReconItems(runId, 0, PAGE_LIMIT) })
+  // Asked for only when the run has an item for attention; a failure only leaves the days out.
+  const attention = query.data?.items.some((item) => reconLevel(item.checkCode) === 'ATTENTION') ?? false
+  const days = useQuery({ queryKey: ['qb-ext', 'finance', 'recon-attention-days', runId], enabled: attention,
+    queryFn: () => readAttentionDays(runId) })
   if (query.isError) return <LoadFailed error={query.error} onRetry={() => void query.refetch()} />
   if (query.isPending) return <PageState kind="loading" />
   const groups = byCheck(query.data.items)
@@ -69,7 +90,15 @@ function Items({ runId }: { runId: string }) {
       {groups.length === 0 && <p className="text-muted-foreground text-sm">{t('finance.recon.noItems')}</p>}
       {groups.map(([check, items]) => (
         <div key={check} className="flex flex-col gap-2" data-testid="recon-group" data-check={check}>
-          <h3 className="font-semibold">{checkLabel(check)}</h3>
+          <h3 className="flex flex-wrap items-center gap-2 font-semibold">
+            {checkLabel(check)}
+            <Badge variant={LEVEL_VARIANT[reconLevel(check)]} data-testid="recon-level"
+              data-level={reconLevel(check)}>{levelLabel(check)}</Badge>
+          </h3>
+          <p className="text-muted-foreground text-sm" data-testid="recon-help">
+            {i18n.exists(`finance.recon.help.${check}`, { ns: EXTENSION_NAMESPACE })
+              ? `${t(`finance.recon.help.${check}`)} ` : ''}{t('finance.recon.helpMore')}
+          </p>
           <Table aria-label={t('finance.recon.groupTable', { check: checkLabel(check) })}>
             <TableHeader>
               <TableRow>
@@ -82,7 +111,14 @@ function Items({ runId }: { runId: string }) {
             <TableBody>
               {items.map((item) => (
                 <TableRow key={item.itemId} data-testid="recon-item">
-                  <TableCell><Subject item={item} /></TableCell>
+                  <TableCell>
+                    <Subject item={item} />
+                    {reconLevel(check) === 'ATTENTION' && days.data?.has(attentionKey(item)) && (
+                      <span className="text-muted-foreground block text-xs" data-testid="recon-days">
+                        {t('finance.recon.attentionDays', { count: days.data.get(attentionKey(item)) })}
+                      </span>
+                    )}
+                  </TableCell>
                   <TableCell className="text-right tabular-nums">{money(item.expected)}</TableCell>
                   <TableCell className="text-right tabular-nums">{money(item.actual)}</TableCell>
                   <TableCell className="text-right tabular-nums">{money(item.difference)}</TableCell>
@@ -138,8 +174,21 @@ export default function ReconciliationPage() {
         </Badge>
       ),
     },
+    // F-M14 (review L10): the differences only; what needs attention beside them (notes are not counted here).
     { id: 'items', header: t('finance.recon.itemCount'), meta: { className: 'text-right tabular-nums' },
-      cell: ({ row }) => row.original.itemCount.toLocaleString() },
+      cell: ({ row }) => {
+        const counts = levelCounts(row.original.summary)
+        return (
+          <span data-testid="recon-run-counts">
+            {counts.differences.toLocaleString()}
+            {counts.attention > 0 && (
+              <span className="text-muted-foreground ml-2 text-xs">
+                {t('finance.recon.attentionCount', { count: counts.attention })}
+              </span>
+            )}
+          </span>
+        )
+      } },
     { id: 'checkedAt', header: t('finance.recon.checkedAt'), cell: ({ row }) => when(row.original.checkedAt) },
   ], [t, runId])
   return (
