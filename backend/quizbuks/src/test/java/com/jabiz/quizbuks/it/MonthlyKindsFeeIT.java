@@ -42,12 +42,16 @@ import static org.assertj.core.api.Assertions.assertThat;
  *
  * <p>Driven here: FEE_CHARGED, FEE_PAID (from the cash account, and the part of a credit note that goes back to it),
  * FEE_VOIDED (a paid invoice voided), FEE_CREDIT_NOTE, KUDOS_SOLD and KUDOS_BOUGHT (the cash to pay the fees),
- * PREPAYMENT_FROZEN, PREPAYMENT_USED and PREPAYMENT_RELEASED (an audience fee set aside, paid from, and given back
- * after the end), FEE_CREDIT_GRANTED and FEE_CREDIT_VOIDED (a lot granted and expired unused), ENTRY_FEE and
+ * PREPAYMENT_FROZEN, AUDIENCE_CHARGED, PREPAYMENT_USED and PREPAYMENT_RELEASED (an audience fee set aside, charged,
+ * paid from, and given back after the end), FEE_CREDIT_GRANTED and FEE_CREDIT_VOIDED (a lot granted and expired unused), ENTRY_FEE and
  * ENTRY_FEE_SETTLED (a taker pays a quiz's entry fee, the daily job settles it into the sponsor's cash),
  * DISTRIBUTION_DEPOSIT, DISTRIBUTION_CHARGED and DISTRIBUTION_RELEASED (a publication's distribution fee), REWARD
  * (a commission), OPERATOR_SHARE (an operator's month settled on its sponsor's platform fee), OPERATOR_TRANSFER_TO_DIRECT
  * (its lead moves part of it to their cash) and OPERATOR_PAID (a withdrawal paid).
+ *
+ * <p>Driven elsewhere with the same guard (F-M14b): the exposure fee's kinds in {@code ExposureSettleIT}, the AI fee's
+ * and the AI credit's in {@code AiCreditReturnIT}, the fee credit given back to a lot expired meanwhile (voided again,
+ * FEE_CREDIT_VOIDED) in {@code PrepaymentIT}.
  *
  * <p>Not driven (too costly for a guard; each has its own row-by-row tests): REFERRAL_REWARD ({@code ReferralIT}: needs
  * a tree prerequisite, a claim and a pass) and FEE_CREDIT_RECOVERED ({@code OperatorSettlementMonthlyIT}, its April
@@ -222,7 +226,7 @@ class MonthlyKindsFeeIT extends CreditNoteItSupport {
         List<Map<String, Object>> report = items("qb.admin.monthly", reader, Map.of("params",
             Map.of("from", "2000-01-01T00:00:00Z", "to", "2100-01-01T00:00:00Z"), "limit", 100));
         MonthlyKinds.assertGuard(report, List.of("REWARD", "KUDOS_SOLD", "KUDOS_BOUGHT", "FEE_CHARGED", "FEE_PAID",
-            "FEE_VOIDED", "FEE_CREDIT_NOTE", "PREPAYMENT_FROZEN", "PREPAYMENT_USED", "PREPAYMENT_RELEASED",
+            "FEE_VOIDED", "FEE_CREDIT_NOTE", "AUDIENCE_CHARGED", "PREPAYMENT_FROZEN", "PREPAYMENT_USED", "PREPAYMENT_RELEASED",
             "FEE_CREDIT_GRANTED", "FEE_CREDIT_VOIDED", "ENTRY_FEE", "ENTRY_FEE_SETTLED", "DISTRIBUTION_DEPOSIT",
             "DISTRIBUTION_CHARGED", "DISTRIBUTION_RELEASED", "OPERATOR_SHARE", "OPERATOR_TRANSFER_TO_DIRECT",
             "OPERATOR_PAID"), query(MonthlyKinds.SOURCES_SQL),

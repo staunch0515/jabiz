@@ -1,6 +1,6 @@
 import { useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Link } from 'react-router'
+import { Link, useSearchParams } from 'react-router'
 import { DataTable, EXTENSION_NAMESPACE, UserName, type ColumnDef } from '@jabiz/admin'
 import { EmptyState, LoadFailed } from './components'
 import { CREDIT_NOTE_REASONS, FEES_KEY, readFeeCreditNotes, type FeeCreditNote } from './fee-api'
@@ -23,15 +23,19 @@ export function FeeCreditNotes({ operator = false }: { operator?: boolean }) {
   const { t } = useTranslation(EXTENSION_NAMESPACE)
   const points = usePoints()
   const amount = operator ? points : money
+  // F-M14b: the reconciliation page links one note by its number (headquarters' list only).
+  const [search] = useSearchParams()
+  const linkedNo = operator ? null : search.get('creditNoteNo')
   const more = useMoreFilters([
     { kind: 'eq', name: 'sponsorId', label: t('fee.sponsor') },
-    ...(operator ? [] : [{ kind: 'eq', name: 'operatorId', label: t('fee.creditNotes.operator') } as const]),
+    ...(operator ? [] : [{ kind: 'eq', name: 'operatorId', label: t('fee.creditNotes.operator') } as const,
+      { kind: 'eq', name: 'creditNoteNo', label: t('fee.creditNotes.number'), upper: true } as const]),
     { kind: 'eq', name: 'chargeId', label: t('fee.creditNotes.charge') },
     { kind: 'eq', name: 'invoiceNo', label: t('fee.invoiceNo'), upper: true },
     { kind: 'choice', name: 'reason', label: t('fee.reason'),
       options: CREDIT_NOTE_REASONS.map((value) => ({ value, label: t(`fee.creditNotes.reasons.${value}`) })) },
     { kind: 'time', name: 'issuedAt', label: t('fee.issuedAt') },
-  ], 'fee-credit-note-filters')
+  ], 'fee-credit-note-filters', linkedNo ? { creditNoteNo: linkedNo } : {})
   const { query, table, sortable } = usePaged([...FEES_KEY, 'credit-notes', operator, more.filters],
     (offset, limit, sorts) => readFeeCreditNotes(operator, offset, limit, sorts, more.filters), true, SORTS)
   const columns = useMemo<ColumnDef<FeeCreditNote, unknown>[]>(() => [

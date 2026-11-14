@@ -31,6 +31,7 @@ import {
   percent,
   planInEffect,
   readAccount,
+  readCarriedTakeBack,
   readOwnTransfers,
   readOwnWithdrawals,
   readPlans,
@@ -75,7 +76,21 @@ function Balance({ account }: { account: OperatorAccount }) {
         {t('account.creditedHint')}{' '}
         <Link to={PATH.operatorSettlements} className={linkClass}>{t('account.settlements')}</Link>
       </p>
+      <CarriedTakeBack />
     </Section>
+  )
+}
+
+/** A take-back of granted credit that the latest settlement could not finish continues next month (F-M12 d). */
+function CarriedTakeBack() {
+  const { t } = useTranslation(EXTENSION_NAMESPACE)
+  const points = usePoints()
+  const carried = useQuery({ queryKey: [...ACCOUNT_KEY, 'carried-take-back'], queryFn: readCarriedTakeBack })
+  if (!carried.data || Number(carried.data) <= 0) return null
+  return (
+    <p className="text-muted-foreground text-sm" data-testid="account-carried-take-back">
+      {t('account.carriedTakeBack', { amount: points(carried.data) })}
+    </p>
   )
 }
 

@@ -355,7 +355,13 @@ class ShopifyStorefrontIT extends ShopifyItSupport {
         String taker = "qbs:" + query("SELECT taker_id FROM qbs_taker WHERE shop_domain = ? AND customer_id = '7001'",
             live.shop()).getFirst().get("taker_id");
         assertThat(query("SELECT 1 FROM qb_attempt WHERE user_id = ?", taker)).hasSize(1);
-        assertThat(query("SELECT 1 FROM qb_attempt WHERE user_id LIKE '%7001%'")).isEmpty();
+        // This campaign's publication has that one attempt, keyed by the row and not by the customer id (only this
+        // test's rows are read, by exact values: other tests' random user ids may well contain "7001", and so may
+        // the row's random key, so no substring is compared).
+        assertThat(query("SELECT user_id FROM qb_attempt WHERE publication_id = ?::uuid", live.publicationId()))
+            .extracting(row -> row.get("user_id")).containsExactly(taker);
+        assertThat(query("SELECT 1 FROM qb_attempt WHERE user_id IN (?, ?, ?)", "7001", "qbs:7001",
+            live.shop() + "/7001")).isEmpty();
     }
 
     @Test

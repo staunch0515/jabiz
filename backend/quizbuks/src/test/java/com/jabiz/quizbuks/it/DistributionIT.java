@@ -222,7 +222,11 @@ class DistributionIT extends PrepaymentItSupport {
             unique("fm6-other"))), Map.of("params", Map.of("publicationId", publicationId)))).isEmpty();
         assertThat(items("qb.admin.distribution-settlements", TestTokens.bearer(tokens, "fm6-finance",
             QbPermissions.ADMIN_FINANCE_READ), Map.of("params", Map.of("publicationId", publicationId))))
-            .singleElement().satisfies(row -> assertThat(row).containsEntry("atFloor", false));
+            .singleElement().satisfies(row -> assertThat(row).containsEntry("atFloor", false)
+                // The operator by its name, not its id (the finance list shows it).
+                .containsEntry("operatorId", operatorOf(sponsor)).containsEntry("operatorName", query(
+                    "SELECT name FROM qb_operator WHERE operator_id = ?", operatorOf(sponsor))
+                    .getFirst().get("name")));
         end(publicationId);
         Instant endedAt = clock.instant();
         assertThat(finalRun(endedAt.plus(Duration.ofMinutes(30))).outcome()).isEqualTo(JobRunner.Outcome.SUCCEEDED);
@@ -385,6 +389,39 @@ class DistributionIT extends PrepaymentItSupport {
         assertThat(differences(sponsor)).isEmpty();
     }
 
+    /** The notes DISTRIBUTION_AT_FLOOR of the daily check about the sponsor: the count of its rows' actuals. */
+    long floorNotes(String sponsor) {
+        Map<String, Object> params = new java.util.HashMap<>(Map.of("at", clock.instant().toString(), "zone",
+            "Asia/Tokyo"));
+        params.put("unsettledHours", paramValue(QbParams.DISTRIBUTION_UNSETTLED_AFTER_HOURS));
+        params.put("missingHours", paramValue(QbParams.DISTRIBUTION_FINAL_MISSING_AFTER_HOURS));
+        return feeAccountItems(TestTokens.bearer(tokens, "fm14b-floor", QbPermissions.WALLET_SYSTEM),
+            Map.of("params", params)).stream()
+            .filter(r -> sponsor.equals(String.valueOf(r.get("sponsorId")))
+                && ReconChecks.DISTRIBUTION_AT_FLOOR.equals(r.get("checkCode")))
+            .mapToLong(r -> dec(r.get("actual")).longValue()).sum();
+    }
+
+    /** F-M14b sweep: a live publication charged its operator's floor is noted (a note, not a difference) until it ends. */
+    @Test
+    void theDailyCheckNotesALivePublicationChargedAtTheFloorUntilItEnds() {
+        autoApprove(true);
+        distribution(true);
+        String sponsor = distributionSponsor("fm14b-floor");
+        cash(sponsor, 1_000);
+        String charged = publication(sponsor, "FM14b above the floor", Map.of());
+        assertThat(row(charged)).containsEntry("distribution_at_floor", false);
+        assertThat(floorNotes(sponsor)).isZero();
+        // The floor above what a start comes to (0.05 × 100 = 5): the next publication is charged the floor.
+        execute("UPDATE qb_distribution_price SET unit_floor = 8 WHERE operator_id = ?", operatorOf(sponsor));
+        String floored = publication(sponsor, "FM14b at the floor", Map.of());
+        assertThat(row(floored)).containsEntry("distribution_at_floor", true);
+        assertThat(floorNotes(sponsor)).isEqualTo(1);
+        assertThat(ReconChecks.level(ReconChecks.DISTRIBUTION_AT_FLOOR)).isEqualTo(ReconChecks.Level.NOTE);
+        end(floored);
+        assertThat(floorNotes(sponsor)).isZero();
+    }
+
     @Test
     void anOperatorsLeadSetsItsPriceWithinTheRange() {
         String hq = TestTokens.bearer(tokens, "fm6-ops", QbPermissions.OPERATORS_WRITE, QbPermissions.OPERATORS_READ);
@@ -428,6 +465,36 @@ class DistributionIT extends PrepaymentItSupport {
             .extracting(ReconChecks.Item::check).containsExactly(ReconChecks.DISTRIBUTION_PRICE_RANGE);
         // The query run before deploying (operations.md, launch-checklist.md) finds the same operator.
         assertThat(offRangeBeforeDeploying()).contains(operator);
+    }
+
+    /**
+     * The reconciliation page names the operator an item is about (its id is a UUID like a user's, so the page showed
+     * it as an unknown user): the items' template gives the operator's name, and none for an item about a user.
+     */
+    @Test
+    void theReconciliationItemsNameTheOperatorTheyAreAbout() {
+        String operator = operatorOf(distributionSponsor("fm6-recon-name"));
+        execute("UPDATE qb_distribution_price SET rate = 2 WHERE operator_id = ?", operator);
+        try {
+            deliverEvents();
+            settlementsAreNotWaitedFor();
+            clock.set(clock.instant().plus(Duration.ofMinutes(17)));
+            var output = (com.jabiz.quizbuks.wallet.Reconciliation.ReconcileOutput) systemRun("QB_RECONCILE_RUN",
+                body("scheduledTime", clock.instant().toString()));
+            List<Map<String, Object>> found = items("qb.admin.recon-items", TestTokens.bearer(tokens,
+                "fm6-recon-reader", QbPermissions.RECONCILE), Map.of("params", Map.of("runId", output.runId()),
+                "limit", 1000));
+            Object name = query("SELECT name FROM qb_operator WHERE operator_id = ?", operator).getFirst().get("name");
+            assertThat(found).filteredOn(item -> operator.equals(item.get("partyId"))
+                    && ReconChecks.DISTRIBUTION_PRICE_RANGE.equals(item.get("checkCode")))
+                .singleElement().satisfies(item -> assertThat(item).containsEntry("operatorName", name));
+            Set<Object> operators = Set.copyOf(query("SELECT operator_id FROM qb_operator").stream()
+                .map(row -> row.get("operator_id")).toList());
+            assertThat(found).filteredOn(item -> !operators.contains(item.get("partyId")))
+                .allSatisfy(item -> assertThat(item.get("operatorName")).isNull());
+        } finally {
+            execute("UPDATE qb_distribution_price SET rate = 0.05 WHERE operator_id = ?", operator);
+        }
     }
 
     /** The operators tools/quizbuks/sql/distribution-price-range.sql lists, at the test's clock. */

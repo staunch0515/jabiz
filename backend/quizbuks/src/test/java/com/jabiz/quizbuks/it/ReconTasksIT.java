@@ -238,9 +238,55 @@ class ReconTasksIT extends TopUpItSupport {
         assertThat(openTasks(attention("op-fm14-backfill-2"))).isEmpty();
     }
 
-    /** Last: it leaves many prices outside the range. */
+    /** The open tasks the holder of these permissions is asked to do (GET /api/tasks/mine), by task type. */
+    @SuppressWarnings("unchecked")
+    List<Map<String, Object>> mine(String... permissions) {
+        Map<String, Object> mine = client.get().uri("/api/tasks/mine?limit=200")
+            .header(org.springframework.http.HttpHeaders.AUTHORIZATION, TestTokens.bearer(tokens, "fm14b-tasks",
+                permissions))
+            .exchange().expectStatus().isOk().expectBody(MAP).returnResult().getResponseBody();
+        return (List<Map<String, Object>>) mine.get("tasks");
+    }
+
+    /**
+     * F-M14b (review M2): the AI help's usage above everybody's row is the content administrators' to look at, on the AI
+     * page where the usage is; finance, who hold only {@code qb.reconcile}, are not asked. The title names the month and
+     * the two numbers.
+     */
     @Test
     @Order(6)
+    void theHelpUsagesAttentionTaskIsTheContentAdministratorsOnTheAiPage() {
+        execute("INSERT INTO qb_help_usage (usage_id, user_id, month, questions, failed_jobs, cancelled_jobs, "
+            + "input_tokens, output_tokens, cost_usd, version) VALUES (?, '*', '2031-04', 3, 0, 0, 100, 50, 0.10, 1), "
+            + "(?, 'u-fm14b-help', '2031-04', 4, 0, 0, 100, 80, 0.30, 1)", UUID.randomUUID().toString(),
+            UUID.randomUUID().toString());
+        try {
+            // (The run itself may differ: the tests before leave prices and operators behind; this is about the task.)
+            reconcileDay(45);
+            assertThat(ReconChecks.level(ReconChecks.HELP_USAGE_TOTAL)).isEqualTo(ReconChecks.Level.ATTENTION);
+            String source = ReconTasks.sourceKey(ReconChecks.HELP_USAGE_TOTAL, null, "2031-04:questions");
+            assertThat(openTasks(source)).singleElement().satisfies(task -> {
+                assertThat(task).containsEntry("assignee_permission", QbPermissions.ADMIN_HELP_GAPS)
+                    .containsEntry("link", "/qb/ai")
+                    .containsEntry("title_key", ReconTasks.ATTENTION_TITLE + "." + ReconChecks.HELP_USAGE_TOTAL);
+                assertThat(String.valueOf(task.get("title_params"))).contains("2031-04").contains("\"3\"")
+                    .contains("\"4\"");
+            });
+            List<String> ids = openTasks(source).stream().map(t -> String.valueOf(t.get("task_id"))).toList();
+            assertThat(mine(QbPermissions.ADMIN_HELP_GAPS)).extracting(t -> String.valueOf(t.get("taskId")))
+                .containsAll(ids);
+            assertThat(mine(QbPermissions.RECONCILE)).extracting(t -> String.valueOf(t.get("taskId")))
+                .doesNotContainAnyElementsOf(ids);
+        } finally {
+            execute("DELETE FROM qb_help_usage WHERE month = '2031-04'");
+        }
+        reconcileDay(46);
+        assertThat(openTasks(ReconTasks.sourceKey(ReconChecks.HELP_USAGE_TOTAL, null, "2031-04:questions"))).isEmpty();
+    }
+
+    /** Last: it leaves many prices outside the range. */
+    @Test
+    @Order(7)
     void aRunThatKeptOnlyPartOfItsItemsClosesNothing() {
         String operator = "op-fm14-trunc";
         price(operator, "2");

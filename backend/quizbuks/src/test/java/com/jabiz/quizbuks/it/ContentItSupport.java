@@ -180,7 +180,7 @@ abstract class ContentItSupport extends QbItSupport {
         "qb.system.recon-fee-credit", List.of(),
         "qb.system.recon-operator-account", List.of(),
         "qb.system.recon-prepayments", List.of("at", "zone", "unsettledHours", "missingHours"),
-        "qb.system.recon-credit-notes", List.of("at", "refundHours"));
+        "qb.system.recon-credit-notes", List.of("at", "refundHours", "missedHours"));
 
     /**
      * What the daily check of the fee account finds: the rows of its four templates together, each given the

@@ -1,4 +1,4 @@
-import { useQueryClient } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useId, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Link, useSearchParams } from 'react-router'
@@ -10,6 +10,7 @@ import {
   Input,
   Label,
   PageHeader,
+  PageState,
   useAuth,
   UserName,
   type ColumnDef,
@@ -19,7 +20,7 @@ import { EmptyState, LoadFailed } from './components'
 import { FeeCreditNotes } from './FeeCreditNotes'
 import { useLabels, usePaged, usePoints, when } from './hooks'
 import { DICTIONARY, PATH, PERMISSION } from './ids'
-import { readOperatorBilling, type OperatorBilling } from './operator-api'
+import { OPERATOR_NOTE_CHECKS, readOperatorBilling, readOperatorReconNotes, type OperatorBilling } from './operator-api'
 
 /** The columns sorted on the server, by the template's `list.sorts` field. */
 const SORTS = { company: 'company', unpaid: 'unpaidTotal' } as const
@@ -27,6 +28,62 @@ const SORTS = { company: 'company', unpaid: 'unpaidTotal' } as const
 const linkClass = 'text-primary font-medium underline-offset-4 hover:underline'
 const right = { className: 'text-right tabular-nums' }
 const KEY = ['qb-ext', 'operator-billing'] as const
+
+/**
+ * F-M14b: what the latest daily reconciliation noted about the operator's own sponsors (`qb.operator.recon-notes`):
+ * publications charged its floor price, and publications of another's video that bought no exposures. Notes only:
+ * nothing is wrong, no task is made, and the operator decides whether to look.
+ */
+function ReconNotes() {
+  const { t } = useTranslation(EXTENSION_NAMESPACE)
+  const query = useQuery({ queryKey: [...KEY, 'recon-notes'], queryFn: readOperatorReconNotes })
+  let body
+  if (query.isError) {
+    body = <LoadFailed error={query.error} onRetry={() => void query.refetch()} />
+  } else if (query.isPending) {
+    body = <PageState kind="loading" />
+  } else {
+    const { asOf, notes } = query.data
+    body = (
+      <>
+        <p className="text-muted-foreground text-sm" data-testid="operator-recon-notes-as-of">
+          {asOf ? t('operator.billingPage.notes.asOf', { when: when(asOf) }) : t('operator.billingPage.notes.noRun')}
+        </p>
+        {asOf && notes.length === 0 && (
+          <p className="text-muted-foreground text-sm" data-testid="operator-recon-notes-none">
+            {t('operator.billingPage.notes.none')}</p>
+        )}
+        {OPERATOR_NOTE_CHECKS.map((check) => {
+          const rows = notes.filter((note) => note.checkCode === check)
+          return rows.length > 0 && (
+            <div key={check} className="flex flex-col gap-2" data-testid="operator-recon-note-group" data-check={check}>
+              <h3 className="font-semibold">{t(`operator.billingPage.notes.check.${check}`)}</h3>
+              <p className="text-muted-foreground text-sm">{t(`operator.billingPage.notes.help.${check}`)}</p>
+              <ul className="flex flex-col gap-1">
+                {rows.map((note) => (
+                  <li key={note.sponsorId} className="flex flex-wrap gap-x-3" data-testid="operator-recon-note"
+                    data-id={note.sponsorId}>
+                    <Link to={PATH.sponsor(note.sponsorId)} className={linkClass}>{note.company || note.contactName}</Link>
+                    <span className="tabular-nums">
+                      {t('operator.billingPage.notes.publications', { count: note.publications })}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )
+        })}
+      </>
+    )
+  }
+  return (
+    <section aria-labelledby="operator-recon-notes-title" className="flex flex-col gap-3" data-testid="operator-recon-notes">
+      <h2 id="operator-recon-notes-title" className="text-lg font-semibold">{t('operator.billingPage.notes.title')}</h2>
+      <p className="text-muted-foreground text-sm">{t('operator.billingPage.notes.description')}</p>
+      {body}
+    </section>
+  )
+}
 
 /**
  * How the operator's own sponsors pay the platform's fees (Q87b, `qb.operator.sponsor-billing`): the billing mode in
@@ -144,6 +201,7 @@ export default function OperatorBillingPage() {
             getRowId={(row) => row.userId} empty={<EmptyState art="people" title={t('operator.billingPage.none')} />}
             rowProps={(row) => ({ 'data-testid': 'billing-row', 'data-id': row.userId })} />
         )}
+      <ReconNotes />
       {/* F-M7: the credit notes on its Sponsors' fees, read only (what they take back is deducted from its share). */}
       <section aria-labelledby="operator-credit-notes-title" className="flex flex-col gap-4" data-testid="operator-credit-notes">
         <h2 id="operator-credit-notes-title" className="text-lg font-semibold">{t('fee.creditNotes.title')}</h2>

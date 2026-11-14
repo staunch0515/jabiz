@@ -30,7 +30,7 @@ steps:
       p59: "$.proposals[58]", p60: "$.proposals[59]", p61: "$.proposals[60]", p62: "$.proposals[61]", p63: "$.proposals[62]", p64: "$.proposals[63]", p65: "$.proposals[64]",
       p66: "$.proposals[65]", p67: "$.proposals[66]", p68: "$.proposals[67]", p69: "$.proposals[68]", p70: "$.proposals[69]", p71: "$.proposals[70]", p72: "$.proposals[71]",
       p73: "$.proposals[72]", p74: "$.proposals[73]", p75: "$.proposals[74]", p76: "$.proposals[75]", p77: "$.proposals[76]", p78: "$.proposals[77]", p79: "$.proposals[78]", p80: "$.proposals[79]", p81: "$.proposals[80]", p82: "$.proposals[81]", p83: "$.proposals[82]", p84: "$.proposals[83]", p85: "$.proposals[84]", p86: "$.proposals[85]", p87: "$.proposals[86]", p88: "$.proposals[87]", p89: "$.proposals[88]", p90: "$.proposals[89]", p91: "$.proposals[90]",
-      p92: "$.proposals[91]", p93: "$.proposals[111]", rt1: "$.proposals[112]", rt2: "$.proposals[113]", p94: "$.proposals[130]", p95: "$.proposals[131]", p96: "$.proposals[132]", p97: "$.proposals[133]", p98: "$.proposals[134]", p99: "$.proposals[135]" }
+      p92: "$.proposals[91]", p93: "$.proposals[112]", rt1: "$.proposals[113]", rt2: "$.proposals[114]", p94: "$.proposals[132]", p95: "$.proposals[133]", p96: "$.proposals[134]", p97: "$.proposals[135]", p98: "$.proposals[136]", p99: "$.proposals[137]" }
   - process: CONTROL_CHANGE_PUBLISH@latest
     actor: { id: publisher, permissions: [control.publish] }
     input: { changeId: "${p1}" }

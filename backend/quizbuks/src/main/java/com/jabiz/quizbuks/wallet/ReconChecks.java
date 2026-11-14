@@ -96,6 +96,10 @@ public final class ReconChecks {
     public static final String CREDIT_NOTE_USE_VOID = "CREDIT_NOTE_USE_VOID";
     /** F-M7 (N4): credit left while an invoice is unpaid. */
     public static final String CREDIT_UNUSED_WITH_DUE = "CREDIT_UNUSED_WITH_DUE";
+    /** F-M13c: an invoice's paid amount and credit applied against the parts and uses that add up to them. */
+    public static final String INVOICE_PAID_SUM = "INVOICE_PAID_SUM";
+    /** F-M13c (for attention): unpaid invoices of a sponsor whose account has money, with the automatic payment on. */
+    public static final String AUTO_PAY_MISSED = "AUTO_PAY_MISSED";
     /**
      * F-M10: a month of the AI help's usage in which everybody's row is below the sum of the people's (questions, input
      * or output tokens, estimated dollars); {@code reference} names the month and the measure. Not "unequal": a deleted
@@ -200,6 +204,15 @@ public final class ReconChecks {
     /** What a transfer holds in transit (2130) against its state (Q6b). */
     public static final String TRANSFER_IN_TRANSIT = "TRANSFER_IN_TRANSIT";
 
+    /** F-M15 b (§9): a wind-up done whose granted credit still has something left (it should have been voided). */
+    public static final String ERASED_GIFT_LEFT = "ERASED_GIFT_LEFT";
+    /** F-M15 b: a wind-up waiting {@code qb.erasure.close.alert-days} or more after the erasure (attention). */
+    public static final String ERASED_CLOSE_OPEN = "ERASED_CLOSE_OPEN";
+    /** F-M15 b: what a wound-up sponsor still owes (a note: the record of an erased sponsor's fees owed). */
+    public static final String ERASED_FEE_OWED = "ERASED_FEE_OWED";
+    /** F-M15 b (review M1): an erased sponsor who had the platform fee account with no wind-up registered. */
+    public static final String ERASED_NO_CLOSURE = "ERASED_NO_CLOSURE";
+
     /** Every check, in the order of the summary. */
     public static final List<String> ALL = List.of(SPONSOR_WALLET, SPONSOR_PENDING_COUNT, SPONSOR_PENDING_AMOUNT,
         TOTAL_2110, LEDGER_ZERO, TOPUP_LEDGER, TOPUP_ARRIVALS, TOPUP_REFUNDS, TOPUP_FEE, TAKER_WALLET,
@@ -209,18 +222,19 @@ public final class ReconChecks {
         PREPAYMENT_PARTS, PREPAYMENT_UNCHARGED, DISTRIBUTION_DEPOSITS, DISTRIBUTION_UNSETTLED,
         DISTRIBUTION_FINAL_MISSING, DISTRIBUTION_PRICE_RANGE, DISTRIBUTION_AT_FLOOR, AUDIENCE_REFUND_MISSING,
         AUDIENCE_REFUND_NO_PERIOD, AUDIENCE_FEE_NOT_LIVE, CREDIT_NOTE_USES, CREDIT_NOTE_LIMITS, CREDIT_NOTE_USE_VOID,
-        CREDIT_UNUSED_WITH_DUE, HELP_USAGE_TOTAL, OPERATOR_SETTLEMENT_WAITING, OPERATOR_SETTLEMENT_COVERAGE,
+        CREDIT_UNUSED_WITH_DUE, INVOICE_PAID_SUM, AUTO_PAY_MISSED, HELP_USAGE_TOTAL, OPERATOR_SETTLEMENT_WAITING, OPERATOR_SETTLEMENT_COVERAGE,
         GIFT_RECOVERY, OPERATOR_CHARGE_NO_OPERATOR, OPERATOR_GIFT_CARRY_OPEN, EXPOSURE_DEPOSITS,
         EXPOSURE_SETTLED_OVER, EXPOSURE_UNSETTLED, EXPOSURE_FINAL_MISSING, EXPOSURE_PRICE_RANGE,
         EXPOSURE_UNIT_MISMATCH, EXPOSURE_UNPURCHASED, EXPOSURE_SETTLED_SHORT, EXPOSURE_AMOUNT_MISMATCH,
-        AI_RESERVATION_SHORT, AI_CREDIT, AI_FEE_MONTH, AI_FEE_UNBILLED, AI_FEE_RESERVED, AI_CREDIT_EXPIRED_HELD);
+        AI_RESERVATION_SHORT, AI_CREDIT, AI_FEE_MONTH, AI_FEE_UNBILLED, AI_FEE_RESERVED, AI_CREDIT_EXPIRED_HELD,
+        ERASED_GIFT_LEFT, ERASED_CLOSE_OPEN, ERASED_FEE_OWED, ERASED_NO_CLOSURE);
 
     /** Codes no longer reported that runs written before may still name: readable, never written. */
     public static final List<String> RETIRED = List.of(DISTRIBUTION_PRICE_OUT_OF_RANGE);
 
     /** The checks that only note something: a run with notes alone is {@code OK}, and nobody is asked. */
     public static final Set<String> NOTES = Set.of(TAKER_WALLET_LAG, DISTRIBUTION_AT_FLOOR, EXPOSURE_UNPURCHASED,
-        OPERATOR_GIFT_CARRY_OPEN, AI_RESERVATION_SHORT);
+        OPERATOR_GIFT_CARRY_OPEN, AI_RESERVATION_SHORT, ERASED_FEE_OWED);
 
     /**
      * F-M14 (docs/quizbuks/plans/impl/F-M14.md §1.2): the checks that need someone to look or decide while the books
@@ -229,7 +243,8 @@ public final class ReconChecks {
      * ({@link ReconTasks}).
      */
     public static final Set<String> ATTENTION = Set.of(DISTRIBUTION_PRICE_RANGE, AUDIENCE_REFUND_NO_PERIOD,
-        CREDIT_UNUSED_WITH_DUE, HELP_USAGE_TOTAL, EXPOSURE_PRICE_RANGE);
+        CREDIT_UNUSED_WITH_DUE, AUTO_PAY_MISSED, HELP_USAGE_TOTAL, EXPOSURE_PRICE_RANGE, ERASED_CLOSE_OPEN,
+        ERASED_NO_CLOSURE);
 
     /** F-M14: the dictionary of each check's level (made from these sets). */
     public static final String LEVEL_DICTIONARY = "urn:jabiz:dict:quizbuks:recon-level";
@@ -293,9 +308,14 @@ public final class ReconChecks {
      *
      * @param items   the differences, at most the given maximum
      * @param counts  the differences of each check, all of them
-     * @param summary {@code counts} as canonical JSON (keys sorted)
+     * @param summary the non-zero {@code counts} as canonical JSON ({@link #summary(Map)})
      */
     public record Result(String status, List<Item> items, Map<String, Integer> counts, String summary) {
+        /** Whether the summary had to be cut to fit its column ({@link #SUMMARY_TRUNCATED}). */
+        public boolean truncated() {
+            return summary.contains(SUMMARY_TRUNCATED);
+        }
+
         /** Every item found, notes included. */
         public int total() {
             return counts.values().stream().mapToInt(Integer::intValue).sum();
@@ -422,8 +442,6 @@ public final class ReconChecks {
         Map<String, Integer> counts = new TreeMap<>();
         ALL.forEach(check -> counts.put(check, 0));
         found.forEach(item -> counts.merge(item.check(), 1, Integer::sum));
-        StringJoiner json = new StringJoiner(",", "{", "}");
-        counts.forEach((check, count) -> json.add("\"" + check + "\":" + count));
         List<Item> ordered = new ArrayList<>(found.stream().filter(i -> TAKER_CHECKS.contains(i.check())).toList());
         for (Level level : Level.values()) {
             found.stream().filter(i -> !TAKER_CHECKS.contains(i.check()) && level(i.check()) == level)
@@ -431,7 +449,67 @@ public final class ReconChecks {
         }
         List<Item> kept = List.copyOf(ordered.size() <= maxItems ? ordered : ordered.subList(0, maxItems));
         boolean differs = found.stream().anyMatch(item -> level(item.check()) == Level.DIFFERENCE);
-        return new Result(differs ? DIFF : OK, kept, Map.copyOf(counts), json.toString());
+        return new Result(differs ? DIFF : OK, kept, Map.copyOf(counts), summary(counts));
+    }
+
+    /**
+     * The summary's first entry: it names only the checks that found something, a check not named found nothing (#702
+     * with #701, the coordinator's option B: 69 checks no longer fitted the sealed column at every count). A string, so
+     * the pages that add the counts by level skip it; the operators' settlement window also finds a clean run by it.
+     */
+    public static final String SUMMARY_FORMAT = "\"_format\":\"nonzero\"";
+    /** Marks a summary cut to fit its column (the run's item count still holds every item; the summary is for showing). */
+    public static final String SUMMARY_TRUNCATED = "\"_truncated\":true";
+    /** The summary's column, {@code qb_recon_run_version.summary varchar(2000)} (V7). */
+    public static final int SUMMARY_MAX = 2_000;
+
+    /** The summary of these counts within {@link #SUMMARY_MAX}. */
+    public static String summary(Map<String, Integer> counts) {
+        return summary(counts, SUMMARY_MAX);
+    }
+
+    /**
+     * The non-zero counts as JSON, keys sorted, after {@link #SUMMARY_FORMAT}. Should they not fit in {@code max}
+     * characters, the differences are kept first, then those for attention, then the notes (each by code), as many as fit
+     * with {@link #SUMMARY_TRUNCATED}: the run is written whatever its summary, never failing on the column.
+     */
+    static String summary(Map<String, Integer> counts, int max) {
+        TreeMap<String, Integer> found = new TreeMap<>();
+        counts.forEach((check, count) -> {
+            if (count != null && count != 0) {
+                found.put(check, count);
+            }
+        });
+        String whole = json(found, false);
+        if (whole.length() <= max) {
+            return whole;
+        }
+        TreeMap<String, Integer> kept = new TreeMap<>();
+        int length = json(kept, true).length();
+        for (Level level : Level.values()) {
+            for (Map.Entry<String, Integer> entry : found.entrySet()) {
+                if (level(entry.getKey()) != level) {
+                    continue;
+                }
+                int more = entry.getKey().length() + 4 + String.valueOf(entry.getValue()).length();
+                if (length + more > max) {
+                    return json(kept, true);
+                }
+                kept.put(entry.getKey(), entry.getValue());
+                length += more;
+            }
+        }
+        return json(kept, true);
+    }
+
+    private static String json(TreeMap<String, Integer> counts, boolean truncated) {
+        StringJoiner json = new StringJoiner(",", "{", "}");
+        json.add(SUMMARY_FORMAT);
+        if (truncated) {
+            json.add(SUMMARY_TRUNCATED);
+        }
+        counts.forEach((check, count) -> json.add("\"" + check + "\":" + count));
+        return json.toString();
     }
 
     private static void add(List<Item> items, String check, String party, String reference, Object expected,

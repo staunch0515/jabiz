@@ -95,6 +95,13 @@ public final class MailProcesses {
     /** F-M2: a sponsor's platform fee Kudos expire soon. */
     public static final String FEE_AUTO_PAID = "QB_MAIL_FEE_AUTO_PAID";
     public static final String FEE_AUTO_PAID_CONSUMER = "qb.mail-fee-auto-paid";
+    /** The mail of the invoices paid from the account, one a sponsor and window ({@value #FEE_PAID_NOTICE}'s row). */
+    public static final String FEE_PAID_DUE = "QB_MAIL_FEE_PAID_DUE";
+    public static final String FEE_PAID_JOB = "qb.mail-fee-paid-due";
+    public static final String FEE_PAID_DUE_TEMPLATE = "qb.system.mail-fee-paid-due";
+    public static final String FEE_PAID_NOTICE = "FEE_AUTO_PAID";
+    public static final String FEE_INVOICE_VOIDED = "QB_MAIL_FEE_INVOICE_VOIDED";
+    public static final String FEE_INVOICE_VOIDED_CONSUMER = "qb.mail-fee-invoice-voided";
     public static final String FEE_CREDIT = "QB_MAIL_FEE_CREDIT";
     public static final String FEE_CREDIT_EXPIRING_CONSUMER = "qb.mail-fee-credit-expiring";
 
@@ -128,8 +135,15 @@ public final class MailProcesses {
      * @param transactionIds the payments the automatic payment made (what is said is read from them again)
      * @param invoiceIds     the invoices they were of
      */
-    public record FeeAutoPaidMailInput(@NotBlank String sponsorId, @NotNull java.util.List<String> transactionIds,
-        @NotNull java.util.List<String> invoiceIds, @NotNull Instant occurredAt) {}
+    /** @param invoiceId the invoice voided (the amounts are read again) */
+    public record FeeVoidedMailInput(@NotBlank String invoiceId, @NotNull java.time.Instant occurredAt) {
+    }
+
+    /** An invoice was paid from the account (the event of {@code FeeAutoPay.PAID_EVENT}): the sponsor, and when. */
+    public record FeeAutoPaidMailInput(@NotBlank String sponsorId, @NotNull Instant occurredAt) {}
+
+    /** The input of {@value #FEE_PAID_DUE}: the sponsor and the instant up to which their payments are told. */
+    public record FeePaidDueInput(@NotBlank @Size(max = 128) String sponsorId, @NotNull Instant cut) {}
 
     /**
      * The payload of {@code qb.fee-credit.expiring} (F-M2), and when it was published.
@@ -301,74 +315,255 @@ public final class MailProcesses {
             reminder == null ? 1 : Integer.valueOf(String.valueOf(reminder)));
     }
 
-    // ---- platform fee invoices paid by themselves (F-M13b) -------------------------------------------------------------
+    // ---- platform fee invoices paid from the account (F-M13b, c) ----------------------------------------------------
 
     static final String PAID_PAYMENTS = "paidPayments";
     static final String PAID_INVOICES = "paidInvoices";
+    static final String PAID_LATER = "paidLater";
 
+    /**
+     * Every payment publishes an event in its own transaction; this consumer only marks the sponsor's notice
+     * {@value #FEE_PAID_NOTICE} pending (a new row starts just before the payment, so the payment is inside the
+     * first window). The mail is {@value #FEE_PAID_DUE}'s: one a sponsor and window, listing everything paid since the
+     * last mail, so a chain of runs, a job and an event chain at once, or an event delivered twice, tell each payment
+     * once. The notice's lock is the sponsor's notices' (the payment holds the wallet's, never this one).
+     */
     public static ProcessDefinition<FeeAutoPaidMailInput, MailOutput, ProcessContext> feeAutoPaid(
-        MessageCatalog messages) {
-        return define(FEE_AUTO_PAID, "Mails a sponsor what was paid of their platform fee invoices from their account.",
-            FeeAutoPaidMailInput.class, FeeAutoPaidMailInput::occurredAt, pb -> pb
-                .step("Load the payments, the invoices and the ban", QueryEntities.<ProcessContext>all(
-                    QueryEntities.query(com.jabiz.quizbuks.fee.QbFeeAccount.defaultDataset(
-                        com.jabiz.quizbuks.fee.QbFeeAccount.PAYMENT), ctx -> EntityQuery.builder().where(
-                        new QueryPredicate.And(List.of(
-                            new QueryPredicate.In("transactionId",
-                                new ArrayList<Object>(input(ctx, FeeAutoPaidMailInput.class).transactionIds())),
-                            new QueryPredicate.Eq("sponsorId", input(ctx, FeeAutoPaidMailInput.class).sponsorId()))))
-                        .limit(PAYMENT_ROWS).build(), PAID_PAYMENTS),
-                    QueryEntities.query(com.jabiz.quizbuks.fee.QbFees.defaultDataset(
-                        com.jabiz.quizbuks.fee.QbFees.INVOICE), ctx -> EntityQuery.builder().where(
-                        new QueryPredicate.And(List.of(
-                            new QueryPredicate.In("invoiceId",
-                                new ArrayList<Object>(input(ctx, FeeAutoPaidMailInput.class).invoiceIds())),
-                            new QueryPredicate.Eq("sponsorId", input(ctx, FeeAutoPaidMailInput.class).sponsorId()))))
-                        .limit(INVOICE_ROWS).build(), PAID_INVOICES),
-                    QueryEntities.query(QbAccounts.defaultDataset(QbAccounts.BAN), ctx -> byId("userId",
-                        uuid(input(ctx, FeeAutoPaidMailInput.class).sponsorId())), BAN),
-                    QueryEntities.query(SecurityEntities.USER_DATASET, ctx -> byId("userId",
-                        uuid(input(ctx, FeeAutoPaidMailInput.class).sponsorId())), USER))),
+        MessageCatalog messages, Duration grace) {
+        return define(FEE_AUTO_PAID, "Marks that a sponsor has platform fee invoices paid from their account to be told.",
+            FeeAutoPaidMailInput.class, input -> null, pb -> pb
+                .step("Lock the sponsor's notices", HoldLock.<ProcessContext>exclusive(
+                    ctx -> QbMessaging.noticeLock(input(ctx, FeeAutoPaidMailInput.class).sponsorId())))
+                .step("Load the notice", loadNotice(ctx -> input(ctx, FeeAutoPaidMailInput.class).sponsorId(),
+                    FEE_PAID_NOTICE)),
             ctx -> {
-                EntityInstance ban = first(ctx, BAN);
-                if (ban != null && BanRules.banned(ban.attributes())) {
+                FeeAutoPaidMailInput input = input(ctx, FeeAutoPaidMailInput.class);
+                EntityInstance notice = first(ctx, NOTICE);
+                if (notice == null) {
+                    Map<String, Object> row = new LinkedHashMap<>();
+                    row.put("recipientId", input.sponsorId());
+                    row.put("kind", FEE_PAID_NOTICE);
+                    // A microsecond before the payment (the event is made at its time): inside the first window.
+                    row.put("lastSentAt", input.occurredAt().minus(java.time.Duration.ofNanos(1_000)));
+                    row.put("pending", true);
+                    ctx.changes().insert(QbMessaging.NOTICE, row);
+                } else if (!Boolean.TRUE.equals(notice.get("pending"))) {
+                    // Nothing was waiting: the window starts at this payment (less the grace a payment may take to be
+                    // committed), so what was paid by hand since the last mail is not listed with it.
+                    Instant last = instant(notice.get("lastSentAt"));
+                    Instant from = input.occurredAt().minus(grace);
+                    Map<String, Object> values = new LinkedHashMap<>();
+                    values.put("pending", true);
+                    values.put("lastSentAt", last != null && last.isAfter(from) ? last : from);
+                    ctx.changes().update(QbMessaging.NOTICE, notice.id(), notice.version(), values);
+                }
+            }, messages);
+    }
+
+    /**
+     * {@value #FEE_PAID_DUE}, one sponsor of the job {@value #FEE_PAID_JOB}: under the sponsor's notices' lock, the
+     * payments from the notice's last time (exclusive) to {@code cut} (inclusive) are mailed as one, then the notice's
+     * time is {@code cut} (the windows meet, so each payment is in one mail), pending only while there are payments
+     * after it (those still being committed when the job ran: the cut is behind the clock by a grace). A banned
+     * sponsor or one without an address is told nothing, the time moves on all the same. What went back (negative) is
+     * the void notice's. Paid by hand or by itself is not recorded on a payment: the text says what was paid.
+     */
+    public static ProcessDefinition<FeePaidDueInput, MailOutput, ProcessContext> feePaidDue(MessageCatalog messages) {
+        return define(FEE_PAID_DUE, "Mails a sponsor the platform fee invoices paid from their account since the last mail.",
+            FeePaidDueInput.class, input -> null, pb -> pb
+                .step("Lock the sponsor's notices", HoldLock.<ProcessContext>exclusive(
+                    ctx -> QbMessaging.noticeLock(input(ctx, FeePaidDueInput.class).sponsorId())))
+                .step("Load the notice, the ban and the sponsor", QueryEntities.<ProcessContext>all(
+                    QueryEntities.query(QbMessaging.defaultDataset(QbMessaging.NOTICE), ctx -> EntityQuery.builder()
+                        .where(new QueryPredicate.And(List.of(
+                            new QueryPredicate.Eq("recipientId", input(ctx, FeePaidDueInput.class).sponsorId()),
+                            new QueryPredicate.Eq("kind", FEE_PAID_NOTICE)))).limit(1).build(), NOTICE),
+                    QueryEntities.query(QbAccounts.defaultDataset(QbAccounts.BAN), ctx -> byId("userId",
+                        uuid(input(ctx, FeePaidDueInput.class).sponsorId())), BAN),
+                    QueryEntities.query(SecurityEntities.USER_DATASET, ctx -> byId("userId",
+                        uuid(input(ctx, FeePaidDueInput.class).sponsorId())), USER)))
+                .step("Load the payments of the window", QueryEntities.<ProcessContext>all(
+                    QueryEntities.query(com.jabiz.quizbuks.fee.QbFeeAccount.defaultDataset(
+                        com.jabiz.quizbuks.fee.QbFeeAccount.PAYMENT), ctx -> paymentsAfter(ctx, true),
+                        PAID_PAYMENTS),
+                    QueryEntities.query(com.jabiz.quizbuks.fee.QbFeeAccount.defaultDataset(
+                        com.jabiz.quizbuks.fee.QbFeeAccount.PAYMENT), ctx -> paymentsAfter(ctx, false), PAID_LATER)))
+                .step("Load the invoices", QueryEntities.<ProcessContext>of(
+                    com.jabiz.quizbuks.fee.QbFees.defaultDataset(com.jabiz.quizbuks.fee.QbFees.INVOICE),
+                    ctx -> EntityQuery.builder().where(new QueryPredicate.And(List.of(
+                        new QueryPredicate.In("invoiceId", new ArrayList<Object>(list(ctx, PAID_PAYMENTS).stream()
+                            .map(payment -> (Object) String.valueOf((Object) payment.get("targetId"))).distinct().toList())),
+                        new QueryPredicate.Eq("sponsorId", input(ctx, FeePaidDueInput.class).sponsorId()))))
+                        .limit(INVOICE_ROWS).build(), PAID_INVOICES)),
+            ctx -> {
+                EntityInstance notice = first(ctx, NOTICE);
+                Instant cut = input(ctx, FeePaidDueInput.class).cut();
+                Instant last = notice == null ? null : instant(notice.get("lastSentAt"));
+                if (notice == null || !Boolean.TRUE.equals(notice.get("pending")) || last == null || !last.isBefore(cut)) {
                     return;
                 }
-                // Read again, not taken from the event: what these payments paid of each invoice, and what is owed now
-                // (a payment may be partial: the text then says what is still owed, never "paid").
-                java.util.Map<String, java.math.BigDecimal> paid = new java.util.LinkedHashMap<>();
-                for (EntityInstance payment : list(ctx, PAID_PAYMENTS)) {
-                    paid.merge(String.valueOf((Object) payment.get("targetId")),
-                        new java.math.BigDecimal(String.valueOf((Object) payment.get("amount"))),
-                        java.math.BigDecimal::add);
-                }
+                EntityInstance ban = first(ctx, BAN);
                 List<String> lines = new ArrayList<>();
                 java.math.BigDecimal total = java.math.BigDecimal.ZERO;
                 java.math.BigDecimal owed = java.math.BigDecimal.ZERO;
+                // Read again, not taken from the events: what the payments of the window paid of each invoice, and
+                // what is owed now (a payment may be partial: the text then says what is still owed).
+                java.util.Map<String, java.math.BigDecimal> paid = new java.util.LinkedHashMap<>();
+                for (EntityInstance payment : list(ctx, PAID_PAYMENTS)) {
+                    paid.merge(String.valueOf((Object) payment.get("targetId")),
+                        new java.math.BigDecimal(String.valueOf((Object) payment.get("amount"))), java.math.BigDecimal::add);
+                }
                 for (EntityInstance invoice : list(ctx, PAID_INVOICES)) {
+                    if (com.jabiz.quizbuks.fee.QbFees.VOID.equals(invoice.get("status"))) {
+                        continue;
+                    }
                     java.math.BigDecimal part = paid.getOrDefault(String.valueOf(invoice.id()), java.math.BigDecimal.ZERO);
                     if (part.signum() <= 0) {
                         continue;
                     }
                     java.math.BigDecimal left = com.jabiz.quizbuks.fee.QbFees.owed(invoice);
-                    lines.add("- " + invoice.get("invoiceNo") + ": " + MailValues.amount(part) + " / " + MailValues.amount(left));
+                    lines.add("- " + invoice.get("invoiceNo") + ": " + MailValues.amount(part) + " / "
+                        + MailValues.amount(left));
                     total = total.add(part);
                     owed = owed.add(left);
                 }
-                if (!lines.isEmpty()) {
-                    decide(ctx, NotificationMails.FEE_AUTO_PAID, Map.of("lines", String.join("\n", lines),
+                if (!lines.isEmpty() && (ban == null || !BanRules.banned(ban.attributes()))) {
+                    List<String> shown = lines.size() > MAX_LISTED ? new ArrayList<>(lines.subList(0, MAX_LISTED)) : lines;
+                    if (lines.size() > MAX_LISTED || list(ctx, PAID_INVOICES).size() >= INVOICE_ROWS) {
+                        shown.add("...");
+                    }
+                    decide(ctx, NotificationMails.FEE_AUTO_PAID, Map.of("lines", String.join("\n", shown),
                         "count", MailValues.count(lines.size()), "paid", MailValues.amount(total),
                         "owed", MailValues.amount(owed)));
                 }
+                // The window moves on whether or not the mail goes (banned, no address, nothing of an invoice left).
+                Map<String, Object> values = new LinkedHashMap<>();
+                values.put("lastSentAt", cut);
+                values.put("pending", !list(ctx, PAID_LATER).isEmpty());
+                ctx.changes().update(QbMessaging.NOTICE, notice.id(), notice.version(), values);
             }, messages, NotificationMails.FEE_AUTO_PAID);
+    }
+
+    /** The sponsor's invoice payments (not what went back) after the notice's time: up to the cut, or after it. */
+    private static EntityQuery paymentsAfter(ProcessContext ctx, boolean upToCut) {
+        FeePaidDueInput input = input(ctx, FeePaidDueInput.class);
+        EntityInstance notice = first(ctx, NOTICE);
+        Instant last = notice == null ? null : instant(notice.get("lastSentAt"));
+        if (last == null || !last.isBefore(input.cut())) {
+            // Nothing to tell: a query that finds nothing.
+            return EntityQuery.builder().where(new QueryPredicate.In("transactionId", List.of())).limit(1).build();
+        }
+        List<QueryPredicate> where = new ArrayList<>(List.of(
+            new QueryPredicate.Eq("sponsorId", input.sponsorId()),
+            new QueryPredicate.Eq("targetEntity", com.jabiz.quizbuks.fee.QbFees.INVOICE),
+            new QueryPredicate.Gt("amount", java.math.BigDecimal.ZERO)));
+        if (upToCut) {
+            where.add(new QueryPredicate.Gt("paidAt", last));
+            where.add(new QueryPredicate.Lte("paidAt", input.cut()));
+        } else {
+            where.add(new QueryPredicate.Gt("paidAt", input.cut()));
+        }
+        return EntityQuery.builder().where(new QueryPredicate.And(where)).limit(upToCut ? PAYMENT_ROWS : 1).build();
+    }
+
+    static final String VOIDED_INVOICE = "voidedInvoice";
+    static final String VOIDED_PAYMENTS = "voidedPayments";
+    static final String VOIDED_GRANTS = "voidedGrants";
+
+    /** The sponsor is told an invoice was voided and what went back to their account (never the reason). */
+    public static ProcessDefinition<FeeVoidedMailInput, MailOutput, ProcessContext> feeInvoiceVoided(
+        MessageCatalog messages) {
+        return define(FEE_INVOICE_VOIDED, "Mails a sponsor that a platform fee invoice was voided.",
+            FeeVoidedMailInput.class, FeeVoidedMailInput::occurredAt, pb -> pb
+                .step("Load the invoice", QueryEntities.<ProcessContext>of(
+                    com.jabiz.quizbuks.fee.QbFees.defaultDataset(com.jabiz.quizbuks.fee.QbFees.INVOICE),
+                    ctx -> byId("invoiceId", input(ctx, FeeVoidedMailInput.class).invoiceId()), VOIDED_INVOICE))
+                // What was paid is given back on the invoice's own parts and, for an invoice of one charge, the charge's.
+                .step("Load the payments, the ban and the sponsor", QueryEntities.<ProcessContext>all(
+                    QueryEntities.query(com.jabiz.quizbuks.fee.QbFeeAccount.defaultDataset(
+                        com.jabiz.quizbuks.fee.QbFeeAccount.PAYMENT), ctx -> EntityQuery.builder().where(
+                        new QueryPredicate.And(List.of(new QueryPredicate.In("targetId", paidTargets(ctx)),
+                            new QueryPredicate.Eq("sponsorId", sponsorOf(ctx))))).limit(PAYMENT_ROWS).build(),
+                        VOIDED_PAYMENTS),
+                    QueryEntities.query(QbAccounts.defaultDataset(QbAccounts.BAN), ctx -> byId("userId",
+                        uuid(sponsorOf(ctx))), BAN),
+                    QueryEntities.query(SecurityEntities.USER_DATASET, ctx -> byId("userId",
+                        uuid(sponsorOf(ctx))), USER)))
+                // The grants the payments came from: what went back to one that has expired is not back in the account.
+                .step("Load the grants", QueryEntities.<ProcessContext>of(
+                    com.jabiz.quizbuks.fee.QbFeeAccount.defaultDataset(com.jabiz.quizbuks.fee.QbFeeAccount.GRANT),
+                    ctx -> EntityQuery.builder().where(new QueryPredicate.In("grantId", new ArrayList<Object>(
+                        list(ctx, VOIDED_PAYMENTS).stream().map(payment -> payment.get("grantId")).filter(java.util.Objects::nonNull)
+                            .map(id -> (Object) String.valueOf(id)).distinct().toList()))).limit(INVOICE_ROWS).build(),
+                    VOIDED_GRANTS)),
+            ctx -> {
+                EntityInstance invoice = first(ctx, VOIDED_INVOICE);
+                EntityInstance ban = first(ctx, BAN);
+                // Stale (not voided as the event says) or a banned sponsor: nothing is said.
+                if (invoice == null || !com.jabiz.quizbuks.fee.QbFees.VOID.equals(invoice.get("status"))
+                    || ban != null && BanRules.banned(ban.attributes())) {
+                    return;
+                }
+                // What went back is read from the payment rows given back (negative) of the sponsor's, not from the event; an
+                // invoice paid before the parts existed has none and went back as it was paid. Unpaid when voided: nothing
+                // is said of money.
+                java.math.BigDecimal refunded = java.math.BigDecimal.ZERO;
+                java.math.BigDecimal given = java.math.BigDecimal.ZERO;
+                boolean parts = false;
+                java.util.Set<String> expired = new java.util.HashSet<>();
+                for (EntityInstance grant : list(ctx, VOIDED_GRANTS)) {
+                    if (grant.get("voidedAt") != null) {
+                        expired.add(String.valueOf(grant.id()));
+                    }
+                }
+                for (EntityInstance payment : list(ctx, VOIDED_PAYMENTS)) {
+                    parts = true;
+                    java.math.BigDecimal amount = new java.math.BigDecimal(String.valueOf((Object) payment.get("amount")));
+                    if (amount.signum() < 0) {
+                        given = given.add(amount.negate());
+                        // Back to a grant that has expired: not back in the account.
+                        if (payment.get("grantId") == null || !expired.contains(String.valueOf((Object) payment.get("grantId")))) {
+                            refunded = refunded.add(amount.negate());
+                        }
+                    }
+                }
+                if (!parts && invoice.get("paidAmount") != null) {
+                    refunded = new java.math.BigDecimal(String.valueOf((Object) invoice.get("paidAmount")));
+                    given = refunded;
+                }
+                String detail = refunded.signum() > 0
+                    ? text(messages, ctx, "qb.mail.invoice-voided.refunded").replace("{refunded}", MailValues.amount(refunded))
+                    : given.signum() > 0 ? text(messages, ctx, "qb.mail.invoice-voided.expired")
+                    : text(messages, ctx, "qb.mail.invoice-voided.unpaid");
+                decide(ctx, NotificationMails.FEE_INVOICE_VOIDED, Map.of("invoiceNo",
+                    String.valueOf((Object) invoice.get("invoiceNo")), "detail", detail));
+            }, messages, NotificationMails.FEE_INVOICE_VOIDED);
+    }
+
+    private static List<Object> paidTargets(ProcessContext ctx) {
+        List<Object> ids = new ArrayList<>(List.of(input(ctx, FeeVoidedMailInput.class).invoiceId()));
+        EntityInstance invoice = first(ctx, VOIDED_INVOICE);
+        if (invoice != null && invoice.get("chargeId") != null) {
+            ids.add(String.valueOf((Object) invoice.get("chargeId")));
+        }
+        return ids;
+    }
+
+    /** The sponsor is read from the invoice the first query found: the second step looks the person up with it. */
+    private static String sponsorOf(ProcessContext ctx) {
+        EntityInstance invoice = first(ctx, VOIDED_INVOICE);
+        return invoice == null ? "00000000-0000-0000-0000-000000000000" : String.valueOf((Object) invoice.get("sponsorId"));
+    }
+
+    static FeeVoidedMailInput feeVoidedInput(DomainEvent event) {
+        return new FeeVoidedMailInput(text(event, "invoiceId"), event.createdTime());
     }
 
     private static final int PAYMENT_ROWS = 1_000;
     private static final int INVOICE_ROWS = 50;
 
     static FeeAutoPaidMailInput feeAutoPaidInput(DomainEvent event) {
-        return new FeeAutoPaidMailInput(text(event, "sponsorId"), strings(event, "transactionIds"),
-            strings(event, "invoiceIds"), event.createdTime());
+        return new FeeAutoPaidMailInput(text(event, "sponsorId"), event.createdTime());
     }
 
     private static List<String> strings(DomainEvent event, String key) {

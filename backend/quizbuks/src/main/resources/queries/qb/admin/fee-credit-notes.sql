@@ -32,7 +32,7 @@ results:
   issuedAt:       { from: QbFeeCreditNote.issuedAt }
   issuedBy:       { from: QbFeeCreditNote.issuedBy }
 list:
-  filters: [sponsorId, operatorId, chargeId, invoiceNo, reason, issuedAt]
+  filters: [sponsorId, operatorId, chargeId, invoiceNo, creditNoteNo, reason, issuedAt]
   sorts:   [issuedAt, total]
   defaultSort: { field: issuedAt, asc: false }
   key: [creditNoteId]

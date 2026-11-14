@@ -72,11 +72,19 @@ export function toFilters(filters: readonly MoreFilter[], values: FilterValues):
 /**
  * A page's filter bar of the template's declared filters (Q53b): the filters in force for the reader (and the query
  * key, so that a change reads the first page again) and the bar to show. The filters are the page's own list, the
- * same at every render (a dictionary's items are read once per dictionary).
+ * same at every render (a dictionary's items are read once per dictionary). `initial` fills the bar when the page opens
+ * (a link that leads to one document, F-M14b).
  */
-export function useMoreFilters(filters: readonly MoreFilter[], testId?: string) {
+export function useMoreFilters(filters: readonly MoreFilter[], testId?: string, initial: FilterValues = {}) {
   const { t } = useTranslation(EXTENSION_NAMESPACE)
-  const [values, setValues] = useState<FilterValues>({})
+  const [values, setValues] = useState<FilterValues>(() => filledFilters(initial))
+  // Another link to the page (or back and forward) brings other values: the bar follows them.
+  const linked = JSON.stringify(initial)
+  const [seen, setSeen] = useState(linked)
+  if (linked !== seen) {
+    setSeen(linked)
+    setValues(filledFilters(initial))
+  }
   const dictionaries = filters.filter((filter) => filter.kind === 'dictionary')
   const items = useQueries({
     queries: dictionaries.map((filter) => ({

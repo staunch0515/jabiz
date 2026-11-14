@@ -1,9 +1,10 @@
 /*---
 id: qb.operator.settlement-lines
 description: "The caller operator's settlement lines (F-M12 §6): each fee counted, each voided fee, each part of a payment made with granted credit, by Sponsor and kind; limited to the caller's operator"
-entities: [QbOperatorSettlementLine]
+entities: [QbOperatorSettlementLine, QbSponsor]
 datasets:
   QbOperatorSettlementLine: urn:jabiz:dataset:operator:QbOperatorSettlementLine
+  QbSponsor: urn:jabiz:dataset:default:QbSponsor
 params:
   settlementId: { like: QbOperatorSettlementLine.settlementId, description: Only this settlement's lines }
   month:        { like: QbOperatorSettlementLine.month, description: Only this month's }
@@ -13,6 +14,7 @@ results:
   month:        { from: QbOperatorSettlementLine.month }
   lineKind:     { from: QbOperatorSettlementLine.lineKind }
   sponsorId:    { from: QbOperatorSettlementLine.sponsorId }
+  sponsorName:  { from: QbSponsor.company }
   feeKind:      { from: QbOperatorSettlementLine.feeKind }
   period:       { from: QbOperatorSettlementLine.period }
   late:         { from: QbOperatorSettlementLine.late }
@@ -39,6 +41,7 @@ SELECT
     l.{{QbOperatorSettlementLine.month}} AS month,
     l.{{QbOperatorSettlementLine.lineKind}} AS lineKind,
     l.{{QbOperatorSettlementLine.sponsorId}} AS sponsorId,
+    sp.{{QbSponsor.company}} AS sponsorName,
     l.{{QbOperatorSettlementLine.feeKind}} AS feeKind,
     l.{{QbOperatorSettlementLine.period}} AS period,
     l.{{QbOperatorSettlementLine.late}} AS late,
@@ -51,5 +54,6 @@ SELECT
     l.{{QbOperatorSettlementLine.noShare}} AS noShare,
     l.{{QbOperatorSettlementLine.occurredAt}} AS occurredAt
 FROM {{QbOperatorSettlementLine}} l
+LEFT JOIN {{QbSponsor}} sp ON sp.{{QbSponsor.userId}} = l.{{QbOperatorSettlementLine.sponsorId}}
 WHERE (CAST(:settlementId AS text) IS NULL OR l.{{QbOperatorSettlementLine.settlementId}} = :settlementId)
   AND (CAST(:month AS text) IS NULL OR l.{{QbOperatorSettlementLine.month}} = :month)

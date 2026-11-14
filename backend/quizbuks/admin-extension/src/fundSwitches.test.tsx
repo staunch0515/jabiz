@@ -173,7 +173,7 @@ describe('FundSwitches', () => {
     await screen.findAllByTestId('fund-switch-proposal')
     // F-M9a-2b: the AI fee and the website draft are active rows now (off at the launch, #702 review M1), with no
     // waiting note; on here, so they differ from the launch's value.
-    expect(KEY_BEFORE_MEANING_ROWS.map((r) => r.key)).toEqual(['qb.fee.auto-pay.enabled'])
+    expect(KEY_BEFORE_MEANING_ROWS.map((r) => r.key)).toEqual([])
     expect(within(stateOfRow('qb.ai.fee.enabled') as HTMLElement).queryByText(/Waits for/)).toBeNull()
     expect(stateOfRow('qb.ai.fee.enabled')).toHaveAttribute('data-state', 'differs')
     expect(within(stateOfRow('qb.ai.site-profile.enabled') as HTMLElement).queryByText(/Waits for/)).toBeNull()

@@ -73,11 +73,14 @@ export function byCheck(items: ReconItem[]): [string, ReconItem[]][] {
   return [...groups.entries()]
 }
 
+/** How many items of each level a run found. */
+export interface LevelCounts { differences: number; attention: number; notes: number }
+
 /**
  * F-M14: how many differences, items for attention and notes a run found, from its summary (JSON of the number found
  * by each check) and the levels of the checks. An unreadable summary counts as nothing found.
  */
-export function levelCounts(summary: string | null): { differences: number; attention: number; notes: number } {
+export function levelCounts(summary: string | null): LevelCounts {
   const counts = { differences: 0, attention: 0, notes: 0 }
   let found: unknown
   try { found = summary ? JSON.parse(summary) : {} } catch { return counts }

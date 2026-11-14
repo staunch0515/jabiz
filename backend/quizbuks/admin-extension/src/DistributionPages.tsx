@@ -1,6 +1,7 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useId, useMemo, useState, type FormEvent } from 'react'
 import { useTranslation } from 'react-i18next'
+import { useSearchParams } from 'react-router'
 import {
   ApiError,
   Button,
@@ -255,7 +256,16 @@ export function DistributionSettlementsPage() {
 function SettlementsList({ own }: { own: boolean }) {
   const { t } = useTranslation(EXTENSION_NAMESPACE)
   const id = useId()
-  const [periodText, setPeriodText] = useState('')
+  // F-M14b: the reconciliation page links a month here (`?period=2026-11`).
+  const [search] = useSearchParams()
+  const linked = search.get('period') ?? ''
+  const [periodText, setPeriodText] = useState(linked)
+  // Another link to this page (or back and forward) brings another month: the field follows it.
+  const [seen, setSeen] = useState(linked)
+  if (linked !== seen) {
+    setSeen(linked)
+    setPeriodText(linked)
+  }
   const [floorOnly, setFloorOnly] = useState(false)
   const filter: SettlementFilter = { period: PERIOD.test(periodText.trim()) ? periodText.trim() : null,
     atFloor: floorOnly ? true : null }
@@ -267,6 +277,9 @@ function SettlementsList({ own }: { own: boolean }) {
     { id: 'publication', header: t('distribution.publication'), cell: ({ row }) => row.original.publicationId },
     { id: 'sponsor', header: t('distribution.sponsor'), cell: ({ row }) => (own ? row.original.sponsorId
       : <UserName id={row.original.sponsorId} />) },
+    // Headquarters' list: the operator by its name (the template reads it); an operator's own list leaves it out.
+    ...(own ? [] : [{ id: 'operator', header: t('distribution.operator'), cell: ({ row }) =>
+      row.original.operatorName ?? row.original.operatorId ?? '' } satisfies ColumnDef<DistributionSettlementRow, unknown>]),
     { id: 'starts', header: t('distribution.starts'), meta: right, cell: ({ row }) => row.original.starts },
     { id: 'unit', header: t('distribution.unit'), meta: right, cell: ({ row }) => (row.original.atFloor
       ? t('distribution.atFloor', { unit: row.original.unit }) : String(row.original.unit)) },

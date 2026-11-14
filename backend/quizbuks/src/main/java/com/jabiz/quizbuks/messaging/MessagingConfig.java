@@ -161,13 +161,57 @@ class MessagingConfig {
 
     @Bean
     ProcessDefinition<MailProcesses.FeeAutoPaidMailInput, MailProcesses.MailOutput, ProcessContext> qbMailFeeAutoPaid(
-        MessageCatalog messages) {
-        return MailProcesses.feeAutoPaid(messages);
+        MessageCatalog messages, @Value("${quizbuks.mail.fee-paid-grace:PT2M}") java.time.Duration grace) {
+        return MailProcesses.feeAutoPaid(messages, grace);
     }
 
     @Bean
     MailTemplate qbFeeAutoPaidMail() {
         return NotificationMails.FEE_AUTO_PAID;
+    }
+
+    @Bean
+    ProcessDefinition<MailProcesses.FeeVoidedMailInput, MailProcesses.MailOutput, ProcessContext> qbMailFeeInvoiceVoided(
+        MessageCatalog messages) {
+        return MailProcesses.feeInvoiceVoided(messages);
+    }
+
+    @Bean
+    MailTemplate qbFeeInvoiceVoidedMail() {
+        return NotificationMails.FEE_INVOICE_VOIDED;
+    }
+
+    @Bean
+    EventSubscription<MailProcesses.FeeVoidedMailInput> qbMailFeeInvoiceVoidedSubscription(
+        ProcessDefinition<MailProcesses.FeeVoidedMailInput, MailProcesses.MailOutput, ProcessContext> qbMailFeeInvoiceVoided) {
+        return EventSubscription.of(MailProcesses.FEE_INVOICE_VOIDED_CONSUMER,
+            com.jabiz.quizbuks.fee.FeeRequests.VOIDED_EVENT, qbMailFeeInvoiceVoided, MailProcesses::feeVoidedInput);
+    }
+
+    @Bean
+    ProcessDefinition<MailProcesses.FeePaidDueInput, MailProcesses.MailOutput, ProcessContext> qbMailFeePaidDue(
+        MessageCatalog messages) {
+        return MailProcesses.feePaidDue(messages);
+    }
+
+    /**
+     * Every few minutes, each sponsor with invoices paid from their account that no mail told yet and whose last mail
+     * went before the window: one mail lists everything paid up to {@code now - grace} (the grace outlasts a payment
+     * still being committed). Both are properties; a sponsor's payments over a window are one mail. The grace must be
+     * longer than the longest a payment can take from its time to its commit (the lock wait and the statement
+     * timeout of the platform): a payment committed after the cut is told by the next mail, never lost.
+     */
+    @Bean
+    JobDefinition<MailProcesses.FeePaidDueInput> qbMailFeePaidDueJob(
+        @Value("${quizbuks.mail.fee-paid-due-cron:0 */10 * * * *}") String cron,
+        @Value("${quizbuks.mail.fee-paid-window:PT10M}") java.time.Duration window,
+        @Value("${quizbuks.mail.fee-paid-grace:PT2M}") java.time.Duration grace,
+        ProcessDefinition<MailProcesses.FeePaidDueInput, MailProcesses.MailOutput, ProcessContext> qbMailFeePaidDue) {
+        return JobDefinition.forEach(MailProcesses.FEE_PAID_JOB, cron, ZoneOffset.UTC,
+            JobItems.template(MailProcesses.FEE_PAID_DUE_TEMPLATE, scheduledTime -> Map.of("before",
+                scheduledTime.minus(window)), "sponsorId"),
+            qbMailFeePaidDue, (scheduledTime, row) -> new MailProcesses.FeePaidDueInput(
+                String.valueOf(row.get("sponsorId")), scheduledTime.minus(grace)));
     }
 
     @Bean

@@ -332,13 +332,15 @@ function Invoices({ onVoid }: { onVoid: ((invoiceId: string) => void) | null }) 
     }
     setSearch(next, { replace: true })
   }
+  // F-M14b: the reconciliation page links one invoice by its number.
+  const linkedNo = search.get('invoiceNo')
   const more = useMoreFilters([
     { kind: 'eq', name: 'sponsorId', label: t('fee.sponsor') },
     { kind: 'eq', name: 'period', label: t('fee.period') },
     { kind: 'eq', name: 'invoiceNo', label: t('fee.invoiceNo'), upper: true },
     { kind: 'date', name: 'dueOn', label: t('fee.dueOn') },
     { kind: 'time', name: 'issuedAt', label: t('fee.issuedAt') },
-  ], 'fee-invoice-filters')
+  ], 'fee-invoice-filters', linkedNo ? { invoiceNo: linkedNo } : {})
   const { query, table, sortable } = usePaged([...FEES_KEY, 'invoices', filterStatus, more.filters],
     (offset, limit, sorts) => readFeeInvoices(filterStatus, offset, limit, sorts, more.filters), true, INVOICE_SORTS)
   const columns = useMemo<ColumnDef<FeeInvoice, unknown>[]>(() => [

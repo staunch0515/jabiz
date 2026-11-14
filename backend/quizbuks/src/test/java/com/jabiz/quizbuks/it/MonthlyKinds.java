@@ -34,8 +34,8 @@ final class MonthlyKinds {
         source("QbOperatorTransfer", "OPERATOR_TRANSFER_TO_DIRECT");
         source("QbKudosExchange", "KUDOS_BOUGHT", "KUDOS_SOLD");
         // The platform's fees: charged, paid (from the cash, the credit, a prepayment), voided, the distribution fee.
-        source("QbFeeCharge", "DISTRIBUTION_CHARGED", "EXPOSURE_CHARGED", "FEE_CHARGED", "FEE_PAID", "FEE_VOIDED",
-            "PREPAYMENT_USED", "AI_CHARGED", "AI_CREDIT_USED");
+        source("QbFeeCharge", "DISTRIBUTION_CHARGED", "EXPOSURE_CHARGED", "AUDIENCE_CHARGED", "FEE_CHARGED", "FEE_PAID",
+            "FEE_VOIDED", "PREPAYMENT_USED", "AI_CHARGED", "AI_CREDIT_USED");
         source("QbFeeInvoice", "FEE_PAID", "FEE_VOIDED");
         source("QbFeeCreditNote", "FEE_CREDIT_NOTE", "FEE_PAID");
         // The entry fees settled into the sponsor's cash account are posted from the cash wallet row.

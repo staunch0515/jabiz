@@ -95,6 +95,11 @@ public final class FeeCodes {
     public static final String AUDIENCE_REFUND_NOT_OPEN = "QB_AUDIENCE_REFUND_NOT_OPEN";
     /** F-M7 (N8): a credit note for more than the fee may still be credited; never issued for less. */
     public static final String CREDIT_NOTE_EXCEEDS = "QB_FEE_CREDIT_NOTE_EXCEEDS";
+    /**
+     * F-M15 b (third re-review M1): a request about an erased sponsor while the erasure's purge is still to run: the purge
+     * would overwrite its reason and its approval could not land. Asked for again once the purge is done.
+     */
+    public static final String FEE_ERASURE_PENDING = "QB_FEE_ERASURE_PENDING";
     /** F-M7: an invoice with a credit note on a fee of it, or paid by one, is not voided: credit it instead. */
     public static final String INVOICE_HAS_CREDIT_NOTE = "QB_FEE_INVOICE_HAS_CREDIT_NOTE";
 
@@ -106,7 +111,7 @@ public final class FeeCodes {
         AUDIENCE_REFUND_NOT_OPEN, EXPOSURE_PRICE_REQUIRED, EXPOSURE_PRICE_RANGE, EXPOSURE_RANGE_MISSING,
         EXPOSURE_DEPOSIT_RANGE, EXPOSURE_PURCHASE_REQUIRED, EXPOSURE_PURCHASED_CHANGED, EXPOSURE_PREPAYMENT_CLOSED,
         EXPOSURE_TOP_UP_RANGE, EXPOSURE_NOT_BOUGHT, EXPOSURE_PARTS_LIMIT, AI_FEE_OFF, AI_CREDIT_MIN, AI_CREDIT_REPEATED,
-        AI_CREDIT_FUNDS_SHORT, AI_CREDIT_RETURN_ABOVE, AI_FEE_TAX_UNSET);
+        AI_CREDIT_FUNDS_SHORT, AI_CREDIT_RETURN_ABOVE, AI_FEE_TAX_UNSET, FEE_ERASURE_PENDING);
 
     private FeeCodes() {}
 }

@@ -128,6 +128,9 @@ public final class FeeRequests {
     static final String REFUNDED = "refunded";
     static final String STATUS_AFTER = "statusAfter";
     static final String DO_VOID = "doVoid";
+
+    /** Published when an invoice was voided (the mail tells the sponsor; the payload names the invoice only). */
+    public static final String VOIDED_EVENT = "qb.fee.invoice-voided";
     static final String DO_CHARGE = "doCharge";
     static final String DO_GRANT = "doGrant";
     static final String BAN = "ban";
@@ -137,6 +140,7 @@ public final class FeeRequests {
     static final String CHARGE_INVOICE = "chargeInvoice";
     static final String MONTH_INVOICE = "monthInvoice";
     static final String CHARGE_NOTES = "chargeNotes";
+    static final String ERASURE = "erasure";
     static final String DO_NOTE = "doNote";
     static final String NOTED = "noted";
     static final String NOTE_FAILED = "noteFailed";
@@ -183,6 +187,9 @@ public final class FeeRequests {
                     ctx -> FeeProcesses.byId("chargeId", input(ctx).chargeId()), CHARGE),
                 QueryEntities.query(QbFees.defaultDataset(QbFees.INVOICE),
                     ctx -> FeeProcesses.byId("chargeId", input(ctx).chargeId()), CHARGE_INVOICE)))
+            // F-M15 b (third re-review M1): whether the sponsor was erased and the erasure's purge is still to run.
+            .step("Read the sponsor's erasure", RunTemplate.<ProcessContext>when(ctx -> requestSponsor(ctx) != null,
+                MoneyClose.PURGED_TEMPLATE, ctx -> Map.of("userId", requestSponsor(ctx)), ERASURE))
             // F-M7 (H1 of the review): the fee's notes so far, however many (a credit note's request only).
             .step("Read the notes on the fee", RunTemplate.<ProcessContext>when(
                 ctx -> QbFees.REQUEST_CREDIT_NOTE.equals(input(ctx).kind()) && input(ctx).chargeId() != null,
@@ -208,9 +215,30 @@ public final class FeeRequests {
         return input(ctx).sponsorId();
     }
 
+    /** The sponsor the request is about: given, or the invoice's, or the fee's. */
+    static String requestSponsor(ProcessContext ctx) {
+        RequestInput input = input(ctx);
+        Object sponsor = bySponsor(input.kind()) ? input.sponsorId()
+            : QbFees.REQUEST_CREDIT_NOTE.equals(input.kind())
+                ? (first(ctx, CHARGE) == null ? null : first(ctx, CHARGE).get("sponsorId"))
+                : (first(ctx, INVOICE) == null ? null : first(ctx, INVOICE).get("sponsorId"));
+        return sponsor == null ? null : String.valueOf(sponsor);
+    }
+
+    /** Erased and its purge still to run: the purge would overwrite this request's reason. */
+    @SuppressWarnings("unchecked")
+    static boolean purgePending(ProcessContext ctx) {
+        return ctx.get(ERASURE) instanceof List<?> rows && !rows.isEmpty()
+            && ((List<Map<String, Object>>) rows).stream().anyMatch(row -> row.get("purgedTime") == null);
+    }
+
     static void check(ProcessContext ctx) {
         RequestInput input = input(ctx);
         List<Violation> problems = new ArrayList<>();
+        if (purgePending(ctx)) {
+            problems.add(new Violation("sponsorId", FeeCodes.FEE_ERASURE_PENDING, "The sponsor's erasure is still "
+                + "being purged", Map.of()));
+        }
         boolean manual = bySponsor(input.kind());
         boolean credit = QbFees.REQUEST_CREDIT.equals(input.kind());
         boolean note = QbFees.REQUEST_CREDIT_NOTE.equals(input.kind());
@@ -512,6 +540,9 @@ public final class FeeRequests {
                         QbCreditNotes.manualSource(String.valueOf(first(ctx, ROW).id())), String.valueOf(approver(ctx)), true),
                     NOTED))
                 .compute("Record the outcome", (metadata, ctx) -> record(ctx))
+                .step("Ask the mail to tell the sponsor", com.jabiz.runtime.process.steps.PublishEvent.<ProcessContext>when(
+                    ctx -> Boolean.TRUE.equals(ctx.get(DO_VOID)), VOIDED_EVENT,
+                    ctx -> Map.of("invoiceId", String.valueOf(first(ctx, INVOICE).id()))))
                 .step("Tell finance it was not done", CreateTask.<ProcessContext>when(
                     ctx -> ctx.contains(NOTE_FAILED), FeeRequests::noteFailedTask))
                 .step("Close the reminder", CloseTasks.<ProcessContext>cancel(ctx -> Boolean.TRUE.equals(ctx.get(DO_VOID))
