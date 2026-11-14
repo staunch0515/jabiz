@@ -183,6 +183,8 @@ class ProcessAccessIT extends QbItSupport {
         Map.entry("QB_FEE_CREDIT_REMIND", ProcessAccess.INTERNAL),
         Map.entry("QB_MAIL_FEE_CREDIT", ProcessAccess.INTERNAL),
         Map.entry("QB_MAIL_FEE_AUTO_PAID", ProcessAccess.INTERNAL),
+        Map.entry("QB_MAIL_FEE_PAID_DUE", ProcessAccess.INTERNAL),
+        Map.entry("QB_MAIL_FEE_INVOICE_VOIDED", ProcessAccess.INTERNAL),
         Map.entry("QB_FEE_MONTHLY_ITEM", ProcessAccess.INTERNAL),
         // Q88b: the daily settlement of the entry fees (job item).
         Map.entry("QB_ENTRY_FEE_SETTLE", ProcessAccess.INTERNAL),

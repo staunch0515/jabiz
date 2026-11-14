@@ -394,7 +394,7 @@ export function referenceKind(check: string): 'topUp' | 'transfer' | null {
  * `ReconChecks.NOTES` (a Vitest reads the Java and fails on a difference); every other check is a difference.
  */
 export const ATTENTION_CHECKS: ReadonlySet<string> = new Set(['DISTRIBUTION_PRICE_RANGE', 'AUDIENCE_REFUND_NO_PERIOD',
-  'CREDIT_UNUSED_WITH_DUE', 'HELP_USAGE_TOTAL', 'EXPOSURE_PRICE_RANGE'])
+  'CREDIT_UNUSED_WITH_DUE', 'AUTO_PAY_MISSED', 'HELP_USAGE_TOTAL', 'EXPOSURE_PRICE_RANGE'])
 export const NOTE_CHECKS: ReadonlySet<string> = new Set(['TAKER_WALLET_LAG', 'DISTRIBUTION_AT_FLOOR',
   'EXPOSURE_UNPURCHASED', 'OPERATOR_GIFT_CARRY_OPEN', 'AI_RESERVATION_SHORT'])
 

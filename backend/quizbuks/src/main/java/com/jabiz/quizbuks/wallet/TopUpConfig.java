@@ -308,6 +308,11 @@ class TopUpConfig {
                 "zh", "抵用到已作废账单的贷项", "ja", "取消済みの請求書への充当")
             .item(ReconChecks.CREDIT_UNUSED_WITH_DUE, "en", "Credit left while an invoice is unpaid",
                 "zh", "有未用贷项却有未付账单", "ja", "返還インボイスの残高があるのに未払いの請求書")
+            .item(ReconChecks.INVOICE_PAID_SUM, "en", "Invoices whose paid amount or credit does not add up",
+                "zh", "已付金额或抵用与明细之和不符的账单", "ja", "支払額または充当額が明細の合計と一致しない請求書")
+            .item(ReconChecks.AUTO_PAY_MISSED, "en", "Unpaid invoices of sponsors whose account has money, with the "
+                + "automatic payment on", "zh", "开启自动付款后，账户有钱却仍未付的账单", "ja",
+                "自動支払いが有効なのに、口座に残高がある主催者の未払い請求書")
             .item(ReconChecks.OPERATOR_SETTLEMENT_WAITING, "en", "Operators without their settlement of a month "
                 + "(and the step they wait for)", "zh", "尚无某月结算的运营商（及其等待的步骤）",
                 "ja", "月の精算がまだない運営パートナー（待っている手順つき）")

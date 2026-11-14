@@ -62,6 +62,8 @@ export interface SponsorWallet {
   prepaymentHeld: number
   /** F-M7: the credit of credit notes not used yet; the next invoices take it first. */
   creditNoteCredit: number
+  /** F-M13c: unpaid invoices are paid by themselves when money arrives. */
+  autoPay: boolean
 }
 
 /** How the platform's fees are billed (Q87b): taken from the cash account at once, or invoiced monthly within a credit. */
@@ -144,6 +146,7 @@ export async function readWallet(): Promise<SponsorWallet> {
     cashFromOperator: num(row.cashFromOperator),
     prepaymentHeld: num(row.prepaymentHeld),
     creditNoteCredit: num(row.creditNoteCredit),
+    autoPay: row.autoPay === true || row.autoPay === 'true',
   }
 }
 

@@ -338,6 +338,22 @@ describe('credit notes (F-M7)', () => {
   })
 })
 
+describe('the automatic payment on the fee account (F-M13c)', () => {
+  it('says the unpaid invoices are paid by themselves only while the switch is on', async () => {
+    server({ wallet: { ...WALLET, autoPay: 'true' } })
+    window.history.replaceState(null, '', '/money/account')
+    const view = render(<App />)
+    expect(await screen.findByTestId('fee-account-auto-pay')).toHaveTextContent('Automatic payment is on')
+    await expectAccessible(screen.getByTestId('wallet-fee-account'))
+    view.unmount()
+    vi.restoreAllMocks()
+    server()
+    render(<App />)
+    await screen.findByTestId('fee-account-total')
+    expect(screen.queryByTestId('fee-account-auto-pay')).toBeNull()
+  })
+})
+
 describe('the platform fee account (F-M1)', () => {
   it('shows the total, the granted credit and the cash, the lots in their order and how fees were paid', async () => {
     server({ wallet: { ...WALLET, feeCreditBalance: '900', cashBalance: '700' },
