@@ -100,7 +100,14 @@ public final class FirstLaunchSwitches {
         // F-C7a's key exists (declared off, controlled) but drafting from a website is only charged once F-M9 can
         // charge the AI credit: it stays off at the launch and its row turns ACTIVE with F-M9's pull request.
         waiting(QbParams.SITE_PROFILE_ENABLED, "aifee", true, "F-M9"),
-        waiting("qb.fee.auto-pay.enabled", "autopay", true, "F-M13"),
+        // F-M13: on at the launch. The parameter is read at each run and is on only once it is published as true, so
+        // publishing it IS turning it on: the sponsors with unpaid invoices and money are paid that night (launch
+        // checklist: tell them first).
+        active(QbParams.FEE_AUTO_PAY_ENABLED, "autopay", true,
+            "money arriving in the platform fee account pays the sponsor's unpaid invoices at the launch (declared off: "
+                + "the tests rely on it); publishing it turns it on, so the sponsors who have unpaid invoices and money are "
+                + "told first"),
+        keep(QbParams.FEE_AUTO_PAY_MAX_INVOICES, "autopay"),
         manual(QbParams.FEE_CREDIT_MANUAL_MAX, "grant"),
         manual(QbParams.TREE_GRANT_MAX_PER_NODE, "grant"));
 
