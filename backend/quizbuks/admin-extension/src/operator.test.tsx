@@ -30,6 +30,7 @@ const server = vi.hoisted(() => ({
   reviews: [] as Record<string, unknown>[],
   sponsors: [] as Record<string, unknown>[],
   billing: [] as Record<string, unknown>[],
+  sponsorAi: [] as Record<string, unknown>[],
   creditNotes: [] as Record<string, unknown>[],
   reconNotes: [] as Record<string, unknown>[],
   team: {} as Record<string, unknown>,
@@ -77,6 +78,7 @@ beforeEach(() => {
     PERMISSION.usersRead])
   server.entry = 'admin'
   server.operators = [operator()]
+  server.sponsorAi = [{ userId: SPONSOR, company: 'Acme', aiCredit: 8000, monthFee: 1200, monthJobs: 5 }]
   server.reconNotes = [{ checkCode: null, sponsorId: null, company: null, contactName: null, publications: null,
     scheduledTime: '2026-11-13T18:37:00Z' }]
   server.members = [
@@ -101,6 +103,7 @@ beforeEach(() => {
       : id === TEMPLATE.operatorMembers ? server.members
         : id === TEMPLATE.operatorReviews ? server.reviews
           : id === TEMPLATE.operatorSponsors ? server.sponsors
+            : id === TEMPLATE.operatorSponsorAi ? server.sponsorAi
             : id === TEMPLATE.operatorBilling ? server.billing
             : id === TEMPLATE.operatorFeeCreditNotes ? server.creditNotes
             : id === TEMPLATE.operatorReconNotes ? server.reconNotes
@@ -496,6 +499,33 @@ describe('the operator', () => {
     expect(server.runQuery).toHaveBeenCalledWith(TEMPLATE.operatorFeeCreditNotes, expect.anything())
     expect(server.runQuery).not.toHaveBeenCalledWith(TEMPLATE.feeCreditNotes, expect.anything())
     await expectAccessible(container)
+  })
+
+  it('shows a sponsor\'s AI credit and the month\'s AI fee as the server gives them, for its own sponsors only', async () => {
+    renderAt('/qb/operator/sponsors', '/qb/operator/sponsors', <OperatorSponsorsPage />)
+    const user = userEvent.setup()
+    // Beta is not the operator's: no button for it.
+    expect(await screen.findAllByTestId('sponsor-row')).toHaveLength(2)
+    expect(screen.getAllByTestId('sponsor-ai-open')).toHaveLength(1)
+    await user.click(screen.getByTestId('sponsor-ai-open'))
+    const dialog = await screen.findByTestId('sponsor-ai-dialog')
+    expect(await within(dialog).findByTestId('sponsor-ai-credit')).toHaveTextContent('8,000 Kudos')
+    expect(within(dialog).getByTestId('sponsor-ai-fee')).toHaveTextContent('1,200 Kudos')
+    expect(within(dialog).getByTestId('sponsor-ai-jobs')).toHaveTextContent('5')
+    expect(dialog).toHaveTextContent(/AI fee, \d{4}-\d{2}/)
+    // The page shows what it was told: it asks for the sponsor and a month, and works nothing out.
+    const call = server.runQuery.mock.calls.find(([id]) => id === TEMPLATE.operatorSponsorAi)!
+    expect(call[1]).toMatchObject({ params: { sponsorId: SPONSOR, month: expect.stringMatching(/^\d{4}-(0[1-9]|1[0-2])$/) } })
+    await expectAccessible(dialog)
+    await user.click(within(dialog).getByRole('button', { name: 'Close' }))
+    await waitFor(() => expect(screen.queryByTestId('sponsor-ai-dialog')).not.toBeInTheDocument())
+  })
+
+  it('says so when the server has no AI figures for the sponsor', async () => {
+    server.sponsorAi = []
+    renderAt('/qb/operator/sponsors', '/qb/operator/sponsors', <OperatorSponsorsPage />)
+    await userEvent.click(await screen.findByTestId('sponsor-ai-open'))
+    expect(await screen.findByTestId('sponsor-ai-none')).toBeInTheDocument()
   })
 
   it('lifts a ban its operator made', async () => {

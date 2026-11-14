@@ -464,3 +464,27 @@ export async function readSponsorAsOperator(userId: string):
     emailVerified: s.emailVerified,
   }
 }
+
+/** The row of `qb.operator.sponsor-ai` (F-M9 b2): a sponsor's AI credit and the month's AI fee charged under the operator. */
+export interface OperatorSponsorAi {
+  userId: string
+  company: string
+  /** The credit its open AI prepayments still hold, whole yen before tax, as text. */
+  aiCredit: string
+  /** The fee of the month's jobs charged under the caller's operator, before tax, and how many jobs carry a fee. */
+  monthFee: string
+  monthJobs: number
+}
+
+/** One sponsor's AI credit and the fee of `month` (`yyyy-MM`); null when the operator does not look after them. */
+export async function readOperatorSponsorAi(sponsorId: string, month: string): Promise<OperatorSponsorAi | null> {
+  const page = await runQuery<Row>(TEMPLATE.operatorSponsorAi, { params: { sponsorId, month }, limit: 1 })
+  const row = page.items[0]
+  return row ? {
+    userId: String(row.userId),
+    company: String(row.company ?? ''),
+    aiCredit: row.aiCredit == null ? '0' : String(row.aiCredit),
+    monthFee: row.monthFee == null ? '0' : String(row.monthFee),
+    monthJobs: num(row.monthJobs),
+  } : null
+}

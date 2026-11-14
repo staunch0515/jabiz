@@ -23,6 +23,7 @@ import {
   useAuth,
 } from '@jabiz/admin'
 import { EVERYBODY, failureRate, PARAM_LABELS, proposeSwitch, readAiJobs, readAiSettings, readAiUsage } from './ai-api'
+import { AiFeesSection } from './AiFeesSection'
 import { LoadFailed, Section } from './components'
 import { HelpGapsLink, HelpUsageSection } from './HelpContentPages'
 import { CONTROL, PERMISSION } from './ids'
@@ -197,6 +198,8 @@ export default function AiPage() {
               <TableHead className="text-right">{t('ai.attempts')}</TableHead>
               <TableHead className="text-right">{t('ai.inputTokens')}</TableHead>
               <TableHead className="text-right">{t('ai.outputTokens')}</TableHead>
+              <TableHead>{t('ai.feeMode')}</TableHead>
+              <TableHead>{t('ai.feeOperator')}</TableHead>
               <TableHead>{t('ai.failure')}</TableHead>
             </TableRow>
           </TableHeader>
@@ -222,6 +225,10 @@ export default function AiPage() {
                 <TableCell className="text-right tabular-nums">{n(row.attempts)}</TableCell>
                 <TableCell className="text-right tabular-nums">{n(row.inputTokens)}</TableCell>
                 <TableCell className="text-right tabular-nums">{n(row.outputTokens)}</TableCell>
+                <TableCell data-testid="ai-job-fee-mode">
+                  {row.feeMode ? t(`ai.feeModes.${row.feeMode}`, { defaultValue: row.feeMode }) : ''}
+                </TableCell>
+                <TableCell data-testid="ai-job-fee-operator">{row.feeOperatorName ?? ''}</TableCell>
                 <TableCell className="text-xs">
                   {row.failureCode && <><code>{row.failureCode}</code> {row.failureMessage}</>}
                 </TableCell>
@@ -247,6 +254,8 @@ export default function AiPage() {
       {/* F-C10c: the AI help Takers and Sponsors use, counted apart from the Sponsors' AI usage above. */}
       <HelpUsageSection month={shownMonth} />
       {can(PERMISSION.adminHelp) && <HelpGapsLink month={shownMonth} />}
+      {/* F-M9 b2: the money of the AI fees, for finance only. */}
+      <AiFeesSection />
       <Section title={t('ai.recent')} testId="ai-jobs-section" actions={
         <div className="flex items-center gap-2">
           <Checkbox id={`${id}-failed`} checked={failedOnly} data-testid="ai-failed-only"

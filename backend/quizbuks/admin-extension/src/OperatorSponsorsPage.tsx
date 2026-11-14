@@ -31,6 +31,7 @@ import { useLabels, usePaged, usePoints } from './hooks'
 import { DICTIONARY, PATH, PERMISSION } from './ids'
 import { confirmOnboarding } from './fee-api'
 import { RegionExceptionAction } from './RegionExceptionAction'
+import { SponsorAiDialog } from './SponsorAiDialog'
 import { banSponsor, readOperatorSponsors, unbanSponsor, type OperatorSponsor } from './operator-api'
 
 /** The columns sorted on the server, by the template's `list.sorts` field (Q53a). */
@@ -120,6 +121,7 @@ export default function OperatorSponsorsPage() {
   const [results, setResults] = useState<Readonly<Record<string, { ok: boolean; text: string }>>>({})
   const [progress, setProgress] = useState<{ done: number; total: number } | null>(null)
   const [billing, setBilling_] = useState<OperatorSponsor | null>(null)
+  const [aiOf, setAiOf] = useState<OperatorSponsor | null>(null)
   const [search, setSearch] = useSearchParams()
   const q = search.get('q') ?? ''
   const mine = search.get('mine') === 'true'
@@ -222,6 +224,16 @@ export default function OperatorSponsorsPage() {
         )
       },
     },
+    // F-M9 b2: the AI credit and this month's AI fee of the operator's own sponsor (read only).
+    {
+      id: 'ai',
+      header: t('operator.sponsorAi.column'),
+      cell: ({ row }) => (row.original.mine ? (
+        <Button size="sm" variant="outline" data-testid="sponsor-ai-open" onClick={() => setAiOf(row.original)}>
+          {t('operator.sponsorAi.open')}<span className="sr-only">: {row.original.company}</span>
+        </Button>
+      ) : null),
+    },
     // F-F11b: a mainland China exception for the operator's own Sponsor, or the note that one is in force.
     ...(can(PERMISSION.regionWrite) ? [{
       id: 'region',
@@ -301,6 +313,7 @@ export default function OperatorSponsorsPage() {
             getRowId={(row) => row.onboardingId} empty={<EmptyState art="people" title={t('operator.sponsors.none')} />}
             rowProps={(row) => ({ 'data-testid': 'sponsor-row', 'data-id': row.userId })} />
         )}
+      {aiOf && <SponsorAiDialog sponsorId={aiOf.userId} company={aiOf.company} onClose={() => setAiOf(null)} />}
       {acting && <BanDialog sponsor={acting.sponsor} lift={acting.lift} onClose={() => setActing(null)} />}
       {billing && (
         <BillingDialog sponsor={billing} onClose={() => setBilling_(null)}

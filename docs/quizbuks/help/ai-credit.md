@@ -58,3 +58,17 @@ The fee follows the AI provider's price list: what your request actually used ×
 Yes. Under "Money → AI credit" give back any amount, or "all that may be given back": the cash first, then the granted credit (the latest to expire first), back to your platform fee account. What the requests still running hold, and the fees of finished requests not charged yet, can be given back once they are settled. While your account is suspended you cannot give it back; afterwards you can.
 
 Granted credit in the AI credit keeps its expiry: once it expired (or was voided because the lit node is no longer held) it is neither used for new requests nor given back, and the daily expiry voids it; what a running request already holds of it is used as usual. Cash does not expire.
+
+## 给运营商（FAQ 的 `audience` = `OPERATOR`，分类 `BILLING`；用法同 `operator-settlement.md`）
+
+### 中文 · 在哪里看发起方的 AI 额度与本月 AI 费？
+
+运营商管理系统的"发起方"页，本运营商自己的发起方一行有"AI…"按钮：打开后只读地显示这位发起方现有的 AI 额度，以及本月的 AI 请求记在你们运营商名下的 AI 费（税前）和收费的请求数。金额与其他页一样以点数显示。不是你们运营商的发起方没有这个按钮。
+
+### 日本語 · 主催者の AI クレジットと今月の AI 利用料はどこで見られますか？
+
+運営パートナー管理システムの「主催者」ページで、自分の運営パートナーの主催者の行にある「AI…」ボタンを開くと、その主催者の現在の AI クレジットと、今月の AI リクエストのうち貴社の運営パートナーの分として請求された AI 利用料（税抜）および請求されたリクエスト数が、閲覧のみで表示されます。金額は他のページと同じくポイント（クドス）で表示されます。担当外の主催者にはこのボタンはありません。
+
+### English · Where do I see a Sponsor's AI credit and this month's AI fee?
+
+On the Sponsors page of the operator system, the rows of your own Sponsors have an "AI…" button. It opens a read-only view of the Sponsor's AI credit now, the AI fee of this month's requests charged under your operator (before tax) and how many requests were charged. Amounts are shown in points, as on the other pages. Sponsors that are not yours have no button.

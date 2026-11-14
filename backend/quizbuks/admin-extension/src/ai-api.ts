@@ -1,4 +1,5 @@
 import { runProcess, runQuery } from '@jabiz/admin'
+import { exportTemplate, type ExportFormat } from './finance-api'
 import { CONTROL, PAGE_LIMIT, TEMPLATE } from './ids'
 
 /*
@@ -92,6 +93,9 @@ export interface AiJobRow {
   inputTokens: number
   outputTokens: number
   requestedAt: string
+  /** F-M9: how the job is charged (`NONE` or `CREDIT`) and the operator the fee was frozen with; never an amount. */
+  feeMode: string | null
+  feeOperatorName: string | null
 }
 
 export async function readAiJobs(failedOnly: boolean): Promise<AiJobRow[]> {
@@ -110,6 +114,8 @@ export async function readAiJobs(failedOnly: boolean): Promise<AiJobRow[]> {
     inputTokens: num(row.inputTokens),
     outputTokens: num(row.outputTokens),
     requestedAt: String(row.requestedAt ?? ''),
+    feeMode: str(row.feeMode),
+    feeOperatorName: str(row.feeOperatorName),
   }))
 }
 
@@ -126,3 +132,78 @@ export function proposeSwitch(on: boolean, reason: string) {
 export function failureRate(row: Pick<AiUsageRow, 'jobs' | 'failedJobs'>): number | null {
   return row.jobs > 0 ? row.failedJobs / row.jobs : null
 }
+
+/** A row of `qb.admin.ai-fees` (F-M9 b2; amounts are whole yen before tax, as text; the dollars exact). */
+export interface AiFeeRow {
+  month: string
+  sponsorId: string
+  company: string | null
+  operatorId: string | null
+  operatorName: string | null
+  jobs: number
+  costUsd: string
+  feeYen: string
+  absorbedYen: string
+  unrecordedUsd: string
+  absorbedTotalYen: string
+  unbilledYen: string
+  /** Only when one sponsor was asked for. */
+  aiCredit: string | null
+}
+
+export interface AiFeeFilter {
+  month: string
+  /** The last month of the span; empty for the one month. */
+  toMonth: string
+  sponsorId: string | null
+  operatorId: string | null
+}
+
+const MONTH = /^\d{4}-(0[1-9]|1[0-2])$/
+const index = (month: string) => Number(month.slice(0, 4)) * 12 + Number(month.slice(5, 7))
+
+/** The longest span the template answers, in months (the server returns no rows beyond it). */
+export const AI_FEE_MAX_MONTHS = 12
+
+/** Whether the filter is one the server answers: a month, and a span of at most 12 months that is not reversed. */
+export function validAiFeeSpan(filter: Pick<AiFeeFilter, 'month' | 'toMonth'>): boolean {
+  if (!MONTH.test(filter.month)) return false
+  if (!filter.toMonth) return true
+  if (!MONTH.test(filter.toMonth)) return false
+  const span = index(filter.toMonth) - index(filter.month)
+  return span >= 0 && span < AI_FEE_MAX_MONTHS
+}
+
+export function aiFeeParams(filter: AiFeeFilter): Record<string, unknown> {
+  return {
+    month: filter.month,
+    ...(filter.toMonth ? { toMonth: filter.toMonth } : {}),
+    ...(filter.sponsorId ? { sponsorId: filter.sponsorId } : {}),
+    ...(filter.operatorId ? { operatorId: filter.operatorId } : {}),
+  }
+}
+
+const text = (value: unknown, fallback = '0'): string => (value == null || value === '' ? fallback : String(value))
+
+export async function readAiFees(filter: AiFeeFilter): Promise<AiFeeRow[]> {
+  const page = await runQuery<Row>(TEMPLATE.aiFees, { params: aiFeeParams(filter), limit: PAGE_LIMIT })
+  return page.items.map((row) => ({
+    month: String(row.month ?? ''),
+    sponsorId: String(row.sponsorId ?? ''),
+    company: str(row.company),
+    operatorId: str(row.operatorId),
+    operatorName: str(row.operatorName),
+    jobs: num(row.jobs),
+    costUsd: text(row.costUsd),
+    feeYen: text(row.feeYen),
+    absorbedYen: text(row.absorbedYen),
+    unrecordedUsd: text(row.unrecordedUsd),
+    absorbedTotalYen: text(row.absorbedTotalYen),
+    unbilledYen: text(row.unbilledYen),
+    aiCredit: row.aiCredit == null || row.aiCredit === '' ? null : String(row.aiCredit),
+  }))
+}
+
+/** Exports every row of the filter through the platform (`POST /api/queries/qb.admin.ai-fees/export`). */
+export const exportAiFees = (filter: AiFeeFilter, format: ExportFormat) =>
+  exportTemplate(TEMPLATE.aiFees, aiFeeParams(filter), format)
