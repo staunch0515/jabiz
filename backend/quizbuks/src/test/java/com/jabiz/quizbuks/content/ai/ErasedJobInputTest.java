@@ -4,17 +4,17 @@ import com.jabiz.external.ExternalJobException;
 import org.junit.jupiter.api.Test;
 import tools.jackson.databind.json.JsonMapper;
 
-import java.time.Duration;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.Assertions.catchThrowableOfType;
 
 /**
  * F-M15c: the platform's purge of an erased account overwrites the input of its AI jobs with {@code {"erased": true}}
- * (ErasurePurger), and the platform reads it leniently (unknown properties are ignored), so a job that runs after the
- * purge (one queued while {@code qb.ai.enabled} was off, say) gets an input of nothing but nulls. It fails at once, for
- * good, without calling the provider.
+ * (ErasurePurger). A job that runs after the purge (one queued while {@code qb.ai.enabled} was off, say) never calls
+ * the provider: an input the platform cannot read (a number missing) is its permanent {@code BAD_INPUT} before the
+ * handler; one it reads leniently (unknown properties ignored) is all nulls, and the handler fails for good.
  */
 class ErasedJobInputTest {
 
@@ -28,7 +28,12 @@ class ErasedJobInputTest {
             calls.incrementAndGet();
             return null;
         });
-        assertErased(() -> handler.run(JSON.readValue(PURGED, AiQuestionsJob.Input.class), null));
+        // Its count is a number: the platform cannot read the purged input (BAD_INPUT, permanent, no handler); were it
+        // read, the handler would refuse it.
+        assertThatThrownBy(() -> JSON.readValue(PURGED, AiQuestionsJob.Input.class))
+            .isInstanceOf(tools.jackson.core.JacksonException.class);
+        assertErased(() -> handler.run(new AiQuestionsJob.Input(null, null, null, 0, null, null, null, null, null,
+            null, null), null));
         assertThat(calls).hasValue(0);
     }
 
@@ -44,10 +49,10 @@ class ErasedJobInputTest {
     }
 
     @Test
-    void aSiteProfileJobWithAPurgedInputFailsBeforeItReadsAnything() {
-        // Its context is never touched: a call to the provider would need it.
-        SiteProfileHandler handler = new SiteProfileHandler(JSON, Duration.ofMinutes(1));
-        assertErased(() -> handler.run(JSON.readValue(PURGED, SiteProfileJob.Input.class), null));
+    void aSiteProfileJobWithAPurgedInputCannotBeReadSoNoHandlerRuns() {
+        // Its switches are booleans: the platform cannot read the purged input (BAD_INPUT, permanent, no handler).
+        assertThatThrownBy(() -> JSON.readValue(PURGED, SiteProfileJob.Input.class))
+            .isInstanceOf(tools.jackson.core.JacksonException.class);
     }
 
     private static void assertErased(Runnable run) {

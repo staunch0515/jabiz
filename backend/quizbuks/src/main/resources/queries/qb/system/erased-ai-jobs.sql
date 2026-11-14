@@ -8,7 +8,7 @@ datasets:
 params:
   userId: { like: ExternalJob.requestedBy, required: true, description: The erased sponsor }
   types:  { like: ExternalJob.jobType, list: true, required: true, description: The AI job types a sponsor asks for }
-  limits: { kind: { type: text, maxLength: 120 }, list: true, required: true, description: "Each type's attempts, as type:attempts" }
+  open:   { kind: { type: text, maxLength: 120 }, list: true, required: true, description: "Each type with each count of attempts it may have made and still be open, as type:count" }
   max:    { kind: { type: numeric, precision: 9, scale: 0 }, required: true, description: The most jobs read at once }
 results:
   jobId:    { kind: { type: text, maxLength: 36 } }
@@ -22,7 +22,8 @@ permissions: [qb.ai.system]
 ---*/
 -- The platform purge keeps requested_by (it overwrites the input and the result only), so the jobs are still found by
 -- the erased sponsor after it. Whether a job is open is the platform's to say (its cancellations and outcomes are not
--- datasets): this leaves out what an attempt ended, and those whose attempts are used up (limits: each type's retry);
+-- datasets): this leaves out what an attempt ended, and those whose attempts are used up (open: each type with the
+-- counts below its retry);
 -- the cancellation (ifOpen) does nothing to one that ended otherwise (cancelled before). No time window: a job of a type
 -- held by its switch (enabledBy) waits without using attempts, however long. total is how many there are, read or
 -- not: more than max is reported by the wind-up, which waits for the next run.
@@ -37,9 +38,7 @@ FROM (
     GROUP BY j.{{ExternalJob.jobId}}, j.{{ExternalJob.jobType}}, j.{{ExternalJob.jobSeq}}
     HAVING NOT coalesce(bool_or(a.{{ExternalJobAttempt.outcome}} = 'SUCCEEDED'
                                 OR NOT a.{{ExternalJobAttempt.retryable}}), false)
-       AND count(a.{{ExternalJobAttempt.attemptId}})
-           < (SELECT max(CAST(split_part(l, ':', 2) AS int)) FROM unnest(CAST(:limits AS text[])) l
-              WHERE split_part(l, ':', 1) = j.{{ExternalJob.jobType}})
+       AND j.{{ExternalJob.jobType}} || ':' || CAST(count(a.{{ExternalJobAttempt.attemptId}}) AS text) = ANY(:open)
     ORDER BY j.{{ExternalJob.jobSeq}} DESC
     LIMIT :max
 ) x

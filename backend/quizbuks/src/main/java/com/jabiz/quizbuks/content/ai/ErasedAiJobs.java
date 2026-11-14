@@ -80,7 +80,7 @@ public final class ErasedAiJobs {
                 })
                 .outputMapper(ErasedAiJobs::cancelOutput)
                 .step("Read the sponsor's AI jobs not ended", RunTemplate.<ProcessContext>of(TEMPLATE,
-                    ctx -> Map.of("userId", sponsor(ctx), "types", List.copyOf(TYPES.keySet()), "limits", limits(),
+                    ctx -> Map.of("userId", sponsor(ctx), "types", List.copyOf(TYPES.keySet()), "open", open(),
                         "max", MAX_JOBS),
                     JOBS))
                 .step("Cancel them", CallProcess.forEach(CANCEL_ONE, 1, ErasedAiJobs::jobs, CANCELLED)));
@@ -103,9 +103,15 @@ public final class ErasedAiJobs {
                 .requestedBy(ctx -> ctx.get(INPUT, JobRef.class).sponsorId()).ifOpen().outputKey(CANCELLED)));
     }
 
-    /** Each type's attempts, as the template takes them ({@code type:attempts}). */
-    static List<String> limits() {
-        return TYPES.entrySet().stream().map(e -> e.getKey() + ":" + e.getValue()).sorted().toList();
+    /** Each type with each count of attempts a job of it may have made and still be open ({@code type:count}). */
+    static List<String> open() {
+        List<String> open = new ArrayList<>();
+        TYPES.forEach((type, attempts) -> {
+            for (int made = 0; made < attempts; made++) {
+                open.add(type + ":" + made);
+            }
+        });
+        return open.stream().sorted().toList();
     }
 
     /** The jobs to cancel: every one the template read. */

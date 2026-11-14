@@ -44,7 +44,7 @@ class SponsorErasureTest {
         allCounts.putAll(counts);
         Map<String, BigDecimal> allSums = new HashMap<>();
         for (String load : List.of(SponsorErasure.UNPAID_TOTAL, SponsorErasure.UNPAID_CREDITED,
-            SponsorErasure.UNPAID_PAID, SponsorErasure.DEPOSITS_LEFT)) {
+            SponsorErasure.UNPAID_PAID, SponsorErasure.DEPOSITS_LEFT, SponsorErasure.AI_CREDIT_LEFT)) {
             allSums.put(load, BigDecimal.ZERO);
         }
         sums.forEach((load, sum) -> allSums.put(load, BigDecimal.valueOf(sum)));
