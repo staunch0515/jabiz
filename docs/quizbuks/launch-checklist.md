@@ -38,7 +38,7 @@
       确认人： ／ 日期： ／ 依据：
 - [ ] 特定商取引法的表示列出首次上线收的费用（配送费、受众规则费、AI 额度、曝光费）与计价方式
       确认人： ／ 日期： ／ 依据：
-- [ ] **发起方条款的自动付款一句**（F-M13）：发起方条款写明"到账后自动支付未付账单"（平台在充值、赠送额度或运营商转入到账后，替发起方支付最早的未付账单，不需要本人操作），并随上线前那一版一起同意（是否另发新版、已有发起方是否重新同意，由法务定）；自动付款开关（`qb.fee.auto-pay.enabled`）**发布即打开**（没有发布时为关），所以发布前已通知有未付账单的发起方（且：①平台费账户的邮件文字 `qb.fee.auto-paid`、`qb.fee.invoice-voided` 已由另一位管理员发布；②夜间任务 `qb.fee-auto-pay` 与 `qb.mail-fee-paid-due` 在运行、`qb.reconcile` 的持有人知道 `AUTO_PAY_MISSED`；③同一次受控变更之外不另开别的钱的开关；④先在 staging 上以真实的未付账单走过一次付款、作废与邮件）
+- [ ] **发起方条款的自动付款一句**（F-M13）：发起方条款写明"到账后自动支付未付账单"（平台在充值、赠送额度或运营商转入到账后，替发起方支付最早的未付账单，不需要本人操作），并随上线前那一版一起同意（是否另发新版、已有发起方是否重新同意，由法务定）；自动付款开关（`qb.fee.auto-pay.enabled`）**发布即打开**（没有发布时为关），所以发布前已通知有未付账单的发起方（且：①平台费账户的邮件文字 `qb.fee.auto-paid`、`qb.fee.invoice-voided` 已由另一位管理员发布；②夜间任务 `qb.fee-auto-pay` 与 `qb.mail-fee-paid-due` 在运行、`qb.reconcile` 的持有人知道 `AUTO_PAY_MISSED`；③`jabiz.mail.enabled` 已开（否则付款通知与作废通知两封邮件都不发）；④`qb.fee.auto-pay.missed-after-hours` 的值已确认（缺省 48），并知道打开后第一夜 `AUTO_PAY_MISSED` 可能报出（见 `operations.md` §7.58，付清后自行消失）；⑤同一次受控变更之外不另开别的钱的开关；⑥先在 staging 上以真实的未付账单走过一次付款、作废与邮件）
       确认人： ／ 日期： ／ 依据：
 - [ ] 上面四种文本都是需求方或律师提供的**正式文本**（日文为准据文本、英文一并提供），经 `QB_LEGAL_PUBLISH` 发布且已生效：页面上不再出现 `[TEST PLACEHOLDER]`；
       正式模式启动日志中没有 `legal:TERMS_APP` / `legal:TERMS_SPONSOR` / `legal:PRIVACY` 的告警（`operations.md` §3 第 9 步）
