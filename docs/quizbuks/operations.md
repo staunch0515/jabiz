@@ -1380,7 +1380,7 @@ Quiz 与发布有主题词（平台词表中的词与自定义词），学者可
 
 - **差异**：已结束月份的账会因此错或不全。运行为 `DIFF`，告警 `qb-reconcile-diff`，月末分录导出被拒（`QB_JOURNAL_RECON_NOT_OK`）；财务（`qb.reconcile`）每天至多一个待办"核对发现差异"，标题写明差异条数与涉及几项核对。
 - **需关注**：账是平的、已结束月份不受影响，只需要有人看或做一个决定。运行仍为 `OK`，不告警、不拦导出；每个（核对项, 对象）给负责的人一个待办"核对需关注"，标题写明核对项、对象、应为与实际。现在的五项：`DISTRIBUTION_PRICE_RANGE`（运营商的配送费价目超出总部范围：改价目或改范围）、`EXPOSURE_PRICE_RANGE`（运营商的曝光费价目超出总部范围，同上，§7.54）、`AUDIENCE_REFUND_NO_PERIOD`（财务决定开凭证或用 `QB_AUDIENCE_REFUND_CLOSE` 记下不开，§7.50）、`CREDIT_UNUSED_WITH_DUE`（下一次开账单或抵用时自行了结）、`HELP_USAGE_TOTAL`（AI 帮助的月用量，由内容管理员负责，见 §7.53）。
-- **提示**：只是信息（`TAKER_WALLET_LAG`、`DISTRIBUTION_AT_FLOOR`、`EXPOSURE_UNPURCHASED`、`AI_RESERVATION_SHORT`），不建待办。
+- **提示**：只是信息（`TAKER_WALLET_LAG`、`DISTRIBUTION_AT_FLOOR`、`EXPOSURE_UNPURCHASED`、`AI_RESERVATION_SHORT`），不建待办。平台承担 AI 费用的明细（含没有回答的尝试按估计记下的美元）看总部 AI 费报表（`qb.admin.ai-fees`，F-M9 b2）；每月合计超过 `qb.ai.fee.absorbed-alert-yen` 时由 `QB_AI_ABSORBED_CHECK` 给财务待办（§7.56"平台承担"），不是核对项。
   其中 `DISTRIBUTION_AT_FLOOR` 与 `EXPOSURE_UNPURCHASED` 也给运营商看（F-M14b）：运营商管理系统「发起方的计费方式」页下方的「每日核对的提示」块，列出最近一次核对中关于**现在分配给本运营商的**发起方的这两种提示（发起方、发布个数），每种一句说明。块只读，不建待办，运营商不需要处理。它读模板 `qb.operator.recon-notes`，按会话的运营商限定（D64）；其他核对项的条目与金额运营商都看不到。**改派之后**：提示按读取时发起方的分配显示，与核对何时运行无关。发起方改派到另一个运营商，连同它在原运营商时提交的发布，立即出现在新运营商的块里，原运营商不再看到；"按运营商的配送费下限计费"指的是发布提交时的运营商的下限（发布的卡片冻结了当时的运营商），不一定是新运营商的。没有提示时块里写「最近一次核对没有关于这些发起方的提示」并给出核对时刻，从未运行过时写「每日核对还没有运行过」。
 - **待办的建立与关闭**：任务 `qb.recon-attention` 与 `qb.recon-tasks-close`，每天 UTC 18:52（日本时间 03:52，核对之后 15 分钟），每次至多 200 项，剩下的次日继续；补跑用 `JOB_RUN_REQUEST`。
   - **关注待办**：同一对象只要有一个未办的就不再建；不再出现即以完成关闭。人手工关了而条件还在，次日会重建：要处理的是条件，不是待办。
