@@ -177,6 +177,20 @@ class BankTopUpIT extends PlayItSupport {
             "values", Map.of("paramKey", QbParams.TOPUP_TARGETS, "value", "KUDOS,CASH"), "reason", "Q87a"));
         run("CONTROL_CHANGE_PUBLISH", financeAdmin(), body("changeId", change.get("changeId")));
         String sponsor = newSponsor("s-bank-cash");
+        // F-M13b: the automatic payment is on, and the sponsor has an unpaid platform invoice of 1,100.
+        Map<String, Object> autoPay = run("CONTROL_CHANGE_PROPOSE", proposer(), body("targetEntity", "SysParam",
+            "values", Map.of("paramKey", QbParams.FEE_AUTO_PAY_ENABLED, "value", "true"), "reason", "F-M13b"));
+        run("CONTROL_CHANGE_PUBLISH", financeAdmin(), body("changeId", autoPay.get("changeId")));
+        String invoiceId = unpaidInvoice(sponsor);
+        // Counter-example: Kudos are not the account that pays the platform's fees.
+        String kudosSponsor = newSponsor("s-bank-kudos-invoice");
+        String kudosInvoice = unpaidInvoice(kudosSponsor);
+        String kudosTopUp = (String) ask(kudosSponsor, 20_000).get("topUpId");
+        run("APPROVAL_DECIDE", content(), body("requestId", record(finance(), kudosTopUp, 20_000, "ST-KUDOS")
+            .get("approvalRequestId"), "decision", "APPROVE"));
+        deliverEvents();
+        assertThat(query("SELECT status FROM qb_fee_invoice WHERE invoice_id = ?", kudosInvoice).getFirst())
+            .containsEntry("status", "OPEN");
         String topUpId = (String) run(BankTopUps.START, sponsorToken(sponsor), body("amount", 20_000, "target",
             "CASH")).get("topUpId");
         assertThat(topUp(topUpId)).containsEntry("target", "CASH");
@@ -187,14 +201,17 @@ class BankTopUpIT extends PlayItSupport {
         assertThat(postings(topUpId)).extracting(p -> p.get("account_code") + " " + p.get("direction"))
             .containsExactly("1120 DEBIT", "2160 CREDIT");
         assertThat(balance(sponsor)).isEqualByComparingTo("0");
+        // The money arriving paid the invoice by itself (the event is delivered with the others): 1,100 of 20,000.
+        assertThat(query("SELECT status FROM qb_fee_invoice WHERE invoice_id = ?", invoiceId).getFirst())
+            .containsEntry("status", "PAID");
         assertThat((BigDecimal) query("SELECT balance FROM qb_wallet WHERE owner_id = ? AND kind = 'CASH'", sponsor)
-            .getFirst().get("balance")).isEqualByComparingTo("20000");
+            .getFirst().get("balance")).isEqualByComparingTo("18900");
         // F-M1: a lot of its own, from the bank, its record the top-up.
         assertThat(query("SELECT source, amount, remaining, source_entity, source_id FROM qb_cash_lot "
             + "WHERE sponsor_id = ?", sponsor)).singleElement().satisfies(lot -> {
                 assertThat(lot).containsEntry("source", "BANK").containsEntry("source_entity", "QbTopUp")
                     .containsEntry("source_id", topUpId);
-                assertThat((BigDecimal) lot.get("remaining")).isEqualByComparingTo("20000");
+                assertThat((BigDecimal) lot.get("remaining")).isEqualByComparingTo("18900");
             });
         assertBooksBalance();
     }
@@ -365,5 +382,17 @@ class BankTopUpIT extends PlayItSupport {
             "receivedOn", today().toString(), "bankReference", "ST-NO-RULE"), 422)))
             .containsExactly(WalletCodes.TOPUP_BANK_NO_REVIEW);
         assertThat(topUp(topUpId)).containsEntry("status", "AWAITING");
+    }
+
+    /** An unpaid postpaid invoice of 1,100 (issued 40 days ago), as the to-do tests write theirs. */
+    String unpaidInvoice(String sponsor) {
+        String id = java.util.UUID.randomUUID().toString();
+        java.time.Instant issued = clock.instant().minus(java.time.Duration.ofDays(40));
+        execute("INSERT INTO qb_fee_invoice (invoice_id, invoice_no, sponsor_id, billing_mode, period, amount, tax, "
+            + "total, paid_amount, status, issued_at, issued_on, due_on) VALUES (?, ?, ?, 'POSTPAID', ?, 1000, 100, "
+            + "1100, 0, 'OPEN', ?, ?::date, ?::date)", id, "BANK-" + id.substring(0, 8), sponsor, "2026-01",
+            java.sql.Timestamp.from(issued), issued.toString().substring(0, 10),
+            issued.plus(java.time.Duration.ofDays(30)).toString().substring(0, 10));
+        return id;
     }
 }

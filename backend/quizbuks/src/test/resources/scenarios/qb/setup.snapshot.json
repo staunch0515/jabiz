@@ -3128,6 +3128,20 @@
       "processSeqId" : "#op:93"
     }, {
       "paramId" : "#uuid:322",
+      "paramKey" : "qb.fee.auto-pay.max-invoices",
+      "valueKind" : {
+        "precision" : 2,
+        "scale" : 0,
+        "type" : "numeric"
+      },
+      "value" : "20",
+      "description" : "How many unpaid invoices one automatic payment run pays (1 to 50; the sponsor's wallet is locked while it runs: half of what paying early may take at once, MAX_EARLY, and below half of that)",
+      "versionNo" : 1,
+      "effectStartTime" : "2026-10-01T00:00:00Z",
+      "createdTime" : "2026-10-01T00:00:00Z",
+      "processSeqId" : "#op:94"
+    }, {
+      "paramId" : "#uuid:323",
       "paramKey" : "qb.sponsor-verification.link-hours",
       "valueKind" : {
         "precision" : 3,
@@ -3139,9 +3153,9 @@
       "versionNo" : 1,
       "effectStartTime" : "2026-10-01T00:00:00Z",
       "createdTime" : "2026-10-01T00:00:00Z",
-      "processSeqId" : "#op:94"
+      "processSeqId" : "#op:95"
     }, {
-      "paramId" : "#uuid:323",
+      "paramId" : "#uuid:324",
       "paramKey" : "qb.content.import.batch-bytes",
       "valueKind" : {
         "precision" : 7,
@@ -3153,9 +3167,9 @@
       "versionNo" : 1,
       "effectStartTime" : "2026-10-01T00:00:00Z",
       "createdTime" : "2026-10-01T00:00:00Z",
-      "processSeqId" : "#op:95"
+      "processSeqId" : "#op:96"
     }, {
-      "paramId" : "#uuid:324",
+      "paramId" : "#uuid:325",
       "paramKey" : "qb.creator-fee-rate",
       "valueKind" : {
         "precision" : 4,
@@ -3169,7 +3183,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:145"
     }, {
-      "paramId" : "#uuid:325",
+      "paramId" : "#uuid:326",
       "paramKey" : "qb.transfer.threshold",
       "valueKind" : {
         "currency" : "JPY",
@@ -3183,7 +3197,7 @@
       "createdTime" : "2026-10-01T01:00:00Z",
       "processSeqId" : "#op:244"
     }, {
-      "paramId" : "#uuid:326",
+      "paramId" : "#uuid:327",
       "paramKey" : "qb.transfer.review-above",
       "valueKind" : {
         "currency" : "JPY",
@@ -3197,7 +3211,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:147"
     }, {
-      "paramId" : "#uuid:327",
+      "paramId" : "#uuid:328",
       "paramKey" : "qb.transfer.enabled",
       "valueKind" : {
         "type" : "bool"
@@ -3209,7 +3223,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:148"
     }, {
-      "paramId" : "#uuid:328",
+      "paramId" : "#uuid:329",
       "paramKey" : "qb.review.sponsor.auto",
       "valueKind" : {
         "type" : "bool"
@@ -3221,7 +3235,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:149"
     }, {
-      "paramId" : "#uuid:329",
+      "paramId" : "#uuid:330",
       "paramKey" : "qb.review.publication.auto",
       "valueKind" : {
         "type" : "bool"
@@ -3233,7 +3247,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:150"
     }, {
-      "paramId" : "#uuid:330",
+      "paramId" : "#uuid:331",
       "paramKey" : "qb.topup.min",
       "valueKind" : {
         "currency" : "JPY",
@@ -3247,7 +3261,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:151"
     }, {
-      "paramId" : "#uuid:331",
+      "paramId" : "#uuid:332",
       "paramKey" : "qb.topup.max",
       "valueKind" : {
         "currency" : "JPY",
@@ -3261,7 +3275,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:152"
     }, {
-      "paramId" : "#uuid:332",
+      "paramId" : "#uuid:333",
       "paramKey" : "qb.transfer.fee",
       "valueKind" : {
         "currency" : "JPY",
@@ -3275,7 +3289,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:153"
     }, {
-      "paramId" : "#uuid:333",
+      "paramId" : "#uuid:334",
       "paramKey" : "qb.transfer.hold-days",
       "valueKind" : {
         "precision" : 3,
@@ -3289,7 +3303,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:154"
     }, {
-      "paramId" : "#uuid:334",
+      "paramId" : "#uuid:335",
       "paramKey" : "qb.topup.new-sponsor.days",
       "valueKind" : {
         "precision" : 3,
@@ -3303,7 +3317,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:155"
     }, {
-      "paramId" : "#uuid:335",
+      "paramId" : "#uuid:336",
       "paramKey" : "qb.topup.new-sponsor.max-total",
       "valueKind" : {
         "currency" : "JPY",
@@ -3317,7 +3331,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:156"
     }, {
-      "paramId" : "#uuid:336",
+      "paramId" : "#uuid:337",
       "paramKey" : "qb.reward.default-methods",
       "valueKind" : {
         "maxLength" : 50,
@@ -3330,7 +3344,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:157"
     }, {
-      "paramId" : "#uuid:337",
+      "paramId" : "#uuid:338",
       "paramKey" : "qb.reward.max-per-attempt",
       "valueKind" : {
         "currency" : "JPY",
@@ -3344,7 +3358,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:158"
     }, {
-      "paramId" : "#uuid:338",
+      "paramId" : "#uuid:339",
       "paramKey" : "qb.journal.account.1110",
       "valueKind" : {
         "maxLength" : 20,
@@ -3357,7 +3371,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:159"
     }, {
-      "paramId" : "#uuid:339",
+      "paramId" : "#uuid:340",
       "paramKey" : "qb.journal.account.1120",
       "valueKind" : {
         "maxLength" : 20,
@@ -3370,7 +3384,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:160"
     }, {
-      "paramId" : "#uuid:340",
+      "paramId" : "#uuid:341",
       "paramKey" : "qb.journal.account.2110",
       "valueKind" : {
         "maxLength" : 20,
@@ -3383,7 +3397,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:161"
     }, {
-      "paramId" : "#uuid:341",
+      "paramId" : "#uuid:342",
       "paramKey" : "qb.journal.account.2120",
       "valueKind" : {
         "maxLength" : 20,
@@ -3396,7 +3410,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:162"
     }, {
-      "paramId" : "#uuid:342",
+      "paramId" : "#uuid:343",
       "paramKey" : "qb.journal.account.2130",
       "valueKind" : {
         "maxLength" : 20,
@@ -3409,7 +3423,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:163"
     }, {
-      "paramId" : "#uuid:343",
+      "paramId" : "#uuid:344",
       "paramKey" : "qb.journal.account.4110",
       "valueKind" : {
         "maxLength" : 20,
@@ -3422,7 +3436,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:164"
     }, {
-      "paramId" : "#uuid:344",
+      "paramId" : "#uuid:345",
       "paramKey" : "qb.journal.account.5110",
       "valueKind" : {
         "maxLength" : 20,
@@ -3435,7 +3449,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:165"
     }, {
-      "paramId" : "#uuid:345",
+      "paramId" : "#uuid:346",
       "paramKey" : "qb.journal.account.5120",
       "valueKind" : {
         "maxLength" : 20,
@@ -3448,7 +3462,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:166"
     }, {
-      "paramId" : "#uuid:346",
+      "paramId" : "#uuid:347",
       "paramKey" : "qb.journal.account.2140",
       "valueKind" : {
         "maxLength" : 20,
@@ -3461,7 +3475,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:167"
     }, {
-      "paramId" : "#uuid:347",
+      "paramId" : "#uuid:348",
       "paramKey" : "qb.journal.account.5130",
       "valueKind" : {
         "maxLength" : 20,
@@ -3474,7 +3488,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:168"
     }, {
-      "paramId" : "#uuid:348",
+      "paramId" : "#uuid:349",
       "paramKey" : "qb.journal.account.2160",
       "valueKind" : {
         "maxLength" : 20,
@@ -3487,7 +3501,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:169"
     }, {
-      "paramId" : "#uuid:349",
+      "paramId" : "#uuid:350",
       "paramKey" : "qb.journal.account.1130",
       "valueKind" : {
         "maxLength" : 20,
@@ -3500,7 +3514,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:170"
     }, {
-      "paramId" : "#uuid:350",
+      "paramId" : "#uuid:351",
       "paramKey" : "qb.journal.account.4120",
       "valueKind" : {
         "maxLength" : 20,
@@ -3513,7 +3527,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:171"
     }, {
-      "paramId" : "#uuid:351",
+      "paramId" : "#uuid:352",
       "paramKey" : "qb.journal.account.2150",
       "valueKind" : {
         "maxLength" : 20,
@@ -3526,7 +3540,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:172"
     }, {
-      "paramId" : "#uuid:352",
+      "paramId" : "#uuid:353",
       "paramKey" : "qb.journal.account.2170",
       "valueKind" : {
         "maxLength" : 20,
@@ -3539,7 +3553,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:173"
     }, {
-      "paramId" : "#uuid:353",
+      "paramId" : "#uuid:354",
       "paramKey" : "qb.journal.account.2190",
       "valueKind" : {
         "maxLength" : 20,
@@ -3552,7 +3566,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:174"
     }, {
-      "paramId" : "#uuid:354",
+      "paramId" : "#uuid:355",
       "paramKey" : "qb.journal.account.5140",
       "valueKind" : {
         "maxLength" : 20,
@@ -3565,7 +3579,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:175"
     }, {
-      "paramId" : "#uuid:355",
+      "paramId" : "#uuid:356",
       "paramKey" : "qb.journal.account.2180",
       "valueKind" : {
         "maxLength" : 20,
@@ -3578,7 +3592,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:176"
     }, {
-      "paramId" : "#uuid:356",
+      "paramId" : "#uuid:357",
       "paramKey" : "qb.issuer.name",
       "valueKind" : {
         "maxLength" : 200,
@@ -3591,7 +3605,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:177"
     }, {
-      "paramId" : "#uuid:357",
+      "paramId" : "#uuid:358",
       "paramKey" : "qb.issuer.address",
       "valueKind" : {
         "maxLength" : 500,
@@ -3604,7 +3618,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:178"
     }, {
-      "paramId" : "#uuid:358",
+      "paramId" : "#uuid:359",
       "paramKey" : "qb.issuer.registration-no",
       "valueKind" : {
         "maxLength" : 50,
@@ -3617,7 +3631,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:179"
     }, {
-      "paramId" : "#uuid:359",
+      "paramId" : "#uuid:360",
       "paramKey" : "qb.legal.max-announce-days",
       "valueKind" : {
         "precision" : 3,
@@ -3631,7 +3645,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:180"
     }, {
-      "paramId" : "#uuid:360",
+      "paramId" : "#uuid:361",
       "paramKey" : "qb.ai.enabled",
       "valueKind" : {
         "type" : "bool"
@@ -3643,7 +3657,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:181"
     }, {
-      "paramId" : "#uuid:361",
+      "paramId" : "#uuid:362",
       "paramKey" : "qb.ai.model",
       "valueKind" : {
         "allowedValues" : [ "claude-opus-5-5", "claude-sonnet-5-5", "claude-haiku-5-5" ],
@@ -3657,7 +3671,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:182"
     }, {
-      "paramId" : "#uuid:362",
+      "paramId" : "#uuid:363",
       "paramKey" : "qb.ai.effort",
       "valueKind" : {
         "allowedValues" : [ "low", "medium", "high" ],
@@ -3671,7 +3685,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:183"
     }, {
-      "paramId" : "#uuid:363",
+      "paramId" : "#uuid:364",
       "paramKey" : "qb.ai.sponsor.daily-jobs",
       "valueKind" : {
         "precision" : 4,
@@ -3685,7 +3699,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:184"
     }, {
-      "paramId" : "#uuid:364",
+      "paramId" : "#uuid:365",
       "paramKey" : "qb.ai.sponsor.monthly-tokens",
       "valueKind" : {
         "precision" : 12,
@@ -3699,7 +3713,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:185"
     }, {
-      "paramId" : "#uuid:365",
+      "paramId" : "#uuid:366",
       "paramKey" : "qb.ai.global.monthly-tokens",
       "valueKind" : {
         "precision" : 12,
@@ -3713,7 +3727,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:186"
     }, {
-      "paramId" : "#uuid:366",
+      "paramId" : "#uuid:367",
       "paramKey" : "qb.prospect.enabled",
       "valueKind" : {
         "type" : "bool"
@@ -3725,7 +3739,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:187"
     }, {
-      "paramId" : "#uuid:367",
+      "paramId" : "#uuid:368",
       "paramKey" : "qb.prospect.model",
       "valueKind" : {
         "allowedValues" : [ "claude-opus-5-5", "claude-sonnet-5-5", "claude-haiku-5-5" ],
@@ -3739,7 +3753,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:188"
     }, {
-      "paramId" : "#uuid:368",
+      "paramId" : "#uuid:369",
       "paramKey" : "qb.prospect.effort",
       "valueKind" : {
         "allowedValues" : [ "low", "medium", "high" ],
@@ -3753,7 +3767,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:189"
     }, {
-      "paramId" : "#uuid:369",
+      "paramId" : "#uuid:370",
       "paramKey" : "qb.prospect.operator-monthly-cap-usd",
       "valueKind" : {
         "precision" : 8,
@@ -3767,7 +3781,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:190"
     }, {
-      "paramId" : "#uuid:370",
+      "paramId" : "#uuid:371",
       "paramKey" : "qb.prospect.usd-jpy",
       "valueKind" : {
         "precision" : 8,
@@ -3781,7 +3795,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:191"
     }, {
-      "paramId" : "#uuid:371",
+      "paramId" : "#uuid:372",
       "paramKey" : "qb.operator.plan.1.fee",
       "valueKind" : {
         "currency" : "JPY",
@@ -3795,7 +3809,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:192"
     }, {
-      "paramId" : "#uuid:372",
+      "paramId" : "#uuid:373",
       "paramKey" : "qb.operator.plan.1.share",
       "valueKind" : {
         "precision" : 4,
@@ -3809,7 +3823,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:193"
     }, {
-      "paramId" : "#uuid:373",
+      "paramId" : "#uuid:374",
       "paramKey" : "qb.operator.plan.2.fee",
       "valueKind" : {
         "currency" : "JPY",
@@ -3823,7 +3837,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:194"
     }, {
-      "paramId" : "#uuid:374",
+      "paramId" : "#uuid:375",
       "paramKey" : "qb.operator.plan.2.share",
       "valueKind" : {
         "precision" : 4,
@@ -3837,7 +3851,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:195"
     }, {
-      "paramId" : "#uuid:375",
+      "paramId" : "#uuid:376",
       "paramKey" : "qb.operator.plan.3.fee",
       "valueKind" : {
         "currency" : "JPY",
@@ -3851,7 +3865,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:196"
     }, {
-      "paramId" : "#uuid:376",
+      "paramId" : "#uuid:377",
       "paramKey" : "qb.operator.plan.3.share",
       "valueKind" : {
         "precision" : 4,
@@ -3865,7 +3879,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:197"
     }, {
-      "paramId" : "#uuid:377",
+      "paramId" : "#uuid:378",
       "paramKey" : "qb.operator.plan.4.fee",
       "valueKind" : {
         "currency" : "JPY",
@@ -3879,7 +3893,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:198"
     }, {
-      "paramId" : "#uuid:378",
+      "paramId" : "#uuid:379",
       "paramKey" : "qb.operator.plan.4.share",
       "valueKind" : {
         "precision" : 4,
@@ -3893,7 +3907,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:199"
     }, {
-      "paramId" : "#uuid:379",
+      "paramId" : "#uuid:380",
       "paramKey" : "qb.operator.plan.5.fee",
       "valueKind" : {
         "currency" : "JPY",
@@ -3907,7 +3921,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:200"
     }, {
-      "paramId" : "#uuid:380",
+      "paramId" : "#uuid:381",
       "paramKey" : "qb.operator.plan.5.share",
       "valueKind" : {
         "precision" : 4,
@@ -3921,7 +3935,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:201"
     }, {
-      "paramId" : "#uuid:381",
+      "paramId" : "#uuid:382",
       "paramKey" : "qb.operator.withdrawal.min",
       "valueKind" : {
         "currency" : "JPY",
@@ -3935,7 +3949,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:202"
     }, {
-      "paramId" : "#uuid:382",
+      "paramId" : "#uuid:383",
       "paramKey" : "qb.operator.withdrawal.cooldown-hours",
       "valueKind" : {
         "precision" : 4,
@@ -3949,7 +3963,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:203"
     }, {
-      "paramId" : "#uuid:383",
+      "paramId" : "#uuid:384",
       "paramKey" : "qb.topup.bank.min",
       "valueKind" : {
         "currency" : "JPY",
@@ -3963,7 +3977,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:204"
     }, {
-      "paramId" : "#uuid:384",
+      "paramId" : "#uuid:385",
       "paramKey" : "qb.topup.bank.max",
       "valueKind" : {
         "currency" : "JPY",
@@ -3977,7 +3991,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:205"
     }, {
-      "paramId" : "#uuid:385",
+      "paramId" : "#uuid:386",
       "paramKey" : "qb.bank.receiving.bank",
       "valueKind" : {
         "maxLength" : 100,
@@ -3990,7 +4004,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:206"
     }, {
-      "paramId" : "#uuid:386",
+      "paramId" : "#uuid:387",
       "paramKey" : "qb.bank.receiving.branch",
       "valueKind" : {
         "maxLength" : 100,
@@ -4003,7 +4017,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:207"
     }, {
-      "paramId" : "#uuid:387",
+      "paramId" : "#uuid:388",
       "paramKey" : "qb.bank.receiving.account-type",
       "valueKind" : {
         "maxLength" : 20,
@@ -4016,7 +4030,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:208"
     }, {
-      "paramId" : "#uuid:388",
+      "paramId" : "#uuid:389",
       "paramKey" : "qb.bank.receiving.account-number",
       "valueKind" : {
         "maxLength" : 20,
@@ -4029,7 +4043,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:209"
     }, {
-      "paramId" : "#uuid:389",
+      "paramId" : "#uuid:390",
       "paramKey" : "qb.bank.receiving.account-holder",
       "valueKind" : {
         "maxLength" : 100,
@@ -4042,7 +4056,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:210"
     }, {
-      "paramId" : "#uuid:390",
+      "paramId" : "#uuid:391",
       "paramKey" : "qb.withdrawal.bank.enabled",
       "valueKind" : {
         "type" : "bool"
@@ -4054,7 +4068,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:211"
     }, {
-      "paramId" : "#uuid:391",
+      "paramId" : "#uuid:392",
       "paramKey" : "qb.withdrawal.bank.fee",
       "valueKind" : {
         "currency" : "JPY",
@@ -4068,7 +4082,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:212"
     }, {
-      "paramId" : "#uuid:392",
+      "paramId" : "#uuid:393",
       "paramKey" : "qb.withdrawal.bank.cooldown-hours",
       "valueKind" : {
         "precision" : 4,
@@ -4082,7 +4096,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:213"
     }, {
-      "paramId" : "#uuid:393",
+      "paramId" : "#uuid:394",
       "paramKey" : "qb.audience.billing.enabled",
       "valueKind" : {
         "type" : "bool"
@@ -4094,7 +4108,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:214"
     }, {
-      "paramId" : "#uuid:394",
+      "paramId" : "#uuid:395",
       "paramKey" : "qb.audience.fee.refund-unused-days",
       "valueKind" : {
         "type" : "bool"
@@ -4106,7 +4120,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:215"
     }, {
-      "paramId" : "#uuid:395",
+      "paramId" : "#uuid:396",
       "paramKey" : "qb.topup.targets",
       "valueKind" : {
         "maxLength" : 20,
@@ -4119,7 +4133,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:216"
     }, {
-      "paramId" : "#uuid:396",
+      "paramId" : "#uuid:397",
       "paramKey" : "qb.topup.default-target",
       "valueKind" : {
         "allowedValues" : [ "KUDOS", "CASH" ],
@@ -4133,7 +4147,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:217"
     }, {
-      "paramId" : "#uuid:397",
+      "paramId" : "#uuid:398",
       "paramKey" : "qb.kudos.buy.enabled",
       "valueKind" : {
         "type" : "bool"
@@ -4145,7 +4159,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:218"
     }, {
-      "paramId" : "#uuid:398",
+      "paramId" : "#uuid:399",
       "paramKey" : "qb.kudos.sell.enabled",
       "valueKind" : {
         "type" : "bool"
@@ -4157,7 +4171,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:219"
     }, {
-      "paramId" : "#uuid:399",
+      "paramId" : "#uuid:400",
       "paramKey" : "qb.transfer.fee-rate",
       "valueKind" : {
         "precision" : 4,
@@ -4171,7 +4185,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:220"
     }, {
-      "paramId" : "#uuid:400",
+      "paramId" : "#uuid:401",
       "paramKey" : "qb.fee.monthly",
       "valueKind" : {
         "currency" : "JPY",
@@ -4185,7 +4199,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:221"
     }, {
-      "paramId" : "#uuid:401",
+      "paramId" : "#uuid:402",
       "paramKey" : "qb.fee.tax-rate",
       "valueKind" : {
         "precision" : 4,
@@ -4199,7 +4213,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:222"
     }, {
-      "paramId" : "#uuid:402",
+      "paramId" : "#uuid:403",
       "paramKey" : "qb.fee.default-billing-mode",
       "valueKind" : {
         "maxLength" : 10,
@@ -4212,7 +4226,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:223"
     }, {
-      "paramId" : "#uuid:403",
+      "paramId" : "#uuid:404",
       "paramKey" : "qb.fee.overdue.block-submit",
       "valueKind" : {
         "type" : "bool"
@@ -4224,7 +4238,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:224"
     }, {
-      "paramId" : "#uuid:404",
+      "paramId" : "#uuid:405",
       "paramKey" : "qb.play.entry-fee.enabled",
       "valueKind" : {
         "type" : "bool"
@@ -4236,7 +4250,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:225"
     }, {
-      "paramId" : "#uuid:405",
+      "paramId" : "#uuid:406",
       "paramKey" : "qb.usage.storage.free-bytes",
       "valueKind" : {
         "precision" : 15,
@@ -4250,7 +4264,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:226"
     }, {
-      "paramId" : "#uuid:406",
+      "paramId" : "#uuid:407",
       "paramKey" : "qb.video.mainland-accessible-sites",
       "valueKind" : {
         "maxLength" : 200,
@@ -4263,7 +4277,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:227"
     }, {
-      "paramId" : "#uuid:407",
+      "paramId" : "#uuid:408",
       "paramKey" : "qb.help.enabled",
       "valueKind" : {
         "type" : "bool"
@@ -4275,7 +4289,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:228"
     }, {
-      "paramId" : "#uuid:408",
+      "paramId" : "#uuid:409",
       "paramKey" : "qb.help.global-monthly-tokens",
       "valueKind" : {
         "precision" : 12,
@@ -4289,7 +4303,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:229"
     }, {
-      "paramId" : "#uuid:409",
+      "paramId" : "#uuid:410",
       "paramKey" : "qb.help.cache-read-weight",
       "valueKind" : {
         "precision" : 3,
@@ -4303,7 +4317,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:230"
     }, {
-      "paramId" : "#uuid:410",
+      "paramId" : "#uuid:411",
       "paramKey" : "qb.fee-credit.grant.enabled",
       "valueKind" : {
         "type" : "bool"
@@ -4315,7 +4329,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:231"
     }, {
-      "paramId" : "#uuid:411",
+      "paramId" : "#uuid:412",
       "paramKey" : "qb.fee-credit.grant.basic",
       "valueKind" : {
         "currency" : "JPY",
@@ -4329,7 +4343,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:232"
     }, {
-      "paramId" : "#uuid:412",
+      "paramId" : "#uuid:413",
       "paramKey" : "qb.fee-credit.grant.certified",
       "valueKind" : {
         "currency" : "JPY",
@@ -4343,7 +4357,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:233"
     }, {
-      "paramId" : "#uuid:413",
+      "paramId" : "#uuid:414",
       "paramKey" : "qb.fee-credit.valid-days",
       "valueKind" : {
         "precision" : 3,
@@ -4357,7 +4371,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:234"
     }, {
-      "paramId" : "#uuid:414",
+      "paramId" : "#uuid:415",
       "paramKey" : "qb.ai.site-profile.enabled",
       "valueKind" : {
         "type" : "bool"
@@ -4369,7 +4383,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:235"
     }, {
-      "paramId" : "#uuid:415",
+      "paramId" : "#uuid:416",
       "paramKey" : "qb.ai.site-profile.monthly",
       "valueKind" : {
         "precision" : 3,
@@ -4383,7 +4397,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:236"
     }, {
-      "paramId" : "#uuid:416",
+      "paramId" : "#uuid:417",
       "paramKey" : "qb.prepayment.release.overdue-days",
       "valueKind" : {
         "precision" : 3,
@@ -4397,7 +4411,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:237"
     }, {
-      "paramId" : "#uuid:417",
+      "paramId" : "#uuid:418",
       "paramKey" : "qb.audience.refund.missing-after-hours",
       "valueKind" : {
         "precision" : 3,
@@ -4411,7 +4425,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:238"
     }, {
-      "paramId" : "#uuid:418",
+      "paramId" : "#uuid:419",
       "paramKey" : "qb.help.user-daily",
       "valueKind" : {
         "precision" : 4,
@@ -4426,7 +4440,7 @@
       "processSeqId" : "#op:239"
     } ],
     "SysControlChange" : [ {
-      "changeId" : "#uuid:419",
+      "changeId" : "#uuid:420",
       "targetEntity" : "SysParam",
       "targetId" : null,
       "changeAction" : "UPSERT",
@@ -4442,7 +4456,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:145"
     }, {
-      "changeId" : "#uuid:420",
+      "changeId" : "#uuid:421",
       "targetEntity" : "SysParam",
       "targetId" : null,
       "changeAction" : "UPSERT",
@@ -4458,7 +4472,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:146"
     }, {
-      "changeId" : "#uuid:421",
+      "changeId" : "#uuid:422",
       "targetEntity" : "SysParam",
       "targetId" : null,
       "changeAction" : "UPSERT",
@@ -4474,7 +4488,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:147"
     }, {
-      "changeId" : "#uuid:422",
+      "changeId" : "#uuid:423",
       "targetEntity" : "SysParam",
       "targetId" : null,
       "changeAction" : "UPSERT",
@@ -4490,7 +4504,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:148"
     }, {
-      "changeId" : "#uuid:423",
+      "changeId" : "#uuid:424",
       "targetEntity" : "SysParam",
       "targetId" : null,
       "changeAction" : "UPSERT",
@@ -4506,7 +4520,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:149"
     }, {
-      "changeId" : "#uuid:424",
+      "changeId" : "#uuid:425",
       "targetEntity" : "SysParam",
       "targetId" : null,
       "changeAction" : "UPSERT",
@@ -4522,7 +4536,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:150"
     }, {
-      "changeId" : "#uuid:425",
+      "changeId" : "#uuid:426",
       "targetEntity" : "SysParam",
       "targetId" : null,
       "changeAction" : "UPSERT",
@@ -4538,7 +4552,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:151"
     }, {
-      "changeId" : "#uuid:426",
+      "changeId" : "#uuid:427",
       "targetEntity" : "SysParam",
       "targetId" : null,
       "changeAction" : "UPSERT",
@@ -4554,7 +4568,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:152"
     }, {
-      "changeId" : "#uuid:427",
+      "changeId" : "#uuid:428",
       "targetEntity" : "SysParam",
       "targetId" : null,
       "changeAction" : "UPSERT",
@@ -4570,7 +4584,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:153"
     }, {
-      "changeId" : "#uuid:428",
+      "changeId" : "#uuid:429",
       "targetEntity" : "SysParam",
       "targetId" : null,
       "changeAction" : "UPSERT",
@@ -4586,7 +4600,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:154"
     }, {
-      "changeId" : "#uuid:429",
+      "changeId" : "#uuid:430",
       "targetEntity" : "SysParam",
       "targetId" : null,
       "changeAction" : "UPSERT",
@@ -4602,7 +4616,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:155"
     }, {
-      "changeId" : "#uuid:430",
+      "changeId" : "#uuid:431",
       "targetEntity" : "SysParam",
       "targetId" : null,
       "changeAction" : "UPSERT",
@@ -4618,7 +4632,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:156"
     }, {
-      "changeId" : "#uuid:431",
+      "changeId" : "#uuid:432",
       "targetEntity" : "SysParam",
       "targetId" : null,
       "changeAction" : "UPSERT",
@@ -4634,7 +4648,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:157"
     }, {
-      "changeId" : "#uuid:432",
+      "changeId" : "#uuid:433",
       "targetEntity" : "SysParam",
       "targetId" : null,
       "changeAction" : "UPSERT",
@@ -4650,7 +4664,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:158"
     }, {
-      "changeId" : "#uuid:433",
+      "changeId" : "#uuid:434",
       "targetEntity" : "SysParam",
       "targetId" : null,
       "changeAction" : "UPSERT",
@@ -4666,7 +4680,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:159"
     }, {
-      "changeId" : "#uuid:434",
+      "changeId" : "#uuid:435",
       "targetEntity" : "SysParam",
       "targetId" : null,
       "changeAction" : "UPSERT",
@@ -4682,7 +4696,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:160"
     }, {
-      "changeId" : "#uuid:435",
+      "changeId" : "#uuid:436",
       "targetEntity" : "SysParam",
       "targetId" : null,
       "changeAction" : "UPSERT",
@@ -4698,7 +4712,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:161"
     }, {
-      "changeId" : "#uuid:436",
+      "changeId" : "#uuid:437",
       "targetEntity" : "SysParam",
       "targetId" : null,
       "changeAction" : "UPSERT",
@@ -4714,7 +4728,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:162"
     }, {
-      "changeId" : "#uuid:437",
+      "changeId" : "#uuid:438",
       "targetEntity" : "SysParam",
       "targetId" : null,
       "changeAction" : "UPSERT",
@@ -4730,7 +4744,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:163"
     }, {
-      "changeId" : "#uuid:438",
+      "changeId" : "#uuid:439",
       "targetEntity" : "SysParam",
       "targetId" : null,
       "changeAction" : "UPSERT",
@@ -4746,7 +4760,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:164"
     }, {
-      "changeId" : "#uuid:439",
+      "changeId" : "#uuid:440",
       "targetEntity" : "SysParam",
       "targetId" : null,
       "changeAction" : "UPSERT",
@@ -4762,7 +4776,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:165"
     }, {
-      "changeId" : "#uuid:440",
+      "changeId" : "#uuid:441",
       "targetEntity" : "SysParam",
       "targetId" : null,
       "changeAction" : "UPSERT",
@@ -4778,7 +4792,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:166"
     }, {
-      "changeId" : "#uuid:441",
+      "changeId" : "#uuid:442",
       "targetEntity" : "SysParam",
       "targetId" : null,
       "changeAction" : "UPSERT",
@@ -4794,7 +4808,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:167"
     }, {
-      "changeId" : "#uuid:442",
+      "changeId" : "#uuid:443",
       "targetEntity" : "SysParam",
       "targetId" : null,
       "changeAction" : "UPSERT",
@@ -4810,7 +4824,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:168"
     }, {
-      "changeId" : "#uuid:443",
+      "changeId" : "#uuid:444",
       "targetEntity" : "SysParam",
       "targetId" : null,
       "changeAction" : "UPSERT",
@@ -4826,7 +4840,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:169"
     }, {
-      "changeId" : "#uuid:444",
+      "changeId" : "#uuid:445",
       "targetEntity" : "SysParam",
       "targetId" : null,
       "changeAction" : "UPSERT",
@@ -4842,7 +4856,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:170"
     }, {
-      "changeId" : "#uuid:445",
+      "changeId" : "#uuid:446",
       "targetEntity" : "SysParam",
       "targetId" : null,
       "changeAction" : "UPSERT",
@@ -4858,7 +4872,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:171"
     }, {
-      "changeId" : "#uuid:446",
+      "changeId" : "#uuid:447",
       "targetEntity" : "SysParam",
       "targetId" : null,
       "changeAction" : "UPSERT",
@@ -4874,7 +4888,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:172"
     }, {
-      "changeId" : "#uuid:447",
+      "changeId" : "#uuid:448",
       "targetEntity" : "SysParam",
       "targetId" : null,
       "changeAction" : "UPSERT",
@@ -4890,7 +4904,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:173"
     }, {
-      "changeId" : "#uuid:448",
+      "changeId" : "#uuid:449",
       "targetEntity" : "SysParam",
       "targetId" : null,
       "changeAction" : "UPSERT",
@@ -4906,7 +4920,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:174"
     }, {
-      "changeId" : "#uuid:449",
+      "changeId" : "#uuid:450",
       "targetEntity" : "SysParam",
       "targetId" : null,
       "changeAction" : "UPSERT",
@@ -4922,7 +4936,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:175"
     }, {
-      "changeId" : "#uuid:450",
+      "changeId" : "#uuid:451",
       "targetEntity" : "SysParam",
       "targetId" : null,
       "changeAction" : "UPSERT",
@@ -4938,7 +4952,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:176"
     }, {
-      "changeId" : "#uuid:451",
+      "changeId" : "#uuid:452",
       "targetEntity" : "SysParam",
       "targetId" : null,
       "changeAction" : "UPSERT",
@@ -4954,7 +4968,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:177"
     }, {
-      "changeId" : "#uuid:452",
+      "changeId" : "#uuid:453",
       "targetEntity" : "SysParam",
       "targetId" : null,
       "changeAction" : "UPSERT",
@@ -4970,7 +4984,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:178"
     }, {
-      "changeId" : "#uuid:453",
+      "changeId" : "#uuid:454",
       "targetEntity" : "SysParam",
       "targetId" : null,
       "changeAction" : "UPSERT",
@@ -4986,7 +5000,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:179"
     }, {
-      "changeId" : "#uuid:454",
+      "changeId" : "#uuid:455",
       "targetEntity" : "SysParam",
       "targetId" : null,
       "changeAction" : "UPSERT",
@@ -5002,7 +5016,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:180"
     }, {
-      "changeId" : "#uuid:455",
+      "changeId" : "#uuid:456",
       "targetEntity" : "SysParam",
       "targetId" : null,
       "changeAction" : "UPSERT",
@@ -5018,7 +5032,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:181"
     }, {
-      "changeId" : "#uuid:456",
+      "changeId" : "#uuid:457",
       "targetEntity" : "SysParam",
       "targetId" : null,
       "changeAction" : "UPSERT",
@@ -5034,7 +5048,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:182"
     }, {
-      "changeId" : "#uuid:457",
+      "changeId" : "#uuid:458",
       "targetEntity" : "SysParam",
       "targetId" : null,
       "changeAction" : "UPSERT",
@@ -5050,7 +5064,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:183"
     }, {
-      "changeId" : "#uuid:458",
+      "changeId" : "#uuid:459",
       "targetEntity" : "SysParam",
       "targetId" : null,
       "changeAction" : "UPSERT",
@@ -5066,7 +5080,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:184"
     }, {
-      "changeId" : "#uuid:459",
+      "changeId" : "#uuid:460",
       "targetEntity" : "SysParam",
       "targetId" : null,
       "changeAction" : "UPSERT",
@@ -5082,7 +5096,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:185"
     }, {
-      "changeId" : "#uuid:460",
+      "changeId" : "#uuid:461",
       "targetEntity" : "SysParam",
       "targetId" : null,
       "changeAction" : "UPSERT",
@@ -5098,7 +5112,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:186"
     }, {
-      "changeId" : "#uuid:461",
+      "changeId" : "#uuid:462",
       "targetEntity" : "SysParam",
       "targetId" : null,
       "changeAction" : "UPSERT",
@@ -5114,7 +5128,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:187"
     }, {
-      "changeId" : "#uuid:462",
+      "changeId" : "#uuid:463",
       "targetEntity" : "SysParam",
       "targetId" : null,
       "changeAction" : "UPSERT",
@@ -5130,7 +5144,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:188"
     }, {
-      "changeId" : "#uuid:463",
+      "changeId" : "#uuid:464",
       "targetEntity" : "SysParam",
       "targetId" : null,
       "changeAction" : "UPSERT",
@@ -5146,7 +5160,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:189"
     }, {
-      "changeId" : "#uuid:464",
+      "changeId" : "#uuid:465",
       "targetEntity" : "SysParam",
       "targetId" : null,
       "changeAction" : "UPSERT",
@@ -5162,7 +5176,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:190"
     }, {
-      "changeId" : "#uuid:465",
+      "changeId" : "#uuid:466",
       "targetEntity" : "SysParam",
       "targetId" : null,
       "changeAction" : "UPSERT",
@@ -5178,7 +5192,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:191"
     }, {
-      "changeId" : "#uuid:466",
+      "changeId" : "#uuid:467",
       "targetEntity" : "SysParam",
       "targetId" : null,
       "changeAction" : "UPSERT",
@@ -5194,7 +5208,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:192"
     }, {
-      "changeId" : "#uuid:467",
+      "changeId" : "#uuid:468",
       "targetEntity" : "SysParam",
       "targetId" : null,
       "changeAction" : "UPSERT",
@@ -5210,7 +5224,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:193"
     }, {
-      "changeId" : "#uuid:468",
+      "changeId" : "#uuid:469",
       "targetEntity" : "SysParam",
       "targetId" : null,
       "changeAction" : "UPSERT",
@@ -5226,7 +5240,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:194"
     }, {
-      "changeId" : "#uuid:469",
+      "changeId" : "#uuid:470",
       "targetEntity" : "SysParam",
       "targetId" : null,
       "changeAction" : "UPSERT",
@@ -5242,7 +5256,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:195"
     }, {
-      "changeId" : "#uuid:470",
+      "changeId" : "#uuid:471",
       "targetEntity" : "SysParam",
       "targetId" : null,
       "changeAction" : "UPSERT",
@@ -5258,7 +5272,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:196"
     }, {
-      "changeId" : "#uuid:471",
+      "changeId" : "#uuid:472",
       "targetEntity" : "SysParam",
       "targetId" : null,
       "changeAction" : "UPSERT",
@@ -5274,7 +5288,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:197"
     }, {
-      "changeId" : "#uuid:472",
+      "changeId" : "#uuid:473",
       "targetEntity" : "SysParam",
       "targetId" : null,
       "changeAction" : "UPSERT",
@@ -5290,7 +5304,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:198"
     }, {
-      "changeId" : "#uuid:473",
+      "changeId" : "#uuid:474",
       "targetEntity" : "SysParam",
       "targetId" : null,
       "changeAction" : "UPSERT",
@@ -5306,7 +5320,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:199"
     }, {
-      "changeId" : "#uuid:474",
+      "changeId" : "#uuid:475",
       "targetEntity" : "SysParam",
       "targetId" : null,
       "changeAction" : "UPSERT",
@@ -5322,7 +5336,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:200"
     }, {
-      "changeId" : "#uuid:475",
+      "changeId" : "#uuid:476",
       "targetEntity" : "SysParam",
       "targetId" : null,
       "changeAction" : "UPSERT",
@@ -5338,7 +5352,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:201"
     }, {
-      "changeId" : "#uuid:476",
+      "changeId" : "#uuid:477",
       "targetEntity" : "SysParam",
       "targetId" : null,
       "changeAction" : "UPSERT",
@@ -5354,7 +5368,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:202"
     }, {
-      "changeId" : "#uuid:477",
+      "changeId" : "#uuid:478",
       "targetEntity" : "SysParam",
       "targetId" : null,
       "changeAction" : "UPSERT",
@@ -5370,7 +5384,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:203"
     }, {
-      "changeId" : "#uuid:478",
+      "changeId" : "#uuid:479",
       "targetEntity" : "SysParam",
       "targetId" : null,
       "changeAction" : "UPSERT",
@@ -5386,7 +5400,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:204"
     }, {
-      "changeId" : "#uuid:479",
+      "changeId" : "#uuid:480",
       "targetEntity" : "SysParam",
       "targetId" : null,
       "changeAction" : "UPSERT",
@@ -5402,7 +5416,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:205"
     }, {
-      "changeId" : "#uuid:480",
+      "changeId" : "#uuid:481",
       "targetEntity" : "SysParam",
       "targetId" : null,
       "changeAction" : "UPSERT",
@@ -5418,7 +5432,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:206"
     }, {
-      "changeId" : "#uuid:481",
+      "changeId" : "#uuid:482",
       "targetEntity" : "SysParam",
       "targetId" : null,
       "changeAction" : "UPSERT",
@@ -5434,7 +5448,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:207"
     }, {
-      "changeId" : "#uuid:482",
+      "changeId" : "#uuid:483",
       "targetEntity" : "SysParam",
       "targetId" : null,
       "changeAction" : "UPSERT",
@@ -5450,7 +5464,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:208"
     }, {
-      "changeId" : "#uuid:483",
+      "changeId" : "#uuid:484",
       "targetEntity" : "SysParam",
       "targetId" : null,
       "changeAction" : "UPSERT",
@@ -5466,7 +5480,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:209"
     }, {
-      "changeId" : "#uuid:484",
+      "changeId" : "#uuid:485",
       "targetEntity" : "SysParam",
       "targetId" : null,
       "changeAction" : "UPSERT",
@@ -5482,7 +5496,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:210"
     }, {
-      "changeId" : "#uuid:485",
+      "changeId" : "#uuid:486",
       "targetEntity" : "SysParam",
       "targetId" : null,
       "changeAction" : "UPSERT",
@@ -5498,7 +5512,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:211"
     }, {
-      "changeId" : "#uuid:486",
+      "changeId" : "#uuid:487",
       "targetEntity" : "SysParam",
       "targetId" : null,
       "changeAction" : "UPSERT",
@@ -5514,7 +5528,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:212"
     }, {
-      "changeId" : "#uuid:487",
+      "changeId" : "#uuid:488",
       "targetEntity" : "SysParam",
       "targetId" : null,
       "changeAction" : "UPSERT",
@@ -5530,7 +5544,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:213"
     }, {
-      "changeId" : "#uuid:488",
+      "changeId" : "#uuid:489",
       "targetEntity" : "SysParam",
       "targetId" : null,
       "changeAction" : "UPSERT",
@@ -5546,7 +5560,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:214"
     }, {
-      "changeId" : "#uuid:489",
+      "changeId" : "#uuid:490",
       "targetEntity" : "SysParam",
       "targetId" : null,
       "changeAction" : "UPSERT",
@@ -5562,7 +5576,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:215"
     }, {
-      "changeId" : "#uuid:490",
+      "changeId" : "#uuid:491",
       "targetEntity" : "SysParam",
       "targetId" : null,
       "changeAction" : "UPSERT",
@@ -5578,7 +5592,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:216"
     }, {
-      "changeId" : "#uuid:491",
+      "changeId" : "#uuid:492",
       "targetEntity" : "SysParam",
       "targetId" : null,
       "changeAction" : "UPSERT",
@@ -5594,7 +5608,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:217"
     }, {
-      "changeId" : "#uuid:492",
+      "changeId" : "#uuid:493",
       "targetEntity" : "SysParam",
       "targetId" : null,
       "changeAction" : "UPSERT",
@@ -5610,7 +5624,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:218"
     }, {
-      "changeId" : "#uuid:493",
+      "changeId" : "#uuid:494",
       "targetEntity" : "SysParam",
       "targetId" : null,
       "changeAction" : "UPSERT",
@@ -5626,7 +5640,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:219"
     }, {
-      "changeId" : "#uuid:494",
+      "changeId" : "#uuid:495",
       "targetEntity" : "SysParam",
       "targetId" : null,
       "changeAction" : "UPSERT",
@@ -5642,7 +5656,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:220"
     }, {
-      "changeId" : "#uuid:495",
+      "changeId" : "#uuid:496",
       "targetEntity" : "SysParam",
       "targetId" : null,
       "changeAction" : "UPSERT",
@@ -5658,7 +5672,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:221"
     }, {
-      "changeId" : "#uuid:496",
+      "changeId" : "#uuid:497",
       "targetEntity" : "SysParam",
       "targetId" : null,
       "changeAction" : "UPSERT",
@@ -5674,7 +5688,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:222"
     }, {
-      "changeId" : "#uuid:497",
+      "changeId" : "#uuid:498",
       "targetEntity" : "SysParam",
       "targetId" : null,
       "changeAction" : "UPSERT",
@@ -5690,7 +5704,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:223"
     }, {
-      "changeId" : "#uuid:498",
+      "changeId" : "#uuid:499",
       "targetEntity" : "SysParam",
       "targetId" : null,
       "changeAction" : "UPSERT",
@@ -5706,7 +5720,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:224"
     }, {
-      "changeId" : "#uuid:499",
+      "changeId" : "#uuid:500",
       "targetEntity" : "SysParam",
       "targetId" : null,
       "changeAction" : "UPSERT",
@@ -5722,7 +5736,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:225"
     }, {
-      "changeId" : "#uuid:500",
+      "changeId" : "#uuid:501",
       "targetEntity" : "SysParam",
       "targetId" : null,
       "changeAction" : "UPSERT",
@@ -5738,7 +5752,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:226"
     }, {
-      "changeId" : "#uuid:501",
+      "changeId" : "#uuid:502",
       "targetEntity" : "SysParam",
       "targetId" : null,
       "changeAction" : "UPSERT",
@@ -5754,7 +5768,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:227"
     }, {
-      "changeId" : "#uuid:502",
+      "changeId" : "#uuid:503",
       "targetEntity" : "SysParam",
       "targetId" : null,
       "changeAction" : "UPSERT",
@@ -5770,7 +5784,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:228"
     }, {
-      "changeId" : "#uuid:503",
+      "changeId" : "#uuid:504",
       "targetEntity" : "SysParam",
       "targetId" : null,
       "changeAction" : "UPSERT",
@@ -5786,7 +5800,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:229"
     }, {
-      "changeId" : "#uuid:504",
+      "changeId" : "#uuid:505",
       "targetEntity" : "SysParam",
       "targetId" : null,
       "changeAction" : "UPSERT",
@@ -5802,7 +5816,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:230"
     }, {
-      "changeId" : "#uuid:505",
+      "changeId" : "#uuid:506",
       "targetEntity" : "SysParam",
       "targetId" : null,
       "changeAction" : "UPSERT",
@@ -5818,7 +5832,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:231"
     }, {
-      "changeId" : "#uuid:506",
+      "changeId" : "#uuid:507",
       "targetEntity" : "SysParam",
       "targetId" : null,
       "changeAction" : "UPSERT",
@@ -5834,7 +5848,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:232"
     }, {
-      "changeId" : "#uuid:507",
+      "changeId" : "#uuid:508",
       "targetEntity" : "SysParam",
       "targetId" : null,
       "changeAction" : "UPSERT",
@@ -5850,7 +5864,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:233"
     }, {
-      "changeId" : "#uuid:508",
+      "changeId" : "#uuid:509",
       "targetEntity" : "SysParam",
       "targetId" : null,
       "changeAction" : "UPSERT",
@@ -5866,7 +5880,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:234"
     }, {
-      "changeId" : "#uuid:509",
+      "changeId" : "#uuid:510",
       "targetEntity" : "SysParam",
       "targetId" : null,
       "changeAction" : "UPSERT",
@@ -5882,7 +5896,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:235"
     }, {
-      "changeId" : "#uuid:510",
+      "changeId" : "#uuid:511",
       "targetEntity" : "SysParam",
       "targetId" : null,
       "changeAction" : "UPSERT",
@@ -5898,28 +5912,12 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:236"
     }, {
-      "changeId" : "#uuid:511",
+      "changeId" : "#uuid:512",
       "targetEntity" : "SysParam",
       "targetId" : null,
       "changeAction" : "UPSERT",
       "changeValues" : "{\"paramKey\":\"qb.distribution.billing.enabled\",\"valueKind\":{\"type\":\"bool\"},\"value\":\"false\",\"description\":\"Whether a publication's submission freezes its price per start and sets its distribution fee's deposit aside (read at the submission only; publications submitted while on are settled to their end)\"}",
       "targetKey" : "qb.distribution.billing.enabled",
-      "effectiveTime" : null,
-      "reason" : "First value of the QuizBuks parameter, proposed by QB_SETUP",
-      "status" : "PROPOSED",
-      "proposedBy" : "installer",
-      "publishedBy" : null,
-      "versionNo" : 1,
-      "effectStartTime" : "2026-10-01T00:00:00Z",
-      "createdTime" : "2026-10-01T00:00:00Z",
-      "processSeqId" : "#op:96"
-    }, {
-      "changeId" : "#uuid:512",
-      "targetEntity" : "SysParam",
-      "targetId" : null,
-      "changeAction" : "UPSERT",
-      "changeValues" : "{\"paramKey\":\"qb.distribution.rate.min\",\"valueKind\":{\"precision\":12,\"scale\":4,\"type\":\"numeric\"},\"value\":\"0.0000\",\"description\":\"The least rate an operator may set: yen per start for each Kudos of the publication's highest tier\"}",
-      "targetKey" : "qb.distribution.rate.min",
       "effectiveTime" : null,
       "reason" : "First value of the QuizBuks parameter, proposed by QB_SETUP",
       "status" : "PROPOSED",
@@ -5934,8 +5932,8 @@
       "targetEntity" : "SysParam",
       "targetId" : null,
       "changeAction" : "UPSERT",
-      "changeValues" : "{\"paramKey\":\"qb.distribution.rate.max\",\"valueKind\":{\"precision\":12,\"scale\":4,\"type\":\"numeric\"},\"value\":\"1.0000\",\"description\":\"The highest rate an operator may set: yen per start for each Kudos of the publication's highest tier\"}",
-      "targetKey" : "qb.distribution.rate.max",
+      "changeValues" : "{\"paramKey\":\"qb.distribution.rate.min\",\"valueKind\":{\"precision\":12,\"scale\":4,\"type\":\"numeric\"},\"value\":\"0.0000\",\"description\":\"The least rate an operator may set: yen per start for each Kudos of the publication's highest tier\"}",
+      "targetKey" : "qb.distribution.rate.min",
       "effectiveTime" : null,
       "reason" : "First value of the QuizBuks parameter, proposed by QB_SETUP",
       "status" : "PROPOSED",
@@ -5950,8 +5948,8 @@
       "targetEntity" : "SysParam",
       "targetId" : null,
       "changeAction" : "UPSERT",
-      "changeValues" : "{\"paramKey\":\"qb.distribution.unit-floor.min\",\"valueKind\":{\"precision\":12,\"scale\":4,\"type\":\"numeric\"},\"value\":\"1.0000\",\"description\":\"The least floor of the price per start an operator may set, in yen (a placeholder: confirmed by the requester before qb.distribution.billing.enabled is turned on; a tier set too low lands on it)\"}",
-      "targetKey" : "qb.distribution.unit-floor.min",
+      "changeValues" : "{\"paramKey\":\"qb.distribution.rate.max\",\"valueKind\":{\"precision\":12,\"scale\":4,\"type\":\"numeric\"},\"value\":\"1.0000\",\"description\":\"The highest rate an operator may set: yen per start for each Kudos of the publication's highest tier\"}",
+      "targetKey" : "qb.distribution.rate.max",
       "effectiveTime" : null,
       "reason" : "First value of the QuizBuks parameter, proposed by QB_SETUP",
       "status" : "PROPOSED",
@@ -5966,8 +5964,8 @@
       "targetEntity" : "SysParam",
       "targetId" : null,
       "changeAction" : "UPSERT",
-      "changeValues" : "{\"paramKey\":\"qb.distribution.unit-floor.max\",\"valueKind\":{\"precision\":12,\"scale\":4,\"type\":\"numeric\"},\"value\":\"100.0000\",\"description\":\"The highest floor of the price per start an operator may set, in yen\"}",
-      "targetKey" : "qb.distribution.unit-floor.max",
+      "changeValues" : "{\"paramKey\":\"qb.distribution.unit-floor.min\",\"valueKind\":{\"precision\":12,\"scale\":4,\"type\":\"numeric\"},\"value\":\"1.0000\",\"description\":\"The least floor of the price per start an operator may set, in yen (a placeholder: confirmed by the requester before qb.distribution.billing.enabled is turned on; a tier set too low lands on it)\"}",
+      "targetKey" : "qb.distribution.unit-floor.min",
       "effectiveTime" : null,
       "reason" : "First value of the QuizBuks parameter, proposed by QB_SETUP",
       "status" : "PROPOSED",
@@ -5982,8 +5980,8 @@
       "targetEntity" : "SysParam",
       "targetId" : null,
       "changeAction" : "UPSERT",
-      "changeValues" : "{\"paramKey\":\"qb.distribution.unit-ceiling.max\",\"valueKind\":{\"precision\":12,\"scale\":4,\"type\":\"numeric\"},\"value\":\"1000.0000\",\"description\":\"The highest ceiling of the price per start an operator may set, in yen\"}",
-      "targetKey" : "qb.distribution.unit-ceiling.max",
+      "changeValues" : "{\"paramKey\":\"qb.distribution.unit-floor.max\",\"valueKind\":{\"precision\":12,\"scale\":4,\"type\":\"numeric\"},\"value\":\"100.0000\",\"description\":\"The highest floor of the price per start an operator may set, in yen\"}",
+      "targetKey" : "qb.distribution.unit-floor.max",
       "effectiveTime" : null,
       "reason" : "First value of the QuizBuks parameter, proposed by QB_SETUP",
       "status" : "PROPOSED",
@@ -5998,8 +5996,8 @@
       "targetEntity" : "SysParam",
       "targetId" : null,
       "changeAction" : "UPSERT",
-      "changeValues" : "{\"paramKey\":\"qb.distribution.minimum-deposit.max\",\"valueKind\":{\"currency\":\"JPY\",\"scale\":0,\"type\":\"monetary\"},\"value\":\"100000\",\"description\":\"The highest least deposit an operator may set (a publication without a cap on its winners sets it aside), in yen\"}",
-      "targetKey" : "qb.distribution.minimum-deposit.max",
+      "changeValues" : "{\"paramKey\":\"qb.distribution.unit-ceiling.max\",\"valueKind\":{\"precision\":12,\"scale\":4,\"type\":\"numeric\"},\"value\":\"1000.0000\",\"description\":\"The highest ceiling of the price per start an operator may set, in yen\"}",
+      "targetKey" : "qb.distribution.unit-ceiling.max",
       "effectiveTime" : null,
       "reason" : "First value of the QuizBuks parameter, proposed by QB_SETUP",
       "status" : "PROPOSED",
@@ -6014,8 +6012,8 @@
       "targetEntity" : "SysParam",
       "targetId" : null,
       "changeAction" : "UPSERT",
-      "changeValues" : "{\"paramKey\":\"qb.distribution.final.end-grace-sec\",\"valueKind\":{\"precision\":5,\"scale\":0,\"type\":\"numeric\"},\"value\":\"3600\",\"description\":\"How many seconds after a publication ended its final distribution settlement waits, so that every start before the end is counted (60 to 86400; less counts as 60)\"}",
-      "targetKey" : "qb.distribution.final.end-grace-sec",
+      "changeValues" : "{\"paramKey\":\"qb.distribution.minimum-deposit.max\",\"valueKind\":{\"currency\":\"JPY\",\"scale\":0,\"type\":\"monetary\"},\"value\":\"100000\",\"description\":\"The highest least deposit an operator may set (a publication without a cap on its winners sets it aside), in yen\"}",
+      "targetKey" : "qb.distribution.minimum-deposit.max",
       "effectiveTime" : null,
       "reason" : "First value of the QuizBuks parameter, proposed by QB_SETUP",
       "status" : "PROPOSED",
@@ -6030,8 +6028,8 @@
       "targetEntity" : "SysParam",
       "targetId" : null,
       "changeAction" : "UPSERT",
-      "changeValues" : "{\"paramKey\":\"qb.distribution.unsettled-after-hours\",\"valueKind\":{\"precision\":3,\"scale\":0,\"type\":\"numeric\"},\"value\":\"30\",\"description\":\"After how many hours of a month a publication not settled for the month before is reported by the daily check (the monthly settlement runs on the 2nd at 00:37)\"}",
-      "targetKey" : "qb.distribution.unsettled-after-hours",
+      "changeValues" : "{\"paramKey\":\"qb.distribution.final.end-grace-sec\",\"valueKind\":{\"precision\":5,\"scale\":0,\"type\":\"numeric\"},\"value\":\"3600\",\"description\":\"How many seconds after a publication ended its final distribution settlement waits, so that every start before the end is counted (60 to 86400; less counts as 60)\"}",
+      "targetKey" : "qb.distribution.final.end-grace-sec",
       "effectiveTime" : null,
       "reason" : "First value of the QuizBuks parameter, proposed by QB_SETUP",
       "status" : "PROPOSED",
@@ -6046,8 +6044,8 @@
       "targetEntity" : "SysParam",
       "targetId" : null,
       "changeAction" : "UPSERT",
-      "changeValues" : "{\"paramKey\":\"qb.distribution.final-missing-after-hours\",\"valueKind\":{\"precision\":3,\"scale\":0,\"type\":\"numeric\"},\"value\":\"48\",\"description\":\"After how many hours of its end a publication without its final distribution settlement is reported by the daily check\"}",
-      "targetKey" : "qb.distribution.final-missing-after-hours",
+      "changeValues" : "{\"paramKey\":\"qb.distribution.unsettled-after-hours\",\"valueKind\":{\"precision\":3,\"scale\":0,\"type\":\"numeric\"},\"value\":\"30\",\"description\":\"After how many hours of a month a publication not settled for the month before is reported by the daily check (the monthly settlement runs on the 2nd at 00:37)\"}",
+      "targetKey" : "qb.distribution.unsettled-after-hours",
       "effectiveTime" : null,
       "reason" : "First value of the QuizBuks parameter, proposed by QB_SETUP",
       "status" : "PROPOSED",
@@ -6062,8 +6060,8 @@
       "targetEntity" : "SysParam",
       "targetId" : null,
       "changeAction" : "UPSERT",
-      "changeValues" : "{\"paramKey\":\"qb.exposure.billing.enabled\",\"valueKind\":{\"type\":\"bool\"},\"value\":\"false\",\"description\":\"Whether a publication that uses another's shared video buys exposures at its submission (read at the submission only; publications submitted while on are settled to their end)\"}",
-      "targetKey" : "qb.exposure.billing.enabled",
+      "changeValues" : "{\"paramKey\":\"qb.distribution.final-missing-after-hours\",\"valueKind\":{\"precision\":3,\"scale\":0,\"type\":\"numeric\"},\"value\":\"48\",\"description\":\"After how many hours of its end a publication without its final distribution settlement is reported by the daily check\"}",
+      "targetKey" : "qb.distribution.final-missing-after-hours",
       "effectiveTime" : null,
       "reason" : "First value of the QuizBuks parameter, proposed by QB_SETUP",
       "status" : "PROPOSED",
@@ -6078,8 +6076,8 @@
       "targetEntity" : "SysParam",
       "targetId" : null,
       "changeAction" : "UPSERT",
-      "changeValues" : "{\"paramKey\":\"qb.exposure.unit.min\",\"valueKind\":{\"precision\":12,\"scale\":4,\"type\":\"numeric\"},\"value\":\"1.0000\",\"description\":\"The least price per exposure an operator may set, in yen (a placeholder: confirmed by the requester before qb.exposure.billing.enabled is turned on)\"}",
-      "targetKey" : "qb.exposure.unit.min",
+      "changeValues" : "{\"paramKey\":\"qb.exposure.billing.enabled\",\"valueKind\":{\"type\":\"bool\"},\"value\":\"false\",\"description\":\"Whether a publication that uses another's shared video buys exposures at its submission (read at the submission only; publications submitted while on are settled to their end)\"}",
+      "targetKey" : "qb.exposure.billing.enabled",
       "effectiveTime" : null,
       "reason" : "First value of the QuizBuks parameter, proposed by QB_SETUP",
       "status" : "PROPOSED",
@@ -6094,8 +6092,8 @@
       "targetEntity" : "SysParam",
       "targetId" : null,
       "changeAction" : "UPSERT",
-      "changeValues" : "{\"paramKey\":\"qb.exposure.unit.max\",\"valueKind\":{\"precision\":12,\"scale\":4,\"type\":\"numeric\"},\"value\":\"100.0000\",\"description\":\"The highest price per exposure an operator may set, in yen (a placeholder: confirmed by the requester)\"}",
-      "targetKey" : "qb.exposure.unit.max",
+      "changeValues" : "{\"paramKey\":\"qb.exposure.unit.min\",\"valueKind\":{\"precision\":12,\"scale\":4,\"type\":\"numeric\"},\"value\":\"1.0000\",\"description\":\"The least price per exposure an operator may set, in yen (a placeholder: confirmed by the requester before qb.exposure.billing.enabled is turned on)\"}",
+      "targetKey" : "qb.exposure.unit.min",
       "effectiveTime" : null,
       "reason" : "First value of the QuizBuks parameter, proposed by QB_SETUP",
       "status" : "PROPOSED",
@@ -6110,8 +6108,8 @@
       "targetEntity" : "SysParam",
       "targetId" : null,
       "changeAction" : "UPSERT",
-      "changeValues" : "{\"paramKey\":\"qb.exposure.min-purchase\",\"valueKind\":{\"precision\":9,\"scale\":0,\"type\":\"numeric\"},\"value\":\"100\",\"description\":\"The fewest exposures a submission buys (1 to 999,999,999; a placeholder: set by the requester before qb.exposure.billing.enabled is turned on; a top-up has no least)\"}",
-      "targetKey" : "qb.exposure.min-purchase",
+      "changeValues" : "{\"paramKey\":\"qb.exposure.unit.max\",\"valueKind\":{\"precision\":12,\"scale\":4,\"type\":\"numeric\"},\"value\":\"100.0000\",\"description\":\"The highest price per exposure an operator may set, in yen (a placeholder: confirmed by the requester)\"}",
+      "targetKey" : "qb.exposure.unit.max",
       "effectiveTime" : null,
       "reason" : "First value of the QuizBuks parameter, proposed by QB_SETUP",
       "status" : "PROPOSED",
@@ -6126,8 +6124,8 @@
       "targetEntity" : "SysParam",
       "targetId" : null,
       "changeAction" : "UPSERT",
-      "changeValues" : "{\"paramKey\":\"qb.exposure.final.end-grace-sec\",\"valueKind\":{\"precision\":5,\"scale\":0,\"type\":\"numeric\"},\"value\":\"3600\",\"description\":\"How many seconds after a publication ended its final exposure settlement waits, so that the reports on the way are counted (60 to 86400; less counts as 60). Not qb.exposure.reconcile.end-grace-sec, which the check of the counting uses\"}",
-      "targetKey" : "qb.exposure.final.end-grace-sec",
+      "changeValues" : "{\"paramKey\":\"qb.exposure.min-purchase\",\"valueKind\":{\"precision\":9,\"scale\":0,\"type\":\"numeric\"},\"value\":\"100\",\"description\":\"The fewest exposures a submission buys (1 to 999,999,999; a placeholder: set by the requester before qb.exposure.billing.enabled is turned on; a top-up has no least)\"}",
+      "targetKey" : "qb.exposure.min-purchase",
       "effectiveTime" : null,
       "reason" : "First value of the QuizBuks parameter, proposed by QB_SETUP",
       "status" : "PROPOSED",
@@ -6142,8 +6140,8 @@
       "targetEntity" : "SysParam",
       "targetId" : null,
       "changeAction" : "UPSERT",
-      "changeValues" : "{\"paramKey\":\"qb.exposure.unsettled-after-hours\",\"valueKind\":{\"precision\":3,\"scale\":0,\"type\":\"numeric\"},\"value\":\"30\",\"description\":\"After how many hours of a month a publication not settled for the month before is reported by the daily check (1 to 720; the monthly exposure settlement runs on the 2nd at 00:47)\"}",
-      "targetKey" : "qb.exposure.unsettled-after-hours",
+      "changeValues" : "{\"paramKey\":\"qb.exposure.final.end-grace-sec\",\"valueKind\":{\"precision\":5,\"scale\":0,\"type\":\"numeric\"},\"value\":\"3600\",\"description\":\"How many seconds after a publication ended its final exposure settlement waits, so that the reports on the way are counted (60 to 86400; less counts as 60). Not qb.exposure.reconcile.end-grace-sec, which the check of the counting uses\"}",
+      "targetKey" : "qb.exposure.final.end-grace-sec",
       "effectiveTime" : null,
       "reason" : "First value of the QuizBuks parameter, proposed by QB_SETUP",
       "status" : "PROPOSED",
@@ -6158,8 +6156,8 @@
       "targetEntity" : "SysParam",
       "targetId" : null,
       "changeAction" : "UPSERT",
-      "changeValues" : "{\"paramKey\":\"qb.exposure.final-missing-after-hours\",\"valueKind\":{\"precision\":3,\"scale\":0,\"type\":\"numeric\"},\"value\":\"48\",\"description\":\"After how many hours of its end a publication without its final exposure settlement is reported by the daily check (1 to 720)\"}",
-      "targetKey" : "qb.exposure.final-missing-after-hours",
+      "changeValues" : "{\"paramKey\":\"qb.exposure.unsettled-after-hours\",\"valueKind\":{\"precision\":3,\"scale\":0,\"type\":\"numeric\"},\"value\":\"30\",\"description\":\"After how many hours of a month a publication not settled for the month before is reported by the daily check (1 to 720; the monthly exposure settlement runs on the 2nd at 00:47)\"}",
+      "targetKey" : "qb.exposure.unsettled-after-hours",
       "effectiveTime" : null,
       "reason" : "First value of the QuizBuks parameter, proposed by QB_SETUP",
       "status" : "PROPOSED",
@@ -6174,8 +6172,8 @@
       "targetEntity" : "SysParam",
       "targetId" : null,
       "changeAction" : "UPSERT",
-      "changeValues" : "{\"paramKey\":\"qb.exposure.top-up.max\",\"valueKind\":{\"precision\":9,\"scale\":0,\"type\":\"numeric\"},\"value\":\"1000000\",\"description\":\"The most exposures one top-up buys (1 to 999,999,999; a placeholder; keeps the parts of a deposit within what it can be shared into)\"}",
-      "targetKey" : "qb.exposure.top-up.max",
+      "changeValues" : "{\"paramKey\":\"qb.exposure.final-missing-after-hours\",\"valueKind\":{\"precision\":3,\"scale\":0,\"type\":\"numeric\"},\"value\":\"48\",\"description\":\"After how many hours of its end a publication without its final exposure settlement is reported by the daily check (1 to 720)\"}",
+      "targetKey" : "qb.exposure.final-missing-after-hours",
       "effectiveTime" : null,
       "reason" : "First value of the QuizBuks parameter, proposed by QB_SETUP",
       "status" : "PROPOSED",
@@ -6190,8 +6188,8 @@
       "targetEntity" : "SysParam",
       "targetId" : null,
       "changeAction" : "UPSERT",
-      "changeValues" : "{\"paramKey\":\"qb.reward.kudos.enabled\",\"valueKind\":{\"type\":\"bool\"},\"value\":\"true\",\"description\":\"Whether a publication may offer the reward method PLATFORM (Kudos paid by QuizBuks); off at the first launch (F-F10a)\"}",
-      "targetKey" : "qb.reward.kudos.enabled",
+      "changeValues" : "{\"paramKey\":\"qb.exposure.top-up.max\",\"valueKind\":{\"precision\":9,\"scale\":0,\"type\":\"numeric\"},\"value\":\"1000000\",\"description\":\"The most exposures one top-up buys (1 to 999,999,999; a placeholder; keeps the parts of a deposit within what it can be shared into)\"}",
+      "targetKey" : "qb.exposure.top-up.max",
       "effectiveTime" : null,
       "reason" : "First value of the QuizBuks parameter, proposed by QB_SETUP",
       "status" : "PROPOSED",
@@ -6203,6 +6201,22 @@
       "processSeqId" : "#op:114"
     }, {
       "changeId" : "#uuid:530",
+      "targetEntity" : "SysParam",
+      "targetId" : null,
+      "changeAction" : "UPSERT",
+      "changeValues" : "{\"paramKey\":\"qb.reward.kudos.enabled\",\"valueKind\":{\"type\":\"bool\"},\"value\":\"true\",\"description\":\"Whether a publication may offer the reward method PLATFORM (Kudos paid by QuizBuks); off at the first launch (F-F10a)\"}",
+      "targetKey" : "qb.reward.kudos.enabled",
+      "effectiveTime" : null,
+      "reason" : "First value of the QuizBuks parameter, proposed by QB_SETUP",
+      "status" : "PROPOSED",
+      "proposedBy" : "installer",
+      "publishedBy" : null,
+      "versionNo" : 1,
+      "effectStartTime" : "2026-10-01T00:00:00Z",
+      "createdTime" : "2026-10-01T00:00:00Z",
+      "processSeqId" : "#op:115"
+    }, {
+      "changeId" : "#uuid:531",
       "targetEntity" : "SysParam",
       "targetId" : null,
       "changeAction" : "UPSERT",
@@ -6218,7 +6232,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:237"
     }, {
-      "changeId" : "#uuid:531",
+      "changeId" : "#uuid:532",
       "targetEntity" : "SysParam",
       "targetId" : null,
       "changeAction" : "UPSERT",
@@ -6234,7 +6248,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:238"
     }, {
-      "changeId" : "#uuid:532",
+      "changeId" : "#uuid:533",
       "targetEntity" : "SysParam",
       "targetId" : null,
       "changeAction" : "UPSERT",
@@ -6250,28 +6264,12 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:239"
     }, {
-      "changeId" : "#uuid:533",
+      "changeId" : "#uuid:534",
       "targetEntity" : "SysParam",
       "targetId" : null,
       "changeAction" : "UPSERT",
       "changeValues" : "{\"paramKey\":\"qb.operator.share.kinds\",\"valueKind\":{\"maxLength\":200,\"type\":\"text\"},\"value\":\"MONTHLY,MANUAL,AUDIENCE,DISTRIBUTION,EXPOSURE\",\"description\":\"The kinds of platform fee that enter an operator's share base, comma-separated (no AI fee at the first launch); a kind outside the list still has a line but does not count\"}",
       "targetKey" : "qb.operator.share.kinds",
-      "effectiveTime" : null,
-      "reason" : "First value of the QuizBuks parameter, proposed by QB_SETUP",
-      "status" : "PROPOSED",
-      "proposedBy" : "installer",
-      "publishedBy" : null,
-      "versionNo" : 1,
-      "effectStartTime" : "2026-10-01T00:00:00Z",
-      "createdTime" : "2026-10-01T00:00:00Z",
-      "processSeqId" : "#op:115"
-    }, {
-      "changeId" : "#uuid:534",
-      "targetEntity" : "SysParam",
-      "targetId" : null,
-      "changeAction" : "UPSERT",
-      "changeValues" : "{\"paramKey\":\"qb.operator.share.ai-cost-in-base\",\"valueKind\":{\"type\":\"bool\"},\"value\":\"false\",\"description\":\"Whether the cost part of an AI fee enters the share base too (only when AI is in the kinds list)\"}",
-      "targetKey" : "qb.operator.share.ai-cost-in-base",
       "effectiveTime" : null,
       "reason" : "First value of the QuizBuks parameter, proposed by QB_SETUP",
       "status" : "PROPOSED",
@@ -6286,8 +6284,8 @@
       "targetEntity" : "SysParam",
       "targetId" : null,
       "changeAction" : "UPSERT",
-      "changeValues" : "{\"paramKey\":\"qb.operator.credit-recovery.rate\",\"valueKind\":{\"precision\":5,\"scale\":4,\"type\":\"numeric\"},\"value\":\"1.0000\",\"description\":\"The fraction of the granted credit used on fees that is taken back from the operator's share (0: none), as a fraction from 0 to 1\"}",
-      "targetKey" : "qb.operator.credit-recovery.rate",
+      "changeValues" : "{\"paramKey\":\"qb.operator.share.ai-cost-in-base\",\"valueKind\":{\"type\":\"bool\"},\"value\":\"false\",\"description\":\"Whether the cost part of an AI fee enters the share base too (only when AI is in the kinds list)\"}",
+      "targetKey" : "qb.operator.share.ai-cost-in-base",
       "effectiveTime" : null,
       "reason" : "First value of the QuizBuks parameter, proposed by QB_SETUP",
       "status" : "PROPOSED",
@@ -6302,8 +6300,8 @@
       "targetEntity" : "SysParam",
       "targetId" : null,
       "changeAction" : "UPSERT",
-      "changeValues" : "{\"paramKey\":\"qb.operator.gift.treatment.onboarding\",\"valueKind\":{\"maxLength\":10,\"type\":\"text\"},\"value\":\"OPERATOR\",\"description\":\"Who bears granted credit (onboarding) used on fees: OPERATOR (shared and taken back) or PLATFORM (not shared, not taken back)\"}",
-      "targetKey" : "qb.operator.gift.treatment.onboarding",
+      "changeValues" : "{\"paramKey\":\"qb.operator.credit-recovery.rate\",\"valueKind\":{\"precision\":5,\"scale\":4,\"type\":\"numeric\"},\"value\":\"1.0000\",\"description\":\"The fraction of the granted credit used on fees that is taken back from the operator's share (0: none), as a fraction from 0 to 1\"}",
+      "targetKey" : "qb.operator.credit-recovery.rate",
       "effectiveTime" : null,
       "reason" : "First value of the QuizBuks parameter, proposed by QB_SETUP",
       "status" : "PROPOSED",
@@ -6318,8 +6316,8 @@
       "targetEntity" : "SysParam",
       "targetId" : null,
       "changeAction" : "UPSERT",
-      "changeValues" : "{\"paramKey\":\"qb.operator.gift.treatment.certified-top-up\",\"valueKind\":{\"maxLength\":10,\"type\":\"text\"},\"value\":\"OPERATOR\",\"description\":\"Who bears granted credit (a verified company's top-up) used on fees: OPERATOR or PLATFORM\"}",
-      "targetKey" : "qb.operator.gift.treatment.certified-top-up",
+      "changeValues" : "{\"paramKey\":\"qb.operator.gift.treatment.onboarding\",\"valueKind\":{\"maxLength\":10,\"type\":\"text\"},\"value\":\"OPERATOR\",\"description\":\"Who bears granted credit (onboarding) used on fees: OPERATOR (shared and taken back) or PLATFORM (not shared, not taken back)\"}",
+      "targetKey" : "qb.operator.gift.treatment.onboarding",
       "effectiveTime" : null,
       "reason" : "First value of the QuizBuks parameter, proposed by QB_SETUP",
       "status" : "PROPOSED",
@@ -6334,8 +6332,8 @@
       "targetEntity" : "SysParam",
       "targetId" : null,
       "changeAction" : "UPSERT",
-      "changeValues" : "{\"paramKey\":\"qb.operator.gift.treatment.manual\",\"valueKind\":{\"maxLength\":10,\"type\":\"text\"},\"value\":\"PLATFORM\",\"description\":\"Who bears granted credit (granted by hand) used on fees: OPERATOR or PLATFORM\"}",
-      "targetKey" : "qb.operator.gift.treatment.manual",
+      "changeValues" : "{\"paramKey\":\"qb.operator.gift.treatment.certified-top-up\",\"valueKind\":{\"maxLength\":10,\"type\":\"text\"},\"value\":\"OPERATOR\",\"description\":\"Who bears granted credit (a verified company's top-up) used on fees: OPERATOR or PLATFORM\"}",
+      "targetKey" : "qb.operator.gift.treatment.certified-top-up",
       "effectiveTime" : null,
       "reason" : "First value of the QuizBuks parameter, proposed by QB_SETUP",
       "status" : "PROPOSED",
@@ -6350,8 +6348,8 @@
       "targetEntity" : "SysParam",
       "targetId" : null,
       "changeAction" : "UPSERT",
-      "changeValues" : "{\"paramKey\":\"qb.operator.gift.treatment.light\",\"valueKind\":{\"maxLength\":10,\"type\":\"text\"},\"value\":\"PLATFORM\",\"description\":\"Who bears granted credit (a lit node) used on fees: OPERATOR or PLATFORM\"}",
-      "targetKey" : "qb.operator.gift.treatment.light",
+      "changeValues" : "{\"paramKey\":\"qb.operator.gift.treatment.manual\",\"valueKind\":{\"maxLength\":10,\"type\":\"text\"},\"value\":\"PLATFORM\",\"description\":\"Who bears granted credit (granted by hand) used on fees: OPERATOR or PLATFORM\"}",
+      "targetKey" : "qb.operator.gift.treatment.manual",
       "effectiveTime" : null,
       "reason" : "First value of the QuizBuks parameter, proposed by QB_SETUP",
       "status" : "PROPOSED",
@@ -6366,8 +6364,8 @@
       "targetEntity" : "SysParam",
       "targetId" : null,
       "changeAction" : "UPSERT",
-      "changeValues" : "{\"paramKey\":\"qb.operator.gift.recover-outside-base\",\"valueKind\":{\"type\":\"bool\"},\"value\":\"false\",\"description\":\"Whether granted credit used on a fee outside the share base (an AI fee) is taken back too, for the part that is not cost\"}",
-      "targetKey" : "qb.operator.gift.recover-outside-base",
+      "changeValues" : "{\"paramKey\":\"qb.operator.gift.treatment.light\",\"valueKind\":{\"maxLength\":10,\"type\":\"text\"},\"value\":\"PLATFORM\",\"description\":\"Who bears granted credit (a lit node) used on fees: OPERATOR or PLATFORM\"}",
+      "targetKey" : "qb.operator.gift.treatment.light",
       "effectiveTime" : null,
       "reason" : "First value of the QuizBuks parameter, proposed by QB_SETUP",
       "status" : "PROPOSED",
@@ -6382,8 +6380,8 @@
       "targetEntity" : "SysParam",
       "targetId" : null,
       "changeAction" : "UPSERT",
-      "changeValues" : "{\"paramKey\":\"qb.operator.settlement.readiness-max-days\",\"valueKind\":{\"precision\":2,\"scale\":0,\"type\":\"numeric\"},\"value\":\"5\",\"description\":\"How many days after a month's end an operator's settlement waits for its sponsors' distribution fees, exposure fees and monthly invoices before it settles anyway (0 to 31; 0: it does not wait)\"}",
-      "targetKey" : "qb.operator.settlement.readiness-max-days",
+      "changeValues" : "{\"paramKey\":\"qb.operator.gift.recover-outside-base\",\"valueKind\":{\"type\":\"bool\"},\"value\":\"false\",\"description\":\"Whether granted credit used on a fee outside the share base (an AI fee) is taken back too, for the part that is not cost\"}",
+      "targetKey" : "qb.operator.gift.recover-outside-base",
       "effectiveTime" : null,
       "reason" : "First value of the QuizBuks parameter, proposed by QB_SETUP",
       "status" : "PROPOSED",
@@ -6398,8 +6396,8 @@
       "targetEntity" : "SysParam",
       "targetId" : null,
       "changeAction" : "UPSERT",
-      "changeValues" : "{\"paramKey\":\"qb.operator.settlement.waiting-after-hours\",\"valueKind\":{\"precision\":4,\"scale\":0,\"type\":\"numeric\"},\"value\":\"48\",\"description\":\"How many hours after its start an operator still without its settlement of a month is reported by the daily check, with the step it waits for; start is the month's end, or the time it became ready if later, but at most the readiness wait's end (30 to 9999; the check does not run until this is published)\"}",
-      "targetKey" : "qb.operator.settlement.waiting-after-hours",
+      "changeValues" : "{\"paramKey\":\"qb.operator.settlement.readiness-max-days\",\"valueKind\":{\"precision\":2,\"scale\":0,\"type\":\"numeric\"},\"value\":\"5\",\"description\":\"How many days after a month's end an operator's settlement waits for its sponsors' distribution fees, exposure fees and monthly invoices before it settles anyway (0 to 31; 0: it does not wait)\"}",
+      "targetKey" : "qb.operator.settlement.readiness-max-days",
       "effectiveTime" : null,
       "reason" : "First value of the QuizBuks parameter, proposed by QB_SETUP",
       "status" : "PROPOSED",
@@ -6414,8 +6412,8 @@
       "targetEntity" : "SysParam",
       "targetId" : null,
       "changeAction" : "UPSERT",
-      "changeValues" : "{\"paramKey\":\"qb.ai.fee.enabled\",\"valueKind\":{\"type\":\"bool\"},\"value\":\"false\",\"description\":\"Whether sponsors' AI requests are charged to their AI credit (off: free); the first launch turns it on\"}",
-      "targetKey" : "qb.ai.fee.enabled",
+      "changeValues" : "{\"paramKey\":\"qb.operator.settlement.waiting-after-hours\",\"valueKind\":{\"precision\":4,\"scale\":0,\"type\":\"numeric\"},\"value\":\"48\",\"description\":\"How many hours after its start an operator still without its settlement of a month is reported by the daily check, with the step it waits for; start is the month's end, or the time it became ready if later, but at most the readiness wait's end (30 to 9999; the check does not run until this is published)\"}",
+      "targetKey" : "qb.operator.settlement.waiting-after-hours",
       "effectiveTime" : null,
       "reason" : "First value of the QuizBuks parameter, proposed by QB_SETUP",
       "status" : "PROPOSED",
@@ -6430,8 +6428,8 @@
       "targetEntity" : "SysParam",
       "targetId" : null,
       "changeAction" : "UPSERT",
-      "changeValues" : "{\"paramKey\":\"qb.ai.fee.markup\",\"valueKind\":{\"precision\":4,\"scale\":2,\"type\":\"numeric\"},\"value\":\"1.50\",\"description\":\"The AI fee as a multiple of the provider's list price, from 1 to 10 (frozen on each job at its request)\"}",
-      "targetKey" : "qb.ai.fee.markup",
+      "changeValues" : "{\"paramKey\":\"qb.ai.fee.enabled\",\"valueKind\":{\"type\":\"bool\"},\"value\":\"false\",\"description\":\"Whether sponsors' AI requests are charged to their AI credit (off: free); the first launch turns it on\"}",
+      "targetKey" : "qb.ai.fee.enabled",
       "effectiveTime" : null,
       "reason" : "First value of the QuizBuks parameter, proposed by QB_SETUP",
       "status" : "PROPOSED",
@@ -6446,8 +6444,8 @@
       "targetEntity" : "SysParam",
       "targetId" : null,
       "changeAction" : "UPSERT",
-      "changeValues" : "{\"paramKey\":\"qb.ai.fee.usd-jpy\",\"valueKind\":{\"precision\":5,\"scale\":2,\"type\":\"numeric\"},\"value\":\"150.00\",\"description\":\"The yen of a US dollar for the AI fee, from 50 to 500 (frozen on each job at its request)\"}",
-      "targetKey" : "qb.ai.fee.usd-jpy",
+      "changeValues" : "{\"paramKey\":\"qb.ai.fee.markup\",\"valueKind\":{\"precision\":4,\"scale\":2,\"type\":\"numeric\"},\"value\":\"1.50\",\"description\":\"The AI fee as a multiple of the provider's list price, from 1 to 10 (frozen on each job at its request)\"}",
+      "targetKey" : "qb.ai.fee.markup",
       "effectiveTime" : null,
       "reason" : "First value of the QuizBuks parameter, proposed by QB_SETUP",
       "status" : "PROPOSED",
@@ -6462,8 +6460,8 @@
       "targetEntity" : "SysParam",
       "targetId" : null,
       "changeAction" : "UPSERT",
-      "changeValues" : "{\"paramKey\":\"qb.ai.fee.unbilled-after-hours\",\"valueKind\":{\"precision\":3,\"scale\":0,\"type\":\"numeric\"},\"value\":\"48\",\"description\":\"How many hours after their month ended charged AI jobs not charged yet are reported by the daily check, taken from 48 to 720 (the monthly charge runs on the 1st; the check does not run until this is published)\"}",
-      "targetKey" : "qb.ai.fee.unbilled-after-hours",
+      "changeValues" : "{\"paramKey\":\"qb.ai.fee.usd-jpy\",\"valueKind\":{\"precision\":5,\"scale\":2,\"type\":\"numeric\"},\"value\":\"150.00\",\"description\":\"The yen of a US dollar for the AI fee, from 50 to 500 (frozen on each job at its request)\"}",
+      "targetKey" : "qb.ai.fee.usd-jpy",
       "effectiveTime" : null,
       "reason" : "First value of the QuizBuks parameter, proposed by QB_SETUP",
       "status" : "PROPOSED",
@@ -6478,8 +6476,8 @@
       "targetEntity" : "SysParam",
       "targetId" : null,
       "changeAction" : "UPSERT",
-      "changeValues" : "{\"paramKey\":\"qb.ai.credit.expired-held-after-hours\",\"valueKind\":{\"precision\":3,\"scale\":0,\"type\":\"numeric\"},\"value\":\"48\",\"description\":\"How many hours after it expired (or was voided) granted credit still in an AI credit beyond what the jobs still holding credit hold is reported by the daily check, taken from 48 to 720 (the expiry runs daily; the check does not run until this is published)\"}",
-      "targetKey" : "qb.ai.credit.expired-held-after-hours",
+      "changeValues" : "{\"paramKey\":\"qb.fee.auto-pay.enabled\",\"valueKind\":{\"type\":\"bool\"},\"value\":\"false\",\"description\":\"Whether money arriving in the platform fee account (a top-up in cash, platform fee Kudos granted, a transfer from the operator) pays the sponsor's unpaid invoices by itself, the earliest first (declared off: the tests rely on it; a parameter that is not true means off)\"}",
+      "targetKey" : "qb.fee.auto-pay.enabled",
       "effectiveTime" : null,
       "reason" : "First value of the QuizBuks parameter, proposed by QB_SETUP",
       "status" : "PROPOSED",
@@ -6796,7 +6794,7 @@
     }, {
       "changeId" : "#uuid:567",
       "targetEntity" : "SysParam",
-      "targetId" : "#uuid:325",
+      "targetId" : "#uuid:326",
       "changeAction" : "UPSERT",
       "changeValues" : "{\"paramKey\":\"qb.transfer.threshold\",\"value\":\"3000\"}",
       "targetKey" : "qb.transfer.threshold",

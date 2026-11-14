@@ -136,7 +136,12 @@ describe('FundSwitches', () => {
     expect(screen.getByTestId('fund-switches-summary')).toHaveAttribute('data-total', '8')
     // The e2e counts the template's rows and the card's own apart (data-source), not by a number written in it.
     expect(stateOfRow('qb.help.enabled')).toHaveAttribute('data-source', 'template')
-    expect(stateOfRow(WAITING_ROWS[0].key)).toHaveAttribute('data-source', 'card')
+    // The rows that wait for a feature and whose key does not exist yet (none while every waiting switch has its key).
+    // Every waiting switch has its key now (they are `KEY_BEFORE_MEANING_ROWS`, read from the template), so no row of the
+    // card's own waits: expected, and checked against the registry by FirstLaunchSwitchesTemplateTest. A waiting switch
+    // whose key is not created yet would be listed in WAITING_ROWS and be card-sourced here.
+    expect(WAITING_ROWS.map((r) => r.key)).toEqual([])
+    for (const waiting of WAITING_ROWS) expect(stateOfRow(waiting.key)).toHaveAttribute('data-source', 'card')
     expect(stateOfRow(MANUAL_ROWS[0].key)).toHaveAttribute('data-source', 'card')
   })
 
@@ -168,7 +173,7 @@ describe('FundSwitches', () => {
     await screen.findAllByTestId('fund-switch-proposal')
     // F-M9a-2b: the AI fee and the website draft are active rows now (off at the launch, #702 review M1), with no
     // waiting note; on here, so they differ from the launch's value.
-    expect(KEY_BEFORE_MEANING_ROWS).toEqual([])
+    expect(KEY_BEFORE_MEANING_ROWS.map((r) => r.key)).toEqual(['qb.fee.auto-pay.enabled'])
     expect(within(stateOfRow('qb.ai.fee.enabled') as HTMLElement).queryByText(/Waits for/)).toBeNull()
     expect(stateOfRow('qb.ai.fee.enabled')).toHaveAttribute('data-state', 'differs')
     expect(within(stateOfRow('qb.ai.site-profile.enabled') as HTMLElement).queryByText(/Waits for/)).toBeNull()

@@ -890,6 +890,40 @@ public class FeeConfig {
         return ExposureSettlements.settle(zone);
     }
 
+    @Bean
+    ProcessDefinition<FeeAutoPay.AutoPayInput, FeeAutoPay.AutoPayOutput, ProcessContext> qbFeeAutoPay() {
+        return FeeAutoPay.autoPay();
+    }
+
+    @Bean
+    ProcessDefinition<FeeAutoPay.ItemInput, FeeAutoPay.ItemPaid, ProcessContext> qbFeeAutoPayItem() {
+        return FeeAutoPay.autoPayItem();
+    }
+
+    /** F-M13b: money arriving in the fee account asks for the sponsor's unpaid invoices to be paid, to be quick. */
+    @Bean
+    EventSubscription<FeeAutoPay.AutoPayInput> qbFeeAutoPayFundedSubscription(
+        ProcessDefinition<FeeAutoPay.AutoPayInput, FeeAutoPay.AutoPayOutput, ProcessContext> qbFeeAutoPay) {
+        return EventSubscription.of("qb.fee-auto-pay-funded", FeeAutoPay.FUNDED_EVENT, qbFeeAutoPay,
+            FeeAutoPay::input);
+    }
+
+    /**
+     * F-M13: every day at 02:27 in the fiscal year's zone (before the overdue reminders' 02:37): the sponsors with an
+     * unpaid invoice and something to pay it with, whatever way the account grew (the event of money arriving is only
+     * for being quick).
+     */
+    @Bean
+    JobDefinition<FeeAutoPay.AutoPayInput> qbFeeAutoPayJob(
+        ProcessDefinition<FeeAutoPay.AutoPayInput, FeeAutoPay.AutoPayOutput, ProcessContext> qbFeeAutoPay,
+        @Value("${quizbuks.fee.auto-pay.cron:0 27 2 * * *}") String cron) {
+        return JobDefinition.forEach(FeeAutoPay.JOB, cron, zone,
+                JobItems.template(FeeAutoPay.DUE_TEMPLATE, scheduledTime -> Map.of("at", scheduledTime), "invoiceId"),
+                qbFeeAutoPay, (scheduledTime, row) -> new FeeAutoPay.AutoPayInput(String.valueOf(row.get("sponsorId")),
+                    String.valueOf(row.get("invoiceId")), 0))
+            .maxItems(10_000);
+    }
+
     /** F-M8: the exposure fees of the month that ended, on the 2nd at 00:47 in the fiscal year's zone. */
     @Bean
     JobDefinition<ExposureSettlements.SettleRef> qbExposureMonthlyJob(

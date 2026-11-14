@@ -349,6 +349,13 @@ public final class QbParams {
     public static final String EXPOSURE_TOP_UP_MAX = "qb.exposure.top-up.max";
     /** The share of what was bought at or below which the sponsor is reminded (0: never); not controlled. */
     public static final String EXPOSURE_LOW_RATIO = "qb.exposure.low-ratio";
+    /**
+     * F-M13: whether money arriving in the platform fee account pays the sponsor's unpaid invoices by itself (controlled;
+     * read at the run, and not {@code true} means off: a parameter nobody published pays nothing), and how many invoices
+     * one run pays (the wallet lock is held meanwhile; 1 to 50).
+     */
+    public static final String FEE_AUTO_PAY_ENABLED = "qb.fee.auto-pay.enabled";
+    public static final String FEE_AUTO_PAY_MAX_INVOICES = "qb.fee.auto-pay.max-invoices";
     /** The headquarters' range of the operators' exposure prices, in the order the price check reads them. */
     public static final List<String> EXPOSURE_RANGE = List.of(EXPOSURE_UNIT_MIN, EXPOSURE_UNIT_MAX);
     /** The controlled ones, in the order of {@link #CONTROLLED} (before {@link #REWARD_KUDOS}). */
@@ -702,7 +709,8 @@ public final class QbParams {
         List.of(ENTRY_FEE_ENABLED), List.of(USAGE_FREE_BYTES), List.of(VIDEO_MAINLAND_SITES), HELP_CONTROLLED, FEE_CREDIT_PARAMS,
         SITE_PROFILE_CONTROLLED, DISTRIBUTION_CONTROLLED, EXPOSURE_CONTROLLED, REWARD_KUDOS, RECON_THRESHOLDS,
         HELP_USER_LIMITS,
-        OPERATOR_SHARE, OPERATOR_SETTLEMENT, OPERATOR_SETTLEMENT_CHECK, AI_FEE_CONTROLLED, AI_FEE_CHECK)
+        OPERATOR_SHARE, OPERATOR_SETTLEMENT, OPERATOR_SETTLEMENT_CHECK, AI_FEE_CONTROLLED,
+        List.of(FEE_AUTO_PAY_ENABLED), AI_FEE_CHECK)
         .flatMap(List::stream).toList();
 
     /** A parameter: its key, kind (as the platform writes kinds) and first value. */
@@ -1101,6 +1109,9 @@ public final class QbParams {
         new Param(EXPOSURE_LOW_RATIO, Map.of("type", "numeric", "precision", 4, "scale", 4), "0.1",
             "The sponsor is reminded when what is left of the exposures bought is at most this share of them (0 to 0.5; "
                 + "0: never)"),
+        new Param(FEE_AUTO_PAY_MAX_INVOICES, Map.of("type", "numeric", "precision", 2, "scale", 0), "20",
+            "How many unpaid invoices one automatic payment run pays (1 to 50; the sponsor's wallet is locked while it "
+                + "runs: half of what paying early may take at once, MAX_EARLY, and below half of that)"),
         new Param(EXPOSURE_BILLING_ENABLED, BOOL, false,
             "Whether a publication that uses another's shared video buys exposures at its submission (read at the "
                 + "submission only; publications submitted while on are settled to their end)"),
@@ -1184,12 +1195,19 @@ public final class QbParams {
                 + "at most the readiness wait's end (30 to 9999; the check does not run until this is published)"),
         // F-M9: the AI fee (qb.ai.credit.min-purchase is not created here: absent, a purchase has no least amount).
         new Param(AI_FEE_ENABLED, BOOL, false,
-            "Whether sponsors' AI requests are charged to their AI credit (off: free); the first launch turns it on"),
+            "Whether sponsors' AI requests are charged to their AI credit (off: free); off at the first launch too, turned "
+                + "on once the website draft's reservation limits are published (launch checklist)"),
         new Param(AI_FEE_MARKUP, Map.of("type", "numeric", "precision", 4, "scale", 2), "1.5",
             "The AI fee as a multiple of the provider's list price, from 1 to 10 (frozen on each job at its request)"),
         new Param(AI_FEE_USD_JPY, Map.of("type", "numeric", "precision", 5, "scale", 2), "150",
             "The yen of a US dollar for the AI fee, from 50 to 500 (frozen on each job at its request)"),
-        // F-M9a-2b: the daily check's hours for the AI fee (controlled; last, so the proposals before keep their places).
+        // F-M13: automatic payment of the unpaid invoices when money arrives (controlled, last: the order of ALL is the order of CONTROLLED).
+        new Param(FEE_AUTO_PAY_ENABLED, BOOL, false,
+            "Whether money arriving in the platform fee account (a top-up in cash, platform fee Kudos granted, a transfer "
+                + "from the operator) pays the sponsor's unpaid invoices by itself, the earliest first (declared off: the "
+                + "tests rely on it; a parameter that is not true means off)"),
+        // F-M9a-2b: the daily check's hours for the AI fee (controlled; after the auto-pay switch, so the proposals before
+        // keep their places).
         new Param(AI_FEE_UNBILLED_AFTER_HOURS, Map.of("type", "numeric", "precision", 3, "scale", 0), "48",
             "How many hours after their month ended charged AI jobs not charged yet are reported by the daily check, "
                 + "taken from 48 to 720 (the monthly charge runs on the 1st; the check does not run until this is "
