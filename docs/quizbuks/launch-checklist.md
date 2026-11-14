@@ -93,6 +93,8 @@
       确认人： ／ 日期： ／ 依据：
 - [ ] **注销收尾的开关 `qb.erasure.close.enabled`**（F-M15 b，受控，首次上线登记为开）：F-M13 的自动付款已合并（#696），收尾以它的单项付款、不看 `qb.fee.auto-pay.enabled`；发布后注销的发起方会先用账户里的钱付欠费、再作废剩余的赠送额度，由财务确认发布时点
       确认人： ／ 日期： ／ 依据：
+- [ ] **AI 额度与注销收尾**（F-M15 b，复核 M2）：有 AI 额度（用途 `AI` 的预付款）的发起方注销后，收尾停在 `DEPOSIT_OPEN`，直到 F-M15c 关闭那笔预付款，属预期；F-M15c 合并之前不打开 `qb.ai.fee.enabled`（首次上线本来就关着）
+      确认人： ／ 日期： ／ 依据：
 
 - [ ] **运营商分成的 8 个设置**（F-M12 a）：部署后，`QB_SETUP` 提出的 `qb.operator.share.kinds`、`qb.operator.share.ai-cost-in-base`、`qb.operator.credit-recovery.rate`、`qb.operator.gift.treatment.*`（4 个）、`qb.operator.gift.recover-outside-base` 已由另一位管理员发布（四眼）；未发布时结算任务对每个运营商都 422 `QB_OPERATOR_NO_SHARE_SETTING`。**必须在部署后的第一次结算任务之前完成**（staging：12 月的第一次任务之前）
       确认人： ／ 日期： ／ 依据：

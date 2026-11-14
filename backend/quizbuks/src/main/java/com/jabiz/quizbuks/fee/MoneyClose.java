@@ -291,9 +291,11 @@ public final class MoneyClose {
             .step("Read the closure and what is held", QueryEntities.<ProcessContext>all(
                 QueryEntities.query(QbFees.defaultDataset(QbSponsorClosures.CLOSURE),
                     ctx -> one(new QueryPredicate.Eq("sponsorId", sponsorId(ctx))), CLOSURE),
-                QueryEntities.query(QbFees.defaultDataset(QbPrepayments.PREPAYMENT), ctx -> one(
-                    new QueryPredicate.Eq("sponsorId", sponsorId(ctx)),
-                    new QueryPredicate.Eq("status", QbPrepayments.OPEN)), OPEN_DEPOSIT)))
+                // The AI credit's last (re-review M2): the one read is AI only when nothing else is held.
+                QueryEntities.query(QbFees.defaultDataset(QbPrepayments.PREPAYMENT), ctx -> EntityQuery.builder()
+                    .where(new QueryPredicate.And(List.of(new QueryPredicate.Eq("sponsorId", sponsorId(ctx)),
+                        new QueryPredicate.Eq("status", QbPrepayments.OPEN))))
+                    .orderBy(QbPrepayments.PURPOSE, false).limit(1).build(), OPEN_DEPOSIT)))
             .compute("Decide whether to go on", (metadata, ctx) -> decideStart(ctx))
             .step("Find the months not invoiced", RunTemplate.<ProcessContext>when(MoneyClose::goingOn,
                 UNINVOICED_TEMPLATE, ctx -> Map.of("sponsorId", sponsorId(ctx)), UNINVOICED))
@@ -329,15 +331,27 @@ public final class MoneyClose {
                 ? slowTaskSource(sponsorId(ctx)) : slowTaskSource("none"))));
     }
 
+    /**
+     * What step 0 withdraws: only what was asked for before the erasure (at its time at the latest; re-review M1). The erasure overwrote the
+     * reasons those were bound to; one asked for after it (finance's void of an invoice the wind-up waits on) is bound
+     * to what is there now, and is decided as usual.
+     */
     static List<WithdrawInput> withdrawInputs(ProcessContext ctx) {
         List<WithdrawInput> inputs = new ArrayList<>();
-        if (FeeGate.first(ctx, REGISTERED_CLOSURE) == null) {
+        EntityInstance closure = FeeGate.first(ctx, REGISTERED_CLOSURE);
+        if (closure == null) {
             return inputs;
         }
-        FeeGate.list(ctx, IN_REVIEW_TOPUPS).forEach(row -> inputs.add(new WithdrawInput(TOPUP, String.valueOf(row.id()))));
-        FeeGate.list(ctx, IN_REVIEW_REQUESTS).forEach(row -> inputs.add(new WithdrawInput(REQUEST,
-            String.valueOf(row.id()))));
+        Instant erasedAt = (Instant) closure.get("erasedAt");
+        FeeGate.list(ctx, IN_REVIEW_TOPUPS).stream().filter(row -> before(row.get("createdAt"), erasedAt))
+            .forEach(row -> inputs.add(new WithdrawInput(TOPUP, String.valueOf(row.id()))));
+        FeeGate.list(ctx, IN_REVIEW_REQUESTS).stream().filter(row -> before(row.get("requestedAt"), erasedAt))
+            .forEach(row -> inputs.add(new WithdrawInput(REQUEST, String.valueOf(row.id()))));
         return inputs;
+    }
+
+    private static boolean before(Object at, Instant erasedAt) {
+        return at instanceof Instant instant && !instant.isAfter(erasedAt);
     }
 
     /** Whether the run winds up now: a closure that is not done (or done with fees owed), the switch on, nothing held. */
@@ -452,8 +466,10 @@ public final class MoneyClose {
         Map<String, String> params = new LinkedHashMap<>();
         params.put("sponsor", sponsorId(ctx));
         // The title says why in words, one message per reason (review L7).
+        EntityInstance held = FeeGate.first(ctx, OPEN_DEPOSIT);
+        boolean onlyAi = held != null && QbPrepayments.AI.equals(held.get(QbPrepayments.PURPOSE));
         return TaskSpec.forPermission(SLOW_TASK, SLOW_TASK_TITLE + "." + ErasureCloseRules.slowReason(
-                (String) ctx.get(OUTCOME)), params, QbPermissions.FEE_MANAGE)
+                (String) ctx.get(OUTCOME), onlyAi), params, QbPermissions.FEE_MANAGE)
             .about(QbSponsorClosures.CLOSURE, String.valueOf(closure.id())).source(slowTaskSource(sponsorId(ctx)));
     }
 

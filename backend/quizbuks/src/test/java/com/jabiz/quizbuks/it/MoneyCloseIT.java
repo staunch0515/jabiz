@@ -522,6 +522,52 @@ class MoneyCloseIT extends MoneyCloseItSupport {
     }
 
     @Test
+    void aRequestMadeAfterTheErasureIsNotWithdrawn() {
+        // Re-review M1: while the wind-up waits on a deposit, finance asks to void the erased sponsor's invoice. The
+        // request is bound to what is there now: the next runs leave it under review.
+        autoApprove(true);
+        String sponsor = pricedSponsor("fm15b-m1");
+        grant(sponsor, 1_000, clock.instant().plus(Duration.ofDays(90)));
+        String publicationId = audienceDraft(sponsor, "FM15b M1");
+        submit(sponsorToken(sponsor), publicationId);
+        billing(sponsor, "POSTPAID", 50_000);
+        manualFee(sponsor, 300);
+        invoicePeriod(sponsor, clock.instant());
+        String invoiceId = String.valueOf(query("SELECT invoice_id FROM qb_fee_invoice WHERE sponsor_id = ?", sponsor)
+            .getFirst().get("invoice_id"));
+        erase(sponsor);
+        assertThat(close(sponsor).outcome()).isEqualTo(MoneyClose.WAITING_DEPOSITS);
+
+        clock.set(clock.instant().plus(Duration.ofMinutes(5)));
+        Map<String, Object> request = run(FeeRequests.RECORD, finance(), body("kind", QbFees.REQUEST_VOID,
+            "invoiceId", invoiceId, "reason", "Charged by mistake"));
+        String requestId = String.valueOf(request.get("requestId"));
+        MoneyClose.CloseOutput next = close(sponsor);
+        assertThat(next.outcome()).isEqualTo(MoneyClose.WAITING_DEPOSITS);
+        assertThat(next.withdrawn()).isZero();
+        assertThat(query("SELECT status, ended_code FROM qb_fee_request WHERE request_id = ?", requestId))
+            .singleElement().satisfies(row -> assertThat(row).containsEntry("status", QbFees.REVIEW)
+                .containsEntry("ended_code", null));
+    }
+
+    @Test
+    void aWindUpWaitingOnlyOnTheAiCreditsPrepaymentSaysSoInFinancesTask() {
+        // Re-review M2: the AI credit's prepayment is closed by F-M15 c; until then such a wind-up waits, as expected,
+        // and the slow task's title says that it is the AI credit's.
+        String sponsor = newSponsor(unique("s-fm15b-ai"));
+        grant(sponsor, 200, clock.instant().plus(Duration.ofDays(90)));
+        SyntheticRows.rows("qb_prepayment", null, 1, null, n -> Map.of("sponsor_id", text(sponsor), "purpose", "'AI'",
+            "mode", "'PREPAID'", "amount", "100", "remaining", "100", "charge_amount", "0", "status", "'OPEN'",
+            "frozen_at", "TIMESTAMPTZ '2026-01-01T00:00:00Z'"));
+        erase(sponsor);
+        clock.set(clock.instant().plus(Duration.ofDays(3)));
+        assertThat(close(sponsor).outcome()).isEqualTo(MoneyClose.WAITING_DEPOSITS);
+        assertThat(openTasks("erasure-close:" + sponsor)).singleElement()
+            .satisfies(task -> assertThat(String.valueOf(task.get("title_key")))
+                .isEqualTo(MoneyClose.SLOW_TASK_TITLE + ".DEPOSIT_OPEN_AI"));
+    }
+
+    @Test
     void financeIsToldOnceWhenItTakesLongAndTheTaskClosesWhenItIsDone() {
         param(QbParams.ERASURE_CLOSE_ENABLED, "false");
         String sponsor = newSponsor(unique("s-fm15b-slow"));

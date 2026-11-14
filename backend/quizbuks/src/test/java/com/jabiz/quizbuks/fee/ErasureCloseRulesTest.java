@@ -57,6 +57,10 @@ class ErasureCloseRulesTest {
         assertThat(ErasureCloseRules.slowReason(MoneyClose.TO_PAY)).isEqualTo("TO_PAY");
         assertThat(ErasureCloseRules.slowReason(MoneyClose.MORE)).isEqualTo("MORE");
         assertThat(ErasureCloseRules.slowReason(null)).isEqualTo("OTHER");
+        // Re-review M2: only the AI credit's prepayment held.
+        assertThat(ErasureCloseRules.slowReason(MoneyClose.WAITING_DEPOSITS, true)).isEqualTo("DEPOSIT_OPEN_AI");
+        assertThat(ErasureCloseRules.slowReason(MoneyClose.WAITING_DEPOSITS, false)).isEqualTo("DEPOSIT_OPEN");
+        assertThat(ErasureCloseRules.slowReason(MoneyClose.TO_PAY, true)).isEqualTo("TO_PAY");
     }
 
     @Test
