@@ -276,18 +276,18 @@ public final class AiProcesses {
             AiTranslateJob.TYPE, Loads.PUBLICATION, zone, ctx -> preparePublicationTexts(ctx, userKeys));
     }
 
-    /** F-M9b: what a request of questions would reserve, and what the credit can hold (no lock, no write). */
+    /** F-M9b: what a request of questions would reserve, and what the credit can hold (no lock, no business data written). */
     public static ProcessDefinition<RequestInput, QuoteOutput, ProcessContext> quote(ZoneId zone, AiUserKeys userKeys,
         AiPdfs.Limits pdfs) {
         return quoteProcess(QUOTE, RequestInput.class, "Prices a request of AI questions as the request would reserve "
-            + "it, writing nothing.", Loads.QUESTIONS, zone, ctx -> prepare(ctx, userKeys, pdfs));
+            + "it, writing no business data.", Loads.QUESTIONS, zone, ctx -> prepare(ctx, userKeys, pdfs));
     }
 
     /** F-M9b: the quote of {@link #translateRequest}. */
     public static ProcessDefinition<TranslateRequestInput, QuoteOutput, ProcessContext> translateQuote(ZoneId zone,
         AiUserKeys userKeys) {
         return quoteProcess(TRANSLATE_QUOTE, TranslateRequestInput.class, "Prices an AI translation of a quiz as the "
-            + "request would reserve it, writing nothing.", Loads.TRANSLATION, zone,
+            + "request would reserve it, writing no business data.", Loads.TRANSLATION, zone,
             ctx -> prepareTranslation(ctx, userKeys));
     }
 
@@ -295,7 +295,7 @@ public final class AiProcesses {
     public static ProcessDefinition<PublicationTranslateRequestInput, QuoteOutput, ProcessContext>
         publicationTranslateQuote(ZoneId zone, AiUserKeys userKeys) {
         return quoteProcess(PUBLICATION_TRANSLATE_QUOTE, PublicationTranslateRequestInput.class, "Prices an AI "
-            + "translation of a publication's texts as the request would reserve it, writing nothing.",
+            + "translation of a publication's texts as the request would reserve it, writing no business data.",
             Loads.PUBLICATION, zone, ctx -> preparePublicationTexts(ctx, userKeys));
     }
 
@@ -330,7 +330,7 @@ public final class AiProcesses {
 
     /**
      * F-M9b (coordinator 2026-11-14): the quote of a request: the same caller, checks and reads as the request and the
-     * same computation of what it reserves ({@link #feeQuote}), with no lock and no write (the AI notice is not asked
+     * same computation of what it reserves ({@link #feeQuote}), with no lock and no business data written (the AI notice is not asked
      * for, nor recorded: the quote is what the sponsor reads before accepting it).
      */
     private static <I extends Requested> ProcessDefinition<I, QuoteOutput, ProcessContext> quoteProcess(

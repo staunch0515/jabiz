@@ -12,7 +12,7 @@
 
 用 AI 出题、翻译和从官网生成资料，费用从你的 **AI 额度**中扣。AI 额度要先在"资金 → AI 额度"中购买：先用你平台费账户中的赠送，不够的部分用现金。
 
-费用按 AI 提供方的价目计算：你的请求实际用到的量 × 价目 × 150%，按当时的汇率换成日元，**向上取整到 1 日元**（有用量时至少 1 日元），每月合计后另加消费税。页面上不显示美元。
+费用按 AI 提供方的价目计算：你的请求实际用到的量 × 价目 × 150%，按当时的汇率换算，**向上取整为整数**（有用量时至少 1），每月合计后另加消费税。页面上的金额与平台费账户一样以点数（Kudos）显示，不显示美元。
 - 发起请求时，会先按这次请求"可能的最大费用"（含税）从额度中**预留**；额度不够时请求会被拒，页面给出购买的入口。
 - 作业结束时按实际用量计算，**不超过预留**；预留多出的部分立即还给你。
 - 每月 1 日把上个月结束的作业合计成一笔 AI 费，从额度中扣，赠送先扣。
@@ -29,7 +29,7 @@
 
 AI による問題作成・翻訳・公式サイトからの資料作成の料金は、**AI クレジット**から差し引かれます。AI クレジットは「資金 → AI クレジット」で先に購入してください。プラットフォーム料金アカウントの付与分から先に使い、足りない分は現金で支払います。
 
-料金は AI の提供元の価格表で計算します：リクエストで実際に使った量 × 価格 × 150% を、その時点の為替レートで円に換算し、**1 円単位に切り上げ**ます（利用があれば最低 1 円）。月ごとに合計し、消費税を加えます。画面にドルは表示しません。
+料金は AI の提供元の価格表で計算します：リクエストで実際に使った量 × 価格 × 150% を、その時点の為替レートで換算し、**整数に切り上げ**ます（利用があれば最低 1）。月ごとに合計し、消費税を加えます。画面の金額はプラットフォーム利用料アカウントと同じくポイント（クドス）で表示し、ドルは表示しません。
 - リクエストの時点で、そのリクエストに**かかりうる最大の料金**（税込）を AI クレジットから**予約**します。足りないときはリクエストを受け付けず、購入への入口を表示します。
 - ジョブが終わると実際の利用量で計算し、**予約額を超えることはありません**。予約の余った分はすぐに戻ります。
 - 毎月 1 日に、前の月に終わったジョブを 1 件の AI 利用料にまとめて AI クレジットから差し引きます（付与分から先に）。
@@ -46,7 +46,7 @@ AI クレジットの中の付与分は、もとの有効期限のままです�
 
 Writing questions, translating and drafting from your website with AI are paid from your **AI credit**. Buy it first under "Money → AI credit": the granted credit in your platform fee account is used first, the rest paid in cash.
 
-The fee follows the AI provider's price list: what your request actually used × the price × 150%, in yen at the rate of the day, **rounded up to the yen** (at least 1 yen when anything was used), with consumption tax added to each month's total. The pages show no dollars.
+The fee follows the AI provider's price list: what your request actually used × the price × 150%, converted at the rate of the day and **rounded up to a whole number** (at least 1 when anything was used), with consumption tax added to each month's total. The pages show amounts in points (Kudos), as the platform fee account does, never in dollars.
 - When you ask, the **most this request may cost** (with tax) is **held** from your credit; when the credit cannot hold it, the request is refused and the page offers a purchase.
 - When the job ends it is charged what it used, **never more than what was held**; the rest goes back to you at once.
 - On the 1st of each month the jobs that ended the month before are charged from the credit as one AI fee, the granted credit first.

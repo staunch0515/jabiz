@@ -65,7 +65,7 @@ abstract class AiItSupport extends LegalItSupport {
         registry.add("jabiz.process.rate-limits[QB_SITE_PROFILE_REQUEST].per-user", () -> "10000");
         // F-M9b: the quotes too.
         for (String quote : List.of("QB_AI_QUESTIONS_QUOTE", "QB_AI_TRANSLATE_QUOTE", "QB_AI_PUBLICATION_TRANSLATE_QUOTE",
-            "QB_SITE_PROFILE_QUOTE")) {
+            "QB_SITE_PROFILE_QUOTE", "QB_AI_CREDIT_STANDING")) {
             registry.add("jabiz.process.rate-limits[" + quote + "].per-user", () -> "10000");
         }
         // A provider that does not answer is found out in two seconds, not the two minutes of production.

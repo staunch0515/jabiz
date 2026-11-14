@@ -4,7 +4,6 @@ import com.jabiz.param.ParamValues;
 import com.jabiz.process.ProcessContext;
 import com.jabiz.process.ProcessDefinition;
 import com.jabiz.quizbuks.QbPermissions;
-import com.jabiz.quizbuks.fee.AiFeeRules;
 import com.jabiz.quizbuks.fee.Prepayments;
 import com.jabiz.query.EntityQuery;
 import com.jabiz.query.QueryPredicate;
@@ -23,7 +22,7 @@ import java.util.Optional;
 /**
  * F-M9b (docs/quizbuks/plans/impl/F-M9.md §7): where the caller's AI credit stands, as the requests and the return read
  * it, for the AI credit page, the AI panels and the "AI credit short" note: what a new request can use now, what may be
- * given back, and whether it is below {@code qb.ai.credit.low-amount}. Read only: no lock, no write; the page shows these
+ * given back, and whether it is below {@code qb.ai.credit.low-amount}. Read only: no lock and no business data written (the platform records the operation, as for every process); the page shows these
  * numbers and works out none of its own (coordinator 2026-11-14).
  */
 public final class AiCreditStanding {
@@ -62,7 +61,7 @@ public final class AiCreditStanding {
         return ProcessDefinition.define(STANDING, 1, StandingInput.class, StandingOutput.class, ProcessContext.class,
             pb -> pb
                 .description("Where the caller's AI credit stands: what a request can use, what may be given back, and "
-                    + "whether it is low; writing nothing.")
+                    + "whether it is low; writing no business data.")
                 .permissions(QbPermissions.AI_USE)
                 // As the AI's other processes (VerifiedEmailWritesIT): who uses AI credit has a verified address.
                 .requiresVerifiedEmail()
@@ -98,8 +97,9 @@ public final class AiCreditStanding {
         }
         BigDecimal rate = taxRate.orElse(BigDecimal.ZERO);
         BigDecimal occupied = standing.occupied(rate);
-        BigDecimal usable = AiFeeRules.usable(Prepayments.aiLots(ctx), occupied, ctx.opTime());
-        BigDecimal available = standing.available(rate).min(usable);
+        AiFees.Room room = AiFees.room(ctx, rate);
+        BigDecimal available = room.available();
+        BigDecimal usable = room.returnable();
         boolean low = feeOn && lowAmount != null && available.compareTo(lowAmount) < 0 && recentlyUsed(ctx);
         return new StandingOutput(feeOn, standing.remaining(), standing.reserved(), occupied.subtract(
             standing.reserved()), available, usable, minPurchase, lowAmount, low);

@@ -120,13 +120,13 @@ public final class SiteProfileProcesses {
 
     /**
      * F-M9b: what a website's draft would reserve and what the credit can hold, as {@link #request} reads them, with no
-     * lock and no write (the notice is not asked for).
+     * lock and no business data written (the notice is not asked for).
      */
     public static ProcessDefinition<RequestInput, AiProcesses.QuoteOutput, ProcessContext> quote(ZoneId zone,
         AiUserKeys userKeys) {
         return ProcessDefinition.define(QUOTE, 1, RequestInput.class, AiProcesses.QuoteOutput.class,
             ProcessContext.class, pb -> {
-                pb.description("Prices a website's draft as the request would reserve it, writing nothing.")
+                pb.description("Prices a website's draft as the request would reserve it, writing no business data.")
                     .outputMapper(ctx -> ctx.get(AiProcesses.OUTPUT, AiProcesses.QuoteOutput.class));
                 prefix(pb, userKeys, true);
                 AiProcesses.quoted(pb, zone);

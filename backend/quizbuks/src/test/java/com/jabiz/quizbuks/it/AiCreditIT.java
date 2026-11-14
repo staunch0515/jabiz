@@ -120,7 +120,7 @@ class AiCreditIT extends AiCreditItSupport {
             List.of(quiz.get(1)), 2), 422);
         assertThat(codes(problem)).containsExactly(AiCodes.CREDIT_SHORT);
         // What it may cost and what is available fill in the message (the page asks QB_AI_FEE_QUOTE for the numbers).
-        assertThat(String.valueOf(problem)).containsPattern("may cost up to [1-9][0-9]* yen and 0 yen is available");
+        assertThat(String.valueOf(problem)).containsPattern("may cost up to [1-9][0-9]* Kudos and 0 Kudos is available");
         assertThat(query("SELECT 1 FROM qb_ai_job WHERE sponsor_id = ?", sponsor)).isEmpty();
     }
 

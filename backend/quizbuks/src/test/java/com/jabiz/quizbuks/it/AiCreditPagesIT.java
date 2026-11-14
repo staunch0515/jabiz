@@ -16,7 +16,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 /**
  * F-M9b (docs/quizbuks/plans/impl/F-M9.md §7): what the Sponsor's AI credit page reads - the credit at a glance
- * (qb.sponsor.ai-credit), its lots (granted credit with its expiry, then cash), the charged requests and the movements
+ * (QB_AI_CREDIT_STANDING; #707 review L4: the glance template is gone), its lots (granted credit with its expiry, then cash), the charged requests and the movements
  * - each the caller's own, another Sponsor seeing none of it.
  */
 class AiCreditPagesIT extends AiCreditItSupport {
@@ -34,19 +34,17 @@ class AiCreditPagesIT extends AiCreditItSupport {
         BigDecimal reserved = money(job(aiJobId).get("reserved_yen"));
 
         // While the request runs: it holds its reservation.
-        Map<String, Object> glance = items("qb.sponsor.ai-credit", token, Map.of()).getFirst();
+        Map<String, Object> glance = run(AiCreditStanding.STANDING, token, Map.of());
         assertThat(money(glance.get("remaining"))).isEqualByComparingTo("1000");
-        assertThat(money(glance.get("bought"))).isEqualByComparingTo("1000");
         assertThat(money(glance.get("reserved"))).isEqualByComparingTo(reserved);
-        assertThat(money(glance.get("unbilled"))).isZero();
+        assertThat(money(glance.get("unbilledWithTax"))).isZero();
 
         // Once it ended: its fee waits for the month's charge.
         runUntilDone(aiJobId);
         BigDecimal fee = money(job(aiJobId).get("fee_yen"));
-        glance = items("qb.sponsor.ai-credit", token, Map.of()).getFirst();
+        glance = run(AiCreditStanding.STANDING, token, Map.of());
         assertThat(money(glance.get("reserved"))).isZero();
-        assertThat(money(glance.get("unbilled"))).isEqualByComparingTo(fee);
-        assertThat(((Number) glance.get("unbilledJobs")).intValue()).isEqualTo(1);
+        assertThat(money(glance.get("unbilledWithTax"))).isGreaterThanOrEqualTo(fee);
 
         // Its lots: the granted credit with its expiry first, then the cash.
         List<Map<String, Object>> lots = items("qb.sponsor.ai-credit-lots", token, Map.of());
@@ -68,9 +66,9 @@ class AiCreditPagesIT extends AiCreditItSupport {
 
         // Another Sponsor sees nothing of it.
         String other = sponsorFull(newSponsor("ai-page-other-" + UUID.randomUUID()));
-        Map<String, Object> theirs = items("qb.sponsor.ai-credit", other, Map.of()).getFirst();
+        Map<String, Object> theirs = run(AiCreditStanding.STANDING, other, Map.of());
         assertThat(money(theirs.get("remaining"))).isZero();
-        assertThat(money(theirs.get("unbilled"))).isZero();
+        assertThat(money(theirs.get("unbilledWithTax"))).isZero();
         assertThat(items("qb.sponsor.ai-credit-lots", other, Map.of())).isEmpty();
         assertThat(items("qb.sponsor.ai-credit-jobs", other, Map.of())).isEmpty();
         assertThat(items("qb.sponsor.ai-credit-movements", other, Map.of())).isEmpty();
@@ -135,6 +133,47 @@ class AiCreditPagesIT extends AiCreditItSupport {
             param(QbParams.AI_FEE_ENABLED, "true");
             yenParam(QbParams.AI_CREDIT_LOW_AMOUNT, "0");
         }
+    }
+
+    /**
+     * #707 review M3: with a request still running (its reservation), a finished one not charged yet (its fee with tax)
+     * and granted credit expired, the standing, the quote and the return read one room: what may be given back is the
+     * cash alone (the open jobs hold the front of the granted credit, the rest of it is expired), a return of exactly
+     * that goes through, and then nothing is available or may be given back.
+     */
+    @Test
+    void theStandingTheQuoteAndTheReturnReadOneRoom() {
+        feeOn();
+        String sponsor = newSponsor("ai-room-" + UUID.randomUUID());
+        String grantId = grant(sponsor, 3_000);
+        cash(sponsor, 2_000);
+        buy(sponsor, 4_000);
+        String token = sponsorFull(sponsor);
+        List<String> quiz = quizWithArticle(token, title(), "Material for the room.");
+        Object finished = request(token, quiz.get(0), List.of(quiz.get(1)), 2).get("aiJobId");
+        runUntilDone(finished);
+        assertThat(money(job(finished).get("fee_yen"))).isPositive();
+        List<String> other = quizWithArticle(token, title(), "Material for the running request.");
+        Object running = request(token, other.get(0), List.of(other.get(1)), 2).get("aiJobId");
+        assertThat(money(job(running).get("reserved_yen"))).isPositive();
+        execute("UPDATE qb_fee_credit_grant SET expires_at = ? WHERE grant_id = ?",
+            java.sql.Timestamp.from(clock.instant().minusSeconds(60)), grantId);
+
+        Map<String, Object> standing = run(AiCreditStanding.STANDING, token, Map.of());
+        BigDecimal occupied = money(standing.get("reserved")).add(money(standing.get("unbilledWithTax")));
+        assertThat(occupied).isPositive().isLessThan(BigDecimal.valueOf(3_000));
+        assertThat(money(standing.get("returnable"))).as("the cash alone").isEqualByComparingTo("1000");
+        assertThat(money(standing.get("available"))).isEqualByComparingTo("1000");
+        assertThat(money(run(AiProcesses.QUOTE, token, requestInput(quiz.get(0), List.of(quiz.get(1)), 2))
+            .get("availableYen"))).isEqualByComparingTo("1000");
+
+        run(AiCreditReturns.RETURN, token, body("amount", 1_000, "requestKey", UUID.randomUUID().toString()));
+        Map<String, Object> after = run(AiCreditStanding.STANDING, token, Map.of());
+        assertThat(money(after.get("returnable"))).isZero();
+        assertThat(money(after.get("available"))).isZero();
+        assertThat(money(after.get("remaining"))).isEqualByComparingTo("3000");
+        assertThat(codes(refused(AiCreditReturns.RETURN, token, body("amount", 1, "requestKey",
+            UUID.randomUUID().toString()), 422))).containsExactly(FeeCodes.AI_CREDIT_RETURN_ABOVE);
     }
 
     /** Sets an optional whole-number parameter (the first change gives its kind). */

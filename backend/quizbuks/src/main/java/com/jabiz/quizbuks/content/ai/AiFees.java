@@ -7,6 +7,7 @@ import com.jabiz.query.QueryPredicate;
 import com.jabiz.runtime.EntityInstance;
 import com.jabiz.runtime.process.steps.QueryEntities;
 import com.jabiz.runtime.BusinessRuleViolationException;
+import com.jabiz.quizbuks.fee.AiCreditGiveBack;
 import com.jabiz.quizbuks.fee.AiFeeRules;
 import com.jabiz.quizbuks.fee.FeeRules;
 import com.jabiz.quizbuks.fee.Prepayments;
@@ -188,15 +189,26 @@ final class AiFees {
             throw new BusinessRuleViolationException(problems);
         }
         BigDecimal reservation = AiFeeRules.reservation(maxUsd, fee.markup(), fee.usdJpy(), fee.taxRate());
+        return new Quote(true, reservation, room(ctx, fee.taxRate()).available(), fee.minPurchase());
+    }
+
+    /**
+     * #707 review M3: what the credit can hold for a new request and what may be given back now, the one reading of a
+     * request, its quote, the standing and the return ({@link AiCreditGiveBack#returnable}, which the return's
+     * sub-process applies to the same lots and what the open jobs hold).
+     *
+     * @param available  what a new request can use: the credit less what the open jobs hold, and (#699 re-review L2)
+     *                   never the expired or voided fee credit beyond what they hold, the next expiry's to void
+     * @param returnable what may be given back: the lots less what the open jobs hold and the expired fee credit
+     */
+    record Room(BigDecimal available, BigDecimal returnable) {}
+
+    /** The {@link Room} of the standing {@link #queries} read and the lots ({@link Prepayments#HELD_LOTS}, if read). */
+    static Room room(ProcessContext ctx, BigDecimal taxRate) {
         Standing standing = standing(ctx, null);
-        BigDecimal available = standing.available(fee.taxRate());
-        if (readsLots(ctx)) {
-            // #699 re-review L2: expired fee credit, or a voided grant's, beyond what the open jobs hold is the next
-            // expiry's to void: never reserved by a new request (no day's window before the daily job).
-            available = available.min(AiFeeRules.usable(Prepayments.aiLots(ctx), standing.occupied(fee.taxRate()),
-                ctx.opTime()));
-        }
-        return new Quote(true, reservation, available, fee.minPurchase());
+        BigDecimal returnable = AiCreditGiveBack.returnable(Prepayments.aiLots(ctx), standing.occupied(taxRate),
+            ctx.opTime());
+        return new Room(standing.available(taxRate).min(returnable), returnable);
     }
 
     /**

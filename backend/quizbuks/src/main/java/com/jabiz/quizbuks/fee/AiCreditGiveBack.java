@@ -147,7 +147,7 @@ public final class AiCreditGiveBack {
      * What may be given back: what the credit holds by lot, less what the open jobs hold (the front of the order it is
      * spent in) and the expired or voided fee credit beyond that (voided by the next expiry, never returned).
      */
-    static BigDecimal returnable(List<AiFeeRules.Lot> lots, BigDecimal occupied, Instant now) {
+    public static BigDecimal returnable(List<AiFeeRules.Lot> lots, BigDecimal occupied, Instant now) {
         return AiFeeRules.usable(lots, occupied, now);
     }
 
