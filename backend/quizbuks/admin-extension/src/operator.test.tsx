@@ -31,6 +31,7 @@ const server = vi.hoisted(() => ({
   sponsors: [] as Record<string, unknown>[],
   billing: [] as Record<string, unknown>[],
   creditNotes: [] as Record<string, unknown>[],
+  reconNotes: [] as Record<string, unknown>[],
   team: {} as Record<string, unknown>,
   runQuery: vi.fn(),
   runProcess: vi.fn(),
@@ -76,6 +77,7 @@ beforeEach(() => {
     PERMISSION.usersRead])
   server.entry = 'admin'
   server.operators = [operator()]
+  server.reconNotes = []
   server.members = [
     { memberId: 'm1', userId: LEAD, displayName: 'Lena Lead', email: 'lena@kansai.example', lead: true,
       addedAt: '2026-10-21T01:00:00Z', removedAt: null, hasRole: true },
@@ -100,6 +102,7 @@ beforeEach(() => {
           : id === TEMPLATE.operatorSponsors ? server.sponsors
             : id === TEMPLATE.operatorBilling ? server.billing
             : id === TEMPLATE.operatorFeeCreditNotes ? server.creditNotes
+            : id === TEMPLATE.operatorReconNotes ? server.reconNotes
               : id === TEMPLATE.operatorOverview ? [{ mySponsors: 1, sponsors: 9, sponsorsInReview: 2,
                 publicationsInReview: 3, livePublications: 4, myLivePublications: 1, myCompletions: 120 }]
                 : id === TEMPLATE.sponsors ? [{ userId: SPONSOR, company: 'Acme', reviewStatus: 'APPROVED' }]
@@ -425,6 +428,42 @@ describe('the operator', () => {
     await waitFor(() => expect(server.runProcess).toHaveBeenCalledWith(FEE_PROCESS.billingSet,
       { userId: 'other', billingMode: 'POSTPAID', creditLimit: 10000, reason: 'Trusted' }))
     await waitFor(() => expect(screen.queryByTestId('billing-dialog')).not.toBeInTheDocument())
+  })
+
+  it('shows the daily check\'s notes about its own Sponsors, by note, and says so when there are none (F-M14b)', async () => {
+    server.get.mockImplementation(async (path: string) => {
+      if (path === '/api/dictionaries/{urn}') return []
+      throw new ApiError(404, { detail: 'Not found' })
+    })
+    const empty = renderAt('/qb/operator/billing', '/qb/operator/billing', <OperatorBillingPage />)
+    const none = await within(await screen.findByTestId('operator-recon-notes')).findByTestId('operator-recon-notes-none')
+    expect(none).toHaveTextContent('The latest check noted nothing about your Sponsors.')
+    expect(server.runQuery).toHaveBeenCalledWith(TEMPLATE.operatorReconNotes, expect.anything())
+    empty.unmount()
+    server.reconNotes = [
+      { checkCode: 'DISTRIBUTION_AT_FLOOR', sponsorId: SPONSOR, company: 'Acme', contactName: 'Alice', publications: 2,
+        scheduledTime: '2026-11-13T18:37:00Z' },
+      { checkCode: 'EXPOSURE_UNPURCHASED', sponsorId: 'other', company: '', contactName: 'Bob', publications: 1,
+        scheduledTime: '2026-11-13T18:37:00Z' },
+      // A check the operator is not given is never shown, whatever the server answered.
+      { checkCode: 'SPONSOR_WALLET', sponsorId: SPONSOR, company: 'Acme', contactName: 'Alice', publications: 9,
+        scheduledTime: '2026-11-13T18:37:00Z' },
+    ]
+    const { container } = renderAt('/qb/operator/billing', '/qb/operator/billing', <OperatorBillingPage />)
+    const section = await screen.findByTestId('operator-recon-notes')
+    const groups = await within(section).findAllByTestId('operator-recon-note-group')
+    expect(groups.map((group) => group.dataset.check)).toEqual(['DISTRIBUTION_AT_FLOOR', 'EXPOSURE_UNPURCHASED'])
+    expect(groups[0]).toHaveTextContent('Charged your floor price')
+    expect(groups[0]).toHaveTextContent('Consider whether your floor suits them')
+    const floor = within(groups[0]).getByTestId('operator-recon-note')
+    expect(floor).toHaveTextContent('2 publications')
+    expect(within(floor).getByRole('link', { name: 'Acme' })).toHaveAttribute('href', `/qb/reviews/sponsors/${SPONSOR}`)
+    // A Sponsor with no company is named by its contact.
+    expect(within(groups[1]).getByTestId('operator-recon-note')).toHaveTextContent(/Bob.*1 publication/)
+    expect(within(section).getAllByTestId('operator-recon-note')).toHaveLength(2)
+    expect(within(section).getByTestId('operator-recon-notes-as-of')).toHaveTextContent('Latest check:')
+    expect(within(section).queryByTestId('operator-recon-notes-none')).not.toBeInTheDocument()
+    await expectAccessible(container)
   })
 
   it('lists the credit notes on its Sponsors\' fees, read only and never who issued them (F-M7)', async () => {

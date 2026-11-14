@@ -2,12 +2,14 @@ package com.jabiz.quizbuks.operator;
 
 import com.jabiz.context.RequestContext;
 import com.jabiz.dataset.DatasetDefinition;
+import com.jabiz.dataset.EntryScopeVia;
 import com.jabiz.approval.ApprovalSubject;
 import com.jabiz.dictionary.StaticDictionary;
 import com.jabiz.document.DocumentLayout;
 import com.jabiz.event.EventSubscription;
 import com.jabiz.job.JobDefinition;
 import com.jabiz.job.JobItems;
+import com.jabiz.quizbuks.wallet.Reconciliation;
 import com.jabiz.quizbuks.wallet.TransferProcesses;
 import com.jabiz.runtime.approval.ApprovalProcesses;
 import com.jabiz.entity.EntityDefinition;
@@ -317,6 +319,21 @@ public class OperatorConfig {
             .permissions(QbPermissions.OPERATOR_USE, QbPermissions.SPONSOR_VIEW_WRITE)
             .policy(p -> p.readOnly(true).allowTimeTravel(false))
             .scope(s -> s.withinEntryScope(QbOperators.SCOPE, "operatorId"))
+            .storage(s -> s.driver("r2dbc-postgresql").connectionPoolRef(poolRef)));
+    }
+
+    /**
+     * F-M14b: the reconciliation's items of the operator's own sponsors (D64, through the sponsor's assignment), read
+     * only and only by {@code qb.operator.recon-notes}; see {@link Reconciliation#OPERATOR_ITEM_DATASET}.
+     */
+    @Bean
+    DatasetDefinition qbOperatorReconItemDataset() {
+        return DatasetDefinition.define(Reconciliation.OPERATOR_ITEM_DATASET, d -> d
+            .targetEntityType(Reconciliation.ITEM_ENTITY_NAME)
+            .permissions(QbPermissions.RECONCILE, QbPermissions.SPONSOR_VIEW_WRITE)
+            .policy(p -> p.readOnly(true).allowTimeTravel(false))
+            .scope(s -> s.withinEntryScope(QbOperators.SCOPE, "partyId",
+                EntryScopeVia.of(QbOperators.ASSIGNMENT, "userId", "operatorId")))
             .storage(s -> s.driver("r2dbc-postgresql").connectionPoolRef(poolRef)));
     }
 

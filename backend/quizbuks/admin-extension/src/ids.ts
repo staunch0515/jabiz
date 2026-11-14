@@ -201,6 +201,8 @@ export const TEMPLATE = {
   operatorSponsors: 'qb.operator.sponsors',
   /** Q87b: how the operator's sponsors pay the platform's fees. */
   operatorBilling: 'qb.operator.sponsor-billing',
+  /** F-M14b: the latest daily reconciliation's notes about the operator's own sponsors. */
+  operatorReconNotes: 'qb.operator.recon-notes',
   /** Q48c, AI prospecting: an operator's own (`qb.prospect.use`) and headquarters' for any owner (`qb.admin.prospect`). */
   operatorProspects: 'qb.operator.prospects',
   operatorProspectSetting: 'qb.operator.prospect-setting',
