@@ -121,6 +121,23 @@ export const operatorMessages = {
       setBy: 'Set {{when}} by',
       set: 'Billing…',
       none: 'No Sponsors of yours yet.',
+      notes: {
+        title: 'Notes from the daily check',
+        description: 'What the platform’s daily reconciliation noticed about the Sponsors assigned to this operator now (a Sponsor moved to another operator is shown there, with its earlier publications). Nothing is wrong and nothing has to be done; it is for you to decide whether to look.',
+        none: 'The latest check noted nothing about these Sponsors.',
+        noRun: 'The daily check has not run yet.',
+        asOf: 'Latest check: {{when}}',
+        publications_one: '{{count}} publication',
+        publications_other: '{{count}} publications',
+        check: {
+          DISTRIBUTION_AT_FLOOR: 'Charged the operator’s least distribution price',
+          EXPOSURE_UNPURCHASED: 'Another Sponsor’s video, no exposures bought',
+        },
+        help: {
+          DISTRIBUTION_AT_FLOOR: 'These publications, not ended yet, are charged the least distribution price a start that the operator set: their top reward is too small to reach it. Consider whether the least price suits them.',
+          EXPOSURE_UNPURCHASED: 'These publications, not ended yet, use another Sponsor’s video but bought no exposures: they were submitted before exposure billing was on, or the operator had no exposure price then.',
+        },
+      },
     },
     billing: {
       title: 'Billing of {{name}}',
@@ -305,6 +322,23 @@ export const operatorMessages = {
       setBy: '{{when}} 设定，设定人：',
       set: '计费…',
       none: '还没有你的发起方。',
+      notes: {
+        title: '每日核对的提示',
+        description: '平台每日核对注意到的、现在分配给本运营商的发起方的情况（改派到别的运营商的发起方，连同它以前的发布，在新的运营商那里显示）。这不是错误，也不需要处理；是否查看由你决定。',
+        none: '最近一次核对没有关于这些发起方的提示。',
+        noRun: '每日核对还没有运行过。',
+        asOf: '最近一次核对：{{when}}',
+        publications_one: '{{count}} 个发布',
+        publications_other: '{{count}} 个发布',
+        check: {
+          DISTRIBUTION_AT_FLOOR: '按运营商的配送费下限计费',
+          EXPOSURE_UNPURCHASED: '使用其他发起方的视频、未购买曝光',
+        },
+        help: {
+          DISTRIBUTION_AT_FLOOR: '这些尚未结束的发布按运营商设定的每次开始的配送费下限收费：其最高奖励小到达不到下限。可考虑配送费下限是否合适。',
+          EXPOSURE_UNPURCHASED: '这些尚未结束的发布使用其他发起方的视频，但没有购买曝光：提交时曝光计费尚未开启，或当时运营商没有曝光价格。',
+        },
+      },
     },
     billing: {
       title: '{{name}} 的计费',
@@ -489,6 +523,23 @@ export const operatorMessages = {
       setBy: '{{when}} に設定、設定者：',
       set: '請求方式…',
       none: '担当の主催者はまだいません。',
+      notes: {
+        title: '日次照合の注記',
+        description: 'プラットフォームの日次照合が、現在この運営パートナーに割り当てられている主催者について気づいたことです（別の運営パートナーに移った主催者は、以前の公開も含めて移った先に表示されます）。誤りではなく、対応も必要ありません。確認するかどうかはご判断ください。',
+        none: '最新の照合では、これらの主催者についての注記はありません。',
+        noRun: '日次照合はまだ実行されていません。',
+        asOf: '最新の照合：{{when}}',
+        publications_one: '公開 {{count}} 件',
+        publications_other: '公開 {{count}} 件',
+        check: {
+          DISTRIBUTION_AT_FLOOR: '運営パートナーの配信料の下限で課金',
+          EXPOSURE_UNPURCHASED: '他の主催者の動画、露出未購入',
+        },
+        help: {
+          DISTRIBUTION_AT_FLOOR: 'これらの終了していない公開は、運営パートナーが定めた開始1回あたりの配信料の下限で課金されています：最上位の報酬が小さく下限に届かないためです。配信料の下限が適切か検討してください。',
+          EXPOSURE_UNPURCHASED: 'これらの終了していない公開は他の主催者の動画を使っていますが、露出を購入していません：露出課金が有効になる前に提出されたか、当時運営パートナーに露出価格がありませんでした。',
+        },
+      },
     },
     billing: {
       title: '{{name}} の請求方式',

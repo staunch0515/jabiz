@@ -510,5 +510,12 @@ class ExposureSettleIT extends ExposureFeeItSupport {
             .reduce(BigDecimal.ZERO, BigDecimal::add)).isEqualByComparingTo("0");
         assertThat(dec(byKind.get("EXPOSURE_CHARGED").get("feeRevenue"))).isEqualByComparingTo("-150");
         assertThat(dec(byKind.get("EXPOSURE_CHARGED").get("taxPayable"))).isEqualByComparingTo("-15");
+        // F-M14b (review L4 of #688): the guard over the whole ledger, the exposure fee's freeze, top-up
+        // (QB_PREPAYMENT_TOP_UP), charge, payment from the deposit and release driven.
+        MonthlyKinds.assertGuard(items("qb.admin.monthly", token, Map.of("params", Map.of("from",
+                "2000-01-01T00:00:00Z", "to", "2100-01-01T00:00:00Z"), "limit", 100)),
+            java.util.List.of("EXPOSURE_DEPOSIT", "EXPOSURE_CHARGED", "PREPAYMENT_USED", "EXPOSURE_RELEASED"),
+            query(MonthlyKinds.SOURCES_SQL), ((Number) query(MonthlyKinds.NO_SOURCE_SQL).getFirst().get("n"))
+                .longValue(), query(MonthlyKinds.TOTALS_SQL).getFirst());
     }
 }

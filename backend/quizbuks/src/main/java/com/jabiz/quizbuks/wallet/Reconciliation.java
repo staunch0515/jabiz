@@ -42,6 +42,13 @@ public final class Reconciliation {
 
     public static final String RUN_ENTITY_NAME = "QbReconRun";
     public static final String ITEM_ENTITY_NAME = "QbReconItem";
+
+    /**
+     * F-M14b: the items an operator's notes read, limited to the sponsors the session's operator looks after (D64).
+     * Read only through {@code qb.operator.recon-notes}: the dataset itself stays {@code qb.reconcile}'s, so an
+     * operator never reads the other checks' items of its sponsors through the dataset API.
+     */
+    public static final String OPERATOR_ITEM_DATASET = "urn:jabiz:dataset:operator:" + ITEM_ENTITY_NAME;
     public static final String CHECK_DICTIONARY = "urn:jabiz:dict:quizbuks:recon-check";
 
     public static final String WALLETS_TEMPLATE = "qb.system.recon-sponsor-wallets";

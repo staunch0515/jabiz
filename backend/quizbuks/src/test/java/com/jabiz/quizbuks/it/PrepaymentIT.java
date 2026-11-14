@@ -410,7 +410,9 @@ class PrepaymentIT extends PrepaymentItSupport {
         assertThat(differences(sponsor)).isEmpty();
 
         List<Row> expected = List.of(
-            new Row("FEE_CHARGED", 1, 770, Map.of("1130", 770L, "4120", -700L, "2150", -70L)),
+            // F-M14 question 5: the audience fee has its row of its own (it was FEE_CHARGED before F-M14b).
+            new Row("AUDIENCE_CHARGED", 1, 770, Map.of("1130", 770L, "4120", -700L, "2150", -70L)),
+            new Row("FEE_CHARGED", 0, 0, Map.of()),
             new Row("FEE_CREDIT_VOIDED", 1, 800, Map.of("2190", 800L, "5140", -800L)),
             new Row("PREPAYMENT_FROZEN", 3, 2_310, Map.of("2190", 1_370L, "2160", 940L, "2180", -2_310L)),
             new Row("PREPAYMENT_USED", 1, 770, Map.of("2180", 770L, "1130", -770L)),
@@ -437,6 +439,15 @@ class PrepaymentIT extends PrepaymentItSupport {
         assertThat(((Number) report.get("OTHER").get("transactionCount")).longValue()).isEqualTo(((Number) query(
             "SELECT count(*) AS n FROM ledger_transaction_version WHERE booking_time >= ? AND booking_time < ? AND "
                 + "source_entity IS NULL", Timestamp.from(from), Timestamp.from(to)).getFirst().get("n")).longValue());
+        // F-M14b (the third case of F-M14 §3.2 point 4): the guard over the whole ledger, the fee credit given back to
+        // a lot that expired meanwhile among it.
+        MonthlyKinds.assertGuard(items("qb.admin.monthly", TestTokens.bearer(tokens, "fm5-monthly-all",
+                QbPermissions.ADMIN_FINANCE_READ), Map.of("params", Map.of("from", "2000-01-01T00:00:00Z", "to",
+                "2100-01-01T00:00:00Z"), "limit", 100)),
+            List.of("AUDIENCE_CHARGED", "FEE_CREDIT_VOIDED", "PREPAYMENT_FROZEN", "PREPAYMENT_USED",
+                "PREPAYMENT_RELEASED"), query(MonthlyKinds.SOURCES_SQL),
+            ((Number) query(MonthlyKinds.NO_SOURCE_SQL).getFirst().get("n")).longValue(),
+            query(MonthlyKinds.TOTALS_SQL).getFirst());
     }
 
     @Test

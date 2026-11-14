@@ -23,7 +23,8 @@ import { attentionKey, readAttentionDays, readReconItems, readReconRuns, type Re
 import { EmptyState, LoadFailed, Section } from './components'
 import { money, useLabels, usePaged, when } from './hooks'
 import { useMoreFilters } from './moreFilters'
-import { DICTIONARY, isUserId, PAGE_LIMIT, PATH, PERMISSION, reconLevel, referenceKind, type ReconLevel } from './ids'
+import { DICTIONARY, isUserId, PAGE_LIMIT, parseReconLevel, PATH, PERMISSION, reconLevel, referenceKind,
+  type ReconLevel, type ReferenceKind } from './ids'
 
 /** The columns sorted on the server, by the template's `list.sorts` field (Q53a). */
 const SORTS = { scheduledTime: 'scheduledTime' } as const
@@ -31,27 +32,26 @@ const SORTS = { scheduledTime: 'scheduledTime' } as const
 const linkClass = 'text-primary font-medium underline-offset-4 hover:underline'
 
 /**
- * What a difference is about: its top-up or transfer, and its party's summary. A link is shown only to someone who
- * holds the permission of the page it leads to (the server decides all the same; this only spares a dead link): the
- * top-ups and transfers are finance's, a user's summary the users'.
+ * What a difference is about: what its reference names (a top-up, a transfer, a publication, a month's settlements,
+ * an invoice, a credit note: `referenceKind`) and its party's summary. A link is shown only to someone who holds the
+ * permission of the page it leads to (the server decides all the same; this only spares a dead link): the top-ups,
+ * transfers, settlements and fees are finance's, a publication the publications' readers', a user's summary the users'.
  */
 function Subject({ item }: { item: ReconItem }) {
   const { t } = useTranslation(EXTENSION_NAMESPACE)
   const { can } = useAuth()
   const kind = referenceKind(item.checkCode)
   const parts: ReactNode[] = []
-  if (item.reference && kind === 'topUp') {
-    parts.push(can(PERMISSION.financeRead)
-      ? <Link key="ref" to={PATH.topUpsWhere({ topUp: item.reference })} className={linkClass}
-          data-testid="recon-reference" data-kind="topUp">{t('finance.recon.topUp')}</Link>
-      : <span key="ref" data-testid="recon-reference" data-kind="topUp">{t('finance.recon.topUp')}</span>)
-  } else if (item.reference && kind === 'transfer') {
-    parts.push(can(PERMISSION.financeRead)
-      ? <Link key="ref" to={PATH.transfersWhere({ transfer: item.reference })} className={linkClass}
-          data-testid="recon-reference" data-kind="transfer">{t('finance.recon.transfer')}</Link>
-      : <span key="ref" data-testid="recon-reference" data-kind="transfer">{t('finance.recon.transfer')}</span>)
-  } else if (item.reference) {
-    parts.push(<code key="ref" className="text-xs">{item.reference}</code>)
+  const reference = item.reference
+  if (reference && kind) {
+    const target = REFERENCE_TARGET[kind](reference)
+    const label = t(`finance.recon.${kind}`, { month: reference, no: reference })
+    parts.push(can(target.permission)
+      ? <Link key="ref" to={target.path} className={linkClass} data-testid="recon-reference" data-kind={kind}>
+          {label}</Link>
+      : <span key="ref" data-testid="recon-reference" data-kind={kind}>{label}</span>)
+  } else if (reference) {
+    parts.push(<code key="ref" className="text-xs">{reference}</code>)
   }
   if (item.partyId && item.operatorName) {
     // An operator (its id is a UUID as a user's is): by its name, never as an unknown user.
@@ -70,6 +70,18 @@ function Subject({ item }: { item: ReconItem }) {
   return parts.length > 0 ? <span className="flex flex-wrap gap-x-3">{parts}</span> : <>{t('finance.recon.whole')}</>
 }
 
+/** Where each kind of reference leads, and who may open it. */
+const REFERENCE_TARGET: Record<ReferenceKind, (reference: string) => { path: string; permission: string }> = {
+  topUp: (ref) => ({ path: PATH.topUpsWhere({ topUp: ref }), permission: PERMISSION.financeRead }),
+  transfer: (ref) => ({ path: PATH.transfersWhere({ transfer: ref }), permission: PERMISSION.financeRead }),
+  publication: (ref) => ({ path: PATH.publication(ref), permission: PERMISSION.publicationRead }),
+  distributionMonth: (ref) => ({ path: PATH.distributionSettlementsOf(ref), permission: PERMISSION.financeRead }),
+  exposureMonth: (ref) => ({ path: PATH.exposureSettlementsOf(ref), permission: PERMISSION.financeRead }),
+  invoice: (ref) => ({ path: PATH.feesWhere({ tab: 'invoices', invoiceNo: ref }), permission: PERMISSION.financeRead }),
+  creditNote: (ref) => ({ path: PATH.feesWhere({ tab: 'creditNotes', creditNoteNo: ref }),
+    permission: PERMISSION.financeRead }),
+}
+
 /** The badge variant of a level: a difference warns, the others are quieter (nothing is an error here). */
 const LEVEL_VARIANT = { DIFFERENCE: 'warning', ATTENTION: 'secondary', NOTE: 'outline' } as const satisfies
   Record<ReconLevel, 'warning' | 'secondary' | 'outline'>
@@ -78,12 +90,12 @@ const LEVEL_VARIANT = { DIFFERENCE: 'warning', ATTENTION: 'secondary', NOTE: 'ou
  * One run's differences, grouped by check (the first {@link PAGE_LIMIT}: a run that finds more says so); read only
  * (C-3: a difference is handled through the money tasks and by hand).
  */
-function Items({ runId }: { runId: string }) {
+function Items({ runId, level }: { runId: string; level: ReconLevel | null }) {
   const { t, i18n } = useTranslation(EXTENSION_NAMESPACE)
   const checkLabel = useLabels(DICTIONARY.reconCheck)
   const levelLabel = useLabels(DICTIONARY.reconLevel)
-  const query = useQuery({ queryKey: ['qb-ext', 'finance', 'recon-items', runId],
-    queryFn: () => readReconItems(runId, 0, PAGE_LIMIT) })
+  const query = useQuery({ queryKey: ['qb-ext', 'finance', 'recon-items', runId, level],
+    queryFn: () => readReconItems(runId, 0, PAGE_LIMIT, level) })
   // Asked for only when the run has an item for attention; a failure only leaves the days out.
   const attention = query.data?.items.some((item) => reconLevel(item.checkCode) === 'ATTENTION') ?? false
   const days = useQuery({ queryKey: ['qb-ext', 'finance', 'recon-attention-days', runId], enabled: attention,
@@ -94,6 +106,14 @@ function Items({ runId }: { runId: string }) {
   const total = query.data.total ?? query.data.items.length
   return (
     <div className="flex flex-col gap-4" data-testid="recon-items">
+      {level && (
+        <p className="flex flex-wrap items-center gap-2 text-sm" data-testid="recon-level-filter" data-level={level}>
+          {t('finance.recon.levelOnly', { level: t(`finance.recon.levelName.${level}`) })}
+          <Link to={PATH.reconRun(runId)} className={linkClass} data-testid="recon-show-all">
+            {t('finance.recon.showAll')}
+          </Link>
+        </p>
+      )}
       {groups.length === 0 && <p className="text-muted-foreground text-sm">{t('finance.recon.noItems')}</p>}
       {groups.map(([check, items]) => (
         <div key={check} className="flex flex-col gap-2" data-testid="recon-group" data-check={check}>
@@ -154,6 +174,7 @@ export default function ReconciliationPage() {
   const [search] = useSearchParams()
   const selected = search.get('run')
   const runId = selected && isUserId(selected) ? selected : null
+  const level = parseReconLevel(search.get('level'))
   const more = useMoreFilters([
     { kind: 'choice', name: 'status', label: t('finance.recon.result'),
       options: ['OK', 'DIFF'].map((code) => ({ value: code, label: t(`finance.recon.status.${code}`) })) },
@@ -214,7 +235,7 @@ export default function ReconciliationPage() {
       </Section>
       {runId && (
         <Section title={t('finance.recon.differences')} testId="recon-run">
-          <Items runId={runId} />
+          <Items runId={runId} level={level} />
         </Section>
       )}
     </div>
