@@ -21,7 +21,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 /**
  * F-M15c's migration (V131): the uses of credit notes written before it are left exactly as they were (the new column
  * empty, every other value the same, so the integrity seal's digests over the old columns still match), and from then
- * on a use names exactly one of an invoice and a cash lot; an AI credit may be released for an erasure, its movement be
+ * on a use names exactly one of an invoice and a posting given back by; an AI credit may be released for an erasure, its movement be
  * a close, and a wind-up wait on AI jobs. Its own schema, migrated by Flyway as the platform does, without the
  * application.
  */
@@ -54,14 +54,14 @@ class ErasureCloseMigrationIT {
         try (Connection c = DB.connect(schema)) {
             Map<String, Object> after = new LinkedHashMap<>(rows(c,
                 "SELECT * FROM qb_fee_credit_note_use_version WHERE use_id = '" + invoiceUse + "'").getFirst());
-            assertThat(after.remove("cash_lot_id")).isNull();
+            assertThat(after.remove("back_transaction_id")).isNull();
             assertThat(after).isEqualTo(before);
             long process = process(c);
             // Exactly one of the two.
-            use(c, process, "NULL", "'lot-1'");
+            use(c, process, "NULL", "'tx-1'");
             assertThatThrownBy(() -> use(c, process, "NULL", "NULL")).isInstanceOf(SQLException.class)
                 .hasMessageContaining("qb_fee_credit_note_use_target");
-            assertThatThrownBy(() -> use(c, process, "'inv-2'", "'lot-2'")).isInstanceOf(SQLException.class)
+            assertThatThrownBy(() -> use(c, process, "'inv-2'", "'tx-2'")).isInstanceOf(SQLException.class)
                 .hasMessageContaining("qb_fee_credit_note_use_target");
             // The new values the constraints allow.
             execute(c, "INSERT INTO qb_prepayment (prepayment_id, sponsor_id, purpose, mode, amount, remaining, "
@@ -118,9 +118,9 @@ class ErasureCloseMigrationIT {
         UUID id = UUID.randomUUID();
         execute(c, "INSERT INTO entity_registry (entity_id, entity_type, created_seq_id) VALUES (?, 'QbFeeCreditNoteUse', "
             + "?)", id, process);
-        String columns = lot == null ? "" : ", cash_lot_id";
+        String columns = lot == null ? "" : ", back_transaction_id";
         boolean migrated = !rows(c, "SELECT 1 FROM information_schema.columns WHERE table_schema = current_schema() "
-            + "AND table_name = 'qb_fee_credit_note_use_version' AND column_name = 'cash_lot_id'").isEmpty();
+            + "AND table_name = 'qb_fee_credit_note_use_version' AND column_name = 'back_transaction_id'").isEmpty();
         execute(c, "INSERT INTO qb_fee_credit_note_use_version (use_id, version_no, effect_start_time, created_time, "
             + "process_seq_id, credit_note_id, sponsor_id, invoice_id" + (migrated ? columns : "") + ", amount, used_at) "
             + "VALUES (?, 1, now(), now(), ?, 'note-1', 's', " + invoice + (migrated ? ", " + lot : "")

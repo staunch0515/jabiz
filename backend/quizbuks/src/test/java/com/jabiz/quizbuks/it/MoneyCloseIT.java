@@ -786,17 +786,62 @@ class MoneyCloseIT extends MoneyCloseItSupport {
         assertThat(lines("QbFeeCreditNote", noteId)).contains("1130 DEBIT " + noteTotal.toPlainString(),
             "2160 CREDIT " + noteTotal.toPlainString());
         Map<String, Object> use = query("SELECT * FROM qb_fee_credit_note_use_version WHERE credit_note_id = ? "
-            + "AND cash_lot_id IS NOT NULL", String.valueOf(noteId)).getFirst();
+            + "AND back_transaction_id IS NOT NULL", String.valueOf(noteId)).getFirst();
         assertThat(use).containsEntry("invoice_id", null);
         assertThat(money(use.get("amount"))).isEqualByComparingTo(noteTotal);
-        assertThat(query("SELECT source, source_entity, amount FROM qb_cash_lot WHERE lot_id = ?",
-            String.valueOf(use.get("cash_lot_id"))).getFirst()).containsEntry("source", "OTHER")
-            .containsEntry("source_entity", "QbFeeCreditNote");
+        // Back to the cash lot that paid the invoice (总控 M2: what paid it, as F-M7 gives back), not a new lot.
+        assertThat(query("SELECT 1 FROM qb_cash_lot WHERE sponsor_id = ? AND source_entity = 'QbFeeCreditNote'",
+            sponsor)).isEmpty();
+        assertThat(query("SELECT sub_account, amount FROM qb_fee_payment_version WHERE target_id = ?",
+            String.valueOf(noteId))).singleElement().satisfies(part -> {
+                assertThat(part).containsEntry("sub_account", "CASH");
+                assertThat(money(part.get("amount"))).isEqualByComparingTo(noteTotal.negate());
+            });
         assertThat(due()).doesNotContain(sponsor);
         // Given back once: the next run finds no credit left.
         assertThat(close(sponsor).outcome()).isEqualTo(MoneyClose.CLOSED);
         assertThat(balance(sponsor, "CASH")).isEqualByComparingTo(new BigDecimal("5000").subtract(total)
             .add(noteTotal));
+        assertBooksBalance();
+        assertThat(differences(sponsor)).isEmpty();
+    }
+
+    @Test
+    void aNoteOnAFeePaidByGrantedCreditGivesItBackToTheGrantVoidedAgainNotToTheCash() {
+        // F-M15c (总控 2026-11-14 M2): what a note gives back goes where its fee's payment came from, as F-M7's: a fee
+        // paid from granted credit gets it back on the grant, which the wind-up voided, so it is voided again at once
+        // (2190 → 5140, the grant the source); the cash gets nothing.
+        String sponsor = newSponsor(unique("s-fm15c-gift"));
+        billing(sponsor, "POSTPAID", 50_000);
+        String grant = grant(sponsor, 2_000, clock.instant().plus(Duration.ofDays(90)));
+        Object chargeId = manualFee(sponsor, 1_000);
+        invoicePeriod(sponsor, clock.instant());
+        erase(sponsor);
+        deliverEvents();
+        assertThat(close(sponsor).outcome()).isEqualTo(MoneyClose.CLOSED);
+        BigDecimal voidedFirst = money(lotOf(grant).get("voided_amount"));
+        assertThat(voidedFirst).isEqualByComparingTo("900");
+
+        clock.set(clock.instant().plus(Duration.ofMinutes(5)));
+        creditNote(chargeId, 400);
+        Map<String, Object> note = notes(sponsor).getFirst();
+        BigDecimal noteTotal = money(note.get("total"));
+        assertThat(close(sponsor).outcome()).isEqualTo(MoneyClose.CLOSED);
+
+        assertThat(money(lotOf(grant).get("voided_amount"))).isEqualByComparingTo(voidedFirst.add(noteTotal));
+        assertThat(money(lotOf(grant).get("remaining"))).isZero();
+        assertThat(balance(sponsor, "CASH")).isZero();
+        assertThat(balance(sponsor, "FEE_CREDIT")).isZero();
+        assertThat(lines("QbFeeCreditNote", note.get("credit_note_id"))).contains(
+            "1130 DEBIT " + noteTotal.toPlainString(), "2190 CREDIT " + noteTotal.toPlainString());
+        assertThat(query("SELECT sub_account, grant_id, amount FROM qb_fee_payment_version WHERE target_id = ?",
+            String.valueOf(note.get("credit_note_id")))).singleElement().satisfies(part -> {
+                assertThat(part).containsEntry("sub_account", "FEE_CREDIT").containsEntry("grant_id", grant);
+                assertThat(money(part.get("amount"))).isEqualByComparingTo(noteTotal.negate());
+            });
+        assertThat(items(com.jabiz.quizbuks.fee.CreditNotes.LEFT_TEMPLATE, com.jabiz.runtime.test.TestTokens.bearer(
+            tokens, "fm15c-system", com.jabiz.quizbuks.QbPermissions.FEE_SYSTEM),
+            Map.of("params", Map.of("sponsorId", sponsor)))).isEmpty();
         assertBooksBalance();
         assertThat(differences(sponsor)).isEmpty();
     }

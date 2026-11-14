@@ -72,6 +72,13 @@ public class MoneyCloseConfig {
         return MoneyClose.register();
     }
 
+    /** F-M15c: a credit note's credit left given back to what paid its fee (step 9). */
+    @Bean
+    ProcessDefinition<CreditNoteGiveBack.GiveBackInput, CreditNoteGiveBack.GiveBackOutput, ProcessContext>
+        qbFeeCreditNoteGiveBack() {
+        return CreditNoteGiveBack.giveBack();
+    }
+
     @Bean
     ProcessDefinition<MoneyClose.VoidLotInput, MoneyClose.VoidLotOutput, ProcessContext> qbFeeCreditVoidLot() {
         return MoneyClose.voidLot();

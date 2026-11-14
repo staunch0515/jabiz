@@ -491,7 +491,8 @@ class AdminFinanceIT extends PayoutItSupport {
      * F-M15 b (plan §6): a wind-up's postings are of the kinds that exist: the invoice it issues posts nothing, its
      * payment is FEE_PAID (from the granted credit: 2190 / 1130) and its void of what is left FEE_CREDIT_VOIDED
      * (2190 / 5140). No new kind. F-M15c: a credit note issued after it (FEE_CREDIT_NOTE) whose credit the next run
-     * gives back to the cash (1130 / 2160, the note the source) is a FEE_PAID taken back, in the same row.
+     * gives back to what paid the fee (here the granted credit: 1130 / 2190, the note the source) is a FEE_PAID taken
+     * back, in the same row, and its grant's voiding again a FEE_CREDIT_VOIDED.
      */
     @Test
     void aWindUpsPostingsAreTheKindsThatExistRowByRow() {
@@ -546,10 +547,11 @@ class AdminFinanceIT extends PayoutItSupport {
 
         List<Expected> expected = List.of(
             row("FEE_CHARGED", 1, 330, "1130", 330, "4120", -300, "2150", -30),
-            // The payment (2190 / 1130) and the note's credit given back to the cash (1130 / 2160).
-            row("FEE_PAID", 2, 440, "2190", 330, "1130", -220, "2160", -110),
+            // The payment (2190 / 1130) and the note's credit given back to what paid the fee (1130 / 2190: the
+            // granted credit, 总控 M2), voided again at once on its grant the wind-up voided (2190 / 5140).
+            row("FEE_PAID", 2, 440, "2190", 220, "1130", -220),
             row("FEE_CREDIT_NOTE", 1, 110, "1130", -110, "4120", 100, "2150", 10),
-            row("FEE_CREDIT_VOIDED", 1, 670, "2190", 670, "5140", -670));
+            row("FEE_CREDIT_VOIDED", 2, 780, "2190", 780, "5140", -780));
         Map<String, Map<String, Object>> monthly = report(MONTHLY, from, to).stream()
             .collect(Collectors.toMap(r -> (String) r.get("category"), Function.identity()));
         for (Expected want : expected) {

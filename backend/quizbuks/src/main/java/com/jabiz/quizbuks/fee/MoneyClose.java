@@ -66,8 +66,6 @@ public final class MoneyClose {
     /** The wind-up's last step for one lot of granted credit (sub-process; the caller holds the wallet lock). */
     public static final String VOID_LOT = "QB_FEE_CREDIT_VOID_LOT";
     /** The posting's description (only a description: the monthly report's kind is the expiry's). */
-    /** F-M15c: the posting of a credit note's credit left given back to the cash (debit 1130, credit 2160). */
-    static final String NOTE_CASH_BACK = "Credit note's credit left given back to the cash on the account's deletion";
     static final String VOIDED_ON_ERASE = "Platform fee Kudos voided on the account's deletion";
     /** The platform's event that an account was erased (its consumers run after the erasure committed). */
     public static final String ACCOUNT_ERASED_EVENT = "jabiz.account.erased";
@@ -122,7 +120,6 @@ public final class MoneyClose {
     static final String CREDITED = "credited";
     static final String NOTES_PAID = "notesPaid";
     static final String NOTES_OVERDUE = "notesOverdue";
-    static final String REFUND_POSTS = "refundPosts";
     static final String REFUNDED = "refunded";
     static final String AI_CLOSED = "aiClosed";
 
@@ -385,12 +382,10 @@ public final class MoneyClose {
             .compute("Decide the end", (metadata, ctx) -> decideEnd(ctx))
             .step("Void the granted credit left", CallProcess.forEach(VOID_LOT, 1, MoneyClose::voidInputs,
                 LOTS_VOIDED))
-            // Step 9 (F-M15c): what the credit notes still have left once the wind-up is done goes back to the cash
-            // (debit 1130, credit 2160, the note the source; a FEE_PAID taken back, as F-M7's giving back).
-            .compute("Work out the credit left to give back", (metadata, ctx) -> refundPlan(ctx))
-            .step("Give the credit left back to the cash", CallProcess.forEach(LedgerProcesses.POST, 1,
-                ctx -> ctx.contains(REFUND_POSTS) ? (List<?>) ctx.get(REFUND_POSTS) : List.of(), REFUNDED))
-            .compute("Record the credit given back", (metadata, ctx) -> recordRefunds(ctx))
+            // Step 9 (F-M15c): what the credit notes still have left once the wind-up is done goes back to what paid
+            // their fees (debit 1130, credit 2160 / 2190, the note the source; a FEE_PAID taken back, as F-M7's).
+            .step("Give the credit left back", CallProcess.forEach(CreditNoteGiveBack.GIVE_BACK, 1,
+                MoneyClose::giveBackInputs, REFUNDED))
             .compute("Record the run", (metadata, ctx) -> recordRun(ctx))
             .step("Tell finance it takes long", CreateTask.<ProcessContext>when(ctx -> Boolean.TRUE.equals(ctx.get(ALERT)),
                 MoneyClose::slowTask))
@@ -583,57 +578,16 @@ public final class MoneyClose {
     }
 
     /**
-     * Step 9 (F-M15c): once the wind-up is done, the credit the notes still have left goes back to the cash, one
-     * posting a note (debit 1130 for the sponsor, credit 2160; the note the source).
+     * Step 9 (F-M15c): once the wind-up is done, the credit the notes still have left goes back to what paid their fees
+     * (总控 2026-11-14 M2: the cash to its lots, the fee credit to its grants and voided again), a note an item.
      */
     @SuppressWarnings("unchecked")
-    static void refundPlan(ProcessContext ctx) {
+    static List<CreditNoteGiveBack.GiveBackInput> giveBackInputs(ProcessContext ctx) {
         if (!CLOSED.equals(ctx.get(OUTCOME)) || !ctx.contains(NOTES_UNUSED)) {
-            return;
+            return List.of();
         }
-        List<LedgerProcesses.PostInput> posts = new ArrayList<>();
-        Map<String, String> party = Map.of(QbLedger.PARTY, sponsorId(ctx));
-        for (CreditNotes.Unused note : (List<CreditNotes.Unused>) ctx.get(NOTES_UNUSED)) {
-            posts.add(new LedgerProcesses.PostInput(ctx.opTime(), NOTE_CASH_BACK, note.creditNoteNo(), List.of(
-                    new LedgerProcesses.Line(QbLedger.FEES_RECEIVABLE, Direction.DEBIT, note.amount(), null, party),
-                    new LedgerProcesses.Line(QbLedger.SPONSOR_CASH, Direction.CREDIT, note.amount(), null, party)),
-                QbCreditNotes.CREDIT_NOTE, note.creditNoteId()));
-        }
-        if (!posts.isEmpty()) {
-            ctx.put(REFUND_POSTS, List.copyOf(posts));
-        }
-    }
-
-    /**
-     * The cash given back: the cash wallet, a lot a note (its source the note), the note's negative part and the use of
-     * its credit naming the lot.
-     */
-    @SuppressWarnings("unchecked")
-    static void recordRefunds(ProcessContext ctx) {
-        if (!ctx.contains(REFUND_POSTS)) {
-            return;
-        }
-        List<CreditNotes.Unused> notes = (List<CreditNotes.Unused>) ctx.get(NOTES_UNUSED);
-        BigDecimal total = CreditNotes.total(notes);
-        QbWallets.change(ctx, FeeGate.first(ctx, paidSomething(ctx) ? CASH_WALLET_AFTER : CASH_WALLET), QbWallets.CASH,
-            sponsorId(ctx), total, 0, BigDecimal.ZERO);
-        List<LedgerProcesses.PostOutput> posted = (List<LedgerProcesses.PostOutput>) ctx.get(REFUNDED);
-        for (int i = 0; i < notes.size(); i++) {
-            CreditNotes.Unused note = notes.get(i);
-            Object lotId = CashLots.add(ctx, sponsorId(ctx), QbFeeAccount.OTHER, note.amount(),
-                QbCreditNotes.CREDIT_NOTE, note.creditNoteId());
-            // A negative part naming the posting, as F-M7's giving back writes (the daily check FEE_PAYMENTS matches
-            // a note's postings of 2160 with its parts).
-            FeeSettlement.insertPayment(ctx, sponsorId(ctx), QbCreditNotes.CREDIT_NOTE, note.creditNoteId(),
-                QbFeeAccount.CASH, null, lotId, note.amount().negate(), posted.get(i).transactionId());
-            Map<String, Object> values = new LinkedHashMap<>();
-            values.put("creditNoteId", note.creditNoteId());
-            values.put("sponsorId", sponsorId(ctx));
-            values.put("cashLotId", String.valueOf(lotId));
-            values.put("amount", note.amount());
-            values.put("usedAt", ctx.opTime());
-            ctx.changes().insert(QbCreditNotes.USE, values);
-        }
+        return ((List<CreditNotes.Unused>) ctx.get(NOTES_UNUSED)).stream().map(note ->
+            new CreditNoteGiveBack.GiveBackInput(sponsorId(ctx), note.creditNoteId(), note.amount())).toList();
     }
 
     private static BigDecimal spendable(ProcessContext ctx, String credits, String cash) {

@@ -13,13 +13,14 @@ ALTER TABLE qb_ai_credit_movement_version DROP CONSTRAINT qb_ai_credit_movement_
 ALTER TABLE qb_ai_credit_movement_version ADD CONSTRAINT qb_ai_credit_movement_version_kind_check
     CHECK (kind IN ('BUY', 'RETURN', 'CHARGE', 'EXPIRE', 'CLOSE'));
 
--- The credit a sponsor's credit notes have left, given back to their cash at the wind-up: a use of the credit as one
--- that paid an invoice (so that every reading of the credit left, "total - given back - used", counts it), naming the
--- cash lot it made instead of an invoice. Exactly one of the two; the rows before this all name an invoice.
-ALTER TABLE qb_fee_credit_note_use_version ADD COLUMN cash_lot_id varchar(36);
+-- The credit a sponsor's credit notes have left, given back at the wind-up to what paid their fees: a use of the
+-- credit as one that paid an invoice (so that every reading of the credit left, "total - given back - used", counts
+-- it), naming the posting that gave it back instead of an invoice. Exactly one of the two; the rows before this all
+-- name an invoice.
+ALTER TABLE qb_fee_credit_note_use_version ADD COLUMN back_transaction_id varchar(36);
 ALTER TABLE qb_fee_credit_note_use_version ALTER COLUMN invoice_id DROP NOT NULL;
 ALTER TABLE qb_fee_credit_note_use_version ADD CONSTRAINT qb_fee_credit_note_use_target
-    CHECK ((invoice_id IS NULL) <> (cash_lot_id IS NULL));
+    CHECK ((invoice_id IS NULL) <> (back_transaction_id IS NULL));
 
 -- A wind-up waits while more of the erased sponsor's AI jobs may be open than a run cancels.
 ALTER TABLE qb_sponsor_closure DROP CONSTRAINT qb_sponsor_closure_reason_code_check;
