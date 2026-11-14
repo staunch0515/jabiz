@@ -21,7 +21,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 /**
  * F-M12 c (plan M8 style): how long the daily check of the operators' settlements takes, and how many statements it
- * sends, with a history (50 operators, each with a settlement a month of 5 fees and the credit used on one of them),
+ * sends, with a history (50 operators, each with a settlement a month of 5 fees and the credit used on one of them, and a
+ * posting on 5140 for each settlement, so the books of the credit taken back are read too),
  * all of it within the 5 seconds a query may take. The history is cloned straight in the tables from one real settlement
  * (the point is the check's read, not 3,000 settlements through the processes). Run it alone; it prints the numbers
  * the PR gives as limits. No statistics, as right after a bulk load.
@@ -40,6 +41,9 @@ class OperatorSettlementReconBudgetIT extends CreditNoteItSupport {
     static final Duration ANALYZED = Duration.ofMillis(2_000);
 
     private static final List<String> OPERATOR_IDS = new ArrayList<>();
+    private static String ledgerTransaction;
+    private static String ledgerEntry;
+    private static String giftAccount;
 
     private String hq() {
         return TestTokens.bearer(tokens, "fm12c-budget-hq", QbPermissions.OPERATORS_WRITE, QbPermissions.OPERATORS_READ);
@@ -93,10 +97,17 @@ class OperatorSettlementReconBudgetIT extends CreditNoteItSupport {
             + "settlement_id = ? AND line_kind = 'CHARGE'", settlementId).getFirst().get("line_id"));
         String giftLine = String.valueOf(query("SELECT line_id FROM qb_operator_settlement_line_version WHERE "
             + "settlement_id = ? AND line_kind = 'GIFT'", settlementId).getFirst().get("line_id"));
+        // Rows of the real ledger to clone: a transaction and an entry (the postings of the seeded settlements), and 5140.
+        ledgerTransaction = String.valueOf(query("SELECT transaction_id FROM ledger_transaction_version LIMIT 1")
+            .getFirst().get("transaction_id"));
+        ledgerEntry = String.valueOf(query("SELECT entry_id FROM ledger_entry_version LIMIT 1").getFirst().get("entry_id"));
+        giftAccount = String.valueOf(query("SELECT account_id FROM ledger_account_version WHERE account_code = '5140'")
+            .getFirst().get("account_id"));
         // The settlements are of the operators' months from 2030; the real one is left alone.
         execute("UPDATE qb_operator SET created_at = '2030-01-01T00:00:00Z'");
         for (String table : List.of("qb_fee_charge_version", "qb_fee_payment_version",
-            "qb_operator_settlement_line_version", "entity_registry")) {
+            "qb_operator_settlement_line_version", "ledger_transaction_version", "ledger_entry_version",
+            "entity_registry")) {
             execute("ALTER TABLE " + table + " SET (autovacuum_enabled = false)");
         }
 
@@ -115,7 +126,8 @@ class OperatorSettlementReconBudgetIT extends CreditNoteItSupport {
         cashPayments(100_000, payment);
         // With statistics, as autovacuum leaves a table in use: all of the history is within the timeout too.
         for (String table : List.of("qb_fee_charge_version", "qb_fee_payment_version",
-            "qb_operator_settlement_line_version", "qb_operator_settlement", "entity_registry")) {
+            "qb_operator_settlement_line_version", "qb_operator_settlement", "ledger_transaction_version",
+            "ledger_entry_version", "entity_registry")) {
             execute("ANALYZE " + table);
         }
         Duration all60Analyzed = measure("60 months, all history, analyzed", null, ANALYZED);
@@ -149,7 +161,8 @@ class OperatorSettlementReconBudgetIT extends CreditNoteItSupport {
             + "gen_random_uuid()::text AS c1, gen_random_uuid()::text AS c2, gen_random_uuid()::text AS c3, "
             + "gen_random_uuid()::text AS c4, gen_random_uuid()::text AS c5, gen_random_uuid()::text AS p1, "
             + "gen_random_uuid()::text AS l1, gen_random_uuid()::text AS l2, gen_random_uuid()::text AS l3, "
-            + "gen_random_uuid()::text AS l4, gen_random_uuid()::text AS l5, gen_random_uuid()::text AS g1 "
+            + "gen_random_uuid()::text AS l4, gen_random_uuid()::text AS l5, gen_random_uuid()::text AS g1, "
+            + "gen_random_uuid()::text AS t1, gen_random_uuid()::text AS e1, gen_random_uuid()::text AS e2 "
             + "FROM (SELECT row_number() OVER (ORDER BY operator_id) AS idx, operator_id FROM qb_operator "
             + "WHERE operator_id = ANY(?)) o CROSS JOIN generate_series(CAST(? AS int), CAST(? AS int) - 1) AS m(m)",
             OPERATOR_IDS.toArray(String[]::new), from, to);
@@ -222,6 +235,38 @@ class OperatorSettlementReconBudgetIT extends CreditNoteItSupport {
         giftSet.put("period", "s.month");
         giftSet.put("occurred_at", "(s.month || '-05')::date + interval '2 minutes'");
         clone("qb_operator_settlement_line_version", "line_id", giftLine, "it_seed s", giftSet);
+        // A posting for each settlement on 5140 (the account the take-back is read from): a credit and a debit of 1, so the
+        // books net to what the seeded settlements say they took back (nothing) while recovered_books reads all of them.
+        registry("t1", ledgerTransaction);
+        registry("e1", ledgerEntry);
+        registry("e2", ledgerEntry);
+        Map<String, String> postingSet = new HashMap<>();
+        postingSet.put("transaction_id", "s.t1::uuid");
+        postingSet.put("booking_time", "s.issued");
+        postingSet.put("created_time", "s.issued");
+        postingSet.put("reference", "NULL");
+        postingSet.put("reverses_transaction_id", "NULL");
+        postingSet.put("source_entity", "'QbOperatorSettlement'");
+        postingSet.put("source_id", "s.sid");
+        clone("ledger_transaction_version", "transaction_id", ledgerTransaction, "it_seed s", postingSet);
+        // Both entries in one statement: the balance of a transaction is checked when the statement ends.
+        List<String> entryColumns = columns("ledger_entry_version");
+        Map<String, String> entrySet = new HashMap<>();
+        entrySet.put("entry_id", "CASE k.k WHEN 1 THEN s.e1::uuid ELSE s.e2::uuid END");
+        entrySet.put("transaction_id", "s.t1::uuid");
+        entrySet.put("account_id", "'" + giftAccount + "'::uuid");
+        entrySet.put("line_no", "k.k");
+        entrySet.put("direction", "CASE k.k WHEN 1 THEN 'CREDIT' ELSE 'DEBIT' END");
+        entrySet.put("amount", "1");
+        entrySet.put("created_time", "s.issued");
+        for (String column : List.of("memo", "dimension_1", "dimension_2", "dimension_3", "dimension_4", "currency",
+            "transaction_amount", "exchange_rate")) {
+            entrySet.put(column, "NULL");
+        }
+        execute("INSERT INTO ledger_entry_version (" + String.join(", ", entryColumns) + ") SELECT "
+            + String.join(", ", entryColumns.stream().map(c -> entrySet.getOrDefault(c, "t." + c)).toList())
+            + " FROM it_seed s CROSS JOIN generate_series(1, 2) AS k(k) CROSS JOIN (SELECT * FROM ledger_entry_version "
+            + "WHERE entry_id = ?::uuid LIMIT 1) t", ledgerEntry);
         execute("DROP TABLE it_seed");
     }
 

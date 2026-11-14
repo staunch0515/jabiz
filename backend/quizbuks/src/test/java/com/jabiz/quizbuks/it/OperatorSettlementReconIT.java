@@ -508,7 +508,7 @@ class OperatorSettlementReconIT extends CapItSupport {
         BigDecimal net2140 = (BigDecimal) query("SELECT coalesce(sum(CASE WHEN e.direction = 'CREDIT' THEN e.amount "
             + "ELSE -e.amount END), 0) AS b FROM ledger_transaction_version t JOIN ledger_entry_version e ON "
             + "e.transaction_id = t.transaction_id JOIN ledger_account_version a ON a.account_id = e.account_id "
-            + "WHERE t.source_entity = 'QbOperatorSettlement' AND a.account_code = '2140' AND t.reference LIKE 'opg_%' "
+            + "WHERE t.source_entity = 'QbOperatorSettlement' AND a.account_code = '2140' AND t.reference LIKE 'opg\\_%' "
             + "AND t.source_id IN (SELECT CAST(settlement_id AS text) FROM qb_operator_settlement WHERE operator_id = ?)",
             who[0]).getFirst().get("b");
         assertThat(net2140).isEqualByComparingTo("-500");
