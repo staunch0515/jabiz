@@ -621,6 +621,8 @@ class SetupIT extends QbItSupport {
             QbParams.EXPOSURE_MIN_PURCHASE, "100", QbParams.EXPOSURE_FINAL_END_GRACE_SEC, "3600",
             QbParams.EXPOSURE_UNSETTLED_AFTER_HOURS, "30", QbParams.EXPOSURE_FINAL_MISSING_AFTER_HOURS, "48",
             QbParams.EXPOSURE_TOP_UP_MAX, "1000000", QbParams.EXPOSURE_LOW_RATIO, "0.1000"));
+        // F-M13b: the automatic payment of invoices (the switch off, controlled; the limit ordinary).
+        expected.putAll(Map.of(QbParams.FEE_AUTO_PAY_MAX_INVOICES, "20", QbParams.FEE_AUTO_PAY_ENABLED, "false"));
         assertThat(values).containsExactlyInAnyOrderEntriesOf(expected);
     }
 

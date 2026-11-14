@@ -512,6 +512,11 @@ public final class BankTopUps {
                     ctx -> ctx.contains(POSTING) && TopUpTargets.paysRewards(TopUpTargets.of(first(ctx, TOPUP))),
                     QbWallets.SETTLE_EVENT,
                     ctx -> Map.of("sponsorId", first(ctx, TOPUP).get("sponsorId"))))
+                // A bank transfer into the cash account may make the sponsor's unpaid platform invoices payable (F-M13b).
+                .step("Ask for the unpaid invoices to be paid", PublishEvent.<ProcessContext>when(
+                    ctx -> ctx.contains(POSTING) && TopUpTargets.CASH.equals(TopUpTargets.of(first(ctx, TOPUP))),
+                    com.jabiz.quizbuks.fee.FeeAutoPay.FUNDED_EVENT,
+                    ctx -> Map.of("sponsorId", first(ctx, TOPUP).get("sponsorId"))))
                 .step("Announce the top-up", PublishEvent.<ProcessContext>when(ctx -> ctx.contains(POSTING),
                     QbTopUps.PAID_EVENT, ctx -> {
                         EntityInstance topUp = first(ctx, TOPUP);

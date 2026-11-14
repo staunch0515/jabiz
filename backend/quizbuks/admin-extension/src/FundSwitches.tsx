@@ -49,6 +49,8 @@ interface Line {
   value: string | null
   exists: boolean
   state: FundState | 'waiting' | 'manual'
+  /** Where the row comes from: the template (the server's) or the card's own lists (waiting, set up by hand). */
+  source: 'template' | 'card'
   feature?: string
   proposals: FundProposal[]
 }
@@ -140,12 +142,13 @@ export function FundSwitches() {
       ...switches.data.map((row) => {
         const mine = open.filter((p) => p.key === row.key)
         const waiting = KEY_BEFORE_MEANING_ROWS.find((w) => w.key === row.key)
-        return { ...row, state: stateOf(row, mine), proposals: mine, feature: waiting?.waitingFor }
+        return { ...row, state: stateOf(row, mine), source: 'template' as const, proposals: mine,
+          feature: waiting?.waitingFor }
       }),
       ...WAITING_ROWS.map((row) => ({ key: row.key, group: row.group, expected: null, value: null, exists: false,
-        state: 'waiting' as const, feature: row.waitingFor, proposals: [] })),
+        state: 'waiting' as const, source: 'card' as const, feature: row.waitingFor, proposals: [] })),
       ...MANUAL_ROWS.map((row) => ({ key: row.key, group: row.group, expected: null, value: null, exists: false,
-        state: 'manual' as const, proposals: [] })),
+        state: 'manual' as const, source: 'card' as const, proposals: [] })),
     ]
     const comparable = lines.filter((line) => line.state !== 'amount' && line.state !== 'waiting'
       && line.state !== 'manual')
@@ -166,7 +169,7 @@ export function FundSwitches() {
         <div data-testid="fund-switches">
           <DataTable label={t('fundSwitch.table')} columns={columns} data={lines} getRowId={(line) => line.key}
             cards={false} rowProps={(line) => ({ 'data-testid': 'fund-switch', 'data-key': line.key,
-              'data-state': line.state })} />
+              'data-state': line.state, 'data-source': line.source })} />
         </div>
         {(can(PERMISSION.controlPropose) || can(PERMISSION.controlPublish) || readsChanges) && (
           <Link to={paths.dataset(CONTROL.changes)} className={linkClass} data-testid="fund-switches-changes">

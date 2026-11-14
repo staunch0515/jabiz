@@ -115,6 +115,11 @@ public final class TopUpCrediting {
                     payload.put("amount", QbTopUps.money(topUp.get("amount")));
                     return payload;
                 }))
+            // A cash top-up may make the sponsor's unpaid platform invoices payable (F-M13b): the event is only for speed.
+            .step("Ask for the unpaid invoices to be paid", PublishEvent.<ProcessContext>when(
+                ctx -> credited(ctx) && TopUpTargets.CASH.equals(TopUpTargets.of(first(ctx, TOPUP))),
+                com.jabiz.quizbuks.fee.FeeAutoPay.FUNDED_EVENT,
+                ctx -> Map.of("sponsorId", first(ctx, TOPUP).get("sponsorId"))))
             .step("Ask Stripe for the fee", StartExternalJob.<ProcessContext>of(TopUpJobs.PAYMENT_FEE,
                     ctx -> new TopUpJobs.FeeInput(String.valueOf(first(ctx, TOPUP).id()),
                         report(ctx).session().paymentIntentId()))

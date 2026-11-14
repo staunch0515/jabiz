@@ -371,4 +371,18 @@ class FeeCreditGrantIT extends PlayItSupport {
         assertThat(all).isNotEmpty().allSatisfy(row -> assertThat(row).containsKeys("operatorName", "spent"));
         assertThat(differences()).isEmpty();
     }
+
+    /** F-M13b: granted credit pays the sponsor's unpaid invoice as far as it goes, by itself. */
+    @Test
+    @Order(8)
+    void theOnboardingCreditPaysAnUnpaidInvoiceAsFarAsItGoes() {
+        switchOn();
+        autoPayOn();
+        Setting s = setting("autopay");
+        String invoiceId = unpaidInvoice(s.sponsor(), 1600);
+        run(FeeCredits.ONBOARDING, s.lead(), body("sponsorId", s.sponsor()));
+        deliverEvents();
+        assertThat(invoiceStatus(invoiceId)).isEqualTo("PARTIAL");
+        assertThat(walletBalance(s.sponsor(), QbWallets.FEE_CREDIT)).isEqualByComparingTo("0");
+    }
 }

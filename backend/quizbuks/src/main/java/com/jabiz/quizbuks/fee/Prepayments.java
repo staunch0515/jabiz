@@ -13,6 +13,7 @@ import com.jabiz.runtime.ledger.LedgerProcesses;
 import com.jabiz.runtime.process.steps.CallProcess;
 import com.jabiz.runtime.process.steps.HoldLock;
 import com.jabiz.runtime.process.steps.QueryEntities;
+import com.jabiz.runtime.process.steps.RunTemplate;
 import com.jabiz.runtime.process.steps.SaveChanges;
 import jakarta.validation.constraints.DecimalMax;
 import jakarta.validation.constraints.DecimalMin;
@@ -109,11 +110,29 @@ public final class Prepayments {
     /** @param credit of it, from the fee credit; {@code cash} from the cash (both 0 for a postpaid one) */
     public record FreezeOutput(String prepaymentId, BigDecimal credit, BigDecimal cash) {}
 
-    /** @param amount what the charge owes (the fee and its tax) */
+    /**
+     * @param amount what the charge owes (the fee and its tax)
+     * @param byLot  F-M9 (plan H4): read what it holds lot by lot, summed in SQL ({@value #HELD_TEMPLATE}), not part by
+     *               part: the AI credit is never closed, so its parts grow without end; null or false for the others
+     *               (one publication's prepayment has a few parts)
+     */
     public record UseInput(@NotBlank @Size(max = 36) String prepaymentId, @NotBlank @Size(max = 36) String chargeId,
         @NotNull @DecimalMin("0") @DecimalMax(FeeProcesses.MAX_AMOUNT) @Digits(integer = 13, fraction = 0)
         BigDecimal amount,
-        @Size(max = 100) String reference) {}
+        @Size(max = 100) String reference, Boolean byLot) {
+
+        /** A prepayment read part by part. */
+        public UseInput(String prepaymentId, String chargeId, BigDecimal amount, String reference) {
+            this(prepaymentId, chargeId, amount, reference, null);
+        }
+
+        boolean lots() {
+            return Boolean.TRUE.equals(byLot);
+        }
+    }
+
+    /** F-M9 (plan H4): what an AI credit holds, lot by lot (its expiry with each lot of fee credit). */
+    public static final String HELD_TEMPLATE = "qb.system.ai-credit-held";
 
     public record ChargeInput(@NotBlank @Size(max = 128) String sponsorId,
         @NotBlank @Size(max = 36) String publicationId,
@@ -163,6 +182,9 @@ public final class Prepayments {
     static final String PARTS = "parts";
     static final String USED_PARTS = "usedParts";
     static final String GRANTS = "grants";
+    /** F-M9: the lots an AI credit holds ({@value #HELD_TEMPLATE}). */
+    /** Where {@value #HELD_TEMPLATE}'s rows are put (the AI processes read them too). */
+    public static final String HELD_LOTS = "heldLots";
     static final String TAKEN = "taken";
     static final String SETTLED = "settled";
     static final String CHARGE_INPUT = "chargeInput";
@@ -372,12 +394,16 @@ public final class Prepayments {
                     QueryEntities.query(QbFeeAccount.defaultDataset(QbPrepayments.PREPAYMENT), ctx -> EntityQuery
                         .builder().where(new QueryPredicate.In("prepaymentId", List.of(useInput(ctx).prepaymentId())))
                         .limit(1).build(), PREPAYMENT),
+                    // By part unless read by lot (an IN of nothing is not sent).
                     QueryEntities.query(QbFeeAccount.defaultDataset(QbFeeAccount.PAYMENT), ctx -> EntityQuery.builder()
-                        .where(new QueryPredicate.In("targetId", List.of(useInput(ctx).prepaymentId())))
+                        .where(new QueryPredicate.In("targetId", partsOf(ctx)))
                         .limit(MAX_PARTS + 1).build(), PARTS),
                     QueryEntities.query(QbFeeAccount.defaultDataset(QbFeeAccount.PAYMENT), ctx -> EntityQuery.builder()
-                        .where(new QueryPredicate.In("prepaymentId", List.of(useInput(ctx).prepaymentId())))
+                        .where(new QueryPredicate.In("prepaymentId", partsOf(ctx)))
                         .limit(MAX_PARTS + 1).build(), USED_PARTS)))
+                // F-M9 (plan H4): an AI credit's, by lot with each lot's expiry.
+                .step("Read what it holds by lot", RunTemplate.<ProcessContext>when(ctx -> useInput(ctx).lots(),
+                    HELD_TEMPLATE, ctx -> Map.of("prepaymentId", useInput(ctx).prepaymentId()), HELD_LOTS))
                 // L2 of the F-M5 review: the fee credit it holds is spent in the account's order (the earliest to
                 // expire first), which needs the lots' expiry.
                 .step("Read the fee credit it was taken from", QueryEntities.<ProcessContext>of(
@@ -413,7 +439,8 @@ public final class Prepayments {
         }
         List<Held> taken = new ArrayList<>();
         BigDecimal left = paid;
-        for (Held held : held(FeeGate.list(ctx, PARTS), FeeGate.list(ctx, USED_PARTS), expiries(ctx))) {
+        for (Held held : useInput(ctx).lots() ? heldLots(ctx) : held(FeeGate.list(ctx, PARTS),
+            FeeGate.list(ctx, USED_PARTS), expiries(ctx))) {
             if (left.signum() == 0) {
                 break;
             }
@@ -479,11 +506,72 @@ public final class Prepayments {
                 add(byLot, part, amount.negate());
             }
         }
-        return byLot.values().stream().filter(h -> h.amount().signum() > 0)
+        return order(byLot.values().stream().filter(h -> h.amount().signum() > 0).toList(), expiries);
+    }
+
+    /** The account's order: the fee credit first, the earliest to expire first, then the cash by lot. */
+    private static List<Held> order(List<Held> lots, Map<String, Instant> expiries) {
+        return lots.stream()
             .sorted(Comparator.comparing((Held h) -> QbFeeAccount.FEE_CREDIT.equals(h.subAccount()) ? 0 : 1)
                 .thenComparing(h -> expiries.getOrDefault(h.lotId(), Instant.MAX))
                 .thenComparing(Held::lotId))
             .toList();
+    }
+
+    /** The prepayment whose parts are read one by one: none when it is read by lot. */
+    private static List<Object> partsOf(ProcessContext ctx) {
+        return useInput(ctx).lots() ? List.of() : List.of(useInput(ctx).prepaymentId());
+    }
+
+    /**
+     * F-M9 (plan H4): what an AI credit holds by lot ({@value #HELD_TEMPLATE}), in the order {@link #held} spends it.
+     * The rows are the lots with something left; more than {@link #MAX_PARTS} of them is refused, as for parts.
+     */
+    @SuppressWarnings("unchecked")
+    static List<Held> heldLots(ProcessContext ctx) {
+        List<Map<String, Object>> rows = ctx.contains(HELD_LOTS) ? (List<Map<String, Object>>) ctx.get(HELD_LOTS)
+            : List.of();
+        if (rows.size() > MAX_PARTS) {
+            throw new IllegalStateException("An AI credit holding more lots than " + MAX_PARTS);
+        }
+        Map<String, Instant> expiries = new LinkedHashMap<>();
+        List<Held> lots = new ArrayList<>();
+        for (Map<String, Object> row : rows) {
+            String lotId = String.valueOf(row.get("lotId"));
+            lots.add(new Held(String.valueOf(row.get("subAccount")), lotId, FeeGate.money(row.get("amount"))));
+            if (row.get("expiresAt") != null) {
+                expiries.put(lotId, toInstant(row.get("expiresAt")));
+            }
+        }
+        return order(lots, expiries);
+    }
+
+    /**
+     * The AI credit's lots as {@link #heldLots} reads and orders them, with each grant's expiry and whether it was
+     * voided before it expired (#699 re-review M1: {@link AiFeeRules.Lot#expiredBy}).
+     */
+    @SuppressWarnings("unchecked")
+    public static List<AiFeeRules.Lot> aiLots(ProcessContext ctx) {
+        Map<String, Map<String, Object>> rows = new LinkedHashMap<>();
+        if (ctx.contains(HELD_LOTS)) {
+            for (Map<String, Object> row : (List<Map<String, Object>>) ctx.get(HELD_LOTS)) {
+                rows.put(row.get("subAccount") + "|" + row.get("lotId"), row);
+            }
+        }
+        List<AiFeeRules.Lot> lots = new ArrayList<>();
+        for (Held held : heldLots(ctx)) {
+            Map<String, Object> row = rows.get(held.subAccount() + "|" + held.lotId());
+            boolean credit = QbFeeAccount.FEE_CREDIT.equals(held.subAccount());
+            lots.add(new AiFeeRules.Lot(credit, held.lotId(), held.amount(),
+                credit && row.get("expiresAt") != null ? toInstant(row.get("expiresAt")) : null,
+                credit && row.get("voidedAt") != null));
+        }
+        return List.copyOf(lots);
+    }
+
+    static Instant toInstant(Object value) {
+        return value instanceof Instant instant ? instant : value instanceof java.time.OffsetDateTime odt
+            ? odt.toInstant() : Instant.parse(String.valueOf(value));
     }
 
     /** When each lot of fee credit read ({@value #GRANTS}) expires. */
@@ -702,21 +790,12 @@ public final class Prepayments {
         List<Release> plan = (List<Release>) ctx.get(PLAN);
         List<LedgerProcesses.PostOutput> posted = ctx.contains(POSTED)
             ? (List<LedgerProcesses.PostOutput>) ctx.get(POSTED) : List.of();
-        Map<String, EntityInstance> grants = FeeSettlement.byId(FeeGate.list(ctx, GRANTS));
-        Map<String, EntityInstance> lots = FeeSettlement.byId(FeeGate.list(ctx, LOTS));
-        Map<String, BigDecimal> grantBack = new LinkedHashMap<>();
-        Map<String, BigDecimal> lotBack = new LinkedHashMap<>();
+        List<Returned> returned = new ArrayList<>();
         int post = 0;
         for (Release release : plan) {
             EntityInstance prepayment = release.prepayment();
             String transactionId = release.back().isEmpty() ? null : posted.get(post++).transactionId();
-            for (Held part : release.back()) {
-                boolean credit = QbFeeAccount.FEE_CREDIT.equals(part.subAccount());
-                insertPart(ctx, input.sponsorId(), QbPrepayments.PREPAYMENT, String.valueOf(prepayment.id()),
-                    part.subAccount(), credit ? part.lotId() : null, credit ? null : part.lotId(),
-                    part.amount().negate(), transactionId, null);
-                (credit ? grantBack : lotBack).merge(part.lotId(), part.amount(), BigDecimal::add);
-            }
+            returned.add(new Returned(String.valueOf(prepayment.id()), release.back(), transactionId));
             Map<String, Object> values = new LinkedHashMap<>();
             values.put("remaining", BigDecimal.ZERO);
             values.put("status", QbPrepayments.RELEASED);
@@ -724,13 +803,41 @@ public final class Prepayments {
             values.put("releaseReason", input.reason());
             ctx.changes().update(QbPrepayments.PREPAYMENT, prepayment.id(), prepayment.version(), values);
         }
+        ctx.put(RELEASE_OUTPUT, toLots(ctx, input.sponsorId(), returned));
+    }
+
+    /** What a prepayment gave back of each lot ({@link #held} order) and the posting that moved it. */
+    record Returned(String prepaymentId, List<Held> back, String transactionId) {}
+
+    /**
+     * Gives what prepayments gave back to the lots they were taken from, under the sponsor's wallet lock: a negative
+     * part each (its object the prepayment), the cash lots and the grants still to be spent raised, and the wallets'
+     * caches; fee credit whose grant expired or was voided meanwhile is voided again at once (with what an expired grant
+     * the daily job has not voided yet still holds), the voids to post put in {@value #VOIDS}. Reads the grants
+     * ({@value #GRANTS}), the cash lots ({@value #LOTS}) and the wallets ({@value #CREDIT_WALLET},
+     * {@value #CASH_WALLET}) read before. F-M9: shared by a release and by an AI credit's return and expiry.
+     */
+    static ReleaseOutput toLots(ProcessContext ctx, String sponsorId, List<Returned> returned) {
+        Map<String, EntityInstance> grants = FeeSettlement.byId(FeeGate.list(ctx, GRANTS));
+        Map<String, EntityInstance> lots = FeeSettlement.byId(FeeGate.list(ctx, LOTS));
+        Map<String, BigDecimal> grantBack = new LinkedHashMap<>();
+        Map<String, BigDecimal> lotBack = new LinkedHashMap<>();
+        for (Returned one : returned) {
+            for (Held part : one.back()) {
+                boolean credit = QbFeeAccount.FEE_CREDIT.equals(part.subAccount());
+                insertPart(ctx, sponsorId, QbPrepayments.PREPAYMENT, one.prepaymentId(),
+                    part.subAccount(), credit ? part.lotId() : null, credit ? null : part.lotId(),
+                    part.amount().negate(), one.transactionId(), null);
+                (credit ? grantBack : lotBack).merge(part.lotId(), part.amount(), BigDecimal::add);
+            }
+        }
         // The fee credit: back to the grants still to be spent; to those expired or voided meanwhile, voided again.
         BigDecimal credit = BigDecimal.ZERO;
         BigDecimal voided = BigDecimal.ZERO;
         // What expired lots still held when voided now (the daily job would have): it leaves the wallet too.
         BigDecimal expiredLeft = BigDecimal.ZERO;
         List<LedgerProcesses.PostInput> voids = new ArrayList<>();
-        Map<String, String> party = Map.of(QbLedger.PARTY, input.sponsorId());
+        Map<String, String> party = Map.of(QbLedger.PARTY, sponsorId);
         for (Map.Entry<String, BigDecimal> entry : grantBack.entrySet()) {
             EntityInstance grant = grants.get(entry.getKey());
             if (grant == null) {
@@ -774,15 +881,15 @@ public final class Prepayments {
             cash = cash.add(entry.getValue());
         }
         if (credit.subtract(expiredLeft).signum() != 0) {
-            QbWallets.change(ctx, FeeGate.first(ctx, CREDIT_WALLET), QbWallets.FEE_CREDIT, input.sponsorId(),
+            QbWallets.change(ctx, FeeGate.first(ctx, CREDIT_WALLET), QbWallets.FEE_CREDIT, sponsorId,
                 credit.subtract(expiredLeft), 0, BigDecimal.ZERO);
         }
         if (cash.signum() > 0) {
-            QbWallets.change(ctx, FeeGate.first(ctx, CASH_WALLET), QbWallets.CASH, input.sponsorId(), cash, 0,
+            QbWallets.change(ctx, FeeGate.first(ctx, CASH_WALLET), QbWallets.CASH, sponsorId, cash, 0,
                 BigDecimal.ZERO);
         }
         ctx.put(VOIDS, List.copyOf(voids));
-        ctx.put(RELEASE_OUTPUT, new ReleaseOutput(credit.add(voided).add(cash), credit, voided, cash));
+        return new ReleaseOutput(credit.add(voided).add(cash), credit, voided, cash);
     }
 
     // ---- the daily job's item ----------------------------------------------------------------------------------------
