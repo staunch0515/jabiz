@@ -37,6 +37,6 @@ FROM (
                     AND g.{{QbFeeCreditGrant.remaining}} > 0 AND g.{{QbFeeCreditGrant.expiresAt}} > :at), 0)
         + coalesce((SELECT sum(greatest(w.{{QbWallet.balance}} - w.{{QbWallet.held}}, 0)) FROM {{QbWallet}} w
                     WHERE w.{{QbWallet.ownerId}} = i.{{QbFeeInvoice.sponsorId}} AND w.{{QbWallet.kind}} = 'CASH'), 0) > 0) due
-WHERE rank <= coalesce((SELECT CAST(m.{{SysParam.value}} AS int) FROM {{SysParam}} m
+WHERE rank <= coalesce((SELECT least(greatest(CAST(m.{{SysParam.value}} AS int), 1), 50) FROM {{SysParam}} m
                          WHERE m.{{SysParam.paramKey}} = 'qb.fee.auto-pay.max-invoices'
                            AND m.{{SysParam.value}} ~ '^[0-9]{1,2}$'), 20)

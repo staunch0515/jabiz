@@ -73,7 +73,7 @@ class AutoPayIT extends PlayItSupport {
         String invoiceId = invoice(sponsor, 1100, 5, 0);
         cash(sponsor, 400);
 
-        // Not published: a parameter nobody turned on has no value, nothing is paid.
+        // Published as false: nothing is paid (a switch nobody published at all is AutoPayOffIT's).
         param(QbParams.FEE_AUTO_PAY_ENABLED, "false");
         assertThat(autoPay(sponsor).outcome()).isEqualTo("OFF");
         assertThat((BigDecimal) row(invoiceId).get("paid_amount")).isEqualByComparingTo("0");
@@ -149,22 +149,42 @@ class AutoPayIT extends PlayItSupport {
     }
 
     @Test
-    void theMailReadsThePaymentsAgainAndSaysWhatIsStillOwed() {
+    void theMailReadsThePaymentsAgainSaysWhatWasPaidAndWhatIsStillOwedAndIsSentOncePerPayment() {
         String sponsor = newSponsor(unique("s-fm13b-mail"));
         String invoiceId = invoice(sponsor, 1100, 5, 0);
         param(QbParams.FEE_AUTO_PAY_ENABLED, "true");
         cash(sponsor, 400);
         autoPay(sponsor);
+        deliverEvents();
+        // Paid 400 of 1,100 (a part): the mail says 400 paid and 700 still owed, never "paid" for the invoice.
+        assertThat(mailTo(sponsor)).filteredOn(row -> "qb.fee.auto-paid".equals(row.get("template")))
+            .singleElement().satisfies(row -> {
+                String params = String.valueOf(row.get("params"));
+                assertThat(params).contains("\"paid\"").contains("400").contains("\"owed\"").contains("700");
+            });
+        // What the mail says is read again: a payment that is not the sponsor's is told to nobody.
         String transaction = String.valueOf(query("SELECT transaction_id FROM qb_fee_payment_version WHERE sponsor_id = ?",
             sponsor).getFirst().get("transaction_id"));
-        Object mailed = systemRun("QB_MAIL_FEE_AUTO_PAID", body("sponsorId", sponsor, "transactionIds", List.of(transaction),
+        String other = newSponsor(unique("s-fm13b-else"));
+        Object told = systemRun("QB_MAIL_FEE_AUTO_PAID", body("sponsorId", other, "transactionIds", List.of(transaction),
             "invoiceIds", List.of(invoiceId), "occurredAt", clock.instant().toString()));
-        assertThat(String.valueOf(mailed)).contains("qb.fee.auto-paid");
-        // Nothing of the sponsor's is named by a payment that is not theirs: nothing is mailed.
-        Object other = systemRun("QB_MAIL_FEE_AUTO_PAID", body("sponsorId", newSponsor(unique("s-fm13b-else")),
-            "transactionIds", List.of(transaction), "invoiceIds", List.of(invoiceId),
-            "occurredAt", clock.instant().toString()));
-        assertThat(String.valueOf(other)).doesNotContain("qb.fee.auto-paid");
+        assertThat(String.valueOf(told)).doesNotContain("qb.fee.auto-paid");
+        assertThat(mailTo(other)).filteredOn(row -> "qb.fee.auto-paid".equals(row.get("template"))).isEmpty();
+    }
+
+    @Test
+    void aBannedSponsorIsStillPaidButToldNothing() {
+        String sponsor = newSponsor(unique("s-fm13b-ban"));
+        String invoiceId = invoice(sponsor, 1100, 5, 0);
+        param(QbParams.FEE_AUTO_PAY_ENABLED, "true");
+        cash(sponsor, 5000);
+        String boss = userWithRole(unique("fm13b-boss"), com.jabiz.quizbuks.setup.QbRoles.ADMIN_SUPER);
+        run("QB_USER_BAN", tokenOf(boss, com.jabiz.quizbuks.setup.QbRoles.ADMIN_SUPER),
+            body("userId", sponsor, "reason", "Fraud"));
+        assertThat(autoPay(sponsor).outcome()).isEqualTo("PAID");
+        deliverEvents();
+        assertThat(row(invoiceId)).containsEntry("status", QbFees.PAID);
+        assertThat(mailTo(sponsor)).filteredOn(row -> "qb.fee.auto-paid".equals(row.get("template"))).isEmpty();
     }
 
     BigDecimal balance(String sponsor, String kind) {

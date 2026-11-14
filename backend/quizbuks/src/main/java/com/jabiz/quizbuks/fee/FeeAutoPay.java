@@ -160,24 +160,28 @@ public final class FeeAutoPay {
                 .step("Lock the sponsor's wallet", HoldLock.<ProcessContext>exclusive(
                     ctx -> Boolean.TRUE.equals(ctx.get(ON))
                         ? QbWallets.lockName(QbWallets.SPONSOR, sponsorId(ctx)) : null))
-                .step("Read the unpaid invoices", QueryEntities.<ProcessContext>of(
-                    QbFees.defaultDataset(QbFees.INVOICE),
-                    ctx -> Boolean.TRUE.equals(ctx.get(ON)) ? CreditNotes.unpaid(sponsorId(ctx))
-                        : EntityQuery.builder().where(new QueryPredicate.In("invoiceId", List.of())).limit(1).build(),
-                    UNPAID))
-                .step("Load the account", QueryEntities.<ProcessContext>all(
+                // One read of the sponsor's unpaid invoices and the account; none of it when the switch is off (the
+                // queries then name nobody).
+                .step("Read the invoices and the account", QueryEntities.<ProcessContext>all(
+                    QueryEntities.query(QbFees.defaultDataset(QbFees.INVOICE),
+                        ctx -> Boolean.TRUE.equals(ctx.get(ON)) ? CreditNotes.unpaid(sponsorId(ctx))
+                            : EntityQuery.builder().where(new QueryPredicate.In("invoiceId", List.of())).limit(1).build(),
+                        UNPAID),
                     QueryEntities.query(QbFeeAccount.defaultDataset(QbFeeAccount.GRANT),
-                        ctx -> FeeSettlement.credits(sponsorId(ctx), ctx.opTime()), FeeProcesses.CREDITS),
+                        ctx -> FeeSettlement.credits(Boolean.TRUE.equals(ctx.get(ON)) ? sponsorId(ctx) : null,
+                            ctx.opTime()), FeeProcesses.CREDITS),
                     QueryEntities.query(QbWallets.defaultDataset(QbWallets.WALLET),
-                        ctx -> QbWallets.query(QbWallets.CASH, sponsorId(ctx)), FeeProcesses.CASH_WALLET)))
+                        ctx -> QbWallets.query(QbWallets.CASH, Boolean.TRUE.equals(ctx.get(ON)) ? sponsorId(ctx) : null),
+                        FeeProcesses.CASH_WALLET)))
                 .compute("Choose the invoice", (metadata, ctx) -> chooseInvoice(ctx))
                 .step("Pay it", CallProcess.<ProcessContext>when(ctx -> ctx.get(CHOSEN) != null, AUTO_PAY_ITEM, 1,
                     ctx -> new ItemInput(String.valueOf(chosen(ctx).id())), PAID))
                 .step("Ask the mail to tell the sponsor", PublishEvent.<ProcessContext>when(
                     FeeAutoPay::paidSomething, PAID_EVENT, FeeAutoPay::paidPayload))
-                // Paid one, more are owing, and the chain is within the limit: the next one (nothing paid: the day's job).
+                // Paid one in full, more are owing, and the chain is within the limit: the next one. A part paid means the
+                // account is used up (the day's job looks again when it grows).
                 .step("Go on", PublishEvent.<ProcessContext>when(
-                    ctx -> paidSomething(ctx) && Boolean.TRUE.equals(ctx.get(MORE)) && ctx.get(INPUT,
+                    ctx -> paidInFull(ctx) && Boolean.TRUE.equals(ctx.get(MORE)) && ctx.get(INPUT,
                         AutoPayInput.class).invoiceId() == null && next(ctx) < max(ctx.get(PARAMS, ParamValues.class)),
                     FUNDED_EVENT, ctx -> {
                         Map<String, Object> payload = new LinkedHashMap<>();
@@ -223,6 +227,11 @@ public final class FeeAutoPay {
 
     private static boolean paidSomething(ProcessContext ctx) {
         return ctx.get(PAID) instanceof ItemPaid item && item.paid().signum() > 0;
+    }
+
+    /** The invoice paid is paid in full: the account may still have something for the next one. */
+    private static boolean paidInFull(ProcessContext ctx) {
+        return paidSomething(ctx) && QbFees.PAID.equals(ctx.get(PAID, ItemPaid.class).status());
     }
 
     /** The invoice, and the payment (the mail reads both again, and what is owed now, itself). */
