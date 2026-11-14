@@ -482,7 +482,7 @@ describe('the operator', () => {
     })
     server.creditNotes = [{ creditNoteId: 'cn-1', creditNoteNo: 'QBC-2026-00001', company: 'Acme', invoiceNo: 'QBF-2026-00001',
       billingMode: 'PREPAID', reason: 'AUDIENCE_UNUSED', endReason: 'WITHDRAWN', usedDays: 3, note: null, amount: 400, tax: 40,
-      total: 440, appliedOwn: 0, refundedCash: 100, refundedCredit: 340, voidedCredit: 0, used: 40, creditLeft: 300,
+      total: 440, appliedOwn: 0, refundedCash: 100, refundedCredit: 340, voidedCredit: 0, used: 40, givenBack: 0, creditLeft: 300,
       issuedAt: '2026-11-05T01:00:00Z', issuedBy: null }]
     const { container } = renderAt('/qb/operator/billing', '/qb/operator/billing', <OperatorBillingPage />)
     const section = await screen.findByTestId('operator-credit-notes')

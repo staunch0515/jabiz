@@ -1,0 +1,32 @@
+-- F-M15c (docs/quizbuks/plans/impl/F-M15.md §5.2 steps 3 and 9, §5.5): the wind-up of an erased sponsor's account
+-- closes their AI credit (everything given back, the prepayment released for the erasure) and gives what their credit
+-- notes have left back to their cash. Only constraints and a new table: the append-only tables gain nothing renamed
+-- (decision D58; the integrity seal's digest reads the values, not the constraints).
+
+-- The AI credit closed at the wind-up: released for the account's erasure.
+ALTER TABLE qb_prepayment DROP CONSTRAINT qb_prepayment_release_reason_check;
+ALTER TABLE qb_prepayment ADD CONSTRAINT qb_prepayment_release_reason_check
+    CHECK (release_reason IN ('WITHDRAWN', 'REJECTED', 'REVIEW_EXPIRED', 'ENDED', 'ERASED'));
+
+-- The AI credit's movement of that close: everything given back (negative, as a return).
+ALTER TABLE qb_ai_credit_movement_version DROP CONSTRAINT qb_ai_credit_movement_version_kind_check;
+ALTER TABLE qb_ai_credit_movement_version ADD CONSTRAINT qb_ai_credit_movement_version_kind_check
+    CHECK (kind IN ('BUY', 'RETURN', 'CHARGE', 'EXPIRE', 'CLOSE'));
+
+-- The credit a sponsor's credit notes have left, given back at the wind-up to what paid their fees: a use of the
+-- credit as one that paid an invoice (so that every reading of the credit left, "total - given back - used", counts
+-- it), naming the posting that gave it back instead of an invoice. Exactly one of the two; the rows before this all
+-- name an invoice.
+ALTER TABLE qb_fee_credit_note_use_version ADD COLUMN back_transaction_id varchar(36);
+ALTER TABLE qb_fee_credit_note_use_version ALTER COLUMN invoice_id DROP NOT NULL;
+ALTER TABLE qb_fee_credit_note_use_version ADD CONSTRAINT qb_fee_credit_note_use_target
+    CHECK ((invoice_id IS NULL) <> (back_transaction_id IS NULL));
+
+-- A wind-up waits while more of the erased sponsor's AI jobs may be open than a run cancels.
+ALTER TABLE qb_sponsor_closure DROP CONSTRAINT qb_sponsor_closure_reason_code_check;
+ALTER TABLE qb_sponsor_closure ADD CONSTRAINT qb_sponsor_closure_reason_code_check
+    CHECK (reason_code IN ('SWITCH_OFF', 'DEPOSIT_OPEN', 'FEE_OWED', 'AI_JOBS_OPEN'));
+-- Where the cancelling of the erased sponsor's AI jobs goes on (a cursor over the platform's job sequence): none from
+-- the latest, 0 when every job was looked at.
+ALTER TABLE qb_sponsor_closure ADD COLUMN ai_jobs_before_seq numeric(19, 0)
+    CONSTRAINT qb_sponsor_closure_ai_jobs_before_seq CHECK (ai_jobs_before_seq >= 0);

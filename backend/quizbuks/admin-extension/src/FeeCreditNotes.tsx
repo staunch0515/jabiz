@@ -70,6 +70,8 @@ export function FeeCreditNotes({ operator = false }: { operator?: boolean }) {
     { id: 'refundedCredit', header: t('fee.creditNotes.refundedCredit'), meta: right,
       cell: ({ row }) => <span data-testid="fee-credit-note-credit">{amount(row.original.refundedCredit)}</span> },
     { id: 'used', header: t('fee.creditNotes.used'), meta: right, cell: ({ row }) => amount(row.original.used) },
+    { id: 'givenBack', header: t('fee.creditNotes.givenBack'), meta: right,
+      cell: ({ row }) => amount(row.original.givenBack) },
     { id: 'creditLeft', header: t('fee.creditNotes.creditLeft'), meta: right,
       cell: ({ row }) => <span data-testid="fee-credit-note-left">{amount(row.original.creditLeft)}</span> },
     { id: 'voidedCredit', header: t('fee.creditNotes.voidedCredit'), meta: right,

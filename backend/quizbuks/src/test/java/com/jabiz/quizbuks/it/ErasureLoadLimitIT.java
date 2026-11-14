@@ -139,6 +139,18 @@ class ErasureLoadLimitIT extends PlayItSupport {
         assertThat(found.get("qb.topup-pending").params()).containsEntry("count", (long) waiting);
     }
 
+    @Test
+    void aSponsorWithManyAiCreditsClosedIsToldWhatTheOpenOneHolds() {
+        // F-M15c: one open AI credit a sponsor (V124's index), the others released: the sum reads the open one only.
+        String sponsor = newSponsor(unique("s-fm15c-ai"));
+        rows("qb_prepayment", null, HISTORY, null, n -> Map.of(
+            "sponsor_id", text(sponsor), "purpose", "'AI'", "mode", "'PREPAID'",
+            "amount", "2000", "remaining", "CASE WHEN n = 1 THEN 700 ELSE 0 END",
+            "status", "CASE WHEN n = 1 THEN 'OPEN' ELSE 'RELEASED' END",
+            "released_at", "CASE WHEN n = 1 THEN NULL ELSE TIMESTAMPTZ '2026-01-02T00:00:00Z' END"));
+        assertThat(noticesOf(sponsor).get("qb.ai-credit").params()).containsEntry("amount", "700");
+    }
+
     /**
      * Review L4: through the real processes (submitted and live, paused by the Sponsor, ended by an administrator, a
      * draft), the cards follow the publications' states, so counting running cards counts running publications.
