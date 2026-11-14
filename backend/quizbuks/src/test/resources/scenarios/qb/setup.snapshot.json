@@ -6398,7 +6398,7 @@
       "targetEntity" : "SysParam",
       "targetId" : null,
       "changeAction" : "UPSERT",
-      "changeValues" : "{\"paramKey\":\"qb.operator.settlement.waiting-after-hours\",\"valueKind\":{\"precision\":4,\"scale\":0,\"type\":\"numeric\"},\"value\":\"48\",\"description\":\"How many hours after a month's end an operator still without its settlement for the month is reported by the daily check, with the step it waits for (0 to 9999)\"}",
+      "changeValues" : "{\"paramKey\":\"qb.operator.settlement.waiting-after-hours\",\"valueKind\":{\"precision\":4,\"scale\":0,\"type\":\"numeric\"},\"value\":\"48\",\"description\":\"How many hours after its start an operator still without its settlement of a month is reported by the daily check, with the step it waits for; start is the month's end, or the time it became ready if later, but at most the readiness wait's end (30 to 9999; the check does not run until this is published)\"}",
       "targetKey" : "qb.operator.settlement.waiting-after-hours",
       "effectiveTime" : null,
       "reason" : "First value of the QuizBuks parameter, proposed by QB_SETUP",
