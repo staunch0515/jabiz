@@ -8,6 +8,7 @@ import { boundPublicationOf, CAPITALS, operatorTree, platformMap, pass } from '.
 import { answerQuiz, GRANT, loopCast, phone, rememberParams, STEP_TIMEOUT_MS, type Loop } from './launch-loop'
 import { sharedVideos } from './exposure-videos'
 import { contentAdmin } from './legal'
+import { signInAdmin } from './admin'
 import { approvedSponsor, fund } from './wallet'
 import {
   accessibleInBoth, adminToken, expect, mailTo, openArea, PASSWORD, prepareQuizbuks, run, runJobNow, setControlledParam, signIn,
@@ -39,6 +40,8 @@ import {
  *      publication's page lists the note
  *   7c F-M8: the exposure fee: bought when submitted, counted by two takers, settled by the final job once it ends
  *      and the rest given back
+ *   9  F-M14: after the loop's money, the daily check finds no difference: the reconciliation page, shown at that
+ *      level only, has nothing
  *
  * Not repeated here: the editor's keyboard (tree-graph.spec), certificates turned off and the deleted account
  * (certificates.spec), and mainland China's view of a publication with a foreign video (foreign-video.spec: the
@@ -763,6 +766,28 @@ test.describe.serial('the first launch\'s loop', () => {
         await restore()
       }
     })
+
+  test('9. F-M14: after the loop\'s money, the daily check finds no difference', async ({ page, request }) => {
+    test.setTimeout(STEP_TIMEOUT_MS)
+    // A run checked after everything above (the server reconciles every minute here; asked once more so as not to
+    // wait for it). A difference blocks the month's journal export: the loop must leave none.
+    const since = Date.now()
+    await runJobNow(request, 'qb.reconcile')
+    const admin = await adminToken(request)
+    let latest: Record<string, unknown> | undefined
+    await expect.poll(async () => {
+      latest = (await query(request, admin, 'qb.admin.recon-runs', {}))
+        .find((row) => Date.parse(String(row.checkedAt)) >= since)
+      return latest !== undefined
+    }, { message: 'a reconciliation checked after the loop', timeout: 120_000, intervals: [5_000] }).toBe(true)
+    expect(latest!.status, `the run's summary: ${String(latest!.summary)}`).toBe('OK')
+
+    await signInAdmin(page)
+    await page.goto(`/admin/qb/finance/reconciliation?run=${String(latest!.runId)}&level=DIFFERENCE`)
+    await expect(page.getByTestId('recon-level-filter')).toHaveAttribute('data-level', 'DIFFERENCE')
+    await expect(page.getByTestId('recon-items')).toBeVisible()
+    await expect(page.getByTestId('recon-group')).toHaveCount(0)
+  })
 })
 
 /** An approved Sponsor moved to the operator (a Sponsor signs up with the default operator). */
