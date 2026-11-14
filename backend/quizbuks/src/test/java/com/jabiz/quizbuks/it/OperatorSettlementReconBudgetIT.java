@@ -33,11 +33,14 @@ class OperatorSettlementReconBudgetIT extends CreditNoteItSupport {
 
     static final int OPERATORS = 50;
     /**
-     * What the check may take (the platform's query timeout is 5 s): measured on the test database at 2.4 s the longest
-     * with no statistics and 0.8 s analyzed (50 operators, 60 months, 3,000 settlements, 18,000 lines, 15,000 fees,
-     * 100,000 cash payments); the limits leave the room a slower machine needs.
+     * What the check may take (the platform's query timeout is 5 s): measured on the test database at 0.2 s the longest
+     * with no statistics and 0.75 s analyzed, of which 0.5 s is PostgreSQL compiling the plan (JIT: the estimates of a
+     * table with statistics pass jit_above_cost); 50 operators, 60 months, 3,000 settlements, 18,000 lines, 15,000
+     * fees, 100,000 cash payments. Before the lookups of the lines were written as probes of the unique index the
+     * case without statistics took 2.2 s here and 4.3 s on CI (the planner took the lines for a handful and compared
+     * every fee with all of them): the limit of 2 s is what catches that coming back, with the room CI needs.
      */
-    static final Duration NO_STATISTICS = Duration.ofMillis(4_000);
+    static final Duration NO_STATISTICS = Duration.ofMillis(2_000);
     static final Duration ANALYZED = Duration.ofMillis(2_000);
 
     private static final List<String> OPERATOR_IDS = new ArrayList<>();

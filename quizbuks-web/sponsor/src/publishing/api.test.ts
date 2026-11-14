@@ -30,6 +30,7 @@ const FORM: PublicationForm = {
   entryFee: '',
   budgetCap: '1000',
   maxWinners: ' 10 ',
+  exposureRequested: '',
   tiers: [
     { key: 'a', tierId: 't1', fromScore: '0', toScore: '1', reward: '0' },
     { key: 'b', tierId: null, fromScore: '2', toScore: '2', reward: '100' },
@@ -64,11 +65,17 @@ describe('the publishing paths', () => {
 })
 
 describe('the wizard\'s form', () => {
+  it('sends the exposures to buy (F-M8) as a whole number, or says what is wrong with them', () => {
+    const sent = inputOf({ ...FORM, exposureRequested: ' 120 ' }, 'p1', 4)
+    expect(sent.input?.exposureRequested).toBe(120)
+    expect(inputOf({ ...FORM, exposureRequested: '1.5' }, 'p1', 4).errors).toEqual({ exposureRequested: 'wholeNumber' })
+  })
+
   it('sends the whole draft: regions in the server\'s order, blank numbers as none, tiers with their keys', () => {
     expect(inputOf(FORM, 'p1', 4)).toEqual({ input: {
       publicationId: 'p1', versionId: 'v1', name: 'Spring quiz', cover: null, regions: ['GLOBAL', 'JP', 'ASIA'],
       startAt: '2026-11-01T00:00:00.000Z', endAt: '2026-11-30T00:00:00.000Z', timeLimitSec: null, passScore: 2,
-      pickCount: null, entryFee: 0, budgetCap: 1000, maxWinners: 10, baseRevision: 4, tiers: [
+      pickCount: null, entryFee: 0, budgetCap: 1000, maxWinners: 10, exposureRequested: null, baseRevision: 4, tiers: [
         { tierId: 't1', fromScore: 0, toScore: 1, reward: 0 },
         { tierId: null, fromScore: 2, toScore: 2, reward: 100 },
       ], rewardMethod: 'PLATFORM', redeemDescription: null, audience: 'PUBLIC', referral: null,

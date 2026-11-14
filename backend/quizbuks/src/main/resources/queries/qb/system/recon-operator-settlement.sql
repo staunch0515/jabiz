@@ -170,9 +170,16 @@ uncounted_fees AS MATERIALIZED (
     -- Not narrowed by when it was charged: a fee can stay uncounted for more than the window (a capped settlement, an operator
     -- long behind); the switch point and the lines already leave only the fees nobody counted. The window is of the
     -- settlements below: one of the two that should have counted it is issued inside it.
-    WHERE NOT EXISTS (SELECT 1 FROM {{QbOperatorSettlementLine}} l
-                      WHERE l.{{QbOperatorSettlementLine.lineKind}} = 'CHARGE'
-                        AND l.{{QbOperatorSettlementLine.chargeId}} = CAST(c.{{QbFeeCharge.chargeId}} AS text))
+    -- A CHARGE line's source is its fee (the table's check, plan M4), so it is looked for by the whole of the unique
+    -- index (line_kind, source_id, charge_id). Written as a scalar subquery, not NOT EXISTS, on purpose: an anti join is
+    -- planned from the table's statistics, and right after a bulk load (none yet) the planner takes the CHARGE lines
+    -- for a handful and compares every fee with all of them (seconds at 15,000); the subquery is one index probe a
+    -- fee whatever the planner knows (the check's budget, OperatorSettlementReconBudgetIT).
+    WHERE (SELECT 1 FROM {{QbOperatorSettlementLine}} l
+           WHERE l.{{QbOperatorSettlementLine.lineKind}} = 'CHARGE'
+             AND l.{{QbOperatorSettlementLine.sourceId}} = CAST(c.{{QbFeeCharge.chargeId}} AS text)
+             AND l.{{QbOperatorSettlementLine.chargeId}} = CAST(c.{{QbFeeCharge.chargeId}} AS text)
+           LIMIT 1) IS NULL
       AND NOT EXISTS (SELECT 1 FROM {{QbFeeInvoice}} i
                       WHERE i.{{QbFeeInvoice.status}} = 'VOID'
                         AND ((i.{{QbFeeInvoice.chargeId}} = CAST(c.{{QbFeeCharge.chargeId}} AS text))
@@ -213,9 +220,10 @@ credit_parts AS (
     WHERE p.{{QbFeePayment.subAccount}} = 'FEE_CREDIT'
       AND p.{{QbFeePayment.paidAt}} >= (SELECT min(n.r_at) FROM switch_points n)
 ),
-resolved AS (
+resolved AS MATERIALIZED (
     -- Each part resolved to the fee(s) it paid, as qb.system.operator-settlement-gifts does: a fee directly, an invoice's
-    -- fees, a credit note by its fee.
+    -- fees, a credit note by its fee. Worked out once (MATERIALIZED): inlined, a planner with no statistics yet takes
+    -- the parts for one row and works them out again for every CHARGE line (tens of seconds at 6,000 lines).
     SELECT g.payment_id, c.{{QbFeeCharge.chargeId}} AS charge_uuid, g.amount, g.paid_at
     FROM credit_parts g
     JOIN {{QbFeeCharge}} c ON c.{{QbFeeCharge.chargeId}} = CAST(g.target_id AS uuid)
@@ -251,15 +259,24 @@ unmatched_parts AS MATERIALIZED (
            s0.r_id AS r_s0_id, s0.r_issued_at AS r_s0_issued_at
     FROM resolved r
     JOIN {{QbFeeCharge}} c ON c.{{QbFeeCharge.chargeId}} = r.charge_uuid
-    JOIN {{QbOperatorSettlementLine}} cl ON cl.{{QbOperatorSettlementLine.lineKind}} = 'CHARGE'
-                                        AND cl.{{QbOperatorSettlementLine.chargeId}} = CAST(c.{{QbFeeCharge.chargeId}} AS text)
-    JOIN all_new_settlements s0 ON s0.r_id_text = cl.{{QbOperatorSettlementLine.settlementId}}
+    -- The fee's CHARGE line (one at most: the unique index), one probe of the whole index a part, by its source as
+    -- uncounted_fees. LATERAL with LIMIT on purpose: joined plainly, a planner with no statistics yet takes the CHARGE
+    -- lines for one and crosses all of them with the parts (seconds at 6,000 lines).
+    CROSS JOIN LATERAL (SELECT cl.{{QbOperatorSettlementLine.settlementId}} AS r_settlement
+                        FROM {{QbOperatorSettlementLine}} cl
+                        WHERE cl.{{QbOperatorSettlementLine.lineKind}} = 'CHARGE'
+                          AND cl.{{QbOperatorSettlementLine.sourceId}} = CAST(c.{{QbFeeCharge.chargeId}} AS text)
+                          AND cl.{{QbOperatorSettlementLine.chargeId}} = CAST(c.{{QbFeeCharge.chargeId}} AS text)
+                        LIMIT 1) cl
+    JOIN all_new_settlements s0 ON s0.r_id_text = cl.r_settlement
     WHERE c.{{QbFeeCharge.operatorId}} IS NOT NULL
       AND r.paid_at >= s0.r_covered_from
-      AND NOT EXISTS (SELECT 1 FROM {{QbOperatorSettlementLine}} g
-                      WHERE g.{{QbOperatorSettlementLine.lineKind}} = 'GIFT'
-                        AND g.{{QbOperatorSettlementLine.sourceId}} = CAST(r.payment_id AS text)
-                        AND g.{{QbOperatorSettlementLine.chargeId}} = CAST(c.{{QbFeeCharge.chargeId}} AS text))
+      -- (one probe of the unique index a part, as uncounted_fees, for the same reason)
+      AND (SELECT 1 FROM {{QbOperatorSettlementLine}} g
+           WHERE g.{{QbOperatorSettlementLine.lineKind}} = 'GIFT'
+             AND g.{{QbOperatorSettlementLine.sourceId}} = CAST(r.payment_id AS text)
+             AND g.{{QbOperatorSettlementLine.chargeId}} = CAST(c.{{QbFeeCharge.chargeId}} AS text)
+           LIMIT 1) IS NULL
 ),
 missed_parts AS (
     -- ... that two settlements of the operator that could have written it did not: those since the one that counted the fee,
