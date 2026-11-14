@@ -134,6 +134,8 @@
       确认人： ／ 日期： ／ 依据：
 - [ ] **AI 费的分成**（F-M9、F-M12）：打开 `qb.ai.fee.enabled`（AI 收费开关）之前，F-M12 已完成（AI 费中属于成本的部分不进运营商分成基数），或财务已书面确认运营商对 AI 费的分成比例（AI 费是成本的 150%，其中 100% 是平台付给 AI 提供方的成本，整笔分给运营商，分成超过费用的三分之一时平台就亏；F-M9 先把 AI 种类排除在分成基数之外，所以这一项没有完成时运营商分不到 AI 费）
       确认人： ／ 日期： ／ 依据：
+- [ ] **官网生成的 AI 费预留**（F-M9，#692 复核）：打开 AI 收费开关（`qb.ai.fee.enabled`）之前，用 staging 或生产上真实 `SITE_PROFILE` 作业的用量（`operations.md` §7.56 的 SQL）定出 P95，经受控变更发布 `qb.ai.fee.site-profile.calls` / `.pages` / `.output-tokens`。未设置时预留按作业自身的上限（最坏情况），请求会因为预留过大而常被拒；作业超出预留的部分由平台承担，每日核对以提示 `AI_RESERVATION_SHORT` 列出
+
 - [ ] **暂停的演练（平台 16v-2）**：`QB_SETUP` 的 `qb.ai.enabled` 提案（`false`）已发布，启动日志中没有 `EXTERNAL` 对 `qb.ai.questions` / `qb.ai.cover` 的 `enabledBy` 警告；以测试商家请求一次后以四眼关闭开关，确认作业留在排队（商家页面注明 AI 暂停）、`jabiz.external.job.held` 为 1、提供方没有收到调用，重新打开后作业完成；部署环境中没有残留的 `QB_AI_HALTED`
       确认人： ／ 日期： ／ 依据：
 - [ ] 值班手册中的 AI 紧急停止按 `operations.md` §7.8 的顺序：吊销密钥 → 四眼关闭 `qb.ai.enabled`（排队与重试中的作业随之暂停）→ 逐个取消；两位能发布受控变更的管理员的联系方式已写明
