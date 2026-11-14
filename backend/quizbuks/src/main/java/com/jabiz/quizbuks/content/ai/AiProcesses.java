@@ -99,6 +99,9 @@ import java.util.UUID;
  */
 public final class AiProcesses {
 
+    /** F-M9: the most charged jobs a sponsor may have holding part of the credit (tests). */
+    public static final int FEE_MAX_OPEN = AiFees.MAX_OPEN;
+
     public static final String REQUEST = "QB_AI_QUESTIONS_REQUEST";
     /** Q73d-1: candidate translations of a quiz's text, and the sponsor's reviewed ones written. */
     public static final String TRANSLATE_REQUEST = "QB_AI_TRANSLATE_REQUEST";

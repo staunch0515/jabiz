@@ -89,15 +89,25 @@ final class AiFees {
                     new QueryPredicate.Eq("purpose", QbPrepayments.AI),
                     new QueryPredicate.Eq("status", QbPrepayments.OPEN)))).limit(1).build(), CREDIT_ROWS),
             QueryEntities.query(QbAi.defaultDataset(QbAi.JOB), ctx -> EntityQuery.builder()
-                .where(new QueryPredicate.And(List.of(new QueryPredicate.Eq("sponsorId", sponsorId.apply(ctx)),
-                    new QueryPredicate.Eq("feeMode", QbAi.FEE_CREDIT), new QueryPredicate.IsNull("feeChargeId"))))
-                .limit(MAX_OPEN + 1).build(), FEE_JOBS)));
+                .where(openFees(sponsorId.apply(ctx))).limit(MAX_OPEN + 1).build(), FEE_JOBS)));
         if (withOperator) {
             queries.add(QueryEntities.query(QbOperators.defaultDataset(QbOperators.ASSIGNMENT), ctx ->
                 EntityQuery.builder().where(new QueryPredicate.Eq("userId", sponsorId.apply(ctx))).limit(1).build(),
                 OPERATOR_ROWS));
         }
         return queries;
+    }
+
+    /**
+     * The sponsor's charged jobs that still hold part of the credit: reserved (no fee yet), or finished with a fee not in
+     * a charge. A finished job with no fee holds nothing and is never charged (#692 review M2), as the partial index
+     * {@code qb_ai_job_fee_open_idx} (V124) has it.
+     */
+    static QueryPredicate openFees(String sponsorId) {
+        return new QueryPredicate.And(List.of(new QueryPredicate.Eq("sponsorId", sponsorId),
+            new QueryPredicate.Eq("feeMode", QbAi.FEE_CREDIT), new QueryPredicate.IsNull("feeChargeId"),
+            new QueryPredicate.Or(List.of(new QueryPredicate.IsNull("feeYen"),
+                new QueryPredicate.Gt("feeYen", BigDecimal.ZERO)))));
     }
 
     /** The sponsor's standing as {@link #queries} read it, without the job {@code except} (an outcome's own). */

@@ -28,9 +28,12 @@ ALTER TABLE qb_ai_job ADD CONSTRAINT qb_ai_job_fee_none
     CHECK (fee_mode = 'CREDIT' OR (reserved_yen = 0 AND fee_yen IS NULL AND fee_charge_id IS NULL));
 ALTER TABLE qb_ai_job ADD CONSTRAINT qb_ai_job_fee_credit
     CHECK (fee_mode = 'NONE' OR (fee_markup IS NOT NULL AND fee_usd_jpy IS NOT NULL));
--- The jobs that still hold part of the credit (reserved, or finished and not yet charged): read at every request and by
--- the monthly charge.
-CREATE INDEX qb_ai_job_fee_open_idx ON qb_ai_job (sponsor_id) WHERE fee_mode = 'CREDIT' AND fee_charge_id IS NULL;
+-- The jobs that still hold part of the credit (reserved, or finished with a fee not yet charged): read at every request,
+-- every outcome and by the monthly charge. A finished job with no fee (cancelled before it ran, failed with no answer)
+-- holds nothing and goes into no charge, so it is never open (#692 review M2: else such jobs would pile up in the set
+-- for good).
+CREATE INDEX qb_ai_job_fee_open_idx ON qb_ai_job (sponsor_id)
+    WHERE fee_mode = 'CREDIT' AND fee_charge_id IS NULL AND (fee_yen IS NULL OR fee_yen > 0);
 
 -- One open AI credit a sponsor (it has no publication, so the publication's unique index does not hold it).
 CREATE UNIQUE INDEX qb_prepayment_ai_open_idx ON qb_prepayment (sponsor_id) WHERE purpose = 'AI' AND status = 'OPEN';

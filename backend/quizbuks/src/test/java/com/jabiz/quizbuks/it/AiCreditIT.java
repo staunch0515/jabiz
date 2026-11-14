@@ -334,4 +334,39 @@ class AiCreditIT extends AiItSupport {
             execute("UPDATE qb_prepayment SET remaining = amount WHERE sponsor_id = ? AND purpose = 'AI'", sponsor);
         }
     }
+
+    /**
+     * #692 review M2: a finished charged job with no fee (cancelled before it ran, failed with no answer) holds nothing
+     * and goes into no charge, so it leaves the open set: more of them than a sponsor may have open jobs stop neither a
+     * request nor an outcome.
+     */
+    @Test
+    void finishedJobsWithoutAFeeNeverPileUpInTheOpenSet() {
+        feeOn();
+        String sponsor = newSponsor("ai-zero-" + UUID.randomUUID());
+        cash(sponsor, 5_000);
+        buy(sponsor, 5_000);
+        String token = sponsorFull(sponsor);
+        List<String> quiz = quizWithArticle(token, title(), "Material after many free endings.");
+        // Asked and ended days ago: today's requests (the daily limit) are not theirs.
+        Timestamp at = Timestamp.from(clock.instant().minus(Duration.ofDays(3)));
+        execute("INSERT INTO qb_ai_job (ai_job_id, external_job_id, sponsor_id, quiz_id, kind, params, model, status, "
+            + "input_bytes, estimated_tokens, zone, requested_at, finished_at, version, fee_mode, fee_markup, "
+            + "fee_usd_jpy, reserved_yen, fee_yen, absorbed_yen, fee_period) "
+            + "SELECT gen_random_uuid()::text, gen_random_uuid()::text, ?, ?::uuid, 'QUESTIONS', '{}', "
+            + "'claude-opus-5-5', CASE WHEN i % 2 = 0 THEN 'CANCELLED' ELSE 'FAILED' END, 10, 10, 'Asia/Tokyo', ?, ?, 1, "
+            + "'CREDIT', 1.5, 150, 0, 0, 0, '2026-11' FROM generate_series(1, ?) AS i",
+            sponsor, quiz.get(0), at, at, AiProcesses.FEE_MAX_OPEN + 1);
+        Object aiJobId = request(token, quiz.get(0), List.of(quiz.get(1)), 2).get("aiJobId");
+        assertThat(money(job(aiJobId).get("reserved_yen"))).isPositive();
+        runUntilDone(aiJobId);
+        Map<String, Object> done = job(aiJobId);
+        assertThat(done).containsEntry("status", QbAi.READY);
+        assertThat(money(done.get("fee_yen"))).isPositive();
+        assertThat(money(done.get("absorbed_yen"))).isZero();
+        // The open set is the one job with a fee.
+        assertThat(query("SELECT count(*) AS n FROM qb_ai_job WHERE sponsor_id = ? AND fee_mode = 'CREDIT' AND "
+            + "fee_charge_id IS NULL AND (fee_yen IS NULL OR fee_yen > 0)", sponsor).getFirst().get("n"))
+            .hasToString("1");
+    }
 }
