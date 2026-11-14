@@ -96,6 +96,10 @@ public final class ReconChecks {
     public static final String CREDIT_NOTE_USE_VOID = "CREDIT_NOTE_USE_VOID";
     /** F-M7 (N4): credit left while an invoice is unpaid. */
     public static final String CREDIT_UNUSED_WITH_DUE = "CREDIT_UNUSED_WITH_DUE";
+    /** F-M13c: an invoice's paid amount and credit applied against the parts and uses that add up to them. */
+    public static final String INVOICE_PAID_SUM = "INVOICE_PAID_SUM";
+    /** F-M13c (for attention): unpaid invoices of a sponsor whose account has money, with the automatic payment on. */
+    public static final String AUTO_PAY_MISSED = "AUTO_PAY_MISSED";
     /**
      * F-M10: a month of the AI help's usage in which everybody's row is below the sum of the people's (questions, input
      * or output tokens, estimated dollars); {@code reference} names the month and the measure. Not "unequal": a deleted
@@ -202,7 +206,7 @@ public final class ReconChecks {
         PREPAYMENT_PARTS, PREPAYMENT_UNCHARGED, DISTRIBUTION_DEPOSITS, DISTRIBUTION_UNSETTLED,
         DISTRIBUTION_FINAL_MISSING, DISTRIBUTION_PRICE_RANGE, DISTRIBUTION_AT_FLOOR, AUDIENCE_REFUND_MISSING,
         AUDIENCE_REFUND_NO_PERIOD, AUDIENCE_FEE_NOT_LIVE, CREDIT_NOTE_USES, CREDIT_NOTE_LIMITS, CREDIT_NOTE_USE_VOID,
-        CREDIT_UNUSED_WITH_DUE, HELP_USAGE_TOTAL, OPERATOR_SETTLEMENT_WAITING, OPERATOR_SETTLEMENT_COVERAGE,
+        CREDIT_UNUSED_WITH_DUE, INVOICE_PAID_SUM, AUTO_PAY_MISSED, HELP_USAGE_TOTAL, OPERATOR_SETTLEMENT_WAITING, OPERATOR_SETTLEMENT_COVERAGE,
         GIFT_RECOVERY, OPERATOR_CHARGE_NO_OPERATOR, OPERATOR_GIFT_CARRY_OPEN, EXPOSURE_DEPOSITS,
         EXPOSURE_SETTLED_OVER, EXPOSURE_UNSETTLED, EXPOSURE_FINAL_MISSING, EXPOSURE_PRICE_RANGE,
         EXPOSURE_UNIT_MISMATCH, EXPOSURE_UNPURCHASED, EXPOSURE_SETTLED_SHORT, EXPOSURE_AMOUNT_MISMATCH,
@@ -222,7 +226,8 @@ public final class ReconChecks {
      * ({@link ReconTasks}).
      */
     public static final Set<String> ATTENTION = Set.of(DISTRIBUTION_PRICE_RANGE, AUDIENCE_REFUND_NO_PERIOD,
-        CREDIT_UNUSED_WITH_DUE, HELP_USAGE_TOTAL, EXPOSURE_PRICE_RANGE, ERASED_CLOSE_OPEN, ERASED_NO_CLOSURE);
+        CREDIT_UNUSED_WITH_DUE, AUTO_PAY_MISSED, HELP_USAGE_TOTAL, EXPOSURE_PRICE_RANGE, ERASED_CLOSE_OPEN,
+        ERASED_NO_CLOSURE);
 
     /** F-M14: the dictionary of each check's level (made from these sets). */
     public static final String LEVEL_DICTIONARY = "urn:jabiz:dict:quizbuks:recon-level";

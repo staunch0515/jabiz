@@ -135,7 +135,7 @@ class ReconChecksTest {
         assertThat(result.total()).isZero();
         // Every check by name, the F-M6 notes (DISTRIBUTION_AT_FLOOR) and the F-M7 checks among them.
         assertThat(result.summary()).startsWith("{\"AI_RESERVATION_SHORT\":0,\"AUDIENCE_FEE_NOT_LIVE\":0,\"AUDIENCE_REFUND_MISSING\":0,"
-            + "\"AUDIENCE_REFUND_NO_PERIOD\":0,\"CASH_ACCOUNT\":0,\"CASH_LOTS\":0,\"CERTIFIED_GRANTS\":0,"
+            + "\"AUDIENCE_REFUND_NO_PERIOD\":0,\"AUTO_PAY_MISSED\":0,\"CASH_ACCOUNT\":0,\"CASH_LOTS\":0,\"CERTIFIED_GRANTS\":0,"
             + "\"CREDIT_NOTE_LIMITS\":0,\"CREDIT_NOTE_USES\":0,\"CREDIT_NOTE_USE_VOID\":0,\"CREDIT_UNUSED_WITH_DUE\":0,"
             + "\"DISTRIBUTION_AT_FLOOR\":0,\"DISTRIBUTION_DEPOSITS\":0,\"DISTRIBUTION_FINAL_MISSING\":0,"
             + "\"DISTRIBUTION_PRICE_RANGE\":0,\"DISTRIBUTION_UNSETTLED\":0,\"ENTRY_FEES_UNSETTLED\":0,"
@@ -230,8 +230,9 @@ class ReconChecksTest {
         // F-M12 c's suspended operator's credit to take back and F-M9's AI jobs beyond their reservation), the rest
         // are differences.
         assertThat(ReconChecks.ATTENTION).containsExactlyInAnyOrder(ReconChecks.DISTRIBUTION_PRICE_RANGE,
-            ReconChecks.AUDIENCE_REFUND_NO_PERIOD, ReconChecks.CREDIT_UNUSED_WITH_DUE, ReconChecks.HELP_USAGE_TOTAL,
-            ReconChecks.EXPOSURE_PRICE_RANGE, ReconChecks.ERASED_CLOSE_OPEN, ReconChecks.ERASED_NO_CLOSURE);
+            ReconChecks.AUDIENCE_REFUND_NO_PERIOD, ReconChecks.CREDIT_UNUSED_WITH_DUE, ReconChecks.AUTO_PAY_MISSED,
+            ReconChecks.HELP_USAGE_TOTAL, ReconChecks.EXPOSURE_PRICE_RANGE, ReconChecks.ERASED_CLOSE_OPEN,
+            ReconChecks.ERASED_NO_CLOSURE);
         assertThat(ReconChecks.NOTES).containsExactlyInAnyOrder(ReconChecks.TAKER_WALLET_LAG,
             ReconChecks.DISTRIBUTION_AT_FLOOR, ReconChecks.EXPOSURE_UNPURCHASED, ReconChecks.OPERATOR_GIFT_CARRY_OPEN,
             ReconChecks.AI_RESERVATION_SHORT, ReconChecks.ERASED_FEE_OWED);
@@ -245,7 +246,7 @@ class ReconChecksTest {
         assertThat(ReconChecks.link(ReconChecks.DISTRIBUTION_PRICE_RANGE)).isEqualTo(ReconTasks.RECONCILIATION_PAGE);
         assertThat(ReconChecks.ALL.stream().filter(c -> ReconChecks.level(c) == ReconChecks.Level.DIFFERENCE))
             .hasSize(ReconChecks.ALL.size() - ReconChecks.ATTENTION.size() - ReconChecks.NOTES.size());
-        assertThat(ReconChecks.ATTENTION).hasSize(7);
+        assertThat(ReconChecks.ATTENTION).hasSize(8);
         assertThat(ReconChecks.NOTES).hasSize(6);
         assertThat(ReconChecks.NOTES).contains(ReconChecks.OPERATOR_GIFT_CARRY_OPEN);
         // F-M12 c: the settlement's checks are differences, owned by finance (qb.reconcile), none for attention.

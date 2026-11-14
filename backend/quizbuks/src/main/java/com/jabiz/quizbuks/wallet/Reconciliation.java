@@ -42,6 +42,13 @@ public final class Reconciliation {
 
     public static final String RUN_ENTITY_NAME = "QbReconRun";
     public static final String ITEM_ENTITY_NAME = "QbReconItem";
+
+    /**
+     * F-M14b: the items an operator's notes read, limited to the sponsors the session's operator looks after (D64).
+     * Read only through {@code qb.operator.recon-notes}: the dataset itself stays {@code qb.reconcile}'s, so an
+     * operator never reads the other checks' items of its sponsors through the dataset API.
+     */
+    public static final String OPERATOR_ITEM_DATASET = "urn:jabiz:dataset:operator:" + ITEM_ENTITY_NAME;
     public static final String CHECK_DICTIONARY = "urn:jabiz:dict:quizbuks:recon-check";
 
     public static final String WALLETS_TEMPLATE = "qb.system.recon-sponsor-wallets";
@@ -203,7 +210,7 @@ public final class Reconciliation {
                     QbParams.DISTRIBUTION_FINAL_MISSING_AFTER_HOURS, QbParams.AUDIENCE_REFUND_MISSING_AFTER_HOURS,
                     QbParams.OPERATOR_SETTLEMENT_WAITING_AFTER_HOURS, QbParams.OPERATOR_SETTLEMENT_READINESS_MAX_DAYS,
                     QbParams.EXPOSURE_UNSETTLED_AFTER_HOURS, QbParams.EXPOSURE_FINAL_MISSING_AFTER_HOURS,
-                    QbParams.ERASURE_CLOSE_ALERT_DAYS))
+                    QbParams.FEE_AUTO_PAY_MISSED_AFTER_HOURS, QbParams.ERASURE_CLOSE_ALERT_DAYS))
                 // The fee account's checks are four statements by domain (F-M14 G10), each with the parameters it declares.
                 .step("Compare the fee credit", RunTemplate.<ProcessContext>of(FEE_CREDIT_TEMPLATE,
                     ctx -> Map.of(), FEE_CREDIT))
@@ -215,7 +222,7 @@ public final class Reconciliation {
                 .step("Compare the exposure fees", RunTemplate.<ProcessContext>of(EXPOSURE_TEMPLATE,
                     ctx -> exposureParams(ctx, zone), EXPOSURE))
                 .step("Compare the credit notes", RunTemplate.<ProcessContext>of(CREDIT_NOTES_TEMPLATE,
-                    ctx -> feeAccountParams(ctx, zone, "at", "refundHours"), CREDIT_NOTES))
+                    ctx -> feeAccountParams(ctx, zone, "at", "refundHours", "missedHours"), CREDIT_NOTES))
                 .step("Find the last clean run", QueryEntities.<ProcessContext>of(defaultDataset(RUN_ENTITY_NAME),
                     ctx -> EntityQuery.builder().where(new QueryPredicate.And(List.of(
                         new QueryPredicate.Eq("status", ReconChecks.OK),
@@ -374,6 +381,10 @@ public final class Reconciliation {
         // F-M7 (N9): the audience fees not decided yet.
         values.put("refundHours", params.find(QbParams.AUDIENCE_REFUND_MISSING_AFTER_HOURS,
             java.math.BigDecimal.class).orElse(null));
+        // F-M13c: the hours after which an unpaid invoice with money on the account is reported (none: not checked).
+        // Kept within 1 to 720 as the parameter says (the platform has no range for a parameter).
+        values.put("missedHours", params.find(QbParams.FEE_AUTO_PAY_MISSED_AFTER_HOURS, java.math.BigDecimal.class)
+            .map(hours -> hours.max(java.math.BigDecimal.ONE).min(java.math.BigDecimal.valueOf(720))).orElse(null));
         // F-M12 c: the hours after which a month without an operator's settlement is reported.
         // F-M12 b: how long a settlement waits for its steps; not published counts as 0 in the template (from the month's end).
         values.put("readinessDays", params.find(QbParams.OPERATOR_SETTLEMENT_READINESS_MAX_DAYS,

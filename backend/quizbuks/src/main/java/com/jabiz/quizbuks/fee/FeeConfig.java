@@ -918,9 +918,8 @@ public class FeeConfig {
         ProcessDefinition<FeeAutoPay.AutoPayInput, FeeAutoPay.AutoPayOutput, ProcessContext> qbFeeAutoPay,
         @Value("${quizbuks.fee.auto-pay.cron:0 27 2 * * *}") String cron) {
         return JobDefinition.forEach(FeeAutoPay.JOB, cron, zone,
-                JobItems.template(FeeAutoPay.DUE_TEMPLATE, scheduledTime -> Map.of("at", scheduledTime), "invoiceId"),
-                qbFeeAutoPay, (scheduledTime, row) -> new FeeAutoPay.AutoPayInput(String.valueOf(row.get("sponsorId")),
-                    String.valueOf(row.get("invoiceId")), 0))
+                JobItems.template(FeeAutoPay.DUE_TEMPLATE, scheduledTime -> Map.of("at", scheduledTime), "sponsorId"),
+                qbFeeAutoPay, (scheduledTime, row) -> FeeAutoPay.AutoPayInput.start(String.valueOf(row.get("sponsorId"))))
             .maxItems(10_000);
     }
 

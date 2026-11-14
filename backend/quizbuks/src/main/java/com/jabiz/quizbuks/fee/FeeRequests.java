@@ -128,6 +128,9 @@ public final class FeeRequests {
     static final String REFUNDED = "refunded";
     static final String STATUS_AFTER = "statusAfter";
     static final String DO_VOID = "doVoid";
+
+    /** Published when an invoice was voided (the mail tells the sponsor; the payload names the invoice only). */
+    public static final String VOIDED_EVENT = "qb.fee.invoice-voided";
     static final String DO_CHARGE = "doCharge";
     static final String DO_GRANT = "doGrant";
     static final String BAN = "ban";
@@ -537,6 +540,9 @@ public final class FeeRequests {
                         QbCreditNotes.manualSource(String.valueOf(first(ctx, ROW).id())), String.valueOf(approver(ctx)), true),
                     NOTED))
                 .compute("Record the outcome", (metadata, ctx) -> record(ctx))
+                .step("Ask the mail to tell the sponsor", com.jabiz.runtime.process.steps.PublishEvent.<ProcessContext>when(
+                    ctx -> Boolean.TRUE.equals(ctx.get(DO_VOID)), VOIDED_EVENT,
+                    ctx -> Map.of("invoiceId", String.valueOf(first(ctx, INVOICE).id()))))
                 .step("Tell finance it was not done", CreateTask.<ProcessContext>when(
                     ctx -> ctx.contains(NOTE_FAILED), FeeRequests::noteFailedTask))
                 .step("Close the reminder", CloseTasks.<ProcessContext>cancel(ctx -> Boolean.TRUE.equals(ctx.get(DO_VOID))
