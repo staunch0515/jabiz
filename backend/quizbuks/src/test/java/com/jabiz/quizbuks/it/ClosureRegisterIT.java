@@ -103,6 +103,25 @@ class ClosureRegisterIT extends CreditNoteItSupport {
     }
 
     @Test
+    void theSweepLooksBackOnlyTheRegisterDaysAndTheReconciliationStillFindsAnOlderOne() {
+        // Re-review L9: an erasure whose event was lost more than qb.erasure.close.register-days (30) days ago is not
+        // the sweep's item any more; ERASED_NO_CLOSURE still reports it.
+        String sponsor = newSponsor(unique("s-fm15b-old"));
+        SyntheticRows.rows("qb_wallet", null, 1, null, n -> Map.of("owner_id", SyntheticRows.text(sponsor),
+            "kind", "'CASH'", "balance", "0", "held", "0", "pending_count", "0", "pending_amount", "0",
+            "pending_out", "0"));
+        runAsSystem("ACCOUNT_ERASE", Map.of("userId", sponsor, "requestedBy", "it-support"));
+        assertThat(unregistered()).contains(sponsor);
+        clock.set(clock.instant().plus(java.time.Duration.ofDays(31)));
+        assertThat(unregistered()).doesNotContain(sponsor);
+        var output = (com.jabiz.quizbuks.wallet.Reconciliation.ReconcileOutput) systemRun("QB_RECONCILE_RUN",
+            Map.of("scheduledTime", clock.instant().toString()));
+        assertThat(query("SELECT check_code FROM qb_recon_item_version WHERE run_id = ? AND party_id = ?",
+            java.util.UUID.fromString(output.runId()), sponsor)).extracting(row -> row.get("check_code"))
+            .contains(com.jabiz.quizbuks.wallet.ReconChecks.ERASED_NO_CLOSURE);
+    }
+
+    @Test
     void aTakerAndASponsorWithoutTheAccountAreNotRegistered() {
         String taker = newTaker(unique("t-fm15b-none"), null);
         String sponsor = newSponsor(unique("s-fm15b-none"));
@@ -116,7 +135,8 @@ class ClosureRegisterIT extends CreditNoteItSupport {
 
     private List<Object> unregistered() {
         return items(MoneyClose.UNREGISTERED_TEMPLATE, com.jabiz.runtime.test.TestTokens.bearer(tokens, "fm15b-job",
-            "qb.fee.system"), Map.of("limit", 1000)).stream().map(row -> row.get("userId")).toList();
+            "qb.fee.system"), Map.of("limit", 1000, "params", Map.of("at", clock.instant().toString()))).stream()
+            .map(row -> row.get("userId")).toList();
     }
 
     private boolean register(String userId) {

@@ -764,7 +764,8 @@ class MoneyCloseIT extends MoneyCloseItSupport {
 
         // The daily sweep registers the one whose event was lost; the reconciliation no longer finds it.
         List<Map<String, Object>> unregistered = items(MoneyClose.UNREGISTERED_TEMPLATE,
-            com.jabiz.runtime.test.TestTokens.bearer(tokens, "fm15b-job", "qb.fee.system"), Map.of("limit", 100));
+            com.jabiz.runtime.test.TestTokens.bearer(tokens, "fm15b-job", "qb.fee.system"), Map.of("limit", 100,
+                "params", Map.of("at", clock.instant().toString())));
         assertThat(unregistered).extracting(row -> row.get("userId")).contains(lost)
             .doesNotContain(owes, left, waits);
         // As the job's item: with the erasure's time, from which the alert days still count.

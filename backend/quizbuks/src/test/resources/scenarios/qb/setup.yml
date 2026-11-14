@@ -38,7 +38,7 @@ steps:
         qb.fee-credit.expiry-notice-days, qb.sponsor.bottom-bar,
         qb.ai.site-profile.daily, qb.ai.site-profile.max-pages, qb.ai.site-profile.questions,
         qb.ai.site-profile.options, qb.ai.site-profile.materials-max, qb.ai.site-profile.handle-alternatives,
-        qb.exposure.low-ratio, qb.fee.auto-pay.max-invoices, qb.erasure.close.alert-days,
+        qb.exposure.low-ratio, qb.fee.auto-pay.max-invoices, qb.erasure.close.alert-days, qb.erasure.close.register-days,
         qb.sponsor-verification.link-hours, qb.content.import.batch-bytes]
       paramsProposed: [qb.creator-fee-rate, qb.transfer.threshold, qb.transfer.review-above, qb.transfer.enabled,
         qb.review.sponsor.auto, qb.review.publication.auto, qb.topup.min, qb.topup.max, qb.transfer.fee,

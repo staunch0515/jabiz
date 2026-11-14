@@ -693,6 +693,8 @@ public final class QbParams {
      */
     public static final String ERASURE_CLOSE_ENABLED = "qb.erasure.close.enabled";
     public static final String ERASURE_CLOSE_ALERT_DAYS = "qb.erasure.close.alert-days";
+    /** F-M15 b (re-review L9): how many days back the daily sweep looks for erasures with no wind-up registered. */
+    public static final String ERASURE_CLOSE_REGISTER_DAYS = "qb.erasure.close.register-days";
     public static final List<String> ERASURE_CLOSE_CONTROLLED = List.of(ERASURE_CLOSE_ENABLED);
 
     /**
@@ -1143,6 +1145,9 @@ public final class QbParams {
         new Param(ERASURE_CLOSE_ALERT_DAYS, Map.of("type", "numeric", "precision", 2, "scale", 0), "3",
             "After how many days a wind-up of an erased sponsor's money not done gives finance a task (a whole number "
                 + "from 1 to 60; any other value gives it at once)"),
+        new Param(ERASURE_CLOSE_REGISTER_DAYS, Map.of("type", "numeric", "precision", 3, "scale", 0), "30",
+            "How many days back the daily sweep registers the wind-up of an erased sponsor whose erasure event was lost "
+                + "(a whole number from 1 to 365; any other value: 30); ERASED_NO_CLOSURE still checks every erasure"),
         // F-F10a: the Kudos reward switch (controlled, after the F-C7, F-M6 and F-M8 ones; the F-M14 thresholds and the help's
         // daily limit come after it, in the order of CONTROLLED, which QB_SETUP's proposals follow).
         new Param(REWARD_KUDOS_ENABLED, BOOL, true,

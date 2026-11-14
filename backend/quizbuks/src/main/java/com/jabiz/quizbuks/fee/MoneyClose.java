@@ -453,7 +453,14 @@ public final class MoneyClose {
             .toList();
     }
 
-    /** The closure's row after the run, and whether finance is told now that it takes long. */
+    /**
+     * The closure's row after the run, and whether finance is told now that it takes long. Written by the version read
+     * under the wallet lock (re-review L6): the registration and the runs of the event and of the daily job for one
+     * sponsor take that lock, so they follow each other; a write that still meets a newer version (the registration of
+     * the same erasure by the sweep and by the event at once) fails with a version conflict, its transaction rolls back
+     * with every posting in it, and the next run (the job's retry, the next day) does it again from what is there: it
+     * converges and never books twice. Accepted.
+     */
     static void recordRun(ProcessContext ctx) {
         EntityInstance closure = FeeGate.first(ctx, CLOSURE);
         if (closure == null) {
