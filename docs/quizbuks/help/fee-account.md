@@ -59,7 +59,7 @@ The top of "Money → Platform fee account" shows the total, the Granted credit 
 
 ### 中文 · 贷项凭证是什么？发布提前结束会退钱吗？
 
-贷项凭证减少您应付的平台费，原来的费用和账单不变。它有两种来源：发布提前结束时退回受众规则费未用的天数（是否退回按平台的设置；被平台下架的不退）；平台的财务人员更正某笔费用（由另一位管理员批准）。凭证先抵这笔费用所在账单还欠的部分；预付的费用再把超出的部分退回原来付款的地方（现金或赠送的平台费 Kudos，已过期的赠送不再退回）；余下的成为贷项，先抵您以后的账单。在"资金 → 账单"的"贷项凭证"一栏可以看到每张凭证并下载 PDF；账单上写明已用凭证抵减的金额。
+贷项凭证减少您应付的平台费，原来的费用和账单不变。它有两种来源：发布提前结束时退回受众规则费未用的天数（是否退回按平台的设置；被平台下架的不退）；平台的财务人员更正某笔费用（由另一位管理员批准）。凭证先抵这笔费用所在账单还欠的部分；预付的费用再把超出的部分退回原来付款的地方（现金或赠送额度，已过期的赠送额度不再退回）；余下的成为贷项，先抵您以后的账单。在"资金 → 账单"的"贷项凭证"一栏可以看到每张凭证并下载 PDF；账单上写明已用凭证抵减的金额。
 
 ### 日本語 · 返還インボイスとは？ 公開が早く終わると返金されますか？
 
@@ -68,6 +68,18 @@ The top of "Money → Platform fee account" shows the total, the Granted credit 
 ### English · What is a credit note? Do I get money back when a publication ends early?
 
 A credit note lowers what you owe in platform fees; the fee and its invoice stay as they were. One is issued when a publication ends early, for the unused days of its audience rule fee (whether they are given back depends on the platform's setting; a takedown by the platform is not), or when the platform's finance staff correct a fee (approved by a second administrator). It first pays what the fee's invoice still owes; for a prepaid fee it then gives the rest back to where it was paid from (cash or granted credit; granted credit that has expired is not given back); anything still left pays your next invoices first. See each credit note and download its PDF under "Credit notes" in "Money → Invoices"; an invoice shows what credit notes paid of it.
+
+### 中文 · 删除账户时，账户里的钱怎么办？
+
+申请删除账户时，页面会先列出与您有关的事项，每一条都要确认后才能申请；里面的数字是申请那一刻的，账户在冷静期过后才删除，实际**按删除那一刻的账户为准**。删除时：进行中的发布随之结束；它们的预付款要等结算完（通常一两天）才释放，所以钱的收尾会晚一两天。之后把还没开账单的平台费一并开出账单，用平台费账户里的钱从最早的账单起付清，先用赠送额度、再用现金；付不完的部分仍然是欠款。付完之后，剩下的赠送额度全部作废，不能折现；剩下的现金留在已关闭的账户里，**不会退到银行**。删除后才到账的充值同样进入已关闭的账户，仍有欠款时自动用来付。删除后才开出的账单上没有公司名，账单与金额照常存档。建议删除前先付清账单，并等充值到账或取消。
+
+### 日本語 · アカウントを削除すると、アカウントのお金はどうなりますか？
+
+アカウントの削除を申請すると、先に関係する事項が一覧で表示され、すべて確認してから申請できます。表示される金額は申請した時点のもので、アカウントは待機期間の後に削除されるため、実際は**削除時点のアカウントの残高**によります。削除時には、実施中の公開が終了します。その前払金は精算（通常 1〜2 日）が済んでから解放されるため、お金の整理は 1〜2 日遅れて行われます。その後、まだ請求書になっていないプラットフォーム利用料もあわせて請求書にし、プラットフォーム利用料アカウントの残高から古い請求書の順に、付与クレジット、次に現金の順で支払います。支払いきれない分は未払いのまま残ります。支払いの後に残った付与クレジットはすべて失効し、現金には換えられません。残った現金は閉じたアカウントに残り、**銀行には返金されません**。削除後に入金されたチャージも閉じたアカウントに入り、未払いがあれば自動的に支払いに充てます。削除後に発行される請求書には会社名が記載されませんが、請求書と金額は通常どおり保管されます。削除の前に請求書を支払い、チャージの入金を待つか取り消すことをおすすめします。
+
+### English · What happens to the money in my account when I delete it?
+
+When you ask to delete your account, the page first lists what concerns you, and you confirm each item before you can ask. Its figures are those of the moment you ask; the account is deleted after a cooling-off period, so **what is in the account when it is deleted counts**. On deletion your running publications end. Their prepayments are released once they are settled (usually a day or two), so the money is wound up a day or two later. Then the platform fees not invoiced yet are invoiced, and the invoices are paid oldest first from your Platform fee account, Granted credit first, then cash; what it does not cover stays owed. After that, the Granted credit left is voided and cannot be turned into cash; the cash left stays in the closed account and **is not refunded to a bank**. A top-up that arrives after the deletion goes into the closed account too, and pays what is still owed. Invoices issued after the deletion carry no company name; they and their amounts are kept as usual. Before deleting, we suggest you pay your invoices and wait for top-ups to arrive, or cancel them.
 
 ### 中文 · 学分现在能用吗？
 
