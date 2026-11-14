@@ -28,7 +28,9 @@ public final class QbSponsorClosures {
     public static final String SWITCH_OFF = "SWITCH_OFF";
     public static final String DEPOSIT_OPEN = "DEPOSIT_OPEN";
     public static final String FEE_OWED = "FEE_OWED";
-    public static final List<String> REASONS = List.of(SWITCH_OFF, DEPOSIT_OPEN, FEE_OWED);
+    /** F-M15c: more of the erased sponsor's AI jobs may be open than a run cancels; the next run goes on. */
+    public static final String AI_JOBS_OPEN = "AI_JOBS_OPEN";
+    public static final List<String> REASONS = List.of(SWITCH_OFF, DEPOSIT_OPEN, FEE_OWED, AI_JOBS_OPEN);
 
     /** Why a manual credit or a fee request under review ended without a decision: its sponsor was erased. */
     public static final String ENDED_ERASED = "ERASED";
@@ -52,6 +54,9 @@ public final class QbSponsorClosures {
         eb.field("closedAt", f -> f.physicalColumn("closed_at").processOnly().asTemporal(TemporalRole.EVENT_TIME));
         // When finance was given the task that it takes long (once).
         eb.field("alertedAt", f -> f.physicalColumn("alerted_at").processOnly().asTemporal(TemporalRole.EVENT_TIME));
+        // F-M15c: where the cancelling of the erased sponsor's AI jobs goes on (below this platform job sequence); none:
+        // from the latest; 0: every job was looked at (none is started after the erasure).
+        eb.field("aiJobsBeforeSeq", f -> f.physicalColumn("ai_jobs_before_seq").processOnly().asNumeric(19, 0));
         eb.field("version", f -> f.physicalColumn("version").asVersion());
         eb.listView("default", lv -> lv
             .columns("sponsorId", "status", "reasonCode", "erasedAt", "lastRunAt", "closedAt")

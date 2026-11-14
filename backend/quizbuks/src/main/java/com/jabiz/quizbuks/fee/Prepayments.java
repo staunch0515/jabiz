@@ -818,6 +818,16 @@ public final class Prepayments {
      * {@value #CASH_WALLET}) read before. F-M9: shared by a release and by an AI credit's return and expiry.
      */
     static ReleaseOutput toLots(ProcessContext ctx, String sponsorId, List<Returned> returned) {
+        return toLots(ctx, sponsorId, QbPrepayments.PREPAYMENT, returned, BigDecimal.ZERO);
+    }
+
+    /**
+     * As {@link #toLots(ProcessContext, String, List)}, the negative parts aimed at records of {@code targetEntity}
+     * (F-M15c: a credit note's credit given back at the wind-up; {@link Returned#prepaymentId} is then the note's id),
+     * and {@code extraCash} more in the cash wallet (a lot of its own the caller added).
+     */
+    static ReleaseOutput toLots(ProcessContext ctx, String sponsorId, String targetEntity, List<Returned> returned,
+        BigDecimal extraCash) {
         Map<String, EntityInstance> grants = FeeSettlement.byId(FeeGate.list(ctx, GRANTS));
         Map<String, EntityInstance> lots = FeeSettlement.byId(FeeGate.list(ctx, LOTS));
         Map<String, BigDecimal> grantBack = new LinkedHashMap<>();
@@ -825,7 +835,7 @@ public final class Prepayments {
         for (Returned one : returned) {
             for (Held part : one.back()) {
                 boolean credit = QbFeeAccount.FEE_CREDIT.equals(part.subAccount());
-                insertPart(ctx, sponsorId, QbPrepayments.PREPAYMENT, one.prepaymentId(),
+                insertPart(ctx, sponsorId, targetEntity, one.prepaymentId(),
                     part.subAccount(), credit ? part.lotId() : null, credit ? null : part.lotId(),
                     part.amount().negate(), one.transactionId(), null);
                 (credit ? grantBack : lotBack).merge(part.lotId(), part.amount(), BigDecimal::add);
@@ -884,8 +894,8 @@ public final class Prepayments {
             QbWallets.change(ctx, FeeGate.first(ctx, CREDIT_WALLET), QbWallets.FEE_CREDIT, sponsorId,
                 credit.subtract(expiredLeft), 0, BigDecimal.ZERO);
         }
-        if (cash.signum() > 0) {
-            QbWallets.change(ctx, FeeGate.first(ctx, CASH_WALLET), QbWallets.CASH, sponsorId, cash, 0,
+        if (cash.add(extraCash).signum() > 0) {
+            QbWallets.change(ctx, FeeGate.first(ctx, CASH_WALLET), QbWallets.CASH, sponsorId, cash.add(extraCash), 0,
                 BigDecimal.ZERO);
         }
         ctx.put(VOIDS, List.copyOf(voids));

@@ -44,7 +44,7 @@ class SponsorErasureTest {
         allCounts.putAll(counts);
         Map<String, BigDecimal> allSums = new HashMap<>();
         for (String load : List.of(SponsorErasure.UNPAID_TOTAL, SponsorErasure.UNPAID_CREDITED,
-            SponsorErasure.UNPAID_PAID, SponsorErasure.DEPOSITS_LEFT)) {
+            SponsorErasure.UNPAID_PAID, SponsorErasure.DEPOSITS_LEFT, SponsorErasure.AI_CREDIT_LEFT)) {
             allSums.put(load, BigDecimal.ZERO);
         }
         sums.forEach((load, sum) -> allSums.put(load, BigDecimal.valueOf(sum)));
@@ -151,6 +151,16 @@ class SponsorErasureTest {
         Map<String, ErasureNotice> gift = byCode(notices(List.of(wallet(QbWallets.FEE_CREDIT, 700, 0)),
             Map.of(SponsorErasure.FROZEN, 1L), Map.of()));
         assertThat(gift).containsOnlyKeys(SponsorErasure.NOTICE_GIFT_VOID);
+    }
+
+    @Test
+    void anAiCreditIsToldWhatItHoldsAndAnEmptyOneNothing() {
+        // F-M15c: the AI credit is given back and closed at the wind-up; its figure when it holds something.
+        Map<String, ErasureNotice> notices = byCode(notices(List.of(), Map.of(),
+            Map.of(SponsorErasure.AI_CREDIT_LEFT, 700L)));
+        assertThat(notices).containsOnlyKeys(SponsorErasure.NOTICE_AI_CREDIT);
+        assertThat(notices.get(SponsorErasure.NOTICE_AI_CREDIT).params()).containsEntry("amount", "700");
+        assertThat(notices(List.of(), Map.of(), Map.of(SponsorErasure.AI_CREDIT_LEFT, 0L))).isEmpty();
     }
 
     @Test

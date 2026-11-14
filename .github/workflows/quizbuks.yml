@@ -85,6 +85,8 @@ jobs:
         run: node --test tools/quizbuks/ops-sections/ops-sections.test.mjs
       - name: Which pull requests may skip the full check
         run: tools/quizbuks/test/ci-scope.test.sh
+      - name: The launch day's read-only dry run (a fake database and site)
+        run: tools/quizbuks/test/launch-day-check.test.sh
       - if: ${{ needs.quizbuks-scope.outputs.docs_tests == 'true' }}
         uses: actions/setup-java@v5
         with:

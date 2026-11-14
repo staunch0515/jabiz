@@ -21,8 +21,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 /**
  * F-M15 b (docs/quizbuks/plans/impl/F-M15.md §5.2 L3, §10 MoneyCloseLockOrderIT and MoneyCloseStatementBudgetIT): the
  * locks a wind-up takes (the sponsor's wallet only, the withdrawals of what is under review before it; never
- * {@code qb.account}, {@code qb.quiz} or an AI lock) and its statements, measured and then fixed here: nothing to do, a deposit to wait
- * for, one invoice to pay, three, and one month not invoiced yet. Each counted after a run of the same shape (warm
+ * {@code qb.account} or {@code qb.quiz}; F-M15c: the sponsor's AI lock before the wallet's, only when an AI credit is
+ * closed) and its statements, measured and then fixed here: nothing to do, a deposit to wait for, one invoice to pay,
+ * three, one month not invoiced yet, and an AI credit to close. Each counted after a run of the same shape (warm
  * caches).
  */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.MOCK, properties = "it.sql-log.enabled=true")
@@ -33,23 +34,71 @@ class MoneyCloseStatementBudgetIT extends MoneyCloseItSupport {
      * the task's (not closed), the commit. The payment's read is not made.
      */
     static final int NOTHING = 7;
-    /** A prepayment still held: as nothing, and the closure's row written. */
-    static final int DEPOSIT = 8;
+    /**
+     * A prepayment still held: as nothing, and the closure's row written; F-M15c: the AI jobs still open looked for
+     * and cancelled (the sub-process's row and its one read), as in every run of a registered wind-up (+2 below too).
+     */
+    static final int DEPOSIT = 10;
     /**
      * One issued invoice paid from cash, nothing voided: as a deposit, and the months not invoiced (none), the invoices
      * to pay (one read), the payment item (its row, the invoice, the account in one read, the settlement's posting and
-     * parts, the invoice's update, the overdue task), the account and the invoices again in one read.
+     * parts, the invoice's update, the overdue task), the account and the invoices again in one read; F-M15c: the
+     * credit notes' credit left (one read, nothing to pay with it).
      */
-    static final int ONE_INVOICE = 20;
+    static final int ONE_INVOICE = 23;
     /** Three issued invoices paid from cash: one payment item each (about eight statements an invoice). */
-    static final int THREE_INVOICES = 37;
+    static final int THREE_INVOICES = 40;
     /**
      * One issued invoice and an empty account (re-review L1): as a deposit, and the months not invoiced, the account and
-     * the invoices in one read; no payment item, no second read (11 before L1).
+     * the invoices in one read, the credit notes' credit left (F-M15c); no payment item, no second read (11 before L1).
      */
-    static final int NOTHING_TO_PAY = 10;
+    static final int NOTHING_TO_PAY = 13;
     /** The current month not invoiced yet: invoiced by its item, then paid. */
-    static final int UNINVOICED = 28;
+    static final int UNINVOICED = 31;
+    /**
+     * F-M15c: an AI credit bought with cash, nothing else, closed: the process row, the parameters, the read of what
+     * is under review (the AI credit with it), the AI lock and the wallet's; the give-back (its row, the credit and the
+     * wallets in one read, what it holds by lot, the lots, the posting, the lots and wallets read again for their parts,
+     * the writes in one statement); the closure, the months not invoiced, the account, the credit notes' credit left,
+     * the task, the closure's update, the commit.
+     */
+    static final int AI_CREDIT = 21;
+
+    @Test
+    void anAiCreditIsClosedUnderTheSponsorsAiLockThenTheWallet() {
+        String sponsor = withAiCredit("lock");
+        erase(sponsor);
+        SqlStatementLog.clear();
+        assertThat(close(sponsor).outcome()).isEqualTo(MoneyClose.CLOSED);
+        List<String> locks = SqlStatementLog.locks();
+        System.out.println("[statement-budget] wind-up locks with an AI credit: " + locks);
+        // F-M9's order qb.ai:<sponsor> → qb.wallet; never qb.ai:*, qb.account or qb.quiz.
+        assertThat(java.util.Set.copyOf(locks)).containsExactlyInAnyOrder("qb.ai:" + sponsor,
+            "qb.wallet:SPONSOR:" + sponsor);
+        assertThat(locks.getFirst()).isEqualTo("qb.ai:" + sponsor);
+    }
+
+    @Test
+    void theStatementsOfAWindUpThatClosesAnAiCredit() {
+        countedClose(withAiCredit("warm"));
+        List<String> ai = countedClose(withAiCredit("measured"));
+        System.out.println("[statement-budget] wind-up, an AI credit: " + ai.size() + "\n" + listing(ai));
+        assertThat(ai).as("AI credit:\n" + listing(ai)).hasSize(AI_CREDIT);
+    }
+
+    /** A sponsor with an AI credit of F-M9 bought with cash, nothing else. */
+    private String withAiCredit(String name) {
+        String sponsor = newSponsor(unique("s-fm15c-budget-" + name));
+        cash(sponsor, 500);
+        param(com.jabiz.quizbuks.setup.QbParams.AI_FEE_ENABLED, "true");
+        try {
+            run(com.jabiz.quizbuks.fee.AiCredits.BUY, sponsorToken(sponsor), body("amount", 400, "requestKey",
+                UUID.randomUUID().toString()));
+        } finally {
+            param(com.jabiz.quizbuks.setup.QbParams.AI_FEE_ENABLED, "false");
+        }
+        return sponsor;
+    }
 
     @Test
     void theLocksOfAWindUpAreTheWithdrawnApprovalsThenTheWallet() {

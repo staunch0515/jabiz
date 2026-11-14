@@ -7,6 +7,8 @@ import com.jabiz.process.ProcessDefinition;
 import com.jabiz.query.EntityQuery;
 import com.jabiz.query.QueryPredicate;
 import com.jabiz.quizbuks.QbPermissions;
+import com.jabiz.quizbuks.content.ai.ErasedAiJobs;
+import com.jabiz.quizbuks.content.ai.QbAi;
 import com.jabiz.param.ParamValues;
 import com.jabiz.quizbuks.setup.QbParams;
 import com.jabiz.quizbuks.wallet.ManualCredits;
@@ -35,9 +37,11 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
- * F-M15 b (docs/quizbuks/plans/impl/F-M15.md §4.1, §5): what becomes of an erased sponsor's platform fee account.
+ * F-M15 b and c (docs/quizbuks/plans/impl/F-M15.md §4.1, §5, §9): what becomes of an erased sponsor's platform fee
+ * account, its AI credit and AI jobs, and the credit left on its credit notes.
  *
  * <p>{@value #REGISTER} answers the platform's {@code jabiz.account.erased} on a subscription of its own (not in
  * {@code QB_SPONSOR_ERASED}, whose sub-processes may fail and exhaust the event's retries): a sponsor who had any of the
@@ -110,10 +114,21 @@ public final class MoneyClose {
     static final String CREDITS_AFTER = "creditsAfter";
     static final String CASH_WALLET_AFTER = "cashWalletAfter";
     static final String PAID = "paid";
+    static final String AI_CREDIT = "aiCredit";
+    static final String AI_JOBS = "aiJobs";
+    static final String NOTES_LEFT = "notesLeft";
+    static final String NOTES_UNUSED = "notesUnused";
+    static final String CREDITED = "credited";
+    static final String NOTES_PAID = "notesPaid";
+    static final String NOTES_OVERDUE = "notesOverdue";
+    static final String REFUNDED = "refunded";
+    static final String AI_CLOSED = "aiClosed";
 
     /** What one run of the wind-up did. */
     public static final String NONE = "NONE";
     public static final String WAITING_DEPOSITS = "DEPOSIT_OPEN";
+    /** F-M15c: more AI jobs may be open than this run cancelled; nothing else is done until they are. */
+    public static final String WAITING_AI_JOBS = "AI_JOBS_OPEN";
     public static final String SWITCHED_OFF = "SWITCH_OFF";
     /** Fees owed and something to pay them with after a run's payments (more invoices than a run pays): the next run. */
     public static final String TO_PAY = "TO_PAY";
@@ -157,8 +172,9 @@ public final class MoneyClose {
     public record CloseInput(@NotBlank @Size(max = 128) String sponsorId) {}
 
     /**
-     * @param outcome {@code NONE} (no closure, or nothing to do), {@code SWITCH_OFF}, {@code DEPOSIT_OPEN},
-     *                {@code TO_PAY}, {@code MORE} or {@code CLOSED}
+     * @param outcome {@code NONE} (no closure, or nothing to do), {@code SWITCH_OFF}, {@code AI_JOBS_OPEN} (c: AI
+     *                jobs still open, cancelled up to a run's batch), {@code DEPOSIT_OPEN}, {@code TO_PAY}, {@code MORE}
+     *                or {@code CLOSED}
      * @param invoicesPaid the invoices this run paid something of
      * @param owed    what the unpaid invoices still owe after the run
      */
@@ -246,18 +262,28 @@ public final class MoneyClose {
     /**
      * Winds up an erased sponsor's platform fee account (§5.2), again and again until it is done: the daily job's item
      * and the consumer of {@value #DUE_EVENT}. It never takes {@code qb.account} or {@code qb.quiz} (the account will not
-     * change any more); its only lock is the sponsor's wallet lock, after step 0's withdrawals (an approval's lock comes
-     * before a wallet's).
+     * change any more); its locks are the sponsor's AI lock (only when it has AI credit) and then its wallet lock, after
+     * step 0's withdrawals (an approval's lock comes before a wallet's) and the AI jobs' cancellation (c: it locks the
+     * platform's job rows before the AI lock, the other way round from {@code QB_AI_CANCEL}; an erased sponsor can no
+     * longer run that, and the platform claims jobs with {@code SKIP LOCKED}).
      * <ol start="0">
      *   <li>whatever the switch, a manual credit or a fee request still under review is withdrawn ({@value #WITHDRAW});
+     *   <li>(c) the AI jobs still open are cancelled ({@value ErasedAiJobs#CANCEL_ALL}, at most a batch a run below
+     *       the closure's cursor {@code aiJobsBeforeSeq}; a full batch records {@code AI_JOBS_OPEN} and the next run
+     *       goes on below it);
      *   <li>the switch {@code qb.erasure.close.enabled} off: only {@code SWITCH_OFF} is recorded;
+     *   <li>(c) with no AI job left, the AI credit is given back whole and closed ({@value AiCreditGiveBack#GIVE_BACK},
+     *       kind {@code CLOSE}), under the AI lock and then the wallet lock;
      *   <li>a prepayment still held: {@code DEPOSIT_OPEN}, nothing else (it is released a day after its end);
      *   <li>every month with postpaid fees not invoiced yet is invoiced (the month's own item, re-entering the lock);
+     *   <li>(c) the credit left on credit notes pays the unpaid invoices first;
      *   <li>the unpaid invoices are paid as far as the account goes, earliest first, through F-M13's
      *       {@value FeeAutoPay#AUTO_PAY_ITEM} (at most {@code qb.fee.auto-pay.max-invoices} a run; fees still owed while
      *       the account can pay record {@code TO_PAY} and the next run goes on);
-     *   <li>last, what is left of every lot of granted credit not voided and not expired is voided
-     *       ({@value #VOID_LOT}), and the closure is {@code CLOSED} ({@code FEE_OWED} when fees are still owed).
+     *   <li>what is left of every lot of granted credit not voided and not expired is voided ({@value #VOID_LOT}), and
+     *       the closure is {@code CLOSED} ({@code FEE_OWED} when fees are still owed);
+     *   <li>(c) last, the credit still left on a credit note goes back by its fee's own payment parts
+     *       ({@value CreditNoteGiveBack#GIVE_BACK}: granted credit back to its grant and voided again, cash to its lot).
      * </ol>
      * A run that does not finish within {@code qb.erasure.close.alert-days} of the erasure gives finance one task, closed
      * when the wind-up is done.
@@ -287,23 +313,42 @@ public final class MoneyClose {
                 QueryEntities.query(QbFees.defaultDataset(QbFees.REQUEST), ctx -> EntityQuery.builder()
                     .where(new QueryPredicate.And(List.of(new QueryPredicate.Eq("sponsorId", sponsorId(ctx)),
                         new QueryPredicate.Eq("status", QbFees.REVIEW)))).limit(FeeGate.MAX_UNPAID).build(),
-                    IN_REVIEW_REQUESTS)))
+                    IN_REVIEW_REQUESTS),
+                // F-M15c: whether there is an AI credit to close (its lock is taken only then); read again under it.
+                QueryEntities.query(QbFees.defaultDataset(QbPrepayments.PREPAYMENT), ctx -> EntityQuery.builder()
+                    .where(new QueryPredicate.And(List.of(new QueryPredicate.Eq("sponsorId", sponsorId(ctx)),
+                        new QueryPredicate.Eq("purpose", QbPrepayments.AI),
+                        new QueryPredicate.Eq("status", QbPrepayments.OPEN)))).limit(1).build(), AI_CREDIT)))
             // Re-review L2: when the erasure's purge was done (it overwrites every row naming the sponsor then); read
             // only when something is under review.
             .step("Read when the purge was done", RunTemplate.<ProcessContext>when(MoneyClose::somethingUnderReview,
                 PURGED_TEMPLATE, ctx -> Map.of("userId", sponsorId(ctx)), PURGED))
             .step("Withdraw what is under review", CallProcess.forEach(WITHDRAW, 1, MoneyClose::withdrawInputs,
                 WITHDRAWN))
+            // F-M15c: the sponsor's AI jobs still open are cancelled (QB_SPONSOR_ERASED did it already; again here,
+            // whatever the switch, until none is left): a wind-up with more than one run reads waits for the next.
+            .step("Cancel the AI jobs still open", CallProcess.<ProcessContext>when(MoneyClose::cancelsAiJobs,
+                ErasedAiJobs.CANCEL_ALL, 1, ctx -> new ErasedAiJobs.SponsorRef(sponsorId(ctx), aiJobsBefore(ctx)),
+                AI_JOBS))
+            // F-M15c: the AI lock before the wallet's (F-M9's order qb.ai:<sponsor> → qb.wallet), only when an AI
+            // credit is to be closed; nothing this process calls takes qb.account or qb.quiz.
+            .step("Lock the sponsor's AI", HoldLock.<ProcessContext>exclusive(
+                ctx -> closesAiCredit(ctx) ? QbAi.lockName(sponsorId(ctx)) : null))
             .step("Lock the sponsor's wallet", HoldLock.<ProcessContext>exclusive(
                 ctx -> QbWallets.lockName(QbWallets.SPONSOR, sponsorId(ctx))))
+            // Step 3 (F-M15c): the AI credit given back whole and closed, before the prepayments are looked at, so it
+            // never holds the wind-up up. Its jobs were deleted with the account and their fees not charged are never
+            // charged (plan H3): nothing is held for them.
+            .step("Close the AI credit", CallProcess.<ProcessContext>when(MoneyClose::closesAiCredit,
+                AiCreditGiveBack.GIVE_BACK, 1, ctx -> new AiCreditGiveBack.GiveBackInput(sponsorId(ctx),
+                    AiCreditGiveBack.CLOSE, null, BigDecimal.ZERO, null), AI_CLOSED))
             .step("Read the closure and what is held", QueryEntities.<ProcessContext>all(
                 QueryEntities.query(QbFees.defaultDataset(QbSponsorClosures.CLOSURE),
                     ctx -> one(new QueryPredicate.Eq("sponsorId", sponsorId(ctx))), CLOSURE),
-                // The AI credit's last (re-review M2): the one read is AI only when nothing else is held.
                 QueryEntities.query(QbFees.defaultDataset(QbPrepayments.PREPAYMENT), ctx -> EntityQuery.builder()
                     .where(new QueryPredicate.And(List.of(new QueryPredicate.Eq("sponsorId", sponsorId(ctx)),
                         new QueryPredicate.Eq("status", QbPrepayments.OPEN))))
-                    .orderBy(QbPrepayments.PURPOSE, false).limit(1).build(), OPEN_DEPOSIT)))
+                    .limit(1).build(), OPEN_DEPOSIT)))
             .compute("Decide whether to go on", (metadata, ctx) -> decideStart(ctx))
             .step("Find the months not invoiced", RunTemplate.<ProcessContext>when(MoneyClose::goingOn,
                 UNINVOICED_TEMPLATE, ctx -> Map.of("sponsorId", sponsorId(ctx)), UNINVOICED))
@@ -327,6 +372,16 @@ public final class MoneyClose {
                         new QueryPredicate.IsNull("voidedAt"),
                         new QueryPredicate.Gt("expiresAt", ctx.opTime()))))
                     .limit(FeeSettlement.MAX_CREDITS).build() : nothing("grantId"), TO_VOID)))
+            // Step 6 (F-M15c): the credit the sponsor's credit notes have left pays the unpaid invoices first, the
+            // earliest note and the earliest invoice first, as a new invoice takes it (CreditNotes.take).
+            .step("Read the credit notes' credit left", RunTemplate.<ProcessContext>when(MoneyClose::goingOn,
+                CreditNotes.LEFT_TEMPLATE, ctx -> CreditNotes.leftParams(sponsorId(ctx)), NOTES_LEFT))
+            .compute("Pay from the credit notes' credit", (metadata, ctx) -> payFromNotes(ctx))
+            // Written now: the invoices are read again below (a change still held would not be in that read).
+            .step("Save what the credit paid", com.jabiz.runtime.process.steps.SaveChanges.<ProcessContext>when(
+                ctx -> Boolean.TRUE.equals(ctx.get(CREDITED))))
+            .step("Close the reminders of the invoices it paid", CallProcess.<ProcessContext>forEach(
+                CreditNotes.TASK_CLOSE, 1, MoneyClose::paidOverdue, "notesTasksClosed"))
             .step("Pay them", CallProcess.forEach(FeeAutoPay.AUTO_PAY_ITEM, 1, MoneyClose::payInputs, PAID))
             // The lots to void are not read again: each item reads its lot (one used up by the payment is marked too).
             .step("Read the account and the invoices again", QueryEntities.<ProcessContext>all(
@@ -339,6 +394,10 @@ public final class MoneyClose {
             .compute("Decide the end", (metadata, ctx) -> decideEnd(ctx))
             .step("Void the granted credit left", CallProcess.forEach(VOID_LOT, 1, MoneyClose::voidInputs,
                 LOTS_VOIDED))
+            // Step 9 (F-M15c): what the credit notes still have left once the wind-up is done goes back to what paid
+            // their fees (debit 1130, credit 2160 / 2190, the note the source; a FEE_PAID taken back, as F-M7's).
+            .step("Give the credit left back", CallProcess.forEach(CreditNoteGiveBack.GIVE_BACK, 1,
+                MoneyClose::giveBackInputs, REFUNDED))
             .compute("Record the run", (metadata, ctx) -> recordRun(ctx))
             .step("Tell finance it takes long", CreateTask.<ProcessContext>when(ctx -> Boolean.TRUE.equals(ctx.get(ALERT)),
                 MoneyClose::slowTask))
@@ -363,6 +422,33 @@ public final class MoneyClose {
         FeeGate.list(ctx, IN_REVIEW_REQUESTS).stream().filter(row -> before(row.get("requestedAt"), until))
             .forEach(row -> inputs.add(new WithdrawInput(REQUEST, String.valueOf(row.id()))));
         return inputs;
+    }
+
+    /** Whether this run closes the AI credit: a wind-up registered, the switch on and an AI credit open. */
+    static boolean closesAiCredit(ProcessContext ctx) {
+        return FeeGate.first(ctx, REGISTERED_CLOSURE) != null && FeeGate.first(ctx, AI_CREDIT) != null
+            && switchOn(ctx.get(PARAMS, ParamValues.class)) && !aiJobsLeft(ctx);
+    }
+
+    /**
+     * Whether this run looks for the sponsor's AI jobs: a wind-up registered whose look is not done (its cursor 0). Once
+     * every job was looked at, none is looked at again: an erased sponsor starts none.
+     */
+    static boolean cancelsAiJobs(ProcessContext ctx) {
+        EntityInstance closure = FeeGate.first(ctx, REGISTERED_CLOSURE);
+        return closure != null && !Long.valueOf(0).equals(aiJobsBefore(ctx));
+    }
+
+    /** Where the look goes on (the closure's cursor); none from the latest. */
+    static Long aiJobsBefore(ProcessContext ctx) {
+        EntityInstance closure = FeeGate.first(ctx, REGISTERED_CLOSURE);
+        Object before = closure == null ? null : closure.get("aiJobsBeforeSeq");
+        return before == null ? null : ((Number) before).longValue();
+    }
+
+    /** Whether more of the sponsor's AI jobs may be open than this run cancelled. */
+    static boolean aiJobsLeft(ProcessContext ctx) {
+        return ctx.get(AI_JOBS) instanceof ErasedAiJobs.CancelOutput out && out.more();
     }
 
     static boolean somethingUnderReview(ProcessContext ctx) {
@@ -399,6 +485,10 @@ public final class MoneyClose {
         }
         if (!switchOn(ctx.get(PARAMS, ParamValues.class))) {
             ctx.put(OUTCOME, SWITCHED_OFF);
+            return;
+        }
+        if (aiJobsLeft(ctx)) {
+            ctx.put(OUTCOME, WAITING_AI_JOBS);
             return;
         }
         if (FeeGate.first(ctx, OPEN_DEPOSIT) != null) {
@@ -438,14 +528,78 @@ public final class MoneyClose {
         if (!goingOn(ctx) || spendable(ctx, CREDITS, CASH_WALLET).signum() <= 0) {
             return List.of();
         }
-        return FeeAutoPay.choose(FeeGate.list(ctx, UNPAID), FeeAutoPay.max(ctx.get(PARAMS, ParamValues.class)))
+        Set<String> paidByNotes = notesPaid(ctx);
+        List<EntityInstance> unpaid = FeeGate.list(ctx, UNPAID).stream()
+            .filter(invoice -> !paidByNotes.contains(String.valueOf(invoice.id()))).toList();
+        return FeeAutoPay.choose(unpaid, FeeAutoPay.max(ctx.get(PARAMS, ParamValues.class)))
             .invoices().stream().map(invoice -> new FeeAutoPay.ItemInput(String.valueOf(invoice.id()))).toList();
     }
 
-    /** Whether an item of this run paid something (the invoices and the account are read again then). */
+    /**
+     * Whether an item of this run paid something, or the credit notes' credit did (the invoices and the account are
+     * read again then).
+     */
     static boolean paidSomething(ProcessContext ctx) {
-        return ctx.get(PAID) instanceof List<?> items
+        return Boolean.TRUE.equals(ctx.get(CREDITED)) || ctx.get(PAID) instanceof List<?> items
             && items.stream().anyMatch(item -> ((FeeAutoPay.ItemPaid) item).paid().signum() > 0);
+    }
+
+    /**
+     * Step 6 (F-M15c): the credit left pays the unpaid invoices read under the lock, the earliest issued first, each
+     * as far as it goes (the invoice's {@code creditApplied}, a use of each note: CreditNotes' own writing); what is
+     * left after it is kept for step 9.
+     */
+    static void payFromNotes(ProcessContext ctx) {
+        if (!goingOn(ctx)) {
+            return;
+        }
+        List<CreditNotes.Unused> unused = CreditNotes.left(CreditNotes.rows(ctx, NOTES_LEFT));
+        Set<String> paid = new java.util.HashSet<>();
+        List<CreditNotes.TaskCloseInput> overdue = new ArrayList<>();
+        for (EntityInstance invoice : FeeAutoPay.owing(FeeGate.list(ctx, UNPAID))) {
+            if (unused.isEmpty()) {
+                break;
+            }
+            List<CreditNotes.Take> takes = CreditNotes.take(unused, QbFees.owed(invoice));
+            if (takes.isEmpty()) {
+                continue;
+            }
+            CreditNotes.recordUses(ctx, sponsorId(ctx), String.valueOf(invoice.id()), takes);
+            if (CreditNotes.applyCredit(ctx, invoice, CreditNotes.takenTotal(takes))) {
+                paid.add(String.valueOf(invoice.id()));
+                if (QbFees.OVERDUE.equals(invoice.get("status"))) {
+                    overdue.add(new CreditNotes.TaskCloseInput(String.valueOf(invoice.id())));
+                }
+            }
+            unused = CreditNotes.after(unused, takes);
+            ctx.put(CREDITED, true);
+        }
+        ctx.put(NOTES_PAID, Set.copyOf(paid));
+        ctx.put(NOTES_OVERDUE, List.copyOf(overdue));
+        ctx.put(NOTES_UNUSED, unused);
+    }
+
+    /** The overdue invoices the credit paid in full: their reminders are closed (F-M7's own process). */
+    static List<?> paidOverdue(ProcessContext ctx) {
+        return ctx.contains(NOTES_OVERDUE) ? (List<?>) ctx.get(NOTES_OVERDUE) : List.of();
+    }
+
+    @SuppressWarnings("unchecked")
+    private static Set<String> notesPaid(ProcessContext ctx) {
+        return ctx.contains(NOTES_PAID) ? (Set<String>) ctx.get(NOTES_PAID) : Set.of();
+    }
+
+    /**
+     * Step 9 (F-M15c): once the wind-up is done, the credit the notes still have left goes back to what paid their fees
+     * (总控 2026-11-14 M2: the cash to its lots, the fee credit to its grants and voided again), a note an item.
+     */
+    @SuppressWarnings("unchecked")
+    static List<CreditNoteGiveBack.GiveBackInput> giveBackInputs(ProcessContext ctx) {
+        if (!CLOSED.equals(ctx.get(OUTCOME)) || !ctx.contains(NOTES_UNUSED)) {
+            return List.of();
+        }
+        return ((List<CreditNotes.Unused>) ctx.get(NOTES_UNUSED)).stream().map(note ->
+            new CreditNoteGiveBack.GiveBackInput(sponsorId(ctx), note.creditNoteId(), note.amount())).toList();
     }
 
     private static BigDecimal spendable(ProcessContext ctx, String credits, String cash) {
@@ -496,6 +650,10 @@ public final class MoneyClose {
         String outcome = (String) ctx.get(OUTCOME);
         Map<String, Object> values = new LinkedHashMap<>();
         values.put("lastRunAt", ctx.opTime());
+        if (ctx.get(AI_JOBS) instanceof ErasedAiJobs.CancelOutput jobs) {
+            // Where the next run goes on, or 0: every job was looked at.
+            values.put("aiJobsBeforeSeq", jobs.more() ? BigDecimal.valueOf(jobs.nextBeforeSeq()) : BigDecimal.ZERO);
+        }
         if (CLOSED.equals(outcome)) {
             values.put("status", QbSponsorClosures.CLOSED);
             values.put("closedAt", closure.get("closedAt") == null ? ctx.opTime() : closure.get("closedAt"));
@@ -523,10 +681,8 @@ public final class MoneyClose {
         Map<String, String> params = new LinkedHashMap<>();
         params.put("sponsor", sponsorId(ctx));
         // The title says why in words, one message per reason (review L7).
-        EntityInstance held = FeeGate.first(ctx, OPEN_DEPOSIT);
-        boolean onlyAi = held != null && QbPrepayments.AI.equals(held.get(QbPrepayments.PURPOSE));
         return TaskSpec.forPermission(SLOW_TASK, SLOW_TASK_TITLE + "." + ErasureCloseRules.slowReason(
-                (String) ctx.get(OUTCOME), onlyAi), params, QbPermissions.FEE_MANAGE)
+                (String) ctx.get(OUTCOME)), params, QbPermissions.FEE_MANAGE)
             .about(QbSponsorClosures.CLOSURE, String.valueOf(closure.id())).source(slowTaskSource(sponsorId(ctx)));
     }
 

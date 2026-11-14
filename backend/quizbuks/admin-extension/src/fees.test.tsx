@@ -65,7 +65,7 @@ const invoice = (change: Row = {}): Row => ({ invoiceId: INVOICE, invoiceNo: 'QB
 const creditNote = (change: Row = {}): Row => ({ creditNoteId: 'cn-1', creditNoteNo: 'QBC-2026-00001', sponsorId: SPONSOR,
   company: 'Acme', operatorId: null, chargeId: CHARGE, invoiceNo: 'QBF-2026-00001', publicationId: 'pub-1',
   billingMode: 'PREPAID', reason: 'AUDIENCE_UNUSED', endReason: 'WITHDRAWN', usedDays: 3, note: null, amount: 400, tax: 40,
-  total: 440, appliedOwn: 0, refundedCash: 100, refundedCredit: 340, voidedCredit: 0, used: 40, creditLeft: 300,
+  total: 440, appliedOwn: 0, refundedCash: 100, refundedCredit: 340, voidedCredit: 0, used: 40, givenBack: 0, creditLeft: 300,
   issuedAt: '2026-11-05T01:00:00Z', issuedBy: null, ...change })
 const chargeCredit = (change: Row = {}): Row => ({ chargeId: CHARGE, sponsorId: SPONSOR, company: 'Acme', kind: 'MONTHLY',
   period: '2026-10', billingMode: 'PREPAID', amount: 1000, taxRate: '0.10', tax: 100, total: 1100, credited: 400,

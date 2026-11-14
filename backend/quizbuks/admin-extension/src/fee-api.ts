@@ -273,6 +273,8 @@ export interface FeeCreditNote {
   refundedCredit: string
   voidedCredit: string
   used: string
+  /** F-M15c: given back at the wind-up of an erased sponsor's account to what paid the fee (not in `used`). */
+  givenBack: string
   creditLeft: string
   issuedAt: string | null
   issuedBy: string | null
@@ -307,6 +309,7 @@ export async function readFeeCreditNotes(operator: boolean, offset: number, limi
       refundedCredit: amount(row.refundedCredit),
       voidedCredit: amount(row.voidedCredit),
       used: amount(row.used),
+      givenBack: amount(row.givenBack),
       creditLeft: amount(row.creditLeft),
       issuedAt: str(row.issuedAt),
       issuedBy: str(row.issuedBy),
