@@ -771,6 +771,27 @@ test.describe.serial('the first launch\'s loop', () => {
       }
     })
 
+  test('7d. F-M13 the automatic payment: the switch published, the fee account says so, and it is switched off again',
+    async ({ page, request }) => {
+      const { sora } = loop
+      const restore = await rememberParams(request, [{ key: 'qb.fee.auto-pay.enabled', absent: 'false' }])
+      try {
+        await signIn(page, '/sponsor/', sora.email)
+        await expect(page.getByTestId('dashboard-status')).toBeVisible()
+        await page.goto('/sponsor/money/account')
+        await expect(page.getByTestId('fee-account-total')).toBeVisible()
+        // Off at the first launch: nothing is said.
+        await expect(page.getByTestId('fee-account-auto-pay')).toHaveCount(0)
+        // Published as true (a controlled change, as everything of money): publishing is turning it on.
+        await setControlledParam(request, 'qb.fee.auto-pay.enabled', 'true')
+        await page.reload()
+        await expect(page.getByTestId('fee-account-auto-pay')).toBeVisible()
+        await accessibleInBoth(page, 'sponsor fee account: the automatic payment is on')
+      } finally {
+        await restore()
+      }
+    })
+
   test('9. F-M14: after the loop\'s money, the daily check finds no difference', async ({ page, request }) => {
     test.setTimeout(STEP_TIMEOUT_MS)
     // A run checked after everything above, told by the server's own times: later than the latest run checked before
