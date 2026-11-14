@@ -55,7 +55,7 @@ class ClosureRegisterIT extends CreditNoteItSupport {
     }
 
     @Test
-    void eachOfTheFiveKindsAloneRegistersAndAReplayRegistersNothingMore() {
+    void eachOfTheEightKindsAloneRegistersTheSweepFindsTheSameAndAReplayRegistersNothingMore() {
         // A zero balance counts: the account was there.
         String wallet = newSponsor(unique("s-fm15b-wallet"));
         SyntheticRows.rows("qb_wallet", null, 1, null, n -> Map.of("owner_id", text(wallet), "kind", "'FEE_CREDIT'",
@@ -73,13 +73,33 @@ class ClosureRegisterIT extends CreditNoteItSupport {
             "status", "'RELEASED'", "released_at", "TIMESTAMPTZ '2026-01-02T00:00:00Z'"));
         String cash = newSponsor(unique("s-fm15b-cash"));
         cash(cash, 1);
+        // The coordinator's decision (2026-11-14): a postpaid fee not invoiced yet.
+        String postpaid = newSponsor(unique("s-fm15b-postpaid"));
+        billing(postpaid, "POSTPAID", 50_000);
+        manualFee(postpaid, 300);
+        // Review M2: a manual credit or a fee request under review, nothing else.
+        String credit = newSponsor(unique("s-fm15b-credit"));
+        run(com.jabiz.quizbuks.wallet.ManualCredits.RECORD, finance(), Map.of("sponsorId", credit, "kind",
+            "PAID_OUTSIDE", "amount", 3000, "reason", "Paid in cash", "receivedOn",
+            java.time.LocalDate.ofInstant(clock.instant(), java.time.ZoneId.of("Asia/Tokyo")).toString(),
+            "bankReference", "R-" + java.util.UUID.randomUUID().toString().substring(0, 8)));
+        String request = newSponsor(unique("s-fm15b-request"));
+        run(com.jabiz.quizbuks.fee.FeeRequests.RECORD, finance(), Map.of("kind",
+            com.jabiz.quizbuks.fee.QbFees.REQUEST_MANUAL, "sponsorId", request, "amount", 500, "reason", "Custom report"));
+        List<String> all = List.of(wallet, lot, invoice, prepayment, cash, postpaid, credit, request);
 
-        for (String sponsor : List.of(wallet, lot, invoice, prepayment, cash)) {
+        // Erased with the events left undelivered: the daily sweep's template finds exactly these of them.
+        for (String sponsor : all) {
+            runAsSystem("ACCOUNT_ERASE", Map.of("userId", sponsor, "requestedBy", "it-support"));
+        }
+        assertThat(unregistered()).containsAll(all);
+        for (String sponsor : all) {
             assertThat(register(sponsor)).as(sponsor).isTrue();
             assertThat(register(sponsor)).as("replayed " + sponsor).isFalse();
             assertThat(closures(sponsor)).as(sponsor).singleElement()
                 .satisfies(row -> assertThat(row).containsEntry("status", QbSponsorClosures.WAITING));
         }
+        assertThat(unregistered()).doesNotContainAnyElementsOf(all);
     }
 
     @Test
@@ -87,9 +107,16 @@ class ClosureRegisterIT extends CreditNoteItSupport {
         String taker = newTaker(unique("t-fm15b-none"), null);
         String sponsor = newSponsor(unique("s-fm15b-none"));
         for (String user : List.of(taker, sponsor)) {
+            runAsSystem("ACCOUNT_ERASE", Map.of("userId", user, "requestedBy", "it-support"));
+            assertThat(unregistered()).as(user).doesNotContain(user);
             assertThat(register(user)).as(user).isFalse();
             assertThat(closures(user)).as(user).isEmpty();
         }
+    }
+
+    private List<Object> unregistered() {
+        return items(MoneyClose.UNREGISTERED_TEMPLATE, com.jabiz.runtime.test.TestTokens.bearer(tokens, "fm15b-job",
+            "qb.fee.system"), Map.of("limit", 1000)).stream().map(row -> row.get("userId")).toList();
     }
 
     private boolean register(String userId) {

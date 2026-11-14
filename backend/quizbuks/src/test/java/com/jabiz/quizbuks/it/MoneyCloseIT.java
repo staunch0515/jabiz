@@ -50,7 +50,7 @@ class MoneyCloseIT extends CreditNoteItSupport {
         param(QbParams.ERASURE_CLOSE_ENABLED, "false");
         String sponsor = newSponsor(unique("s-fm15b-switch"));
         String lot = grant(sponsor, 1000, clock.instant().plus(Duration.ofDays(60)));
-        register(sponsor);
+        erase(sponsor);
 
         assertThat(close(sponsor).outcome()).isEqualTo(MoneyClose.SWITCHED_OFF);
         assertThat(closure(sponsor)).containsEntry("status", QbSponsorClosures.WAITING)
@@ -80,24 +80,88 @@ class MoneyCloseIT extends CreditNoteItSupport {
     }
 
     @Test
-    void aPrepaymentStillHeldStopsTheRunUntilItIsGivenBack() {
-        String sponsor = newSponsor(unique("s-fm15b-held"));
-        String lot = grant(sponsor, 500, clock.instant().plus(Duration.ofDays(60)));
-        SyntheticRows.rows("qb_prepayment", null, 1, null, n -> Map.of("sponsor_id", text(sponsor),
-            "purpose", "'DISTRIBUTION'", "mode", "'PREPAID'", "amount", "2000", "remaining", "1500",
-            "status", "'OPEN'"));
-        register(sponsor);
+    void aPrepaymentStillHeldStopsTheRunAndTheGrantedCreditGivenBackToItsLotIsVoidedLast() {
+        // Review M3: a real prepayment frozen from a lot, given back by the real release; voided only after that.
+        autoApprove(true);
+        String sponsor = pricedSponsor("fm15b-held");
+        String lot = grant(sponsor, 1_000, clock.instant().plus(Duration.ofDays(90)));
+        String publicationId = audienceDraft(sponsor, "FM15b held");
+        submit(sponsorToken(sponsor), publicationId);
+        assertThat(prepayments(publicationId)).singleElement()
+            .satisfies(row -> assertThat(row).containsEntry("status", "OPEN"));
+        BigDecimal frozen = new BigDecimal("1000").subtract(remainingOf(lot));
+        assertThat(frozen).isPositive();
+        erase(sponsor);
 
         assertThat(close(sponsor).outcome()).isEqualTo(MoneyClose.WAITING_DEPOSITS);
         assertThat(closure(sponsor)).containsEntry("status", QbSponsorClosures.WAITING)
             .containsEntry("reason_code", QbSponsorClosures.DEPOSIT_OPEN);
-        // Nothing voided while a prepayment holds granted credit that comes back to its lot.
         assertThat(lotOf(lot)).containsEntry("voided_at", null);
 
-        execute("UPDATE qb_prepayment SET status = 'RELEASED', remaining = 0, released_at = now() WHERE sponsor_id = ?",
-            sponsor);
+        // Ended (the erasure ends the Sponsor's publications, or an administrator does) and given back by the job.
+        if (!"ENDED".equals(status(publicationId))) {
+            run("QB_PUBLICATION_ADMIN_END", com.jabiz.runtime.test.TestTokens.bearer(tokens, "fm15b-content",
+                com.jabiz.quizbuks.QbPermissions.ADMIN_CONTENT_WRITE), Map.of("publicationId", publicationId,
+                "reason", "F-M15 b test"));
+        }
+        systemRun(com.jabiz.quizbuks.fee.Prepayments.RELEASE_ITEM, Map.of("publicationId", publicationId,
+            "sponsorId", sponsor, "purpose", "AUDIENCE"));
+        assertThat(prepayments(publicationId)).singleElement()
+            .satisfies(row -> assertThat(row).containsEntry("status", "RELEASED"));
+        assertThat(remainingOf(lot)).isEqualByComparingTo("1000");
+
+        MoneyClose.CloseOutput done = close(sponsor);
+        assertThat(done.outcome()).isEqualTo(MoneyClose.CLOSED);
+        assertThat(remainingOf(lot)).isZero();
+        assertThat(new BigDecimal(String.valueOf(lotOf(lot).get("voided_amount")))).isEqualByComparingTo("1000");
+        // The books: balanced, the ledger only inserted into, the fee credit and its promotion agree.
+        assertBooksBalance();
+        assertThat(differences(sponsor)).isEmpty();
+        // FEE_CREDIT_PROMOTION for this lot: 5140 debited when granted, credited back as much when voided.
+        assertThat(promotion(lot)).isEqualByComparingTo("0");
+    }
+
+    @Test
+    void aWindUpDoneWithFeesOwedKeepsItsReasonWhenALaterRunStopsAndIsTakenAgain() {
+        // Review M1: done with fees owed, cash arrives later; a run the switch stops keeps FEE_OWED and the daily job
+        // still takes it.
+        String sponsor = newSponsor(unique("s-fm15b-owed-again"));
+        billing(sponsor, "POSTPAID", 50_000);
+        manualFee(sponsor, 300);
+        erase(sponsor);
         assertThat(close(sponsor).outcome()).isEqualTo(MoneyClose.CLOSED);
-        assertThat(lotOf(lot).get("voided_at")).isNotNull();
+        assertThat(closure(sponsor)).containsEntry("reason_code", QbSponsorClosures.FEE_OWED);
+
+        // Cash that arrives after it (a top-up confirmed late): its lot and the wallet's cache, as the crediting writes.
+        SyntheticRows.rows("qb_wallet", null, 1, null, n -> Map.of("owner_id", text(sponsor), "kind", "'CASH'",
+            "balance", "200", "held", "0", "pending_count", "0", "pending_amount", "0", "pending_out", "0"));
+        SyntheticRows.rows("qb_cash_lot", null, 1, null, n -> Map.of("sponsor_id", text(sponsor), "source", "'CARD'",
+            "amount", "200", "remaining", "200"));
+        param(QbParams.ERASURE_CLOSE_ENABLED, "false");
+        assertThat(close(sponsor).outcome()).isEqualTo(MoneyClose.SWITCHED_OFF);
+        assertThat(closure(sponsor)).containsEntry("status", QbSponsorClosures.CLOSED)
+            .containsEntry("reason_code", QbSponsorClosures.FEE_OWED);
+        assertThat(due()).contains(sponsor);
+        param(QbParams.ERASURE_CLOSE_ENABLED, "true");
+        // Until F-M13's payment: something to pay with, so it waits to pay, still FEE_OWED and still taken.
+        assertThat(close(sponsor).outcome()).isEqualTo(MoneyClose.TO_PAY);
+        assertThat(closure(sponsor)).containsEntry("status", QbSponsorClosures.CLOSED)
+            .containsEntry("reason_code", QbSponsorClosures.FEE_OWED);
+        assertThat(due()).contains(sponsor);
+    }
+
+    @Test
+    void withoutAWindUpNothingIsWithdrawn() {
+        // Review L4: the process run for a sponsor never registered (not erased) withdraws nothing.
+        String sponsor = newSponsor(unique("s-fm15b-none"));
+        Map<String, Object> request = run(FeeRequests.RECORD, finance(), Map.of("kind", QbFees.REQUEST_MANUAL,
+            "sponsorId", sponsor, "amount", 500, "reason", "Custom report"));
+        MoneyClose.CloseOutput run = close(sponsor);
+        assertThat(run.outcome()).isEqualTo(MoneyClose.NONE);
+        assertThat(run.withdrawn()).isZero();
+        assertThat(query("SELECT status FROM qb_fee_request WHERE request_id = ?",
+            String.valueOf(request.get("requestId")))).singleElement()
+            .satisfies(row -> assertThat(row).containsEntry("status", QbFees.REVIEW));
     }
 
     @Test
@@ -109,7 +173,7 @@ class MoneyCloseIT extends CreditNoteItSupport {
         SyntheticRows.rows("qb_fee_credit_grant", null, 1, null, n -> Map.of("sponsor_id", text(sponsor),
             "source", "'MANUAL'", "amount", "800", "remaining", "0", "voided_amount", "0",
             "granted_at", "TIMESTAMPTZ '2026-01-01T00:00:00Z'", "expires_at", "TIMESTAMPTZ '2099-01-01T00:00:00Z'"));
-        register(sponsor);
+        erase(sponsor);
         assertThat(query("SELECT * FROM qb_fee_invoice WHERE sponsor_id = ?", sponsor)).isEmpty();
 
         MoneyClose.CloseOutput done = close(sponsor);
@@ -137,7 +201,7 @@ class MoneyCloseIT extends CreditNoteItSupport {
         billing(sponsor, "POSTPAID", 50_000);
         manualFee(sponsor, 300);
         String lot = grant(sponsor, 1000, clock.instant().plus(Duration.ofDays(60)));
-        register(sponsor);
+        erase(sponsor);
 
         MoneyClose.CloseOutput run = close(sponsor);
         assertThat(run.invoicesIssued()).isEqualTo(1);
@@ -150,8 +214,9 @@ class MoneyCloseIT extends CreditNoteItSupport {
     @Test
     void whatIsUnderReviewIsWithdrawnWhateverTheSwitchAndFinanceIsToldOfTheManualCredit() {
         param(QbParams.ERASURE_CLOSE_ENABLED, "false");
+        // Review M2: nothing but a manual credit and a fee request under review (no wallet, grant, invoice, prepayment
+        // or fee): registered all the same, and step 0 withdraws them.
         String sponsor = newSponsor(unique("s-fm15b-review"));
-        cash(sponsor, 100);
         Map<String, Object> credit = run(ManualCredits.RECORD, finance(), body("sponsorId", sponsor, "kind",
             "PAID_OUTSIDE", "amount", 3000, "reason", "Paid in cash", "receivedOn",
             LocalDate.ofInstant(clock.instant(), ZoneId.of("Asia/Tokyo")).toString(), "bankReference",
@@ -160,12 +225,15 @@ class MoneyCloseIT extends CreditNoteItSupport {
             "sponsorId", sponsor, "amount", 500, "reason", "Custom report"));
         String topUpId = String.valueOf(credit.get("topUpId"));
         String requestId = String.valueOf(request.get("requestId"));
-        register(sponsor);
+        erase(sponsor);
 
         MoneyClose.CloseOutput run = close(sponsor);
         assertThat(run.withdrawn()).isEqualTo(2);
-        assertThat(query("SELECT status, ended_code FROM qb_topup WHERE topup_id = ?", topUpId)).singleElement()
-            .satisfies(row -> assertThat(row).containsEntry("status", "CANCELLED").containsEntry("ended_code", "ERASED"));
+        // Withdrawn after the erasure overwrote what was bound; the statement's entry let go (review L5).
+        assertThat(query("SELECT status, ended_code, received_on, bank_reference FROM qb_topup WHERE topup_id = ?",
+            topUpId)).singleElement().satisfies(row -> assertThat(row).containsEntry("status", "CANCELLED")
+                .containsEntry("ended_code", "ERASED").containsEntry("received_on", null)
+                .containsEntry("bank_reference", null));
         assertThat(query("SELECT status, ended_code FROM qb_fee_request WHERE request_id = ?", requestId))
             .singleElement().satisfies(row -> assertThat(row).containsEntry("status", QbFees.REJECTED)
                 .containsEntry("ended_code", "ERASED"));
@@ -188,7 +256,7 @@ class MoneyCloseIT extends CreditNoteItSupport {
         param(QbParams.ERASURE_CLOSE_ENABLED, "false");
         String sponsor = newSponsor(unique("s-fm15b-slow"));
         grant(sponsor, 200, clock.instant().plus(Duration.ofDays(90)));
-        register(sponsor);
+        erase(sponsor);
         close(sponsor);
         assertThat(openTasks("erasure-close:" + sponsor)).isEmpty();
 
@@ -217,7 +285,7 @@ class MoneyCloseIT extends CreditNoteItSupport {
         String waiting = newSponsor(unique("s-fm15b-job"));
         grant(waiting, 100, clock.instant().plus(Duration.ofDays(60)));
         param(QbParams.ERASURE_CLOSE_ENABLED, "false");
-        register(waiting);
+        erase(waiting);
         close(waiting);
         param(QbParams.ERASURE_CLOSE_ENABLED, "true");
         List<Map<String, Object>> due = items(MoneyClose.DUE_TEMPLATE, com.jabiz.runtime.test.TestTokens.bearer(tokens,
@@ -232,19 +300,19 @@ class MoneyCloseIT extends CreditNoteItSupport {
         billing(owes, "POSTPAID", 50_000);
         manualFee(owes, 300);
         spentLot(owes);
-        register(owes);
+        erase(owes);
         assertThat(close(owes).outcome()).isEqualTo(MoneyClose.CLOSED);
         // Granted credit left after it (a lot that the wind-up should have voided): a difference.
         String left = newSponsor(unique("s-fm15b-rc-left"));
         String lot = grant(left, 400, clock.instant().plus(Duration.ofDays(60)));
-        register(left);
+        erase(left);
         assertThat(close(left).outcome()).isEqualTo(MoneyClose.CLOSED);
         execute("UPDATE qb_fee_credit_grant SET remaining = 150, voided_amount = 0, voided_at = NULL WHERE grant_id = ?", lot);
         // Waiting: the switch off.
         param(QbParams.ERASURE_CLOSE_ENABLED, "false");
         String waits = newSponsor(unique("s-fm15b-rc-wait"));
         grant(waits, 100, clock.instant().plus(Duration.ofDays(60)));
-        register(waits);
+        erase(waits);
         close(waits);
         // Erased with the account, the registration's event never delivered.
         String lost = newSponsor(unique("s-fm15b-rc-lost"));
@@ -283,7 +351,7 @@ class MoneyCloseIT extends CreditNoteItSupport {
         billing(sponsor, "POSTPAID", 50_000);
         manualFee(sponsor, 300);
         spentLot(sponsor);
-        register(sponsor);
+        erase(sponsor);
         assertThat(close(sponsor).outcome()).isEqualTo(MoneyClose.CLOSED);
         String invoiceId = String.valueOf(query("SELECT invoice_id FROM qb_fee_invoice WHERE sponsor_id = ?", sponsor)
             .getFirst().get("invoice_id"));
@@ -301,6 +369,19 @@ class MoneyCloseIT extends CreditNoteItSupport {
         assertThat(query("SELECT status, reminders_sent FROM qb_fee_invoice WHERE invoice_id = ?", invoiceId)
             .getFirst()).containsEntry("status", QbFees.OPEN);
         assertThat(openTasks(QbFees.overdueTaskSource(invoiceId))).isEmpty();
+    }
+
+    private List<Object> due() {
+        return items(MoneyClose.DUE_TEMPLATE, com.jabiz.runtime.test.TestTokens.bearer(tokens, "fm15b-job",
+            "qb.fee.system"), Map.of("limit", 1000)).stream().map(row -> row.get("sponsorId")).toList();
+    }
+
+    /** 5140 posted with the lot as the source, debit less credit. */
+    private static BigDecimal promotion(String lot) {
+        return (BigDecimal) query("SELECT coalesce(sum(CASE e.direction WHEN 'DEBIT' THEN e.amount ELSE -e.amount END), 0)"
+            + " AS net FROM ledger_transaction_version t JOIN ledger_entry_version e ON e.transaction_id = t.transaction_id"
+            + " JOIN ledger_account_version a ON a.account_id = e.account_id WHERE t.source_entity = 'QbFeeCreditGrant'"
+            + " AND t.source_id = ? AND a.account_code = '5140'", lot).getFirst().get("net");
     }
 
     /** A granted lot used up: the sponsor had the account (fees not invoiced yet are not part of that, §4.1). */
@@ -323,7 +404,12 @@ class MoneyCloseIT extends CreditNoteItSupport {
         return found;
     }
 
-    private void register(String sponsor) {
+    /**
+     * Review M3: the account is really erased first (ACCOUNT_ERASE: tombstones, the reasons overwritten), then the
+     * registration runs as the erasure's event would (the event is left undelivered: a replay registers nothing more).
+     */
+    private void erase(String sponsor) {
+        runAsSystem("ACCOUNT_ERASE", Map.of("userId", sponsor, "requestedBy", "it-support"));
         assertThat(((MoneyClose.RegisterOutput) systemRun(MoneyClose.REGISTER, Map.of("userId", sponsor)))
             .registered()).isTrue();
     }

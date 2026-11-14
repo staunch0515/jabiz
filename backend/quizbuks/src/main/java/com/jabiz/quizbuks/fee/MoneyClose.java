@@ -78,6 +78,9 @@ public final class MoneyClose {
     static final String MONEY_GRANT = "moneyGrant";
     static final String MONEY_INVOICE = "moneyInvoice";
     static final String MONEY_PREPAYMENT = "moneyPrepayment";
+    static final String MONEY_POSTPAID = "moneyPostpaid";
+    static final String MONEY_TOPUP_REVIEW = "moneyTopUpReview";
+    static final String MONEY_REQUEST_REVIEW = "moneyRequestReview";
     static final String CLOSURE = "closure";
     static final String REGISTERED = "registered";
     static final String LOT = "lot";
@@ -100,6 +103,7 @@ public final class MoneyClose {
     static final String OUTCOME = "outcome";
     static final String ROW = "row";
     static final String ALERT = "alert";
+    static final String REGISTERED_CLOSURE = "registeredClosure";
 
     /** What one run of the wind-up did. */
     public static final String NONE = "NONE";
@@ -108,6 +112,11 @@ public final class MoneyClose {
     /** Fees owed and something to pay them with: the next run pays (F-M13's automatic payment, after #696). */
     public static final String TO_PAY = "TO_PAY";
     public static final String CLOSED = "CLOSED";
+    /**
+     * More lots to void than one run reads ({@code FeeSettlement.MAX_CREDITS}, review L8): those read are voided, the
+     * closure stays {@code WAITING} and the next run voids the rest.
+     */
+    public static final String MORE = "MORE";
 
     /** A manual credit or a fee request still under review when the wind-up ran. */
     public static final String TOPUP = "TOPUP";
@@ -179,6 +188,18 @@ public final class MoneyClose {
                         ctx -> one(new QueryPredicate.Eq("sponsorId", userId(ctx))), MONEY_INVOICE),
                     QueryEntities.query(QbFees.defaultDataset(QbPrepayments.PREPAYMENT),
                         ctx -> one(new QueryPredicate.Eq("sponsorId", userId(ctx))), MONEY_PREPAYMENT),
+                    // A postpaid fee not invoiced yet (the wind-up invoices it), a manual credit or a fee request still
+                    // under review (step 0 withdraws them; review M2).
+                    QueryEntities.query(QbFees.defaultDataset(QbFees.CHARGE), ctx -> one(
+                        new QueryPredicate.Eq("sponsorId", userId(ctx)),
+                        new QueryPredicate.Eq("billingMode", FeeRules.POSTPAID)), MONEY_POSTPAID),
+                    QueryEntities.query(QbTopUps.defaultDataset(QbTopUps.TOPUP), ctx -> one(
+                        new QueryPredicate.Eq("sponsorId", userId(ctx)),
+                        new QueryPredicate.Eq("method", QbTopUps.MANUAL),
+                        new QueryPredicate.Eq("status", TopUpStatus.REVIEW)), MONEY_TOPUP_REVIEW),
+                    QueryEntities.query(QbFees.defaultDataset(QbFees.REQUEST), ctx -> one(
+                        new QueryPredicate.Eq("sponsorId", userId(ctx)),
+                        new QueryPredicate.Eq("status", QbFees.REVIEW)), MONEY_REQUEST_REVIEW),
                     QueryEntities.query(QbFees.defaultDataset(QbSponsorClosures.CLOSURE),
                         ctx -> one(new QueryPredicate.Eq("sponsorId", userId(ctx))), CLOSURE)))
                 .compute("Register the wind-up", (metadata, ctx) -> registerClosure(ctx))
@@ -187,10 +208,16 @@ public final class MoneyClose {
                     ctx -> Map.of("sponsorId", userId(ctx)))));
     }
 
-    /** Whether a user had the platform fee account: any one row of the five (the definition ERASED_NO_CLOSURE uses). */
+    /**
+     * Whether a user had the platform fee account: any one row of the eight (§4.1: a CASH or FEE_CREDIT wallet, a grant,
+     * an invoice, a prepayment, a postpaid fee, a manual credit or a fee request under review). The reconciliation's
+     * {@code ERASED_NO_CLOSURE} and the daily sweep's template write the same in SQL: change the three together.
+     */
     static boolean hadAccount(ProcessContext ctx) {
         return FeeGate.first(ctx, MONEY_WALLET) != null || FeeGate.first(ctx, MONEY_GRANT) != null
-            || FeeGate.first(ctx, MONEY_INVOICE) != null || FeeGate.first(ctx, MONEY_PREPAYMENT) != null;
+            || FeeGate.first(ctx, MONEY_INVOICE) != null || FeeGate.first(ctx, MONEY_PREPAYMENT) != null
+            || FeeGate.first(ctx, MONEY_POSTPAID) != null || FeeGate.first(ctx, MONEY_TOPUP_REVIEW) != null
+            || FeeGate.first(ctx, MONEY_REQUEST_REVIEW) != null;
     }
 
     static void registerClosure(ProcessContext ctx) {
@@ -240,6 +267,9 @@ public final class MoneyClose {
             // Step 0, whatever the switch: what is under review is withdrawn before anything else (its approval's lock
             // comes before the wallet's).
             .step("Read what is under review", QueryEntities.<ProcessContext>all(
+                // Only a sponsor with a wind-up (review L4): the closure is read again under the lock.
+                QueryEntities.query(QbFees.defaultDataset(QbSponsorClosures.CLOSURE),
+                    ctx -> one(new QueryPredicate.Eq("sponsorId", sponsorId(ctx))), REGISTERED_CLOSURE),
                 QueryEntities.query(QbTopUps.defaultDataset(QbTopUps.TOPUP), ctx -> EntityQuery.builder()
                     .where(new QueryPredicate.And(List.of(new QueryPredicate.Eq("sponsorId", sponsorId(ctx)),
                         new QueryPredicate.Eq("method", QbTopUps.MANUAL),
@@ -290,6 +320,9 @@ public final class MoneyClose {
 
     static List<WithdrawInput> withdrawInputs(ProcessContext ctx) {
         List<WithdrawInput> inputs = new ArrayList<>();
+        if (FeeGate.first(ctx, REGISTERED_CLOSURE) == null) {
+            return inputs;
+        }
         FeeGate.list(ctx, IN_REVIEW_TOPUPS).forEach(row -> inputs.add(new WithdrawInput(TOPUP, String.valueOf(row.id()))));
         FeeGate.list(ctx, IN_REVIEW_REQUESTS).forEach(row -> inputs.add(new WithdrawInput(REQUEST,
             String.valueOf(row.id()))));
@@ -351,11 +384,12 @@ public final class MoneyClose {
         }
         BigDecimal spendable = FeeSettlement.spendable(FeeGate.list(ctx, CREDITS), FeeGate.first(ctx, CASH_WALLET),
             ctx.opTime());
-        ctx.put(OUTCOME, ErasureCloseRules.end(owed(ctx), spendable));
+        String end = ErasureCloseRules.end(owed(ctx), spendable);
+        ctx.put(OUTCOME, CLOSED.equals(end) && FeeGate.list(ctx, TO_VOID).size() >= FeeSettlement.MAX_CREDITS ? MORE : end);
     }
 
     static List<VoidLotInput> voidInputs(ProcessContext ctx) {
-        if (!CLOSED.equals(ctx.get(OUTCOME))) {
+        if (!CLOSED.equals(ctx.get(OUTCOME)) && !MORE.equals(ctx.get(OUTCOME))) {
             return List.of();
         }
         return FeeGate.list(ctx, TO_VOID).stream().map(lot -> new VoidLotInput(sponsorId(ctx), String.valueOf(lot.id())))
@@ -376,7 +410,8 @@ public final class MoneyClose {
             values.put("closedAt", closure.get("closedAt") == null ? ctx.opTime() : closure.get("closedAt"));
             values.put("reasonCode", owed(ctx).signum() > 0 ? QbSponsorClosures.FEE_OWED : null);
         } else {
-            values.put("reasonCode", ErasureCloseRules.reasonOf(outcome, (String) closure.get("reasonCode")));
+            values.put("reasonCode", ErasureCloseRules.reasonOf(outcome, (String) closure.get("reasonCode"),
+                QbSponsorClosures.CLOSED.equals(closure.get("status"))));
             BigDecimal days = ctx.get(PARAMS, ParamValues.class) == null ? null
                 : ctx.get(PARAMS, ParamValues.class).find(QbParams.ERASURE_CLOSE_ALERT_DAYS, BigDecimal.class).orElse(null);
             if (QbSponsorClosures.WAITING.equals(closure.get("status")) && closure.get("alertedAt") == null
@@ -396,9 +431,9 @@ public final class MoneyClose {
         EntityInstance closure = FeeGate.first(ctx, CLOSURE);
         Map<String, String> params = new LinkedHashMap<>();
         params.put("sponsor", sponsorId(ctx));
-        params.put("reason", String.valueOf(ErasureCloseRules.reasonOf((String) ctx.get(OUTCOME),
-            (String) closure.get("reasonCode"))));
-        return TaskSpec.forPermission(SLOW_TASK, SLOW_TASK_TITLE, params, QbPermissions.FEE_MANAGE)
+        // The title says why in words, one message per reason (review L7).
+        return TaskSpec.forPermission(SLOW_TASK, SLOW_TASK_TITLE + "." + ErasureCloseRules.slowReason(
+                (String) ctx.get(OUTCOME)), params, QbPermissions.FEE_MANAGE)
             .about(QbSponsorClosures.CLOSURE, String.valueOf(closure.id())).source(slowTaskSource(sponsorId(ctx)));
     }
 
@@ -493,6 +528,9 @@ public final class MoneyClose {
         values.put("endedCode", QbSponsorClosures.ENDED_ERASED);
         if (TOPUP.equals(withdrawInput(ctx).kind())) {
             values.put("status", TopUpStatus.CANCELLED);
+            // As a credit rejected (ManualCredits.cancel): the statement's entry is let go.
+            values.put("receivedOn", null);
+            values.put("bankReference", null);
             ctx.changes().update(QbTopUps.TOPUP, row.id(), row.version(), values);
         } else {
             values.put("status", QbFees.REJECTED);

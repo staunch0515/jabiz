@@ -1,13 +1,16 @@
 /*---
 id: qb.system.money-close-unregistered
 description: "The erased users who had the platform fee account and have no wind-up registered (the items of the daily job qb.sponsor-closure-register, F-M15 b §9 M1): the registration's event was lost"
-entities: [QbSponsorClosure, QbFeeCreditGrant, QbFeeInvoice, QbWallet, QbPrepayment, Erasure]
+entities: [QbSponsorClosure, QbFeeCreditGrant, QbFeeInvoice, QbWallet, QbPrepayment, QbFeeCharge, QbTopUp, QbFeeRequest, Erasure]
 datasets:
   QbSponsorClosure: urn:jabiz:dataset:default:QbSponsorClosure
   QbFeeCreditGrant: urn:jabiz:dataset:default:QbFeeCreditGrant
   QbFeeInvoice: urn:jabiz:dataset:default:QbFeeInvoice
   QbWallet: urn:jabiz:dataset:default:QbWallet
   QbPrepayment: urn:jabiz:dataset:default:QbPrepayment
+  QbFeeCharge: urn:jabiz:dataset:default:QbFeeCharge
+  QbTopUp: urn:jabiz:dataset:default:QbTopUp
+  QbFeeRequest: urn:jabiz:dataset:default:QbFeeRequest
   Erasure: urn:jabiz:dataset:platform:Erasure
 results:
   userId: { kind: { type: text, maxLength: 128 } }
@@ -18,8 +21,8 @@ list:
   key: [userId]
 permissions: [qb.fee.system]
 ---*/
--- "Had the account" is QB_SPONSOR_CLOSURE_REGISTER's definition (a CASH or FEE_CREDIT wallet, a grant, an invoice or a
--- prepayment), as the reconciliation's ERASED_NO_CLOSURE (qb.system.recon-erased): write the three together. The item
+-- "Had the account" is QB_SPONSOR_CLOSURE_REGISTER's definition (a CASH or FEE_CREDIT wallet, a grant, an invoice, a
+-- prepayment, a postpaid fee, a manual credit or a fee request under review), as the reconciliation's ERASED_NO_CLOSURE (qb.system.recon-erased): write the three together. The item
 -- reads everything again.
 SELECT CAST(e.{{Erasure.userId}} AS varchar(128)) AS userId, e.{{Erasure.erasedTime}} AS erasedTime
 FROM {{Erasure}} e
@@ -33,4 +36,13 @@ WHERE NOT EXISTS (SELECT 1 FROM {{QbSponsorClosure}} nc
        OR EXISTS (SELECT 1 FROM {{QbFeeInvoice}} ni
                   WHERE ni.{{QbFeeInvoice.sponsorId}} = CAST(e.{{Erasure.userId}} AS text))
        OR EXISTS (SELECT 1 FROM {{QbPrepayment}} np
-                  WHERE np.{{QbPrepayment.sponsorId}} = CAST(e.{{Erasure.userId}} AS text)))
+                  WHERE np.{{QbPrepayment.sponsorId}} = CAST(e.{{Erasure.userId}} AS text))
+       OR EXISTS (SELECT 1 FROM {{QbFeeCharge}} nf
+                  WHERE nf.{{QbFeeCharge.sponsorId}} = CAST(e.{{Erasure.userId}} AS text)
+                    AND nf.{{QbFeeCharge.billingMode}} = 'POSTPAID')
+       OR EXISTS (SELECT 1 FROM {{QbTopUp}} nt
+                  WHERE nt.{{QbTopUp.sponsorId}} = CAST(e.{{Erasure.userId}} AS text)
+                    AND nt.{{QbTopUp.method}} = 'MANUAL' AND nt.{{QbTopUp.status}} = 'REVIEW')
+       OR EXISTS (SELECT 1 FROM {{QbFeeRequest}} nr
+                  WHERE nr.{{QbFeeRequest.sponsorId}} = CAST(e.{{Erasure.userId}} AS text)
+                    AND nr.{{QbFeeRequest.status}} = 'REVIEW'))

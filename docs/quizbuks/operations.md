@@ -1521,12 +1521,12 @@ Quiz 与发布有主题词（平台词表中的词与自定义词），学者可
 
 ### 7.56 已注销发起方的平台费账户收尾（F-M15 b）
 
-注销的发起方在平台费账户里还有钱（现金、赠送额度、账单、预付款任一）时，由平台自动收尾，计划见 `docs/quizbuks/plans/impl/F-M15.md` §2、§5。
+注销的发起方有平台费账户（现金或赠送钱包、赠送额度、账单、预付款、后付的费用、审核中的手工加币或平台费申请任一）时，由平台自动收尾，计划见 `docs/quizbuks/plans/impl/F-M15.md` §2、§5。
 
 - **登记**：账户删除（`jabiz.account.erased`）的消费者 `qb.account-erased-money` 运行 `QB_SPONSOR_CLOSURE_REGISTER`，写一行 `QbSponsorClosure`（`WAITING`）并发 `qb.sponsor.money-close-due`。事件丢失时由每日任务 `qb.sponsor-closure-register`（03:47，`quizbuks.erasure-close.register-cron`，模板 `qb.system.money-close-unregistered`）补登。
-- **收尾** `QB_SPONSOR_MONEY_CLOSE`（事件 `qb.sponsor-money-close` 与每日任务 `qb.sponsor-money-close`，03:53，`quizbuks.erasure-close.cron`，每次至多 `quizbuks.erasure-close.max-items` 项）：撤回审核中的手工加币与平台费申请（`ended_code = ERASED`；手工加币另给财务待办 `qb.erasure-close.withdrawn`，钱怎么处理由财务与发起方另行联系）→ 钱包锁内：开关 `qb.erasure.close.enabled` 关着即停（`SWITCH_OFF`）→ 有未关闭的预付款即等（`DEPOSIT_OPEN`，预付款由结束与释放的任务退回）→ 后付的未开账单按月开出（含当月）→ 自动付款（F-M13）→ 有欠费且还有钱可付即等下次（`TO_PAY`）；否则完成（`CLOSED`，仍欠即原因 `FEE_OWED`），作废未到期的赠送额度（借 2190 / 贷 5140，`QB_FEE_CREDIT_VOID_LOT`）。现金余额不退回，留在账户（法务说明见上线检查清单）。
+- **收尾** `QB_SPONSOR_MONEY_CLOSE`（事件 `qb.sponsor-money-close` 与每日任务 `qb.sponsor-money-close`，03:53，`quizbuks.erasure-close.cron`，每次至多 `quizbuks.erasure-close.max-items` 项）：撤回审核中的手工加币与平台费申请（`ended_code = ERASED`；手工加币另给财务待办 `qb.erasure-close.withdrawn`，钱怎么处理由财务与发起方另行联系）→ 钱包锁内：开关 `qb.erasure.close.enabled` 关着即停（`SWITCH_OFF`）→ 有未关闭的预付款即等（`DEPOSIT_OPEN`，预付款由结束与释放的任务退回）→ 后付的未开账单按月开出（含当月）→ 自动付款（F-M13）→ 有欠费且还有钱可付即等下次（`TO_PAY`）；否则完成（`CLOSED`，仍欠即原因 `FEE_OWED`；要作废的笔数多于一次能读的即作废读到的、留在 `WAITING` 等次日），作废未到期的赠送额度（借 2190 / 贷 5140，`QB_FEE_CREDIT_VOID_LOT`）。现金余额不退回，留在账户（法务说明见上线检查清单）。
 - **完成后又进账**（迟到的充值、作废账单退回现金）：每日任务把 `CLOSED` + `FEE_OWED` 且有现金剩余的再跑一次，付到欠费上。
-- **慢了**：注销后 `qb.erasure.close.alert-days`（普通参数，缺省 3，1～60）天仍未完成，给财务一次待办 `qb.erasure-close.slow`（完成时关闭）；同时每日核对报 `ERASED_CLOSE_OPEN`。按原因处理：`SWITCH_OFF` 由财务与另一位管理员经受控变更打开开关；`DEPOSIT_OPEN` 看该发起方的预付款为何未释放（§7.47、§7.48、§7.54）；没有原因的看任务 `qb.sponsor-money-close` 的失败，修好后用 `JOB_RUN_REQUEST` 补跑。
+- **慢了**：注销后 `qb.erasure.close.alert-days`（普通参数，缺省 3；须是 1～60 的整数，否则当即提醒）天仍未完成，给财务一次待办 `qb.erasure-close.slow`（标题写明原因，完成时关闭）；同时每日核对报 `ERASED_CLOSE_OPEN`。按原因处理：`SWITCH_OFF` 由财务与另一位管理员经受控变更打开开关；`DEPOSIT_OPEN` 看该发起方的预付款为何未释放（§7.47、§7.48、§7.54）；没有原因的看任务 `qb.sponsor-money-close` 的失败，修好后用 `JOB_RUN_REQUEST` 补跑。
 - **欠费**：已注销发起方的过期账单不再变为 `OVERDUE`、不发提醒、不建逾期待办；财务看核对的提示 `ERASED_FEE_OWED`，决定是否以平台费申请（`QB_FEE_REQUEST`，种类 `CREDIT_NOTE`，四眼）免除。
 - **核对**：`ERASED_GIFT_LEFT`、`ERASED_CLOSE_OPEN`、`ERASED_FEE_OWED`、`ERASED_NO_CLOSURE`（模板 `qb.system.recon-erased`，见 §7.55 的总表）；收尾中的每一笔仍经 `FEE_CREDIT`、`FEE_CREDIT_PROMOTION`、`FEE_PAYMENTS`、`FEES_RECEIVABLE` 核对。
 

@@ -1080,14 +1080,15 @@ public final class QbParams {
         new Param(EXPOSURE_TOP_UP_MAX, Map.of("type", "numeric", "precision", 9, "scale", 0), "1000000",
             "The most exposures one top-up buys (1 to 999,999,999; a placeholder; keeps the parts of a deposit within "
                 + "what it can be shared into)"),
-        // F-F10a: the Kudos reward switch (controlled, after the F-C7, F-M6 and F-M8 ones; the F-M14 thresholds and the help's
-        // daily limit come after it, in the order of CONTROLLED, which QB_SETUP's proposals follow).
         // F-M15 b: the wind-up of an erased sponsor's money (controlled, before the Kudos reward switch).
         new Param(ERASURE_CLOSE_ENABLED, BOOL, false,
             "Whether an erased sponsor's platform fee account is wound up: invoiced, paid as far as it goes, the granted "
                 + "credit voided (off: only recorded; the daily job winds up once it is turned on)"),
         new Param(ERASURE_CLOSE_ALERT_DAYS, Map.of("type", "numeric", "precision", 2, "scale", 0), "3",
-            "After how many days a wind-up of an erased sponsor's money not done gives finance a task (1 to 60)"),
+            "After how many days a wind-up of an erased sponsor's money not done gives finance a task (a whole number "
+                + "from 1 to 60; any other value gives it at once)"),
+        // F-F10a: the Kudos reward switch (controlled, after the F-C7, F-M6 and F-M8 ones; the F-M14 thresholds and the help's
+        // daily limit come after it, in the order of CONTROLLED, which QB_SETUP's proposals follow).
         new Param(REWARD_KUDOS_ENABLED, BOOL, true,
             "Whether a publication may offer the reward method PLATFORM (Kudos paid by QuizBuks); off at the first "
                 + "launch (F-F10a)"),

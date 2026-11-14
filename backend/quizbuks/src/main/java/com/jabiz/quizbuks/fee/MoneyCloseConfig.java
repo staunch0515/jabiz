@@ -14,7 +14,6 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
 import java.time.ZoneId;
-import java.time.ZoneOffset;
 
 /** F-M15 b: the beans of an erased sponsor's money's wind-up (docs/quizbuks/plans/impl/F-M15.md §4.1, §5). */
 @Configuration
@@ -26,13 +25,12 @@ public class MoneyCloseConfig {
     MoneyCloseConfig(@Value("${jabiz.storage.default-pool-ref:default}") String poolRef,
         @Value("${jabiz.fiscal-year-zone:UTC}") String zone) {
         this.poolRef = poolRef;
-        ZoneId zoneId;
+        // A zone that is not one stops the start (review L9): the jobs' days would silently be UTC's.
         try {
-            zoneId = ZoneId.of(zone);
+            this.zone = ZoneId.of(zone);
         } catch (RuntimeException e) {
-            zoneId = ZoneOffset.UTC;
+            throw new IllegalStateException("jabiz.fiscal-year-zone is not a time zone: " + zone, e);
         }
-        this.zone = zoneId;
     }
 
     @Bean

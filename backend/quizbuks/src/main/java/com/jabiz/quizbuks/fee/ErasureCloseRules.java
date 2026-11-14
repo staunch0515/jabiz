@@ -25,11 +25,15 @@ public final class ErasureCloseRules {
     }
 
     /**
-     * The closure's reason code after a run that did not close it: why it stopped ({@code SWITCH_OFF},
-     * {@code DEPOSIT_OPEN}); a run that only waits for a payment keeps {@code FEE_OWED} (a closure done with fees owed
-     * that pays again) and clears a stale one; a run that found nothing to do keeps what was there.
+     * The closure's reason code after a run that did not close it. A closure already done ({@code closed}) keeps its
+     * reason whatever stopped the run: {@code FEE_OWED} is what takes it again when cash arrives (review M1). One not
+     * done gets why it stopped ({@code SWITCH_OFF}, {@code DEPOSIT_OPEN}); a run that only waits for a payment clears a
+     * stale one; a run that found nothing to do keeps what was there.
      */
-    public static String reasonOf(String outcome, String previous) {
+    public static String reasonOf(String outcome, String previous, boolean closed) {
+        if (closed) {
+            return previous;
+        }
         if (MoneyClose.SWITCHED_OFF.equals(outcome)) {
             return QbSponsorClosures.SWITCH_OFF;
         }
@@ -42,15 +46,30 @@ public final class ErasureCloseRules {
         return previous;
     }
 
+    /** Why a run that took long did not finish, as the key of the slow task's title: its outcome, or {@code OTHER}. */
+    public static String slowReason(String outcome) {
+        return MoneyClose.SWITCHED_OFF.equals(outcome) || MoneyClose.WAITING_DEPOSITS.equals(outcome)
+            || MoneyClose.TO_PAY.equals(outcome) || MoneyClose.MORE.equals(outcome) ? outcome : "OTHER";
+    }
+
     /**
-     * Whether a wind-up not done is taking long: {@code alertDays} (a whole number from 1 to {@value #MAX_ALERT_DAYS};
-     * anything else tells nobody) days or more after the erasure.
+     * Whether a wind-up not done is taking long: {@code alertDays} days or more after the erasure. {@code alertDays} is
+     * a whole number from 1 to {@value #MAX_ALERT_DAYS}; any other value, or none, alerts at once (review L9: a
+     * parameter set wrong tells finance, never nobody).
      */
     public static boolean slow(Instant erasedAt, BigDecimal alertDays, Instant now) {
-        if (erasedAt == null || alertDays == null || alertDays.signum() <= 0 || alertDays.stripTrailingZeros().scale() > 0
-            || alertDays.compareTo(BigDecimal.valueOf(MAX_ALERT_DAYS)) > 0) {
+        if (erasedAt == null) {
             return false;
         }
+        if (!validAlertDays(alertDays)) {
+            return true;
+        }
         return !erasedAt.plus(Duration.ofDays(alertDays.longValueExact())).isAfter(now);
+    }
+
+    /** Whether {@code qb.erasure.close.alert-days} is a whole number from 1 to {@value #MAX_ALERT_DAYS}. */
+    public static boolean validAlertDays(BigDecimal alertDays) {
+        return alertDays != null && alertDays.signum() > 0 && alertDays.stripTrailingZeros().scale() <= 0
+            && alertDays.compareTo(BigDecimal.valueOf(MAX_ALERT_DAYS)) <= 0;
     }
 }
