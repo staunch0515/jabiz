@@ -25,7 +25,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  * the usual import from the draft's articles, the drafted questions are kept as a ready job of that quiz and reach it
  * only through {@code QB_AI_ACCEPT}, each reviewed; one quiz a draft; nobody else's draft; nothing but a ready one.
  */
-class SiteQuizIT extends AiItSupport {
+class SiteQuizIT extends AiCreditItSupport {
 
     private static final String DRAFT = """
         {"failure": null,
@@ -53,6 +53,8 @@ class SiteQuizIT extends AiItSupport {
     @BeforeEach
     void switchedOn() {
         aiOn();
+        // F-M9: a website's draft is charged to the AI credit: the fee on, and AI credit for the sponsors who ask.
+        feeOn();
         if (query("SELECT 1 FROM sys_param_version WHERE param_key = ? AND param_value = 'true'",
             QbParams.SITE_PROFILE_ENABLED).isEmpty()) {
             param(QbParams.SITE_PROFILE_ENABLED, "true");
@@ -82,7 +84,7 @@ class SiteQuizIT extends AiItSupport {
 
     @Test
     void theQuizIsADraftOfTheArticlesAndTheQuestionsWaitForReview() {
-        String sponsor = newSponsor("site-quiz-" + UUID.randomUUID());
+        String sponsor = funded(newSponsor("site-quiz-" + UUID.randomUUID()));
         String token = sponsorFull(sponsor);
         Object aiJobId = readyDraft(token);
         // The website request is the one request of the day; the questions kept next to the quiz are none.
@@ -148,16 +150,16 @@ class SiteQuizIT extends AiItSupport {
 
     @Test
     void anotherSponsorsDraftANotReadyOneOneWithoutArticlesAndAnExpiredOneMakeNothing() {
-        String owner = newSponsor("site-quiz-a-" + UUID.randomUUID());
+        String owner = funded(newSponsor("site-quiz-a-" + UUID.randomUUID()));
         String token = sponsorFull(owner);
         Object aiJobId = readyDraft(token);
         Object quizzesBefore = query("SELECT count(DISTINCT quiz_id) AS n FROM qb_quiz_version").getFirst().get("n");
         // Anyone else's draft is not found.
-        refused(SiteQuizProcesses.QUIZ, sponsorFull(newSponsor("site-quiz-b-" + UUID.randomUUID())),
+        refused(SiteQuizProcesses.QUIZ, sponsorFull(funded(newSponsor("site-quiz-b-" + UUID.randomUUID()))),
             body("aiJobId", aiJobId), 404);
 
         // One still being made.
-        String other = sponsorFull(newSponsor("site-quiz-c-" + UUID.randomUUID()));
+        String other = sponsorFull(funded(newSponsor("site-quiz-c-" + UUID.randomUUID())));
         Object queued = run(SiteProfileProcesses.REQUEST, other, body("siteAddress", "https://www.aini.example/",
             "language", "ja", "otherLanguages", List.of(), "rightsDeclared", true,
             "aiNoticeVersionNo", noticeVersion())).get("aiJobId");
@@ -167,7 +169,7 @@ class SiteQuizIT extends AiItSupport {
 
         // One without articles.
         draft = DRAFT.replaceAll("(?s)\"materials\": \\[.*?\\],\\s*\"questions\"", "\"materials\": [], \"questions\"");
-        String third = sponsorFull(newSponsor("site-quiz-d-" + UUID.randomUUID()));
+        String third = sponsorFull(funded(newSponsor("site-quiz-d-" + UUID.randomUUID())));
         Object bare = readyDraft(third);
         assertThat(codes(refused(SiteQuizProcesses.QUIZ, third, body("aiJobId", bare), 422)))
             .contains(AiCodes.SITE_NO_QUIZ);
@@ -182,7 +184,7 @@ class SiteQuizIT extends AiItSupport {
 
     @Test
     void theDraftOfAnotherKindIsRefusedAndSoAreABannedSponsorAnUnverifiedAddressAndACallerWithoutContentWrite() {
-        String sponsor = newSponsor("site-quiz-k-" + UUID.randomUUID());
+        String sponsor = funded(newSponsor("site-quiz-k-" + UUID.randomUUID()));
         String token = sponsorFull(sponsor);
         // Not a website draft: an ordinary request for questions.
         List<String> quiz = quizWithArticle(token, "Kinds " + UUID.randomUUID(), "Material.");
@@ -210,7 +212,7 @@ class SiteQuizIT extends AiItSupport {
     @Test
     void questionsThatAllFailTheRulesLeaveNoJobAndTheQuizIsStillMade() {
         draft = DRAFT.replaceAll("(?s)\"questions\": \\[.*\\]\\}\\s*$", "\"questions\": []}");
-        String token = sponsorFull(newSponsor("site-quiz-n-" + UUID.randomUUID()));
+        String token = sponsorFull(funded(newSponsor("site-quiz-n-" + UUID.randomUUID())));
         Object aiJobId = readyDraft(token);
         Map<String, Object> made = run(SiteQuizProcesses.QUIZ, token, body("aiJobId", aiJobId));
         assertThat(made.get("questionsJob")).isNull();
@@ -220,14 +222,14 @@ class SiteQuizIT extends AiItSupport {
 
     @Test
     void theKeptQuestionsExpireAndCanBeDiscardedLikeAnyOther() {
-        String sponsor = newSponsor("site-quiz-e-" + UUID.randomUUID());
+        String sponsor = funded(newSponsor("site-quiz-e-" + UUID.randomUUID()));
         String token = sponsorFull(sponsor);
         Object first = readyDraft(token);
         Object discarded = run(SiteQuizProcesses.QUIZ, token, body("aiJobId", first)).get("questionsJob");
         assertThat(run(AiProcesses.DISCARD, token, body("aiJobId", discarded))).containsEntry("status", QbAi.DISCARDED);
         assertThat(job(discarded)).containsEntry("status", QbAi.DISCARDED).containsEntry("candidates", null);
 
-        String other = sponsorFull(newSponsor("site-quiz-f-" + UUID.randomUUID()));
+        String other = sponsorFull(funded(newSponsor("site-quiz-f-" + UUID.randomUUID())));
         Object second = readyDraft(other);
         Object expires = run(SiteQuizProcesses.QUIZ, other, body("aiJobId", second)).get("questionsJob");
         advance(Duration.ofDays(30));
@@ -249,7 +251,7 @@ class SiteQuizIT extends AiItSupport {
             }
             draft = DRAFT.replaceAll("(?s)\"materials\": \\[.*?\\],\\s*\"questions\"",
                 java.util.regex.Matcher.quoteReplacement("\"materials\": [" + many + "], \"questions\""));
-            String token = sponsorFull(newSponsor("site-quiz-r-" + UUID.randomUUID()));
+            String token = sponsorFull(funded(newSponsor("site-quiz-r-" + UUID.randomUUID())));
             Object aiJobId = readyDraft(token);
             assertThat(codes(refused(SiteQuizProcesses.QUIZ, token, body("aiJobId", aiJobId), 422))).isNotEmpty();
             assertThat(job(aiJobId).get("site_quiz_id")).isNull();
@@ -262,7 +264,7 @@ class SiteQuizIT extends AiItSupport {
 
     @Test
     void theOtherLanguagesAskedForGetTheQuizsTitleAndIntroductionInThem() {
-        String token = sponsorFull(newSponsor("site-quiz-l-" + UUID.randomUUID()));
+        String token = sponsorFull(funded(newSponsor("site-quiz-l-" + UUID.randomUUID())));
         Object aiJobId = readyDraft(token, List.of("en"));
         String quizId = String.valueOf(run(SiteQuizProcesses.QUIZ, token, body("aiJobId", aiJobId)).get("quizId"));
         Map<String, Object> quiz = latest("qb_quiz_version", "quiz_id", "quiz_id = '" + quizId + "'").getFirst();
@@ -279,7 +281,7 @@ class SiteQuizIT extends AiItSupport {
         Map<String, String> titles = Map.of("ja", "私たちを知ろう", "en", "Get to know us", "zh", "认识我们");
         titles.forEach((language, title) -> {
             draft = DRAFT.replace("\"company\": \"Aini Inc.\"", "\"company\": null");
-            String token = sponsorFull(newSponsor("site-quiz-u-" + language + "-" + UUID.randomUUID()));
+            String token = sponsorFull(funded(newSponsor("site-quiz-u-" + language + "-" + UUID.randomUUID())));
             Object aiJobId = run(SiteProfileProcesses.REQUEST, token, body("siteAddress", "https://www.aini.example/",
                 "language", language, "otherLanguages", List.of(), "profile", false, "products", false, "quiz", true,
                 "rightsDeclared", true, "aiNoticeVersionNo", noticeVersion())).get("aiJobId");

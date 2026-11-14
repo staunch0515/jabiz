@@ -124,8 +124,18 @@ class HelpIT extends HelpItSupport {
     @Test
     void theHelpIsNeverASponsorsAiUsage() {
         String sponsor = newSponsor("s-fc10-usage-" + UUID.randomUUID());
-        Map<String, Object> asked = ask(sponsorToken(sponsor), null, QbHelp.SPONSOR, "How do I publish?", "dashboard");
+        // F-M9 (a-1's deferred test): with the AI fee on the help is still the platform's: a sponsor without AI credit
+        // asks, and nothing is reserved or charged.
+        param(com.jabiz.quizbuks.setup.QbParams.AI_FEE_ENABLED, "true");
+        Map<String, Object> asked;
+        try {
+            asked = ask(sponsorToken(sponsor), null, QbHelp.SPONSOR, "How do I publish?", "dashboard");
+        } finally {
+            param(com.jabiz.quizbuks.setup.QbParams.AI_FEE_ENABLED, "false");
+        }
         runJobs();
+        assertThat(query("SELECT 1 FROM qb_prepayment WHERE sponsor_id = ? AND purpose = 'AI'", sponsor)).isEmpty();
+        assertThat(query("SELECT 1 FROM qb_ai_credit_movement_version WHERE sponsor_id = ?", sponsor)).isEmpty();
         assertThat(message(asked.get("messageId"))).containsEntry("job_status", QbHelp.ANSWERED);
         assertThat(query("SELECT 1 FROM qb_ai_usage WHERE sponsor_id = ?", sponsor)).isEmpty();
         assertThat(query("SELECT 1 FROM qb_ai_job WHERE sponsor_id = ?", sponsor)).isEmpty();
