@@ -105,7 +105,7 @@ public final class AiCreditReturns {
                     }
                     ReturnInput input = ctx.get(INPUT, ReturnInput.class);
                     ctx.put(GIVE_BACK, new AiCreditGiveBack.GiveBackInput(ctx.request().actorId(), "RETURN",
-                        input.amount(), occupied(ctx), input.requestKey()));
+                        input.amount(), occupied(ctx, true), input.requestKey()));
                 })
                 .step("Give it back", CallProcess.<ProcessContext>of(AiCreditGiveBack.GIVE_BACK, 1,
                     ctx -> ctx.get(GIVE_BACK), GIVEN_BACK)));
@@ -136,20 +136,25 @@ public final class AiCreditReturns {
                 .step("Read where the sponsor stands", QueryEntities.<ProcessContext>all(
                     array(AiFees.queries(AiCreditReturns::sponsor, false))))
                 .compute("Work out what the jobs hold", (metadata, ctx) -> ctx.put(GIVE_BACK,
-                    new AiCreditGiveBack.GiveBackInput(sponsor(ctx), "EXPIRE", null, occupied(ctx), null)))
+                    new AiCreditGiveBack.GiveBackInput(sponsor(ctx), "EXPIRE", null, occupied(ctx, false), null)))
                 .step("Void the expired fee credit", CallProcess.<ProcessContext>of(AiCreditGiveBack.GIVE_BACK, 1,
                     ctx -> ctx.get(GIVE_BACK), GIVEN_BACK)));
     }
 
     /**
      * What the sponsor's open jobs hold of the credit with tax. With fees waiting and no tax rate (never published),
-     * nothing is given back: what they hold with tax is not known.
+     * nothing is given back: what they hold with tax is not known. The sponsor's return is refused for it
+     * ({@link FeeCodes#AI_FEE_TAX_UNSET}, #699 re-review L3); the daily expiry's item fails (its run alerts).
      */
-    static BigDecimal occupied(ProcessContext ctx) {
+    static BigDecimal occupied(ProcessContext ctx, boolean sponsorsReturn) {
         AiFees.Standing standing = AiFees.standing(ctx, null);
         Optional<BigDecimal> taxRate = ctx.get(PARAMS, ParamValues.class).find(QbParams.FEE_TAX_RATE,
             BigDecimal.class);
         if (taxRate.isEmpty() && !standing.unbilled().isEmpty()) {
+            if (sponsorsReturn) {
+                throw new BusinessRuleViolationException(new Violation(null, FeeCodes.AI_FEE_TAX_UNSET,
+                    "The AI credit cannot be given back now: the fee tax rate is not set", Map.of()));
+            }
             throw new IllegalStateException("AI fees wait to be charged and the fee tax rate is not set");
         }
         return standing.occupied(taxRate.orElse(BigDecimal.ZERO));

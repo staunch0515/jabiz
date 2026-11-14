@@ -17,7 +17,8 @@ permissions: [qb.fee.system]
 ---*/
 -- The same condition as the item's read (qb.system.ai-fee-batch): finished, charged (CREDIT), with a fee, not in a
 -- charge, of an earlier month. A sponsor with more jobs than an item charges (200) is given one row a batch; each item
--- takes the earliest jobs still waiting, so the batches are taken in turn. An item's key is the earliest job of its
+-- takes the jobs still waiting from its key on (#699 re-review M2), so an item that fails leaves its own batch under
+-- its own key, for the run requested again for the same time, and no other item takes it. An item's key is the earliest job of its
 -- batch (#699 review M1): a job whose outcome was recorded after the month's run (its fee_period still the month
 -- before) gives its sponsor a key not run yet, so a run requested again for the same time (JOB_RUN_REQUEST) charges
 -- it, while the items that charged stay done. The item reads everything again under the sponsor's AI and wallet locks.

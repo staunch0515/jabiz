@@ -6,7 +6,8 @@ description: >-
   deleting an account erases the person's row and keeps everybody's, and a conversation already deleted adds only to
   everybody's, so the total may be more than the people's sum, never less. F-M9 (#692 re-review, a note): the charged AI
   jobs whose fee went beyond what they could take (their reservation, or the credit), the rest taken on by the platform,
-  in the month they ended and the month after (a job charged nothing is never taken in by a charge: the a-2 review M1);
+  until the month's charge takes them in, and at most in the month they ended and the month after (a job charged
+  nothing is never taken in by a charge: the a-2 review M1; #699 re-review L1);
   the reference is the job, the actual what the platform took on before tax
 entities: [QbHelpUsage, QbAiJob]
 datasets:
@@ -57,7 +58,7 @@ UNION ALL
 SELECT 'AI_RESERVATION_SHORT', CAST(j.{{QbAiJob.aiJobId}} AS varchar(100)), CAST(0 AS numeric(20, 0)),
        CAST(j.{{QbAiJob.absorbedYen}} AS numeric(20, 0))
 FROM {{QbAiJob}} j
-WHERE j.{{QbAiJob.feeMode}} = 'CREDIT' AND j.{{QbAiJob.absorbedYen}} > 0
+WHERE j.{{QbAiJob.feeMode}} = 'CREDIT' AND j.{{QbAiJob.feeChargeId}} IS NULL AND j.{{QbAiJob.absorbedYen}} > 0
   -- The month before :at in :zone and after (fee_period is the month the job ended in, in the same zone).
   AND j.{{QbAiJob.feePeriod}} >= to_char(date_trunc('month', CAST(:at AS timestamptz) AT TIME ZONE CAST(:zone AS text))
                                          - interval '1 month', 'YYYY-MM')

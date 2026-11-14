@@ -44,10 +44,12 @@ import java.util.Map;
  *       stays to be charged (the month's charge spends it first) and is voided by a later run.</li>
  * </ul>
  *
- * <p>Either way one posting (debit 2180, credit 2160 / 2190) and a negative part a lot, then
- * {@link Prepayments#toLots}, the same as a publication's release: fee credit whose grant expired or was voided goes
- * back and is voided again at once (debit 2160, credit 5140, its source the grant), so an expiry ends on 5140 with the
- * grant as the source, and the credit's parts still add up to what it holds (plan H3). One movement.
+ * <p>Either way one posting (debit 2180, credit 2190 for the fee credit and 2160 for the cash) and a negative part a
+ * lot, then {@link Prepayments#toLots}, the same as a publication's release: fee credit whose grant expired or was voided
+ * goes back and is voided again at once (debit 2190, credit 5140, its source the grant; #699 re-review L6), so an
+ * expiry ends on 5140 with the grant as the source, and the credit's parts still add up to what it holds (plan H3). One
+ * movement. A grant voided before it expired (a lighting grant whose node is no longer held) is as good as expired: its
+ * fee credit is never given back, the expiry voids it (#699 re-review M1, {@link AiFeeRules.Lot#expiredBy}).
  */
 public final class AiCreditGiveBack {
 
@@ -143,13 +145,10 @@ public final class AiCreditGiveBack {
 
     /**
      * What may be given back: what the credit holds by lot, less what the open jobs hold (the front of the order it is
-     * spent in) and the expired fee credit beyond that (voided by the next expiry, never returned).
+     * spent in) and the expired or voided fee credit beyond that (voided by the next expiry, never returned).
      */
     static BigDecimal returnable(List<AiFeeRules.Lot> lots, BigDecimal occupied, Instant now) {
-        BigDecimal held = lots.stream().map(AiFeeRules.Lot::amount).reduce(BigDecimal.ZERO, BigDecimal::add);
-        BigDecimal expired = AiFeeRules.expired(lots, occupied, now).stream().map(AiFeeRules.Lot::amount)
-            .reduce(BigDecimal.ZERO, BigDecimal::add);
-        return held.subtract(occupied).subtract(expired).max(BigDecimal.ZERO);
+        return AiFeeRules.usable(lots, occupied, now);
     }
 
     static void plan(ProcessContext ctx) {
@@ -239,16 +238,9 @@ public final class AiCreditGiveBack {
             balance));
     }
 
-    /** The lots the credit holds, in the order it is spent, with each grant's expiry. */
+    /** The lots the credit holds, in the order it is spent, with each grant's expiry and whether it was voided. */
     static List<AiFeeRules.Lot> lots(ProcessContext ctx) {
-        Map<String, Instant> expiries = Prepayments.expiries(ctx);
-        List<AiFeeRules.Lot> lots = new ArrayList<>();
-        for (Prepayments.Held held : Prepayments.heldLots(ctx)) {
-            boolean credit = QbFeeAccount.FEE_CREDIT.equals(held.subAccount());
-            lots.add(new AiFeeRules.Lot(credit, held.lotId(), held.amount(),
-                credit ? expiries.get(held.lotId()) : null));
-        }
-        return List.copyOf(lots);
+        return Prepayments.aiLots(ctx);
     }
 
     @SuppressWarnings("unchecked")

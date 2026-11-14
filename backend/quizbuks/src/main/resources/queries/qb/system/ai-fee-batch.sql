@@ -7,6 +7,7 @@ datasets:
 params:
   sponsorId: { like: QbAiJob.sponsorId, required: true, description: The sponsor }
   month:     { like: QbAiJob.feePeriod, required: true, description: "The month the job runs in (yyyy-MM): the jobs of the months before it" }
+  fromJobId: { like: QbAiJob.aiJobId, description: "The item's key, the earliest job of its batch: the jobs from it on (none: from the earliest waiting)" }
 results:
   aiJobId: { from: QbAiJob.aiJobId }
 list:
@@ -27,5 +28,10 @@ FROM (SELECT j.{{QbAiJob.aiJobId}} AS aiJobId
       WHERE j.{{QbAiJob.sponsorId}} = :sponsorId AND j.{{QbAiJob.feeMode}} = 'CREDIT'
         AND j.{{QbAiJob.feeChargeId}} IS NULL AND j.{{QbAiJob.finishedAt}} IS NOT NULL AND j.{{QbAiJob.feeYen}} > 0
         AND j.{{QbAiJob.feePeriod}} < :month
+        -- #699 re-review M2: from the item's key on, in the order the due template numbers the batches.
+        AND (CAST(:fromJobId AS text) IS NULL
+             OR (j.{{QbAiJob.finishedAt}}, j.{{QbAiJob.aiJobId}}) >= (
+                 SELECT k.{{QbAiJob.finishedAt}}, k.{{QbAiJob.aiJobId}} FROM {{QbAiJob}} k
+                 WHERE k.{{QbAiJob.aiJobId}} = :fromJobId))
       ORDER BY j.{{QbAiJob.finishedAt}}, j.{{QbAiJob.aiJobId}}
       LIMIT 200) b

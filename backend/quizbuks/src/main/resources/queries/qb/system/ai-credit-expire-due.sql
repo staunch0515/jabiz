@@ -1,6 +1,6 @@
 /*---
 id: qb.system.ai-credit-expire-due
-description: The sponsors whose AI credit holds fee credit expired by the run's time (the items of the daily job qb.ai-credit-expire, F-M9a-2)
+description: The sponsors whose AI credit holds fee credit expired by the run's time or voided before it expired (the items of the daily job qb.ai-credit-expire, F-M9a-2)
 entities: [QbPrepayment, QbFeePayment, QbFeeCreditGrant]
 datasets:
   QbPrepayment: urn:jabiz:dataset:default:QbPrepayment
@@ -18,7 +18,8 @@ list:
 permissions: [qb.fee.system]
 ---*/
 -- What each open AI credit holds of each grant, as qb.system.ai-credit-held reads one credit (its own parts, signed,
--- less the positive parts fees took of it), kept where the grant expired by :at and something is left. A sponsor whose
+-- less the positive parts fees took of it), kept where the grant expired by :at, or was voided before it expired (a
+-- lighting grant whose node is no longer held: as good as expired, #699 re-review M1), and something is left. A sponsor whose
 -- open jobs hold all of it is listed every day until the month's charge spends it; the item then voids nothing. The
 -- item reads everything again under the sponsor's AI and wallet locks. The key: the sponsor's id hashed (36 at most).
 WITH credits AS (
@@ -37,4 +38,4 @@ WITH credits AS (
 SELECT DISTINCT CAST(md5(h.r_sponsor) AS varchar(36)) AS itemKey, CAST(h.r_sponsor AS varchar(128)) AS sponsorId
 FROM (SELECT r_sponsor, r_grant, sum(r_amount) AS r_held FROM parts GROUP BY r_sponsor, r_grant) h
 JOIN {{QbFeeCreditGrant}} g ON g.{{QbFeeCreditGrant.grantId}} = h.r_grant
-WHERE h.r_held > 0 AND g.{{QbFeeCreditGrant.expiresAt}} <= :at
+WHERE h.r_held > 0 AND (g.{{QbFeeCreditGrant.expiresAt}} <= :at OR g.{{QbFeeCreditGrant.voidedAt}} IS NOT NULL)

@@ -136,7 +136,7 @@
 | `MANAGEMENT_OPENTELEMETRY_LOGGING_EXPORT_OTLP_ENDPOINT` | 日志 |
 | `COMPOSE_PROFILES=observability` | 启动本环境的 LGTM（`deploy/quizbuks/server/compose.yaml` 的 `lgtm`）；上面三项即 `http://lgtm:4318/v1/traces`、`…/v1/metrics`、`…/v1/logs` |
 | `JABIZ_ALERT_EMAIL`、`GF_SMTP_ENABLED=true`、`GF_SMTP_HOST`、`GF_SMTP_USER`、`GF_SMTP_PASSWORD`、`GF_SMTP_FROM_ADDRESS` | 告警的收件人（值班的人，几个以 `;` 分隔）与 Grafana 发信用的 SMTP（§5） |
-| `JABIZ_ALERT_*` 的阈值 | 缺省见 compose（平台 13 §7）；QuizBuks 的 `JABIZ_ALERT_QB_AI_HELD_MAX`（§5"AI 作业暂停"）、`JABIZ_ALERT_QB_HELP_COST_PERCENT`（§5“AI 费用接近美元阈值”）、`JABIZ_ALERT_QB_HELP_USAGE_PERCENT`（§5"AI 问题解答的用量"，缺省 80） |
+| `JABIZ_ALERT_*` 的阈值 | 缺省见 compose（平台 13 §7）；QuizBuks 的 `JABIZ_ALERT_QB_AI_HELD_MAX`（§5"AI 作业暂停"）、`JABIZ_ALERT_QB_HELP_COST_PERCENT`（§5“AI 费用接近美元阈值”）、`JABIZ_ALERT_QB_HELP_USAGE_PERCENT`（§5"AI 问题解答的用量"，缺省 80）、`JABIZ_ALERT_QB_AI_EXPIRE_ITEMS_MAX`（§5"AI 额度到期的项数"，缺省 1000） |
 | `QB_GRAFANA_PORT` | Grafana 在服务器 `127.0.0.1` 上的端口（缺省 3000；staging 与 production 在同一台服务器上时各用一个），经 SSH 隧道访问 |
 
 遥测缺省不外发、只经 OTLP 推送；**不开放**匿名的指标端点（应用端口上的 `/actuator/metrics` 不要暴露，平台 13）。
@@ -361,6 +361,7 @@ FROM pg_stat_statements ORDER BY total_exec_time DESC LIMIT 20;
 | AI 作业暂停（§7.8） | QuizBuks `qb-ai-paused`（仪表 `jabiz.external.job.held{job_type=~"qb.ai.*"}`，不含 AI 问题解答的 `qb.ai.help`） | 缺省 `JABIZ_ALERT_QB_AI_HELD_MAX=1`：AI 有意关闭时不告警；开启 `qb.ai.enabled` 后在 `.env` 设为 `0` 并重启 LGTM，此后暂停超过 5 分钟即告警 |
 | AI 问题解答的用量（§7.34） | QuizBuks `qb-help-usage-high`（仪表 `qb.help.usage.percent`：本月已用 `qb.help.global-monthly-tokens` 的百分比，作业结局与每日任务 `qb.help-usage` 更新） | 缺省 `JABIZ_ALERT_QB_HELP_USAGE_PERCENT=80`；到 100 % 时新的提问被拒（可直接转人工），到月底或经受控变更调高上限 |
 | AI 费用接近美元阈值（§7.53） | QuizBuks `qb-help-cost-high`（仪表 `qb.help.cost.percent`：本月帮助与审核人翻译核对的估算美元占 `qb.help.global-monthly-usd-alert` 的百分比，作业结局与每日任务 `qb.help-usage` 更新；仪表带月份，换月后读 0） | 缺省 `JABIZ_ALERT_QB_HELP_COST_PERCENT=100`；只提醒，不停。每日任务同时给财务和超级管理员建待办 `qb.help.cost-high`（每月至多一个，上个月的也检查，不自动关闭） |
+| AI 额度到期的项数（§7.56） | QuizBuks `qb-ai-expire-items`（26 小时内 `QB_AI_CREDIT_EXPIRE_ITEM` 的流程数，即每日任务 `qb.ai-credit-expire` 的项数） | 缺省 `JABIZ_ALERT_QB_AI_EXPIRE_ITEMS_MAX=1000`；只提醒。一次至多 10000 项，其余留到次日；规模见 §7.56"AI 额度的到期" |
 | 任务 | 平台 `jabiz-job-failed`（`FAILED` / `PARTIAL`）、`jabiz-job-locked` | 包括 `qb.analytics`、`qb.usage-snapshot`、`qb.fee-*`、`qb.broadcast-*` 等每个任务 |
 | 站内信、平台费、邮件补发 | 平台 `jabiz-job-item-failed`、`jabiz-outbox-failed` | 平台费的核对项 `FEES_RECEIVABLE` 属于 `qb-reconcile-diff`；`sys_mail_message` 中 `FAILED` 增多看发件服务商；徽标模板 `qb.app.inbox-unread` 的耗时（目标 < 5 ms，`perf/Q7c-inbox.md`）在仪表盘上看 |
 | 发起方分析（§7.7）、资源占用的计量（§7.22） | 平台 `jabiz-job-failed` | 30 分钟内没有成功的分析、当天缺少计量快照（`SELECT max(snapshot_day) FROM qb_usage_day` 早于今天）：仪表盘与只读查询 |
@@ -1515,6 +1516,10 @@ Quiz 与发布有主题词（平台词表中的词与自定义词），学者可
 ### 7.56 AI 费的预留与实测（F-M9）
 
 收费的 AI 请求在发起时按"可能的最大费用"（含税，税向上取整）从 AI 额度中预留；作业结束时按有回答的用量收费，**至多收到预留为止**。超出部分由平台承担（`qb_ai_job.absorbed_yen`），每日核对以提示级 `AI_RESERVATION_SHORT` 列出（引用为作业编号，在作业结束的当月与下一月列出：费用被封到 0 的作业不会被月度记费收进，所以按月份而不按记费结束）。
+
+**AI 额度的退回与到期**（F-M9a-2）：发起方可随时退回 AI 额度（`QB_AI_CREDIT_RETURN`，需已验证的邮箱；先退现金、再退赠送，至多"额度 − 进行中作业的预留与未记费的含税费用 − 已到期或已作废的赠送"）。赠送到期，或在到期前被作废（点亮赠送的节点不再持有时，`LightGrants`），额度里属于它的部分不再能用于新的请求（请求时就扣除，不等每日任务）、也不能退回，由每日任务 `qb.ai-credit-expire`（每天 03:47，财年时区）作废：先记 2180 → 2190（月报 `AI_CREDIT_VOIDED`），同一时刻按原赠送再作废 2190 → 5140（`FEE_CREDIT_VOIDED`）。进行中的作业所占的部分留到月度记费先用掉，之后的一次每日任务再作废。税率未设置而有未记费的费用时，退回以 422 `QB_AI_FEE_TAX_UNSET` 拒绝，到期的项失败（任务告警）。
+
+- **规模**：每个"额度中还有已到期或已作废的赠送"的发起方一项（模板 `qb.system.ai-credit-expire-due`，按发起方去重）；每项在发起方的 AI 锁与钱包锁下读一次额度（按批次而非按部分）并至多过两笔账。发起方的作业占着全部到期部分时，他每天都会被列出、该项什么也不作废，直到月度记费把它用掉（至多一个月）。一次运行至多 10000 项（`maxItems`），其余留到次日。项数超过 `JABIZ_ALERT_QB_AI_EXPIRE_ITEMS_MAX`（缺省 1000）时告警 `qb-ai-expire-items`（§5）：通常是大批赠送同时到期或被作废；用模板 `qb.system.ai-credit-expire-due` 看是哪些发起方，再看他们赠送的来源（`qb_fee_credit_grant.source`），必要时把一批到期日错开。
 
 平台承担的金额不入账：按月看用模板 `qb.admin.ai-fee-monthly`（按作业结束的月份 `fee_period`：收费作业数、向发起方收的费用、平台承担 `absorbed_yen`，都是**含加价的税前日元**）；记费本身在月报的 `AI_CHARGED`、从额度付的在 `AI_CREDIT_USED`。
 

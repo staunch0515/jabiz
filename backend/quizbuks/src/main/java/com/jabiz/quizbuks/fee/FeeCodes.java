@@ -81,6 +81,11 @@ public final class FeeCodes {
     public static final String AI_CREDIT_FUNDS_SHORT = "QB_AI_CREDIT_FUNDS_SHORT";
     /** F-M9a-2: a return of more AI credit than may be given back (detail {@code returnable}), or of none. */
     public static final String AI_CREDIT_RETURN_ABOVE = "QB_AI_CREDIT_RETURN_ABOVE";
+    /**
+     * #699 re-review L3: a return of AI credit while fees wait to be charged and the fee tax rate is not set (what they
+     * hold with tax is not known).
+     */
+    public static final String AI_FEE_TAX_UNSET = "QB_AI_FEE_TAX_UNSET";
     /** F-M8: a top-up that asks for more at once than {@code qb.exposure.top-up.max}, or beyond what a publication buys. */
     public static final String EXPOSURE_TOP_UP_RANGE = "QB_EXPOSURE_TOP_UP_RANGE";
 
@@ -101,7 +106,7 @@ public final class FeeCodes {
         AUDIENCE_REFUND_NOT_OPEN, EXPOSURE_PRICE_REQUIRED, EXPOSURE_PRICE_RANGE, EXPOSURE_RANGE_MISSING,
         EXPOSURE_DEPOSIT_RANGE, EXPOSURE_PURCHASE_REQUIRED, EXPOSURE_PURCHASED_CHANGED, EXPOSURE_PREPAYMENT_CLOSED,
         EXPOSURE_TOP_UP_RANGE, EXPOSURE_NOT_BOUGHT, EXPOSURE_PARTS_LIMIT, AI_FEE_OFF, AI_CREDIT_MIN, AI_CREDIT_REPEATED,
-        AI_CREDIT_FUNDS_SHORT, AI_CREDIT_RETURN_ABOVE);
+        AI_CREDIT_FUNDS_SHORT, AI_CREDIT_RETURN_ABOVE, AI_FEE_TAX_UNSET);
 
     private FeeCodes() {}
 }

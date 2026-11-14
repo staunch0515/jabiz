@@ -124,7 +124,7 @@ public class AiConfig {
                     com.jabiz.quizbuks.fee.FeeRules.period(scheduledTime, zone)), "itemKey"),
                 qbAiFeeSettle,
                 (scheduledTime, row) -> new AiFeeSettlements.SettleRef(String.valueOf(row.get("sponsorId")),
-                    com.jabiz.quizbuks.fee.FeeRules.period(scheduledTime, zone)))
+                    com.jabiz.quizbuks.fee.FeeRules.period(scheduledTime, zone), String.valueOf(row.get("itemKey"))))
             .maxItems(10_000);
     }
 

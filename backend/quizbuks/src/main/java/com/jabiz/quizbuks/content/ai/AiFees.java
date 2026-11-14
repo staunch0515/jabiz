@@ -9,6 +9,7 @@ import com.jabiz.runtime.process.steps.QueryEntities;
 import com.jabiz.runtime.BusinessRuleViolationException;
 import com.jabiz.quizbuks.fee.AiFeeRules;
 import com.jabiz.quizbuks.fee.FeeRules;
+import com.jabiz.quizbuks.fee.Prepayments;
 import com.jabiz.quizbuks.fee.QbFees;
 import com.jabiz.quizbuks.fee.QbPrepayments;
 import com.jabiz.quizbuks.operator.QbOperators;
@@ -165,12 +166,22 @@ final class AiFees {
             throw new BusinessRuleViolationException(problems);
         }
         BigDecimal reservation = AiFeeRules.reservation(maxUsd, fee.markup(), fee.usdJpy(), fee.taxRate());
-        BigDecimal available = standing(ctx, null).available(fee.taxRate());
+        Standing standing = standing(ctx, null);
+        BigDecimal available = standing.available(fee.taxRate());
+        if (readsLots(ctx)) {
+            // #699 re-review L2: expired fee credit, or a voided grant's, beyond what the open jobs hold is the next
+            // expiry's to void: never reserved by a new request (no day's window before the daily job).
+            available = available.min(AiFeeRules.usable(Prepayments.aiLots(ctx), standing.occupied(fee.taxRate()),
+                ctx.opTime()));
+        }
         if (available.compareTo(reservation) < 0) {
             Map<String, Object> details = new LinkedHashMap<>();
             details.put("needed", reservation);
             details.put("available", available);
-            details.put("minPurchase", fee.minPurchase());
+            if (fee.minPurchase() != null) {
+                // Not set (an optional parameter): no detail; a null one would fail the refusal itself (a 500).
+                details.put("minPurchase", fee.minPurchase());
+            }
             throw new BusinessRuleViolationException(List.of(new Violation(null, AiCodes.CREDIT_SHORT,
                 "The AI credit holds " + available + " yen; this request may cost up to " + reservation, details)));
         }
@@ -178,6 +189,24 @@ final class AiFees {
         ctx.put(FROZEN, new Frozen(QbAi.FEE_CREDIT,
             operator.isEmpty() ? null : (String) operator.getFirst().get("operatorId"), fee.markup(), fee.usdJpy(),
             reservation));
+    }
+
+    /**
+     * Whether a request reads its credit by lot ({@link Prepayments#HELD_TEMPLATE}, #699 re-review L2): a charged kind
+     * with the fee on and an open credit holding something.
+     */
+    static boolean readsLots(ProcessContext ctx) {
+        if (!ctx.contains(AiProcesses.SETTINGS) || !ctx.contains(AiProcesses.KIND)
+            || !ctx.get(AiProcesses.SETTINGS, AiSettings.class).fee().enabled()
+            || !CHARGED_KINDS.contains((String) ctx.get(AiProcesses.KIND))) {
+            return false;
+        }
+        List<EntityInstance> credit = rows(ctx, CREDIT_ROWS);
+        return !credit.isEmpty() && money(credit.getFirst().get("remaining")).signum() > 0;
+    }
+
+    static Map<String, Object> lotsParams(ProcessContext ctx) {
+        return Map.of("prepaymentId", String.valueOf(rows(ctx, CREDIT_ROWS).getFirst().id()));
     }
 
     /** The fee's values of a new job, as {@link #reserve} froze them ({@code NONE} when it did not run). */

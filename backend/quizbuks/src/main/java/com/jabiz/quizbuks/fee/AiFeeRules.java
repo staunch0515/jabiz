@@ -236,20 +236,46 @@ public final class AiFeeRules {
      * A lot of the credit, in the order it is spent (the fee credit first, the earliest to expire first, then cash).
      *
      * @param expiresAt a grant's expiry; null for cash
+     * @param voided    the grant was voided before it expired (a lighting grant whose node is no longer held,
+     *                  {@code LightGrants}): its fee credit is as good as expired (#699 re-review M1)
      */
-    public record Lot(boolean credit, String lotId, BigDecimal amount, java.time.Instant expiresAt) {}
+    public record Lot(boolean credit, String lotId, BigDecimal amount, java.time.Instant expiresAt, boolean voided) {
+
+        public Lot(boolean credit, String lotId, BigDecimal amount, java.time.Instant expiresAt) {
+            this(credit, lotId, amount, expiresAt, false);
+        }
+
+        /** Fee credit that may no longer be spent or given back at {@code now}: expired, or its grant voided. */
+        public boolean expiredBy(java.time.Instant now) {
+            return credit && (voided || expiresAt != null && !expiresAt.isAfter(now));
+        }
+    }
+
+    /**
+     * What of the credit may still be used or given back (#699 re-review L2, plan §4 item 4): what it holds by lot,
+     * less what the open jobs hold (the front of the order it is spent in) and the expired or voided fee credit beyond
+     * that (voided by the next expiry, never spent by a new request nor returned).
+     */
+    public static BigDecimal usable(List<Lot> lotsInOrder, BigDecimal occupied, java.time.Instant now) {
+        BigDecimal held = lotsInOrder.stream().map(Lot::amount).reduce(BigDecimal.ZERO, BigDecimal::add);
+        BigDecimal expired = expired(lotsInOrder, occupied, now).stream().map(Lot::amount)
+            .reduce(BigDecimal.ZERO, BigDecimal::add);
+        return held.subtract(occupied).subtract(expired).max(BigDecimal.ZERO);
+    }
 
     /**
      * What a return gives back (plan §4 item 4), {@code amount} at most: the reverse of the order the credit is spent
-     * in, the cash first (the last taken first), then the fee credit, the latest to expire first. What the open jobs
-     * hold and the expired fee credit are at the front of that order, so a return within what may be given back leaves
-     * them where they are.
+     * in, the cash first (the last taken first), then the fee credit, the latest to expire first, a voided grant's
+     * last (#699 re-review M1: its expiry may be late, but it is as good as expired). What the open jobs hold and the
+     * expired fee credit are at the front of that order, so a return within what may be given back leaves them where
+     * they are.
      */
     public static List<Lot> giveBack(List<Lot> lots, BigDecimal amount) {
         List<Lot> order = new ArrayList<>(lots.stream().filter(l -> !l.credit())
             .sorted(java.util.Comparator.comparing(Lot::lotId, java.util.Comparator.reverseOrder())).toList());
         order.addAll(lots.stream().filter(Lot::credit)
-            .sorted(java.util.Comparator.comparing(Lot::expiresAt, java.util.Comparator.reverseOrder())
+            .sorted(java.util.Comparator.comparing(Lot::voided)
+                .thenComparing(Lot::expiresAt, java.util.Comparator.reverseOrder())
                 .thenComparing(Lot::lotId, java.util.Comparator.reverseOrder())).toList());
         List<Lot> back = new ArrayList<>();
         BigDecimal left = amount;
@@ -259,7 +285,7 @@ public final class AiFeeRules {
             }
             BigDecimal part = lot.amount().min(left);
             if (part.signum() > 0) {
-                back.add(new Lot(lot.credit(), lot.lotId(), part, lot.expiresAt()));
+                back.add(new Lot(lot.credit(), lot.lotId(), part, lot.expiresAt(), lot.voided()));
                 left = left.subtract(part);
             }
         }
@@ -268,8 +294,9 @@ public final class AiFeeRules {
 
     /**
      * What of the expired fee credit is voided (plan §4 item 5): the lots in the order they are spent (as given), the
-     * open jobs taking {@code occupied} from them in that order first; what an expired grant holds beyond its share of
-     * that is voided, the rest stays to be charged (the month's charge spends it first) and is voided after.
+     * open jobs taking {@code occupied} from them in that order first; what an expired grant, or one voided before it
+     * expired (#699 re-review M1), holds beyond its share of that is voided, the rest stays to be charged and is voided
+     * after.
      */
     public static List<Lot> expired(List<Lot> lotsInOrder, BigDecimal occupied, java.time.Instant now) {
         List<Lot> voided = new ArrayList<>();
@@ -278,8 +305,8 @@ public final class AiFeeRules {
             BigDecimal used = lot.amount().min(taken);
             taken = taken.subtract(used);
             BigDecimal free = lot.amount().subtract(used);
-            if (lot.credit() && lot.expiresAt() != null && !lot.expiresAt().isAfter(now) && free.signum() > 0) {
-                voided.add(new Lot(true, lot.lotId(), free, lot.expiresAt()));
+            if (lot.expiredBy(now) && free.signum() > 0) {
+                voided.add(new Lot(true, lot.lotId(), free, lot.expiresAt(), lot.voided()));
             }
         }
         return List.copyOf(voided);

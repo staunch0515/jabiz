@@ -218,4 +218,191 @@ class AiCreditReturnIT extends AiCreditItSupport {
         assertThat(movements(sponsor).stream().filter(m -> m.startsWith("EXPIRE"))).hasSize(1);
         assertThat(heldByParts(sponsor)).isEqualByComparingTo(withTax);
     }
+
+    /**
+     * A grant voided before it expired, as {@code LightGrants} voids a lighting grant whose node is no longer held: what
+     * it still holds (not what the AI credit holds of it) voided, 2190 to 5140 with the grant as the source.
+     */
+    private void voidGrant(String grantId) {
+        Map<String, Object> grant = grantRow(grantId);
+        BigDecimal left = money(grant.get("remaining"));
+        String sponsor = String.valueOf(grant.get("sponsor_id"));
+        execute("UPDATE qb_fee_credit_grant SET remaining = 0, voided_amount = voided_amount + ?, voided_at = ?, "
+            + "version = version + 1 WHERE grant_id = ?", left, Timestamp.from(clock.instant()), grantId);
+        run("LEDGER_POST", com.jabiz.runtime.test.TestTokens.bearer(tokens, "ledger-test", "ledger.post"),
+            body("bookingTime", clock.instant().toString(), "description", "Lighting grant voided (test)",
+                "sourceEntity", "QbFeeCreditGrant", "sourceId", grantId, "entries", List.of(
+                    body("accountCode", "2190", "direction", "DEBIT", "amount", left, "dimensions",
+                        Map.of("party", sponsor)),
+                    body("accountCode", "5140", "direction", "CREDIT", "amount", left, "dimensions",
+                        Map.of("party", sponsor)))));
+        execute("UPDATE qb_wallet SET balance = balance - ?, version = version + 1 WHERE owner_id = ? AND "
+            + "kind = 'FEE_CREDIT'", left, sponsor);
+    }
+
+    /**
+     * #699 re-review M1: fee credit of a grant voided before it expired is as good as expired: never given back (it
+     * would go back and be voided at once, the sponsor getting nothing for what the return said), and the daily expiry
+     * voids it.
+     */
+    @Test
+    void aGrantVoidedBeforeItExpiresIsNotGivenBackAndTheExpiryVoidsIt() {
+        feeOn();
+        String sponsor = newSponsor("ai-voided-" + UUID.randomUUID());
+        cash(sponsor, 1_000);
+        buy(sponsor, 1_000);
+        String grantId = grant(sponsor, 1_000);
+        buy(sponsor, 600);
+        assertThat(money(grantRow(grantId).get("remaining"))).isEqualByComparingTo("400");
+        voidGrant(grantId);
+        BigDecimal promotionBefore = net("5140", sponsor);
+
+        // Only the cash may be given back.
+        Map<String, Object> above = refused(AiCreditReturns.RETURN, sponsorToken(sponsor), body("amount", 1_001,
+            "requestKey", "k-voided"), 422);
+        assertThat(codes(above)).containsExactly(FeeCodes.AI_CREDIT_RETURN_ABOVE);
+        assertThat(String.valueOf(above)).contains("1000");
+        Map<String, Object> out = giveBack(sponsor, null);
+        assertThat(money(out.get("amount"))).isEqualByComparingTo("1000");
+        assertThat(money(out.get("cash"))).isEqualByComparingTo("1000");
+        assertThat(money(out.get("voided"))).isZero();
+        assertThat(money(aiCredit(sponsor).get("remaining"))).isEqualByComparingTo("600");
+        assertThat(heldByParts(sponsor)).isEqualByComparingTo("600");
+        assertThat(money(giveBack(sponsor, null).get("amount"))).isZero();
+
+        // The daily expiry lists the sponsor and voids the 600 (2180 to 2190, then 2190 to 5140, the grant the source).
+        assertThat(runJob(qbAiCreditExpireJob)).isEqualTo(JobRunner.Outcome.SUCCEEDED);
+        assertThat(money(aiCredit(sponsor).get("remaining"))).isZero();
+        assertThat(heldByParts(sponsor)).isZero();
+        assertThat(money(grantRow(grantId).get("voided_amount"))).isEqualByComparingTo("1000");
+        assertThat(money(grantRow(grantId).get("remaining"))).isZero();
+        assertThat(promotionBefore.subtract(net("5140", sponsor))).isEqualByComparingTo("600");
+        assertThat(movements(sponsor)).last().isEqualTo("EXPIRE -600 -600/0 0");
+    }
+
+    /**
+     * #699 re-review L2: a request does not count expired fee credit, nor a voided grant's, as available: it is refused
+     * at once, not after the daily expiry voided it.
+     */
+    @Test
+    void aRequestDoesNotReserveExpiredOrVoidedFeeCredit() {
+        feeOn();
+        String sponsor = newSponsor("ai-expired-request-" + UUID.randomUUID());
+        String expiring = grant(sponsor, 2_000);
+        buy(sponsor, 2_000);
+        String token = sponsorFull(sponsor);
+        List<String> quiz = quizWithArticle(token, title(), "Material for a request on expired credit.");
+        execute("UPDATE qb_fee_credit_grant SET expires_at = ? WHERE grant_id = ?",
+            Timestamp.from(clock.instant().plusSeconds(60)), expiring);
+        advance(Duration.ofMinutes(5));
+        token = sponsorFull(sponsor);
+        assertThat(codes(refused(com.jabiz.quizbuks.content.ai.AiProcesses.REQUEST, token, requestInput(quiz.get(0),
+            List.of(quiz.get(1)), 2), 422))).containsExactly(com.jabiz.quizbuks.content.ai.AiCodes.CREDIT_SHORT);
+
+        // A voided grant's the same; a live one's is reserved.
+        String voided = grant(sponsor, 2_000);
+        buy(sponsor, 1_500);
+        voidGrant(voided);
+        assertThat(codes(refused(com.jabiz.quizbuks.content.ai.AiProcesses.REQUEST, token, requestInput(quiz.get(0),
+            List.of(quiz.get(1)), 2), 422))).containsExactly(com.jabiz.quizbuks.content.ai.AiCodes.CREDIT_SHORT);
+        grant(sponsor, 2_000);
+        buy(sponsor, 2_000);
+        Object aiJobId = request(token, quiz.get(0), List.of(quiz.get(1)), 2).get("aiJobId");
+        assertThat(money(job(aiJobId).get("reserved_yen"))).isPositive();
+    }
+
+    /** #699 re-review L3: with fees waiting and no tax rate, a return is refused with its own code, not a 500. */
+    @Test
+    void aReturnWithoutATaxRateIsRefusedWithItsCode() {
+        feeOn();
+        List<String> s = charged("ai-return-no-tax-");
+        String sponsor = s.get(0);
+        Object aiJobId = request(s.get(1), s.get(2), List.of(s.get(3)), 2).get("aiJobId");
+        runUntilDone(aiJobId);
+        Map<String, Object> rate = query("SELECT * FROM sys_param_version WHERE param_key = ? ORDER BY "
+            + "effect_start_time DESC, version_no DESC LIMIT 1", com.jabiz.quizbuks.setup.QbParams.FEE_TAX_RATE)
+            .getFirst();
+        String insert = "INSERT INTO sys_param_version (param_id, version_no, effect_start_time, created_time, "
+            + "process_seq_id, is_deleted, param_key, value_kind, param_value, description) "
+            + "SELECT param_id, version_no + 1, ?, ?, process_seq_id, ?, param_key, value_kind, param_value, "
+            + "description FROM sys_param_version WHERE row_id = ?";
+        // The rate removed (a tombstone, as a deletion writes it) from now on; put back afterwards.
+        execute(insert, Timestamp.from(clock.instant()), Timestamp.from(clock.instant()), true, rate.get("row_id"));
+        try {
+            advance(Duration.ofSeconds(1));
+            assertThat(codes(refused(AiCreditReturns.RETURN, sponsorToken(sponsor), body("amount", 100,
+                "requestKey", "k-no-tax"), 422))).containsExactly(FeeCodes.AI_FEE_TAX_UNSET);
+        } finally {
+            Object tombstone = query("SELECT row_id FROM sys_param_version WHERE param_key = ? ORDER BY version_no "
+                + "DESC LIMIT 1", com.jabiz.quizbuks.setup.QbParams.FEE_TAX_RATE).getFirst().get("row_id");
+            advance(Duration.ofSeconds(1));
+            execute(insert, Timestamp.from(clock.instant()),
+                Timestamp.from(clock.instant()), false, tombstone);
+            advance(Duration.ofSeconds(1));
+        }
+        assertThat(money(giveBack(sponsor, 100L).get("amount"))).isEqualByComparingTo("100");
+    }
+
+    /**
+     * #699 re-review L5: a return, the daily expiry's item, a job's outcome and the month's charge at once: each waits
+     * for the sponsor's AI lock (then the wallet's), none fails, nothing is voided or given back twice, and the
+     * credit's parts add up to what it holds afterwards.
+     */
+    @Test
+    void aReturnAnExpiryAnOutcomeAndTheMonthsChargeAtOnceAllEndAndTheCreditAddsUp() throws Exception {
+        feeOn();
+        List<String> s = charged("ai-return-race-");
+        String sponsor = s.get(0);
+        Object waiting = request(s.get(1), s.get(2), List.of(s.get(3)), 2).get("aiJobId");
+        runUntilDone(waiting);
+        String grantId = grant(sponsor, 1_000);
+        buy(sponsor, 1_000);
+        // The next month: the job waits for its charge, the grant has expired, another job waits for its outcome.
+        java.time.ZoneId zone = java.time.ZoneId.of("Asia/Tokyo");
+        java.time.YearMonth next = java.time.YearMonth.from(clock.instant().atZone(zone)).plusMonths(1);
+        execute("UPDATE qb_fee_credit_grant SET expires_at = ? WHERE grant_id = ?",
+            Timestamp.from(next.atDay(1).atStartOfDay(zone).toInstant()), grantId);
+        clock.set(next.atDay(1).atTime(0, 30).atZone(zone).toInstant());
+        String token = sponsorFull(sponsor);
+        List<String> other = quizWithArticle(token, title(), "More material for the race.");
+        Object running = request(token, other.get(0), List.of(other.get(1)), 2).get("aiJobId");
+
+        var settle = java.util.concurrent.CompletableFuture.supplyAsync(() -> systemRun(
+            com.jabiz.quizbuks.content.ai.AiFeeSettlements.SETTLE, body("sponsorId", sponsor, "month",
+                next.toString())));
+        var expire = java.util.concurrent.CompletableFuture.supplyAsync(() -> systemRun(AiCreditReturns.EXPIRE_ITEM,
+            body("sponsorId", sponsor)));
+        var returned = java.util.concurrent.CompletableFuture.supplyAsync(() -> giveBack(sponsor, null));
+        var outcome = java.util.concurrent.CompletableFuture.runAsync(() -> runUntilDone(running));
+        java.util.concurrent.CompletableFuture.allOf(settle, expire, returned, outcome).get(120,
+            java.util.concurrent.TimeUnit.SECONDS);
+
+        assertThat(job(running).get("finished_at")).isNotNull();
+        assertThat(job(waiting).get("fee_charge_id")).isNotNull();
+        BigDecimal remaining = money(aiCredit(sponsor).get("remaining"));
+        assertThat(heldByParts(sponsor)).isEqualByComparingTo(remaining);
+        assertThat(movements(sponsor).stream().filter(m -> m.startsWith("RETURN"))).hasSize(1);
+        assertGrantAddsUp(sponsor, grantId);
+        // Run again: what the ended job's reservation held beyond its fee is voided now; a third run voids nothing.
+        systemRun(AiCreditReturns.EXPIRE_ITEM, body("sponsorId", sponsor));
+        assertGrantAddsUp(sponsor, grantId);
+        BigDecimal voided = money(grantRow(grantId).get("voided_amount"));
+        systemRun(AiCreditReturns.EXPIRE_ITEM, body("sponsorId", sponsor));
+        assertThat(money(grantRow(grantId).get("voided_amount"))).isEqualByComparingTo(voided);
+        assertThat(heldByParts(sponsor)).isEqualByComparingTo(money(aiCredit(sponsor).get("remaining")));
+    }
+
+    /**
+     * The grant's 1000: what charges took of it, what the credit still holds of it (for fees not charged yet: voided by
+     * a later expiry), and the rest voided; never given back.
+     */
+    private static void assertGrantAddsUp(String sponsor, String grantId) {
+        String creditId = String.valueOf(aiCredit(sponsor).get("prepayment_id"));
+        BigDecimal spent = money(query("SELECT coalesce(sum(amount), 0) AS t FROM qb_fee_payment_version WHERE "
+            + "grant_id = ? AND prepayment_id = ? AND amount > 0", grantId, creditId).getFirst().get("t"));
+        BigDecimal held = money(query("SELECT coalesce(sum(amount), 0) AS t FROM qb_fee_payment_version WHERE "
+            + "grant_id = ? AND target_id = ?", grantId, creditId).getFirst().get("t")).subtract(spent);
+        assertThat(held).isNotNegative();
+        assertThat(money(grantRow(grantId).get("voided_amount")).add(spent).add(held)).isEqualByComparingTo("1000");
+    }
 }

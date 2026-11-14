@@ -183,7 +183,8 @@ public final class Prepayments {
     static final String USED_PARTS = "usedParts";
     static final String GRANTS = "grants";
     /** F-M9: the lots an AI credit holds ({@value #HELD_TEMPLATE}). */
-    static final String HELD_LOTS = "heldLots";
+    /** Where {@value #HELD_TEMPLATE}'s rows are put (the AI processes read them too). */
+    public static final String HELD_LOTS = "heldLots";
     static final String TAKEN = "taken";
     static final String SETTLED = "settled";
     static final String CHARGE_INPUT = "chargeInput";
@@ -543,6 +544,29 @@ public final class Prepayments {
             }
         }
         return order(lots, expiries);
+    }
+
+    /**
+     * The AI credit's lots as {@link #heldLots} reads and orders them, with each grant's expiry and whether it was
+     * voided before it expired (#699 re-review M1: {@link AiFeeRules.Lot#expiredBy}).
+     */
+    @SuppressWarnings("unchecked")
+    public static List<AiFeeRules.Lot> aiLots(ProcessContext ctx) {
+        Map<String, Map<String, Object>> rows = new LinkedHashMap<>();
+        if (ctx.contains(HELD_LOTS)) {
+            for (Map<String, Object> row : (List<Map<String, Object>>) ctx.get(HELD_LOTS)) {
+                rows.put(row.get("subAccount") + "|" + row.get("lotId"), row);
+            }
+        }
+        List<AiFeeRules.Lot> lots = new ArrayList<>();
+        for (Held held : heldLots(ctx)) {
+            Map<String, Object> row = rows.get(held.subAccount() + "|" + held.lotId());
+            boolean credit = QbFeeAccount.FEE_CREDIT.equals(held.subAccount());
+            lots.add(new AiFeeRules.Lot(credit, held.lotId(), held.amount(),
+                credit && row.get("expiresAt") != null ? toInstant(row.get("expiresAt")) : null,
+                credit && row.get("voidedAt") != null));
+        }
+        return List.copyOf(lots);
     }
 
     static Instant toInstant(Object value) {

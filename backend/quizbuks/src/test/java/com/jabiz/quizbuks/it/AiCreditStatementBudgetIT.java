@@ -16,9 +16,9 @@ import java.util.stream.IntStream;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * F-M9a-1 (docs/quizbuks/plans/impl/F-M9.md §9): the statements of an AI request with the fee on and off (the same: the
- * credit, the charged jobs and the operator are read in the statement the request already makes, and the fee is frozen
- * in the job's insert), the AI locks a request takes (no wallet lock), and the statements of a purchase of credit (its
+ * F-M9a-1 (docs/quizbuks/plans/impl/F-M9.md §9): the statements of an AI request with the fee on and off (one more with
+ * it on: the credit, the charged jobs and the operator are read in the statement the request already makes, the credit
+ * by lot in one more (#699 re-review L2), and the fee is frozen in the job's insert), the AI locks a request takes (no wallet lock), and the statements of a purchase of credit (its
  * wallet lock only). Each counted once before it is counted (warm caches).
  */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.MOCK, properties = "it.sql-log.enabled=true")
@@ -30,6 +30,8 @@ class AiCreditStatementBudgetIT extends AiItSupport {
     static final int BUY = 10;
     /** A return of part of the credit (measured, then fixed here). */
     static final int RETURN = 14;
+    /** The daily expiry's item for one sponsor, voiding one expired grant's fee credit (measured, then fixed here). */
+    static final int EXPIRE = 15;
     /** A month's charge of one job (measured, then fixed here). */
     static final int SETTLE_ONE = 21;
     /**
@@ -72,8 +74,9 @@ class AiCreditStatementBudgetIT extends AiItSupport {
             System.out.println("[statement-budget] AI credit purchase: " + buying.size() + "\n" + listing(buying));
             System.out.println("[statement-budget] locks: " + offLocks + " / " + onLocks + " / " + buyLocks);
 
-            // The fee adds no statement to a request, and no lock: the sponsor's AI requests, then everybody's.
-            assertThat(on).as("fee on:\n" + listing(on)).hasSize(off.size());
+            // The fee adds one statement to a request (#699 re-review L2: the credit read by lot, so that expired fee
+            // credit is not counted as available), and no lock: the sponsor's AI requests, then everybody's.
+            assertThat(on).as("fee on:\n" + listing(on)).hasSize(off.size() + 1);
             assertThat(onLocks).isEqualTo(offLocks).containsExactly("qb.ai:" + sponsor, "qb.ai:*");
             // A purchase holds the sponsor's wallet only (plan §4 item 7: never an AI lock).
             assertThat(buyLocks).containsExactly("qb.wallet:SPONSOR:" + sponsor);
@@ -160,6 +163,49 @@ class AiCreditStatementBudgetIT extends AiItSupport {
             assertThat(oneLocks).containsExactly("qb.ai:" + sponsor, "qb.wallet:SPONSOR:" + sponsor);
             assertThat(one).as("one job:\n" + listing(one)).hasSize(SETTLE_ONE);
             assertThat(many).as("200 jobs:\n" + listing(many)).hasSize(SETTLE_MANY);
+        } finally {
+            param(QbParams.AI_FEE_ENABLED, "false");
+        }
+    }
+
+    /**
+     * #699 re-review L5: the daily expiry's item takes the sponsor's AI lock, then their wallet lock (never everybody's
+     * AI lock), and its statements are fixed here (a sponsor whose expired grant the credit holds; another sponsor's
+     * item counted first, to warm the caches).
+     */
+    @Test
+    void theStatementsAndLocksOfAnExpiry() {
+        aiOn();
+        param(QbParams.KUDOS_SELL_ENABLED, "true");
+        advance(Duration.ofDays(1));
+        param(QbParams.AI_FEE_ENABLED, "true");
+        try {
+            List<String> sponsors = IntStream.range(0, 2).mapToObj(i -> {
+                String sponsor = newSponsor("ai-budget-expire-" + UUID.randomUUID());
+                String grantId = UUID.randomUUID().toString();
+                execute("INSERT INTO qb_fee_credit_grant (grant_id, sponsor_id, source, source_key, amount, remaining, "
+                    + "voided_amount, granted_at, expires_at, version) VALUES (?, ?, 'MANUAL', ?, 1000, 1000, 0, ?, ?, 1)",
+                    grantId, sponsor, "test:" + grantId, java.sql.Timestamp.from(clock.instant()),
+                    java.sql.Timestamp.from(clock.instant().plus(Duration.ofDays(365))));
+                execute("INSERT INTO qb_wallet (wallet_id, owner_id, kind, balance, pending_count, pending_amount, "
+                    + "pending_out, version) VALUES (?, ?, 'FEE_CREDIT', 1000, 0, 0, 0, 1)",
+                    UUID.randomUUID().toString(), sponsor);
+                run(AiCredits.BUY, sponsorToken(sponsor), body("amount", 1_000, "requestKey",
+                    UUID.randomUUID().toString()));
+                execute("UPDATE qb_fee_credit_grant SET expires_at = ? WHERE grant_id = ?",
+                    java.sql.Timestamp.from(clock.instant().plusSeconds(60)), grantId);
+                return sponsor;
+            }).toList();
+            advance(Duration.ofMinutes(5));
+            counted(() -> systemRun(com.jabiz.quizbuks.content.ai.AiCreditReturns.EXPIRE_ITEM,
+                body("sponsorId", sponsors.get(0))));
+            List<String> expiring = counted(() -> systemRun(com.jabiz.quizbuks.content.ai.AiCreditReturns.EXPIRE_ITEM,
+                body("sponsorId", sponsors.get(1))));
+            List<String> locks = SqlStatementLog.locks();
+            System.out.println("[statement-budget] AI credit expiry: " + expiring.size() + "\n" + listing(expiring));
+            System.out.println("[statement-budget] expiry locks: " + locks);
+            assertThat(locks).containsExactly("qb.ai:" + sponsors.get(1), "qb.wallet:SPONSOR:" + sponsors.get(1));
+            assertThat(expiring).as("expiry:\n" + listing(expiring)).hasSize(EXPIRE);
         } finally {
             param(QbParams.AI_FEE_ENABLED, "false");
         }

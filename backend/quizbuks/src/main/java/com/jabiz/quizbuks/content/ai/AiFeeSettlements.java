@@ -38,7 +38,9 @@ import java.util.Map;
  * key, so the run requested again for the same time charges it). The item ({@value #SETTLE}) takes the sponsor's AI
  * lock and then their wallet lock (never everybody's AI lock: plan §4 item 7), finds the earliest
  * {@value #BATCH_SIZE} jobs still waiting by their own month ({@code feePeriod < month}, {@value #BATCH_TEMPLATE};
- * #699 review M3) and reads them with the credit.
+ * #699 review M3) from its key on (#699 re-review M2: an item that charged did so from its own key, so when an earlier
+ * batch's item failed, the run requested again for the same time finds that batch under the failed item's key, not
+ * under a key already done) and reads them with the credit.
  *
  * <p>The jobs are charged a group (operator, month) at a time ({@link AiFeeRules#charges}): one {@code QB_FEE_CHARGE}
  * of the kind {@code AI}, the month the jobs belong to (not the month it is charged in), the operator frozen on them
@@ -78,9 +80,16 @@ public final class AiFeeSettlements {
     /**
      * @param sponsorId the sponsor
      * @param month     the month the job runs in (yyyy-MM, the fiscal year's zone): the jobs of the months before it
+     * @param fromJobId the item's key, the earliest job of its batch: the item charges the jobs from it on (#699
+     *                  re-review M2: an item never charges another item's batch); none: from the earliest waiting
      */
     public record SettleRef(@NotBlank @Size(max = 128) String sponsorId,
-        @NotBlank @Pattern(regexp = "\\d{4}-\\d{2}") String month) {}
+        @NotBlank @Pattern(regexp = "\\d{4}-\\d{2}") String month, @Size(max = 36) String fromJobId) {
+
+        public SettleRef(String sponsorId, String month) {
+            this(sponsorId, month, null);
+        }
+    }
 
     public static ProcessDefinition<SettleRef, FeeProcesses.ItemOutput, ProcessContext> settle() {
         return ProcessDefinition.define(SETTLE, 1, SettleRef.class, FeeProcesses.ItemOutput.class, ProcessContext.class,
@@ -105,7 +114,7 @@ public final class AiFeeSettlements {
                     ctx -> QbWallets.lockName(QbWallets.SPONSOR, ref(ctx).sponsorId())))
                 // #699 review M3: the jobs of the months before by their own month (feePeriod), as the due template.
                 .step("Find the jobs to charge", RunTemplate.<ProcessContext>of(BATCH_TEMPLATE,
-                    ctx -> Map.of("sponsorId", ref(ctx).sponsorId(), "month", ref(ctx).month()), BATCH))
+                    AiFeeSettlements::batchParams, BATCH))
                 .step("Read the jobs to charge and the credit", QueryEntities.<ProcessContext>all(
                     QueryEntities.query(QbAi.defaultDataset(QbAi.JOB), ctx -> EntityQuery.builder()
                         .where(new QueryPredicate.In("aiJobId", batchIds(ctx)))
@@ -219,6 +228,14 @@ public final class AiFeeSettlements {
             return "CHARGED";
         }
         return ctx.contains(PLAN) ? "SETTLED_ABSORBED" : "SKIPPED";
+    }
+
+    private static Map<String, Object> batchParams(ProcessContext ctx) {
+        Map<String, Object> params = new LinkedHashMap<>();
+        params.put("sponsorId", ref(ctx).sponsorId());
+        params.put("month", ref(ctx).month());
+        params.put("fromJobId", ref(ctx).fromJobId());
+        return params;
     }
 
     @SuppressWarnings("unchecked")

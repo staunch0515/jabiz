@@ -17,6 +17,7 @@ import java.time.YearMonth;
 import java.time.ZoneId;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -129,6 +130,64 @@ class AiFeeSettleIT extends AiCreditItSupport {
         assertThat(job(lateJob.get("ai_job_id")).get("fee_charge_id")).isNotNull();
         requestRunAgain(scheduled);
         assertThat(charges(sponsor)).hasSize(2);
+    }
+
+    /**
+     * #699 re-review M2: three batches of a sponsor's jobs (401, 200 an item); the first batch's item fails once (a
+     * transient error: the first charge's insert), the later ones charge their own batches, not the failed one's; the run
+     * requested again for the same time retries the failed item under its own key, and every job is charged once.
+     */
+    @Test
+    void aFailedBatchIsChargedByTheRunRequestedAgainAndTheOthersChargeTheirOwn() {
+        feeOn();
+        List<String> s = charged("ai-settle-batches-");
+        String sponsor = s.get(0);
+        Map<String, Object> done = finishedJob(s);
+        Object aiJobId = done.get("ai_job_id");
+        // Enough credit for 401 of the job with tax.
+        long needed = money(done.get("fee_yen")).multiply(new BigDecimal("1.2")).multiply(BigDecimal.valueOf(401))
+            .setScale(0, RoundingMode.UP).longValue();
+        cash(sponsor, needed);
+        buy(sponsor, needed);
+        execute(("DO $$ DECLARE cols text; BEGIN SELECT string_agg(CASE column_name "
+            + "WHEN 'ai_job_id' THEN 'gen_random_uuid()::text' WHEN 'external_job_id' THEN 'gen_random_uuid()::text' "
+            + "ELSE quote_ident(column_name) END, ', ' ORDER BY ordinal_position) INTO cols "
+            + "FROM information_schema.columns WHERE table_name = 'qb_ai_job' AND table_schema = current_schema(); "
+            + "EXECUTE format('INSERT INTO qb_ai_job SELECT %%s FROM qb_ai_job, generate_series(1, 400) g "
+            + "WHERE ai_job_id = %%L', cols, '%s'); END $$").formatted(aiJobId));
+        String sequence = "qb_test_fail_once_" + UUID.randomUUID().toString().replace("-", "");
+        execute("CREATE SEQUENCE " + sequence);
+        execute(("CREATE FUNCTION %1$s() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN "
+            + "IF NEW.sponsor_id = '%2$s' AND nextval('%1$s') = 1 THEN RAISE EXCEPTION 'a transient failure'; END IF; "
+            + "RETURN NEW; END $$").formatted(sequence, sponsor));
+        execute("CREATE TRIGGER " + sequence + " BEFORE INSERT ON qb_fee_charge_version FOR EACH ROW EXECUTE FUNCTION "
+            + sequence + "()");
+        try {
+            assertThat(nextMonthsRun()).isEqualTo(JobRunner.Outcome.PARTIAL);
+            // The second and third items charged their own batches (200 and 1); the first batch waits.
+            assertThat(charges(sponsor)).hasSize(2);
+            assertThat(open(sponsor)).isEqualTo(200);
+            requestRunAgain(lastRun);
+        } finally {
+            execute("DROP TRIGGER " + sequence + " ON qb_fee_charge_version");
+            execute("DROP FUNCTION " + sequence + "()");
+            execute("DROP SEQUENCE " + sequence);
+        }
+        assertThat(open(sponsor)).isZero();
+        assertThat(charges(sponsor)).hasSize(3);
+        assertThat(query("SELECT count(DISTINCT fee_charge_id) AS n, count(*) AS j FROM qb_ai_job WHERE sponsor_id = ?",
+            sponsor).getFirst()).satisfies(row -> {
+                assertThat(((Number) row.get("n")).longValue()).isEqualTo(3);
+                assertThat(((Number) row.get("j")).longValue()).isEqualTo(401);
+            });
+        requestRunAgain(lastRun);
+        assertThat(charges(sponsor)).hasSize(3);
+    }
+
+    /** The sponsor's charged jobs still waiting for a charge. */
+    private static long open(String sponsor) {
+        return ((Number) query("SELECT count(*) AS n FROM qb_ai_job WHERE sponsor_id = ? AND fee_mode = 'CREDIT' AND "
+            + "fee_charge_id IS NULL AND fee_yen > 0", sponsor).getFirst().get("n")).longValue();
     }
 
     /** JOB_RUN_REQUEST of the monthly job at {@code scheduledTime}, done when its run is recorded. */

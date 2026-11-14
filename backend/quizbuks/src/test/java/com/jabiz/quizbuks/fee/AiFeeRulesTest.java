@@ -301,4 +301,41 @@ class AiFeeRulesTest {
         assertThat(AiFeeRules.expired(inOrder, BigDecimal.ZERO, java.time.Instant.parse("2026-12-01T00:00:00Z")))
             .isEmpty();
     }
+
+    /** #699 re-review M1: a grant voided before it expired (its expiry still late) is as good as expired. */
+    @Test
+    void aVoidedGrantsFeeCreditIsNeverGivenBackAndIsVoidedLikeAnExpiredOnes() {
+        java.time.Instant now = java.time.Instant.parse("2027-02-01T00:00:00Z");
+        AiFeeRules.Lot voided = new AiFeeRules.Lot(true, "g-voided", BigDecimal.valueOf(100),
+            java.time.Instant.parse("2027-12-01T00:00:00Z"), true);
+        List<AiFeeRules.Lot> inOrder = List.of(lot(true, "g-live", 100, "2027-06-01T00:00:00Z"), voided,
+            lot(false, "c-1", 50, null));
+        assertThat(voided.expiredBy(now)).isTrue();
+        assertThat(lot(true, "g-live", 1, "2027-06-01T00:00:00Z").expiredBy(now)).isFalse();
+        assertThat(lot(false, "c", 1, null).expiredBy(now)).isFalse();
+        // Not returnable: 250 held, 150 usable; a return of it all never reaches the voided lot.
+        assertThat(AiFeeRules.usable(inOrder, BigDecimal.ZERO, now)).isEqualByComparingTo("150");
+        assertThat(AiFeeRules.giveBack(inOrder, BigDecimal.valueOf(150))).extracting(l -> l.lotId() + ":" + l.amount())
+            .containsExactly("c-1:50", "g-live:100");
+        // Voided by the expiry, but for what the open jobs hold at the front of the order.
+        assertThat(AiFeeRules.expired(inOrder, BigDecimal.ZERO, now)).extracting(l -> l.lotId() + ":" + l.amount())
+            .containsExactly("g-voided:100");
+        assertThat(AiFeeRules.expired(inOrder, BigDecimal.valueOf(130), now)).extracting(l -> l.lotId() + ":"
+            + l.amount()).containsExactly("g-voided:70");
+        assertThat(AiFeeRules.usable(inOrder, BigDecimal.valueOf(130), now)).isEqualByComparingTo("50");
+    }
+
+    /** #699 re-review L2: what a new request may reserve leaves out expired fee credit the open jobs do not hold. */
+    @Test
+    void whatMayBeUsedLeavesOutTheExpiredFeeCreditBeyondWhatTheJobsHold() {
+        java.time.Instant now = java.time.Instant.parse("2027-02-01T00:00:00Z");
+        List<AiFeeRules.Lot> inOrder = List.of(lot(true, "g-expired", 100, "2027-01-01T00:00:00Z"),
+            lot(true, "g-live", 100, "2027-06-01T00:00:00Z"), lot(false, "c-1", 50, null));
+        assertThat(AiFeeRules.usable(inOrder, BigDecimal.ZERO, now)).isEqualByComparingTo("150");
+        assertThat(AiFeeRules.usable(inOrder, BigDecimal.valueOf(30), now)).isEqualByComparingTo("150");
+        assertThat(AiFeeRules.usable(inOrder, BigDecimal.valueOf(120), now)).isEqualByComparingTo("130");
+        assertThat(AiFeeRules.usable(inOrder, BigDecimal.valueOf(400), now)).isZero();
+        assertThat(AiFeeRules.usable(inOrder, BigDecimal.ZERO, java.time.Instant.parse("2026-12-01T00:00:00Z")))
+            .isEqualByComparingTo("250");
+    }
 }

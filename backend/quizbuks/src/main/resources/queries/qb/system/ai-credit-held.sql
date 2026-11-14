@@ -12,6 +12,7 @@ results:
   lotId:      { kind: { type: text, maxLength: 36 } }
   amount:     { kind: { type: numeric, precision: 19, scale: 0 } }
   expiresAt:  { from: QbFeeCreditGrant.expiresAt }
+  voidedAt:   { from: QbFeeCreditGrant.voidedAt }
 list:
   sorts: [lotId]
   defaultSort: { field: lotId, asc: true }
@@ -21,7 +22,8 @@ permissions: [qb.fee.system]
 -- The same as Prepayments.held, in one statement: the parts whose object is the credit (all of them, signed) and the
 -- positive parts fees took of it (a voided invoice's negative parts name it too, but give back to the account, not to
 -- the credit, H1 of the F-M5 review). The lot is the grant for fee credit, the cash lot for cash. The caller orders the
--- lots as the account spends them (fee credit first, the earliest to expire first, then cash).
+-- lots as the account spends them (fee credit first, the earliest to expire first, then cash). A grant voided before it
+-- expired (voidedAt) is as good as expired (#699 re-review M1).
 WITH parts AS (
     SELECT p.{{QbFeePayment.subAccount}} AS r_sub,
            coalesce(p.{{QbFeePayment.grantId}}, p.{{QbFeePayment.cashLotId}}) AS r_lot,
@@ -35,7 +37,8 @@ WITH parts AS (
     WHERE u.{{QbFeePayment.prepaymentId}} = :prepaymentId AND u.{{QbFeePayment.amount}} > 0
 )
 SELECT CAST(h.r_sub AS varchar(20)) AS subAccount, CAST(h.r_lot AS varchar(36)) AS lotId,
-       CAST(h.r_held AS numeric(19, 0)) AS amount, g.{{QbFeeCreditGrant.expiresAt}} AS expiresAt
+       CAST(h.r_held AS numeric(19, 0)) AS amount, g.{{QbFeeCreditGrant.expiresAt}} AS expiresAt,
+       g.{{QbFeeCreditGrant.voidedAt}} AS voidedAt
 FROM (SELECT r_sub, r_lot, sum(r_amount) AS r_held FROM parts GROUP BY r_sub, r_lot) h
 LEFT JOIN {{QbFeeCreditGrant}} g ON h.r_sub = 'FEE_CREDIT' AND g.{{QbFeeCreditGrant.grantId}} = h.r_lot
 WHERE h.r_held > 0
