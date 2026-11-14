@@ -111,6 +111,20 @@ class AiCreditPagesIT extends AiCreditItSupport {
         assertThat(run(AiCreditStanding.STANDING, token, Map.of())).containsEntry("low", true);
         yenParam(QbParams.AI_CREDIT_LOW_AMOUNT, available.toPlainString());
         assertThat(run(AiCreditStanding.STANDING, token, Map.of())).containsEntry("low", false);
+
+        // The coordinator's condition: a Sponsor with no charged request lately is never told, however little it has.
+        yenParam(QbParams.AI_CREDIT_LOW_AMOUNT, available.add(BigDecimal.ONE).toPlainString());
+        String idle = newSponsor("ai-standing-idle-" + UUID.randomUUID());
+        cash(idle, 1_000);
+        buy(idle, 1);
+        assertThat(run(AiCreditStanding.STANDING, sponsorFull(idle), Map.of())).containsEntry("low", false);
+        // And the request counts only within qb.ai.credit.low-recent-days (30 when not set).
+        advance(java.time.Duration.ofDays(31));
+        token = sponsorFull(sponsor);
+        assertThat(run(AiCreditStanding.STANDING, token, Map.of())).as("31 days on").containsEntry("low", false);
+        intParam(QbParams.AI_CREDIT_LOW_RECENT_DAYS, "60");
+        assertThat(run(AiCreditStanding.STANDING, token, Map.of())).as("within 60 days").containsEntry("low", true);
+        intParam(QbParams.AI_CREDIT_LOW_RECENT_DAYS, "30");
         // The fee off: never low.
         yenParam(QbParams.AI_CREDIT_LOW_AMOUNT, available.add(BigDecimal.ONE).toPlainString());
         param(QbParams.AI_FEE_ENABLED, "false");
@@ -121,5 +135,18 @@ class AiCreditPagesIT extends AiCreditItSupport {
             param(QbParams.AI_FEE_ENABLED, "true");
             yenParam(QbParams.AI_CREDIT_LOW_AMOUNT, "0");
         }
+    }
+
+    /** Sets an optional whole-number parameter (the first change gives its kind). */
+    private void intParam(String key, String value) {
+        Map<String, Object> values = new java.util.LinkedHashMap<>();
+        values.put("paramKey", key);
+        values.put("value", value);
+        if (query("SELECT 1 FROM sys_param_version WHERE param_key = ?", key).isEmpty()) {
+            values.put("valueKind", QbParams.AI_FEE_SITE_LIMIT_KIND);
+        }
+        Map<String, Object> change = run("CONTROL_CHANGE_PROPOSE", proposer(), body("targetEntity", "SysParam",
+            "values", values, "reason", "F-M9 test"));
+        run("CONTROL_CHANGE_PUBLISH", financeAdmin(), body("changeId", change.get("changeId")));
     }
 }

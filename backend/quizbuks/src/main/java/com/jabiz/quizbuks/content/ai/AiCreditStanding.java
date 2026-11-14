@@ -6,12 +6,18 @@ import com.jabiz.process.ProcessDefinition;
 import com.jabiz.quizbuks.QbPermissions;
 import com.jabiz.quizbuks.fee.AiFeeRules;
 import com.jabiz.quizbuks.fee.Prepayments;
+import com.jabiz.query.EntityQuery;
+import com.jabiz.query.QueryPredicate;
 import com.jabiz.quizbuks.setup.QbParams;
+import com.jabiz.runtime.EntityInstance;
 import com.jabiz.runtime.process.steps.LoadParams;
 import com.jabiz.runtime.process.steps.QueryEntities;
 import com.jabiz.runtime.process.steps.RunTemplate;
 
 import java.math.BigDecimal;
+import java.time.Duration;
+import java.time.Instant;
+import java.util.List;
 import java.util.Optional;
 
 /**
@@ -26,6 +32,7 @@ public final class AiCreditStanding {
 
     static final String PARAMS = "params";
     static final String OUTPUT = "output";
+    static final String RECENT = "recentRequest";
 
     private AiCreditStanding() {
     }
@@ -44,7 +51,8 @@ public final class AiCreditStanding {
      * @param returnable      what may be given back now (as the return reads it); null as {@code unbilledWithTax}
      * @param minPurchase     the least purchase, null when none is set
      * @param lowAmount       qb.ai.credit.low-amount, null when not set (then never low)
-     * @param low             the fee on, the amount set, and what is available below it
+     * @param low             the fee on, the amount set, what is available below it, and a charged request made within
+     *                        qb.ai.credit.low-recent-days (30 when not set)
      */
     public record StandingOutput(boolean feeOn, BigDecimal remaining, BigDecimal reserved,
         BigDecimal unbilledWithTax, BigDecimal available, BigDecimal returnable, BigDecimal minPurchase,
@@ -62,7 +70,13 @@ public final class AiCreditStanding {
                 .outputMapper(ctx -> ctx.get(OUTPUT, StandingOutput.class))
                 .step("Load the parameters", LoadParams.<ProcessContext>optional(ProcessContext::opTime, PARAMS,
                     QbParams.FEE_TAX_RATE, QbParams.AI_FEE_ENABLED, QbParams.AI_CREDIT_MIN_PURCHASE,
-                    QbParams.AI_CREDIT_LOW_AMOUNT))
+                    QbParams.AI_CREDIT_LOW_AMOUNT, QbParams.AI_CREDIT_LOW_RECENT_DAYS))
+                // The coordinator's condition: a Sponsor who made no charged request lately is not told it is short.
+                .step("Find a recent charged request", QueryEntities.<ProcessContext>of(QbAi.defaultDataset(QbAi.JOB),
+                    ctx -> EntityQuery.builder().where(new QueryPredicate.And(List.of(
+                        new QueryPredicate.Eq("sponsorId", ctx.request().actorId()),
+                        new QueryPredicate.Eq("feeMode", QbAi.FEE_CREDIT),
+                        new QueryPredicate.Gte("requestedAt", recentSince(ctx))))).limit(1).build(), RECENT))
                 .step("Read where the sponsor stands", QueryEntities.<ProcessContext>all(
                     AiFees.queries(ctx -> ctx.request().actorId(), false).toArray(QueryEntities.Metadata[]::new)))
                 .step("Read what the AI credit holds by lot", RunTemplate.<ProcessContext>when(AiFees::holdsCredit,
@@ -86,8 +100,24 @@ public final class AiCreditStanding {
         BigDecimal occupied = standing.occupied(rate);
         BigDecimal usable = AiFeeRules.usable(Prepayments.aiLots(ctx), occupied, ctx.opTime());
         BigDecimal available = standing.available(rate).min(usable);
-        boolean low = feeOn && lowAmount != null && available.compareTo(lowAmount) < 0;
+        boolean low = feeOn && lowAmount != null && available.compareTo(lowAmount) < 0 && recentlyUsed(ctx);
         return new StandingOutput(feeOn, standing.remaining(), standing.reserved(), occupied.subtract(
             standing.reserved()), available, usable, minPurchase, lowAmount, low);
+    }
+
+    /** The start of the days a charged request counts as recent (qb.ai.credit.low-recent-days, else 30). */
+    static Instant recentSince(ProcessContext ctx) {
+        ParamValues params = ctx.get(PARAMS, ParamValues.class);
+        int days = params.find(QbParams.AI_CREDIT_LOW_RECENT_DAYS, BigDecimal.class)
+            .filter(value -> value.signum() > 0 && value.compareTo(BigDecimal.valueOf(365)) <= 0
+                && value.stripTrailingZeros().scale() <= 0)
+            .map(BigDecimal::intValue).orElse(QbParams.AI_CREDIT_LOW_RECENT_DAYS_DEFAULT);
+        return ctx.opTime().minus(Duration.ofDays(days));
+    }
+
+    @SuppressWarnings("unchecked")
+    private static boolean recentlyUsed(ProcessContext ctx) {
+        Object found = ctx.get(RECENT);
+        return found instanceof List<?> rows && !((List<EntityInstance>) rows).isEmpty();
     }
 }

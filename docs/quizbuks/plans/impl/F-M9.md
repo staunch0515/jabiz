@@ -132,7 +132,7 @@
   - 钱包页 `FeeAccount` 的预付款块把 AI 额度分开显示（`qb.sponsor.wallet` 的 `prepaymentHeld` 排除用途 `AI`，另加 `aiCreditHeld`）。
   - 报价：四个只读流程 `QB_AI_QUESTIONS_QUOTE`、`QB_AI_TRANSLATE_QUOTE`、`QB_AI_PUBLICATION_TRANSLATE_QUOTE`、`QB_SITE_PROFILE_QUOTE`，与各自的请求共用构建器（同一段代码 `AiProcesses.feeQuote` 算预留与报价）；权限与入口范围同请求（读不到别人的测验或发布）；不取锁、不写入（AI 说明既不要求也不记录）；额度不足是答案而非拒绝（`enough`、`shortYen`）；`jabiz.process.rate-limits` 按用户 300/小时（同曝光费的报价）。IT `AiQuoteIT`：四种各一例断言"报价的本次最多 == 随后同输入请求的预留"；`ProcessAccessIT` 断言四者开放、权限与邮箱要求同请求、有限流。
   - 三个 AI 面板（题目、翻译、官网生成）显示"本次最多 ¥X，可用 ¥Y"，不足时给出差额与购买入口并禁用提交；请求因 `QB_AI_CREDIT_SHORT` 被拒时同样给入口。
-  - 首页"待我处理"的"AI 额度不足"：`QB_AI_CREDIT_STANDING` 的 `low`（收费开着、`qb.ai.credit.low-amount` 已设、可用低于它）。`qb.ai.credit.low-amount` 是可选的受控参数，不进 setup，**未设即不提示**；`launch-checklist.md` 有一行提醒上线前决定（与最低购买额并列）。原计划的"近 30 天用过 AI"条件不做（总控：未设不提示即可）。
+  - 首页"待我处理"的"AI 额度不足"：`QB_AI_CREDIT_STANDING` 的 `low`（收费开着、`qb.ai.credit.low-amount` 已设、可用低于它，**且近 N 天有过收费的 AI 请求**：N 为 `qb.ai.credit.low-recent-days`，可选受控，未设为 30；从不用 AI 的发起方不被提示，总控 2026-11-14）。`qb.ai.credit.low-amount` 是可选的受控参数，不进 setup，**未设即不提示**；`launch-checklist.md` 有一行提醒上线前决定（与最低购买额并列）。
   - 费用不显示美元，只显示日元；帮助 `docs/quizbuks/help/ai-credit.md`（新，三语）、`manual-sponsor.*` 的"资金"与官网生成的帮助 `site-profile.md`。
 - **b2**（之后另一个 PR）：运营商与总部的页面（下面两项）。
 - **运营商管理系统**：发起方详情加 AI 额度余额与本月 AI 费（只读，限自己的发起方）；AI 费出现在现有的费用列表（种类 `AI`）。**新增的视图 / 模板声明 `withinEntryScope`**（D64，按运营商限定，同现有运营商页的写法），并测试别的运营商看不到。

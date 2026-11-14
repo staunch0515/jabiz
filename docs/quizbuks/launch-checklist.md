@@ -137,7 +137,7 @@
 - [ ] **AI 费的分成**（F-M9、F-M12）：打开 `qb.ai.fee.enabled`（AI 收费开关）之前，F-M12 已完成（AI 费中属于成本的部分不进运营商分成基数），或财务已书面确认运营商对 AI 费的分成比例（AI 费是成本的 150%，其中 100% 是平台付给 AI 提供方的成本，整笔分给运营商，分成超过费用的三分之一时平台就亏；F-M9 先把 AI 种类排除在分成基数之外，所以这一项没有完成时运营商分不到 AI 费）
       确认人： ／ 日期： ／ 依据：
 - [ ] **AI 收费与官网生成的打开顺序**（F-M9，#692 复核、#702 审查 M3）：首次上线时两者都关。① 在 **staging** 打开 AI 收费（`qb.ai.fee.enabled`）与官网生成（`qb.ai.site-profile.enabled`），用测试发起方购买 AI 额度，跑若干真实网站的 `SITE_PROFILE` 作业，用 `operations.md` §7.56 的 SQL 取每次尝试的调用次数、页数与输出的 P95（数据来源：staging 上这些作业的 `qb_ai_job`）；② 在**正式环境**先经受控变更发布 `qb.ai.fee.site-profile.calls` / `.pages` / `.output-tokens`（取上一步的 P95），并确认加价 `qb.ai.fee.markup`、汇率 `qb.ai.fee.usd-jpy`；③ 再发布 `qb.ai.fee.enabled = true`；④ 最后发布 `qb.ai.site-profile.enabled = true`。三个参数未设时预留按作业自身的上限（最坏情况），请求会因为预留过大而常被拒（AI 收费开着时启动检查警告）；作业超出预留的部分由平台承担，每日核对以提示 `AI_RESERVATION_SHORT` 列出
-- [ ] **AI 额度的最低购买额与"额度不足"提示**（F-M9b，总控 2026-11-14）：上线前决定是否设置 `qb.ai.credit.min-purchase`（最低购买额，未设即不限）与 `qb.ai.credit.low-amount`（可用低于它时发起方首页与 AI 额度页提示"AI 额度不足"；**未设即永远不提示**）。两者都是可选的受控参数，`QB_SETUP` 不建立；要设时经受控变更发布（另一位管理员）
+- [ ] **AI 额度的最低购买额与"额度不足"提示**（F-M9b，总控 2026-11-14）：上线前决定是否设置 `qb.ai.credit.min-purchase`（最低购买额，未设即不限）与 `qb.ai.credit.low-amount`（可用低于它、且近 `qb.ai.credit.low-recent-days`（未设为 30）天内有过收费的 AI 请求时，发起方首页与 AI 额度页提示"AI 额度不足"；**未设即永远不提示**）。两者都是可选的受控参数，`QB_SETUP` 不建立；要设时经受控变更发布（另一位管理员）
 
 - [ ] **暂停的演练（平台 16v-2）**：`QB_SETUP` 的 `qb.ai.enabled` 提案（`false`）已发布，启动日志中没有 `EXTERNAL` 对 `qb.ai.questions` / `qb.ai.cover` 的 `enabledBy` 警告；以测试商家请求一次后以四眼关闭开关，确认作业留在排队（商家页面注明 AI 暂停）、`jabiz.external.job.held` 为 1、提供方没有收到调用，重新打开后作业完成；部署环境中没有残留的 `QB_AI_HALTED`
       确认人： ／ 日期： ／ 依据：
