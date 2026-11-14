@@ -87,7 +87,7 @@
     "params" : {
       "audience" : {
         "kind" : {
-          "allowedValues" : [ "APP", "SPONSOR", "ALL" ],
+          "allowedValues" : [ "APP", "SPONSOR", "ALL", "OPERATOR" ],
           "dictUrn" : "urn:jabiz:dict:quizbuks:faq-audience",
           "type" : "code"
         },

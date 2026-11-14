@@ -29,7 +29,10 @@ class OperatorScopesIT extends QbItSupport {
         // Reference data and settings: the countries, the parameters in effect (the reward defaults), when the
         // play statistics were last counted.
         "urn:jabiz:dataset:default:QbCountry", "urn:jabiz:dataset:now:SysParam",
-        "urn:jabiz:dataset:default:QbStatsRun");
+        "urn:jabiz:dataset:default:QbStatsRun",
+        // The help centre's questions: the same for every operator (qb.operator.faq reads the published ones of the
+        // operators' audience only); not readable through the dataset API with the operators' permissions.
+        "urn:jabiz:dataset:default:QbFaqEntry");
 
     @Autowired
     DatasetRegistry datasets;
