@@ -33,6 +33,9 @@ class AiFeeSettleIT extends AiCreditItSupport {
     @Autowired
     JobDefinition<AiFeeSettlements.SettleRef> qbAiFeeMonthlyJob;
 
+    /** The scheduled time of the last monthly run. */
+    private Instant lastRun;
+
     /** A finished charged job of the sponsor's, by a request run to its end. */
     private Map<String, Object> finishedJob(List<String> s) {
         Object aiJobId = request(s.get(1), s.get(2), List.of(s.get(3)), 2).get("aiJobId");
@@ -48,6 +51,7 @@ class AiFeeSettleIT extends AiCreditItSupport {
         YearMonth next = YearMonth.from(clock.instant().atZone(ZONE)).plusMonths(1);
         Instant at = next.atDay(1).atTime(0, 27).atZone(ZONE).toInstant();
         clock.set(at.plusSeconds(60));
+        lastRun = at;
         // The job's lock outlives a run by real time (jabiz.jobs.lock-at-least-for): released for the next.
         execute("UPDATE jabiz_shedlock SET lock_until = locked_at");
         return jobRunner.run(qbAiFeeMonthlyJob, at);
@@ -104,9 +108,125 @@ class AiFeeSettleIT extends AiCreditItSupport {
                 assertThat(m.get("reference")).hasToString(String.valueOf(charge.get("charge_id")));
             });
 
-        // Run again: nothing more is charged.
-        assertThat(nextMonthsRun()).isEqualTo(JobRunner.Outcome.SUCCEEDED);
+        // #699 review M4: the same run requested again (JOB_RUN_REQUEST, the same scheduled time): nothing more.
+        Instant scheduled = lastRun;
+        requestRunAgain(scheduled);
         assertThat(charges(sponsor)).hasSize(1);
+
+        // #699 review M1: a job of the month whose outcome was recorded after the run (its fee_period the month
+        // before): its sponsor's item has a new key (the batch's earliest job), so the run requested again charges it.
+        // A token of now: the one of the test's start has expired with the month.
+        String token = sponsorFull(sponsor);
+        List<String> late = quizWithArticle(token, title(), "Late material.");
+        Map<String, Object> lateJob = finishedJob(List.of(sponsor, token, late.get(0), late.get(1)));
+        execute("UPDATE qb_ai_job SET fee_period = ? WHERE ai_job_id = ?", first.get("fee_period"),
+            String.valueOf(lateJob.get("ai_job_id")));
+        requestRunAgain(scheduled);
+        assertThat(charges(sponsor)).hasSize(2).last().satisfies(c -> {
+            assertThat(c).containsEntry("period", first.get("fee_period"));
+            assertThat(money(c.get("amount"))).isEqualByComparingTo(money(lateJob.get("fee_yen")));
+        });
+        assertThat(job(lateJob.get("ai_job_id")).get("fee_charge_id")).isNotNull();
+        requestRunAgain(scheduled);
+        assertThat(charges(sponsor)).hasSize(2);
+    }
+
+    /** JOB_RUN_REQUEST of the monthly job at {@code scheduledTime}, done when its run is recorded. */
+    private void requestRunAgain(Instant scheduledTime) {
+        execute("UPDATE jabiz_shedlock SET lock_until = locked_at");
+        Map<String, Object> accepted = client.post().uri("/api/jobs/{job}/runs", AiFeeSettlements.JOB)
+            .header(org.springframework.http.HttpHeaders.AUTHORIZATION, com.jabiz.runtime.test.TestTokens.bearer(
+                tokens, "ai-fee-jobs", "job.run", "job.read"))
+            .contentType(org.springframework.http.MediaType.APPLICATION_JSON).bodyValue(Map.of("scheduledTime",
+                scheduledTime.toString(), "reason", "A late AI job")).exchange().expectStatus().isAccepted()
+            .expectBody(MAP).returnResult().getResponseBody();
+        long seq = ((Number) accepted.get("requestSeqId")).longValue();
+        long deadline = System.nanoTime() + java.time.Duration.ofSeconds(60).toNanos();
+        while (query("SELECT 1 FROM sys_job_run WHERE request_seq_id = ?", seq).isEmpty()) {
+            assertThat(System.nanoTime()).as("the run of the request ended").isLessThan(deadline);
+            try {
+                Thread.sleep(50);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                throw new IllegalStateException(e);
+            }
+        }
+    }
+
+    /**
+     * #699 review M4 (H4): the month's charge spends the credit as the account does: the fee credit first, the lot that
+     * expires first first, then the cash; the charge's parts and the movement say how much came from each.
+     */
+    @Test
+    void theChargeSpendsTheFeeCreditThatExpiresFirstThenTheCash() {
+        feeOn();
+        String sponsor = newSponsor("ai-settle-lots-" + java.util.UUID.randomUUID());
+        String later = grant(sponsor, 1_000);
+        String sooner = grant(sponsor, 1_000);
+        execute("UPDATE qb_fee_credit_grant SET expires_at = ? WHERE grant_id = ?",
+            Timestamp.from(clock.instant().plus(java.time.Duration.ofDays(60))), sooner);
+        cash(sponsor, 1_000);
+        buy(sponsor, 2_500);
+        String token = sponsorFull(sponsor);
+        List<String> quiz = quizWithArticle(token, title(), "Material for the lots.");
+        Map<String, Object> done = finishedJob(List.of(sponsor, token, quiz.get(0), quiz.get(1)));
+        nextMonthsRun();
+        Map<String, Object> charge = charges(sponsor).getFirst();
+        BigDecimal total = money(charge.get("total"));
+        Object creditId = aiCredit(sponsor).get("prepayment_id");
+        // All of it from the grant that expires first (the fee is small), none from the later grant or the cash.
+        assertThat(query("SELECT sub_account, grant_id, amount FROM qb_fee_payment_version WHERE target_id = ? AND "
+            + "prepayment_id = ?", String.valueOf(charge.get("charge_id")), String.valueOf(creditId)))
+            .singleElement().satisfies(part -> {
+                assertThat(part).containsEntry("sub_account", "FEE_CREDIT").containsEntry("grant_id", sooner);
+                assertThat(money(part.get("amount"))).isEqualByComparingTo(total);
+            });
+        assertThat(later).isNotEqualTo(sooner);
+        assertThat(query("SELECT credit, cash FROM qb_ai_credit_movement_version WHERE sponsor_id = ? AND kind = "
+            + "'CHARGE'", sponsor)).singleElement().satisfies(m -> {
+                assertThat(money(m.get("credit"))).isEqualByComparingTo(total.negate());
+                assertThat(money(m.get("cash"))).isZero();
+            });
+        assertThat(done.get("fee_charge_id")).isNull();
+    }
+
+    /**
+     * #699 review M4: the month's charge item, a purchase and a job's outcome at once: each waits for the lock it needs
+     * (the item AI then wallet, the purchase the wallet, the outcome the AI locks), none fails, and the credit's parts
+     * add up to what it holds afterwards.
+     */
+    @Test
+    void theChargeAPurchaseAndAnOutcomeAtOnceAllEndAndTheCreditAddsUp() throws Exception {
+        feeOn();
+        List<String> s = charged("ai-settle-race-");
+        String sponsor = s.get(0);
+        finishedJob(s);
+        cash(sponsor, 2_000);
+        // The next month: a job of this month waits for its charge, another of the new month for its outcome.
+        YearMonth next = YearMonth.from(clock.instant().atZone(ZONE)).plusMonths(1);
+        clock.set(next.atDay(1).atTime(0, 30).atZone(ZONE).toInstant());
+        String token = sponsorFull(sponsor);
+        List<String> other = quizWithArticle(token, title(), "More material for the race.");
+        Object running = request(token, other.get(0), List.of(other.get(1)), 2).get("aiJobId");
+        java.util.concurrent.CompletableFuture<Object> settle = java.util.concurrent.CompletableFuture.supplyAsync(
+            () -> systemRun(AiFeeSettlements.SETTLE, body("sponsorId", sponsor, "month", next.toString())));
+        java.util.concurrent.CompletableFuture<Map<String, Object>> purchase = java.util.concurrent.CompletableFuture
+            .supplyAsync(() -> buy(sponsor, 1_000));
+        java.util.concurrent.CompletableFuture<Void> outcome = java.util.concurrent.CompletableFuture
+            .runAsync(() -> runUntilDone(running));
+        java.util.concurrent.CompletableFuture.allOf(settle, purchase, outcome).get(120,
+            java.util.concurrent.TimeUnit.SECONDS);
+
+        assertThat(charges(sponsor)).hasSize(1);
+        assertThat(job(running).get("finished_at")).isNotNull();
+        BigDecimal remaining = money(aiCredit(sponsor).get("remaining"));
+        assertThat(remaining).isEqualByComparingTo(new BigDecimal("6000").subtract(money(charges(sponsor).getFirst()
+            .get("total"))));
+        Object creditId = aiCredit(sponsor).get("prepayment_id");
+        assertThat(money(query("SELECT coalesce(sum(amount), 0) AS h FROM (SELECT amount FROM qb_fee_payment_version "
+            + "WHERE target_id = ? UNION ALL SELECT -amount FROM qb_fee_payment_version WHERE prepayment_id = ? AND "
+            + "amount > 0) p", String.valueOf(creditId), String.valueOf(creditId)).getFirst().get("h")))
+            .isEqualByComparingTo(remaining);
     }
 
     /** M1 of the review: a job asked before the onboarding has no operator, and its fee is no operator's. */
@@ -152,6 +272,20 @@ class AiFeeSettleIT extends AiCreditItSupport {
         assertThat(net("2160", sponsor)).isEqualByComparingTo(cashBefore);
         assertThat(net("1130", sponsor)).isZero();
         assertThat(query("SELECT 1 FROM qb_fee_invoice WHERE sponsor_id = ? AND status <> 'PAID'", sponsor)).isEmpty();
+
+        // #692 re-review M1: the month's summary gives what the platform took on, before tax (never posted).
+        String reader = com.jabiz.runtime.test.TestTokens.bearer(tokens, "ai-fee-monthly",
+            com.jabiz.quizbuks.QbPermissions.ADMIN_FINANCE_READ);
+        List<Map<String, Object>> rows = query("SELECT coalesce(sum(fee_yen), 0) AS f, coalesce(sum(absorbed_yen), 0) "
+            + "AS a, count(*) AS n FROM qb_ai_job WHERE fee_mode = 'CREDIT' AND fee_period = ?", done.get("fee_period"));
+        assertThat(items("qb.admin.ai-fee-monthly", reader, Map.of("params", Map.of("month", done.get("fee_period")),
+            "limit", 10))).singleElement().satisfies(row -> {
+                assertThat(money(row.get("absorbedYen"))).isEqualByComparingTo(money(rows.getFirst().get("a")))
+                    .isGreaterThanOrEqualTo(new BigDecimal("10000").subtract(fits));
+                assertThat(money(row.get("feeYen"))).isEqualByComparingTo(money(rows.getFirst().get("f")));
+                assertThat(((Number) row.get("jobs")).longValue()).isEqualTo(((Number) rows.getFirst().get("n"))
+                    .longValue());
+            });
     }
 
     /**

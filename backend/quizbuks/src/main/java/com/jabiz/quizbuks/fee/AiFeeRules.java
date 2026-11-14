@@ -15,6 +15,13 @@ import java.util.Objects;
  * request, rounded up to the yen; its tax is worked out on the month's total of its group (the operator and the month the
  * fee will be charged as), so that the jobs' increments add up to exactly what the one charge comes to (review H2 (a), as
  * the distribution fee's cumulative rounding).
+ *
+ * <p>The life of a fee here: a request holds its {@link #reservation} (the most it may cost, its tax rounded up); its
+ * end {@link #settle}s the answered usage within {@code min(its reservation, what the sponsor may use besides)}, the
+ * rest the platform's ({@code absorbed}, never charged later); the month's charge takes the finished jobs a group at a
+ * time ({@link #charges}), never more than the credit holds. What leaves the credit otherwise is worked out lot by lot:
+ * a return ({@link #giveBack}) and the expired fee credit ({@link #expired}). The order the credit is spent in is the
+ * account's: the fee credit first, the earliest to expire first, then the cash.
  */
 public final class AiFeeRules {
 
@@ -121,21 +128,44 @@ public final class AiFeeRules {
      * @param period     the month its outcome ran in (yyyy-MM)
      * @param fee        its fee before tax ({@code feeYen})
      * @param costPart   what of the fee is the provider's cost: its answered dollars at its frozen rate, rounded up
+     * @param absorbed   what of its fee the platform took on at its end ({@code absorbedYen}): the fee it was charged
+     *                   is that much short of its answered usage at the markup, and its cost part as much
      */
-    public record Job(String id, String operatorId, String period, BigDecimal fee, BigDecimal costPart) {}
+    public record Job(String id, String operatorId, String period, BigDecimal fee, BigDecimal costPart,
+        BigDecimal absorbed) {
+
+        public Job(String id, String operatorId, String period, BigDecimal fee, BigDecimal costPart) {
+            this(id, operatorId, period, fee, costPart, BigDecimal.ZERO);
+        }
+
+        /**
+         * #699 review M2: the cost part of {@code charged} of this job's fee: the answered usage's cost part in the
+         * proportion of the fee charged to the whole fee before anything was taken on ({@code fee + absorbed}),
+         * rounded up and never more than {@code charged}, so that it never takes the markup of the group's other jobs.
+         */
+        BigDecimal costPartOf(BigDecimal charged) {
+            BigDecimal whole = fee.add(absorbed == null ? BigDecimal.ZERO : absorbed);
+            if (charged.signum() <= 0 || costPart.signum() <= 0 || whole.signum() <= 0) {
+                return BigDecimal.ZERO;
+            }
+            return costPart.multiply(charged).divide(whole, 0, RoundingMode.UP).min(charged);
+        }
+    }
 
     /**
      * One charge of a month: a group (operator, month), what is charged and the jobs it takes in.
      *
      * @param amount        the fee before tax (after any part the credit could not hold was taken on)
      * @param tax           its tax, worked out on the group's total as the charge does ({@link FeeRules#tax})
-     * @param shareExcluded what of the amount is the provider's cost (F-M12 §3.2): the jobs' cost parts, in
-     *                      proportion to what of each job is still charged, never above the amount
+     * @param shareExcluded what of the amount is the provider's cost (F-M12 §3.2): each job's cost part in proportion
+     *                      to what of its whole fee is charged, never above what is charged of it
+     *                      ({@link Job#costPartOf}), so never above the amount
      * @param fees          each job's fee as charged (lower than read when the platform took a part on)
      */
     public record Charge(String operatorId, String period, BigDecimal amount, BigDecimal tax, BigDecimal shareExcluded,
         Map<String, BigDecimal> fees) {
 
+        /** What the charge takes of the credit: the amount and its tax. */
         public BigDecimal total() {
             return amount.add(tax);
         }
@@ -172,10 +202,7 @@ public final class AiFeeRules {
             }
             BigDecimal excluded = BigDecimal.ZERO;
             for (Job job : group) {
-                if (job.fee().signum() > 0 && job.costPart().signum() > 0) {
-                    excluded = excluded.add(job.costPart().multiply(fees.get(job.id()))
-                        .divide(job.fee(), 0, RoundingMode.UP));
-                }
+                excluded = excluded.add(job.costPartOf(fees.get(job.id())));
             }
             BigDecimal tax = Objects.requireNonNullElse(FeeRules.tax(fits, taxRate), BigDecimal.ZERO);
             charges.add(new Charge(group.getFirst().operatorId(), group.getFirst().period(), fits, tax,
@@ -201,6 +228,61 @@ public final class AiFeeRules {
             }
         }
         return withTax(high, taxRate).compareTo(room) <= 0 ? high : low;
+    }
+
+    // ---- what may be given back, and what expired (F-M9a-2, plan §4 items 4 and 5) ---------------------------------
+
+    /**
+     * A lot of the credit, in the order it is spent (the fee credit first, the earliest to expire first, then cash).
+     *
+     * @param expiresAt a grant's expiry; null for cash
+     */
+    public record Lot(boolean credit, String lotId, BigDecimal amount, java.time.Instant expiresAt) {}
+
+    /**
+     * What a return gives back (plan §4 item 4), {@code amount} at most: the reverse of the order the credit is spent
+     * in, the cash first (the last taken first), then the fee credit, the latest to expire first. What the open jobs
+     * hold and the expired fee credit are at the front of that order, so a return within what may be given back leaves
+     * them where they are.
+     */
+    public static List<Lot> giveBack(List<Lot> lots, BigDecimal amount) {
+        List<Lot> order = new ArrayList<>(lots.stream().filter(l -> !l.credit())
+            .sorted(java.util.Comparator.comparing(Lot::lotId, java.util.Comparator.reverseOrder())).toList());
+        order.addAll(lots.stream().filter(Lot::credit)
+            .sorted(java.util.Comparator.comparing(Lot::expiresAt, java.util.Comparator.reverseOrder())
+                .thenComparing(Lot::lotId, java.util.Comparator.reverseOrder())).toList());
+        List<Lot> back = new ArrayList<>();
+        BigDecimal left = amount;
+        for (Lot lot : order) {
+            if (left.signum() <= 0) {
+                break;
+            }
+            BigDecimal part = lot.amount().min(left);
+            if (part.signum() > 0) {
+                back.add(new Lot(lot.credit(), lot.lotId(), part, lot.expiresAt()));
+                left = left.subtract(part);
+            }
+        }
+        return List.copyOf(back);
+    }
+
+    /**
+     * What of the expired fee credit is voided (plan §4 item 5): the lots in the order they are spent (as given), the
+     * open jobs taking {@code occupied} from them in that order first; what an expired grant holds beyond its share of
+     * that is voided, the rest stays to be charged (the month's charge spends it first) and is voided after.
+     */
+    public static List<Lot> expired(List<Lot> lotsInOrder, BigDecimal occupied, java.time.Instant now) {
+        List<Lot> voided = new ArrayList<>();
+        BigDecimal taken = occupied.max(BigDecimal.ZERO);
+        for (Lot lot : lotsInOrder) {
+            BigDecimal used = lot.amount().min(taken);
+            taken = taken.subtract(used);
+            BigDecimal free = lot.amount().subtract(used);
+            if (lot.credit() && lot.expiresAt() != null && !lot.expiresAt().isAfter(now) && free.signum() > 0) {
+                voided.add(new Lot(true, lot.lotId(), free, lot.expiresAt()));
+            }
+        }
+        return List.copyOf(voided);
     }
 
     private AiFeeRules() {}

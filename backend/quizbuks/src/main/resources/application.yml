@@ -19,6 +19,12 @@ spring:
     url: ${SPRING_FLYWAY_URL:jdbc:postgresql://localhost:5440/quizbuks}
     user: ${SPRING_FLYWAY_USER:quizbuks}
     password: ${DB_PASSWORD}
+    # V127 builds an index CONCURRENTLY outside a transaction: Flyway's lock must be the session-level one, or the build
+    # and Flyway wait for each other for ever (docs/guide/platform-operations.md section 6, platform decision D81).
+    postgresql:
+      transactional-lock: false
+    placeholders:
+      concurrently: CONCURRENTLY
 
 jabiz:
   # The wallets are the ledger, kept in yen without decimals and shown as Kudos (docs/quizbuks/02-design.md

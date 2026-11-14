@@ -199,7 +199,7 @@ public final class Reconciliation {
                 .step("Compare the credit notes", RunTemplate.<ProcessContext>of(CREDIT_NOTES_TEMPLATE,
                     ctx -> feeAccountParams(ctx, zone, "at", "refundHours"), CREDIT_NOTES))
                 .step("Compare the AI help's usage", RunTemplate.<ProcessContext>of(HELP_USAGE_TEMPLATE,
-                    ctx -> Map.of(), HELP_USAGE))
+                    ctx -> feeAccountParams(ctx, zone, "at", "zone"), HELP_USAGE))
                 // The takers' cache follows by events: one found behind counts only when the previous run found them.
                 .step("Find the previous run", QueryEntities.<ProcessContext>of(defaultDataset(RUN_ENTITY_NAME),
                     ctx -> EntityQuery.builder().where(new QueryPredicate.Lt("scheduledTime",

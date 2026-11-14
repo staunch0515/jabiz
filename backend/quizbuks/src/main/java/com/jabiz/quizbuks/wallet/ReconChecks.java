@@ -122,7 +122,8 @@ public final class ReconChecks {
     public static final String EXPOSURE_UNPURCHASED = "EXPOSURE_UNPURCHASED";
     /**
      * F-M9 (#692 re-review, a note): a charged AI job whose fee went beyond its reservation (or what the credit held),
-     * the rest taken on by the platform; until the month's charge takes the job in.
+     * the rest taken on by the platform; listed in the month the job ended and the month after (a-2 review M1: a job
+     * whose fee was lowered to nothing is never taken in by the month's charge, so the charge cannot end the note).
      */
     public static final String AI_RESERVATION_SHORT = "AI_RESERVATION_SHORT";
     /** Account 2110 in all against all sponsors' cached balances. */

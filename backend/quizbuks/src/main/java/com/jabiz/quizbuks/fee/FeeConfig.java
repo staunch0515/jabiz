@@ -270,6 +270,13 @@ public class FeeConfig {
         return AiCredits.buy();
     }
 
+    /** F-M9a-2: part of an AI credit back to its lots (a return, an expiry; later F-M15). */
+    @Bean
+    ProcessDefinition<AiCreditGiveBack.GiveBackInput, AiCreditGiveBack.GiveBackOutput, ProcessContext>
+        qbAiCreditGiveBack() {
+        return AiCreditGiveBack.giveBack();
+    }
+
     /** F-M8: the operators' exposure prices, the publications' settlements and the reminders. */
     @Bean
     EntityDefinition qbExposurePriceEntity() {

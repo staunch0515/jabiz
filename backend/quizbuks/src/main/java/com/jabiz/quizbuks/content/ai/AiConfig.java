@@ -107,7 +107,7 @@ public class AiConfig {
     @Bean
     ProcessDefinition<AiFeeSettlements.SettleRef, com.jabiz.quizbuks.fee.FeeProcesses.ItemOutput, ProcessContext>
         qbAiFeeSettle() {
-        return AiFeeSettlements.settle(zone);
+        return AiFeeSettlements.settle();
     }
 
     /**
@@ -125,6 +125,37 @@ public class AiConfig {
                 qbAiFeeSettle,
                 (scheduledTime, row) -> new AiFeeSettlements.SettleRef(String.valueOf(row.get("sponsorId")),
                     com.jabiz.quizbuks.fee.FeeRules.period(scheduledTime, zone)))
+            .maxItems(10_000);
+    }
+
+    /** F-M9a-2: the sponsor gives back AI credit. */
+    @Bean
+    ProcessDefinition<AiCreditReturns.ReturnInput, com.jabiz.quizbuks.fee.AiCreditGiveBack.GiveBackOutput,
+        ProcessContext> qbAiCreditReturn() {
+        return AiCreditReturns.giveBack();
+    }
+
+    /** F-M9a-2: a sponsor's expired fee credit in their AI credit, voided (an item of {@value AiCreditReturns#EXPIRE_JOB}). */
+    @Bean
+    ProcessDefinition<AiCreditReturns.ExpireRef, com.jabiz.quizbuks.fee.FeeProcesses.ItemOutput, ProcessContext>
+        qbAiCreditExpireItem() {
+        return AiCreditReturns.expireItem();
+    }
+
+    /**
+     * F-M9a-2: the fee credit expired in AI credits, every day at 03:47 in the fiscal year's zone
+     * ({@code quizbuks.ai-credit-expire.cron}); missed runs are run again with {@code JOB_RUN_REQUEST}.
+     */
+    @Bean
+    JobDefinition<AiCreditReturns.ExpireRef> qbAiCreditExpireJob(
+        ProcessDefinition<AiCreditReturns.ExpireRef, com.jabiz.quizbuks.fee.FeeProcesses.ItemOutput, ProcessContext>
+            qbAiCreditExpireItem,
+        @Value("${quizbuks.ai-credit-expire.cron:" + AiCreditReturns.EXPIRE_CRON + "}") String cron) {
+        return JobDefinition.forEach(AiCreditReturns.EXPIRE_JOB, cron, zone,
+                JobItems.template(AiCreditReturns.EXPIRE_DUE_TEMPLATE, scheduledTime -> Map.of("at", scheduledTime),
+                    "itemKey"),
+                qbAiCreditExpireItem,
+                (scheduledTime, row) -> new AiCreditReturns.ExpireRef(String.valueOf(row.get("sponsorId"))))
             .maxItems(10_000);
     }
 
@@ -163,7 +194,9 @@ public class AiConfig {
             .targetEntityType(entity)
             .asDefault()
             .permissions(QbPermissions.ADMIN_AI_READ, QbPermissions.SPONSOR_VIEW_WRITE)
-            .policy(p -> p.processOnlyWrites().maxWriteBatchSize(10))
+            // F-M9a-2: the month's charge writes back each job it charges, AiFeeSettlements.BATCH_SIZE at most.
+            .policy(p -> p.processOnlyWrites().maxWriteBatchSize(QbAi.JOB.equals(entity)
+                ? AiFeeSettlements.BATCH_SIZE : 10))
             .storage(s -> s.driver("r2dbc-postgresql").connectionPoolRef(poolRef)));
     }
 

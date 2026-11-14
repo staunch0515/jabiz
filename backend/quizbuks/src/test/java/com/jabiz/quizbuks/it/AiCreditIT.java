@@ -385,9 +385,22 @@ class AiCreditIT extends AiCreditItSupport {
     void aJobThatOverrunsItsReservationIsChargedTheReservationAndTheRestIsNoted() {
         feeOn();
         List<String> s = charged("ai-overrun-");
+        String sponsor = s.get(0);
         Object aiJobId = request(s.get(1), s.get(2), List.of(s.get(3)), 2).get("aiJobId");
-        // As if the reservation had come out low (a model's price raised at the provider): 1 yen, the credit full.
+        // What a request of two questions on this material reserves (each request below reserves the same).
+        BigDecimal each = money(job(aiJobId).get("reserved_yen"));
+        // As if the reservation had come out low (a model's price raised at the provider): 1 yen.
         execute("UPDATE qb_ai_job SET reserved_yen = 1 WHERE ai_job_id = ?", String.valueOf(aiJobId));
+        // #692 re-review L-c: another request of the sponsor's still running while the first ends (its attempt held
+        // by an instance whose lease lasts), and the credit given back down to what it holds, one yen for the first and
+        // room for one more request: an overrun taking more than its reservation would leave too little for it.
+        List<String> second = quizWithArticle(s.get(1), title(), "Material for ai-overrun-");
+        Object other = request(s.get(1), second.get(0), List.of(second.get(1)), 2).get("aiJobId");
+        assertThat(money(job(other).get("reserved_yen"))).isEqualByComparingTo(each);
+        claimedByADeadInstance(job(other).get("external_job_id"), 1, clock.instant().plus(Duration.ofDays(1)));
+        BigDecimal held = BigDecimal.ONE.add(each).add(each);
+        run(com.jabiz.quizbuks.content.ai.AiCreditReturns.RETURN, sponsorToken(sponsor), body("amount",
+            new BigDecimal("5000").subtract(held), "requestKey", java.util.UUID.randomUUID().toString()));
         runUntilDone(aiJobId);
         Map<String, Object> done = job(aiJobId);
         BigDecimal fee = feeOf(done);
@@ -396,8 +409,12 @@ class AiCreditIT extends AiCreditItSupport {
         assertThat(money(done.get("fee_yen"))).isEqualByComparingTo("1");
         assertThat(money(done.get("absorbed_yen"))).isEqualByComparingTo(fee.subtract(BigDecimal.ONE));
         assertThat(money(done.get("reserved_yen"))).isZero();
-        // The credit held 5,000: the cap is the reservation, not what was free.
-        assertThat(money(aiCredit(s.get(0)).get("remaining"))).isEqualByComparingTo("5000");
+        // The cap is the reservation, not what was free: the other request still holds its own, and one more fits.
+        assertThat(money(aiCredit(sponsor).get("remaining"))).isEqualByComparingTo(held);
+        assertThat(job(other).get("finished_at")).isNull();
+        List<String> third = quizWithArticle(s.get(1), title(), "Material for ai-overrun-");
+        assertThat(money(job(request(s.get(1), third.get(0), List.of(third.get(1)), 2).get("aiJobId"))
+            .get("reserved_yen"))).isEqualByComparingTo(each);
 
         java.time.Instant at = clock.instant().plus(Duration.ofMinutes(7));
         Object output = systemRun("QB_RECONCILE_RUN", body("scheduledTime", at.toString()));

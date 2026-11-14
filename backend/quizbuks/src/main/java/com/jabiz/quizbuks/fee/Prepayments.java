@@ -545,7 +545,7 @@ public final class Prepayments {
         return order(lots, expiries);
     }
 
-    private static Instant toInstant(Object value) {
+    static Instant toInstant(Object value) {
         return value instanceof Instant instant ? instant : value instanceof java.time.OffsetDateTime odt
             ? odt.toInstant() : Instant.parse(String.valueOf(value));
     }
@@ -766,21 +766,12 @@ public final class Prepayments {
         List<Release> plan = (List<Release>) ctx.get(PLAN);
         List<LedgerProcesses.PostOutput> posted = ctx.contains(POSTED)
             ? (List<LedgerProcesses.PostOutput>) ctx.get(POSTED) : List.of();
-        Map<String, EntityInstance> grants = FeeSettlement.byId(FeeGate.list(ctx, GRANTS));
-        Map<String, EntityInstance> lots = FeeSettlement.byId(FeeGate.list(ctx, LOTS));
-        Map<String, BigDecimal> grantBack = new LinkedHashMap<>();
-        Map<String, BigDecimal> lotBack = new LinkedHashMap<>();
+        List<Returned> returned = new ArrayList<>();
         int post = 0;
         for (Release release : plan) {
             EntityInstance prepayment = release.prepayment();
             String transactionId = release.back().isEmpty() ? null : posted.get(post++).transactionId();
-            for (Held part : release.back()) {
-                boolean credit = QbFeeAccount.FEE_CREDIT.equals(part.subAccount());
-                insertPart(ctx, input.sponsorId(), QbPrepayments.PREPAYMENT, String.valueOf(prepayment.id()),
-                    part.subAccount(), credit ? part.lotId() : null, credit ? null : part.lotId(),
-                    part.amount().negate(), transactionId, null);
-                (credit ? grantBack : lotBack).merge(part.lotId(), part.amount(), BigDecimal::add);
-            }
+            returned.add(new Returned(String.valueOf(prepayment.id()), release.back(), transactionId));
             Map<String, Object> values = new LinkedHashMap<>();
             values.put("remaining", BigDecimal.ZERO);
             values.put("status", QbPrepayments.RELEASED);
@@ -788,13 +779,41 @@ public final class Prepayments {
             values.put("releaseReason", input.reason());
             ctx.changes().update(QbPrepayments.PREPAYMENT, prepayment.id(), prepayment.version(), values);
         }
+        ctx.put(RELEASE_OUTPUT, toLots(ctx, input.sponsorId(), returned));
+    }
+
+    /** What a prepayment gave back of each lot ({@link #held} order) and the posting that moved it. */
+    record Returned(String prepaymentId, List<Held> back, String transactionId) {}
+
+    /**
+     * Gives what prepayments gave back to the lots they were taken from, under the sponsor's wallet lock: a negative
+     * part each (its object the prepayment), the cash lots and the grants still to be spent raised, and the wallets'
+     * caches; fee credit whose grant expired or was voided meanwhile is voided again at once (with what an expired grant
+     * the daily job has not voided yet still holds), the voids to post put in {@value #VOIDS}. Reads the grants
+     * ({@value #GRANTS}), the cash lots ({@value #LOTS}) and the wallets ({@value #CREDIT_WALLET},
+     * {@value #CASH_WALLET}) read before. F-M9: shared by a release and by an AI credit's return and expiry.
+     */
+    static ReleaseOutput toLots(ProcessContext ctx, String sponsorId, List<Returned> returned) {
+        Map<String, EntityInstance> grants = FeeSettlement.byId(FeeGate.list(ctx, GRANTS));
+        Map<String, EntityInstance> lots = FeeSettlement.byId(FeeGate.list(ctx, LOTS));
+        Map<String, BigDecimal> grantBack = new LinkedHashMap<>();
+        Map<String, BigDecimal> lotBack = new LinkedHashMap<>();
+        for (Returned one : returned) {
+            for (Held part : one.back()) {
+                boolean credit = QbFeeAccount.FEE_CREDIT.equals(part.subAccount());
+                insertPart(ctx, sponsorId, QbPrepayments.PREPAYMENT, one.prepaymentId(),
+                    part.subAccount(), credit ? part.lotId() : null, credit ? null : part.lotId(),
+                    part.amount().negate(), one.transactionId(), null);
+                (credit ? grantBack : lotBack).merge(part.lotId(), part.amount(), BigDecimal::add);
+            }
+        }
         // The fee credit: back to the grants still to be spent; to those expired or voided meanwhile, voided again.
         BigDecimal credit = BigDecimal.ZERO;
         BigDecimal voided = BigDecimal.ZERO;
         // What expired lots still held when voided now (the daily job would have): it leaves the wallet too.
         BigDecimal expiredLeft = BigDecimal.ZERO;
         List<LedgerProcesses.PostInput> voids = new ArrayList<>();
-        Map<String, String> party = Map.of(QbLedger.PARTY, input.sponsorId());
+        Map<String, String> party = Map.of(QbLedger.PARTY, sponsorId);
         for (Map.Entry<String, BigDecimal> entry : grantBack.entrySet()) {
             EntityInstance grant = grants.get(entry.getKey());
             if (grant == null) {
@@ -838,15 +857,15 @@ public final class Prepayments {
             cash = cash.add(entry.getValue());
         }
         if (credit.subtract(expiredLeft).signum() != 0) {
-            QbWallets.change(ctx, FeeGate.first(ctx, CREDIT_WALLET), QbWallets.FEE_CREDIT, input.sponsorId(),
+            QbWallets.change(ctx, FeeGate.first(ctx, CREDIT_WALLET), QbWallets.FEE_CREDIT, sponsorId,
                 credit.subtract(expiredLeft), 0, BigDecimal.ZERO);
         }
         if (cash.signum() > 0) {
-            QbWallets.change(ctx, FeeGate.first(ctx, CASH_WALLET), QbWallets.CASH, input.sponsorId(), cash, 0,
+            QbWallets.change(ctx, FeeGate.first(ctx, CASH_WALLET), QbWallets.CASH, sponsorId, cash, 0,
                 BigDecimal.ZERO);
         }
         ctx.put(VOIDS, List.copyOf(voids));
-        ctx.put(RELEASE_OUTPUT, new ReleaseOutput(credit.add(voided).add(cash), credit, voided, cash));
+        return new ReleaseOutput(credit.add(voided).add(cash), credit, voided, cash);
     }
 
     // ---- the daily job's item ----------------------------------------------------------------------------------------

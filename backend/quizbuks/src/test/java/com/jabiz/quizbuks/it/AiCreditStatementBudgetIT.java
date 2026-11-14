@@ -28,6 +28,15 @@ class AiCreditStatementBudgetIT extends AiItSupport {
     static final int REQUEST = 20;
     /** A purchase that raises the credit (the second): the lock, one read, the top-up's sub-process, the movement. */
     static final int BUY = 10;
+    /** A return of part of the credit (measured, then fixed here). */
+    static final int RETURN = 14;
+    /** A month's charge of one job (measured, then fixed here). */
+    static final int SETTLE_ONE = 21;
+    /**
+     * A month's charge of 200 jobs in two groups (two months): a second charge, and one update a job (the platform
+     * updates by the version read, one statement each; the item's batch of 200 bounds them).
+     */
+    static final int SETTLE_MANY = 235;
 
     @Test
     void theStatementsOfARequestWithTheFeeOnAndOffAndOfAPurchase() {
@@ -78,6 +87,87 @@ class AiCreditStatementBudgetIT extends AiItSupport {
     private Map<String, Object> buy(String sponsor) {
         return run(AiCredits.BUY, sponsorToken(sponsor), body("amount", 1_000, "requestKey",
             UUID.randomUUID().toString()));
+    }
+
+    /**
+     * F-M9a-2 (plan §4 item 7, §9): a return takes the sponsor's AI lock, then their wallet lock (never everybody's AI
+     * lock), and its statements are fixed here: the locks, the parameters, the standing's one read with the request
+     * key's, the sub-process (the credit and the wallets in one read, the lots by template, the grants and cash lots in
+     * one read, the posting, the parts, the lots' and wallets' writes, the movement).
+     */
+    @Test
+    void theStatementsAndLocksOfAReturn() {
+        aiOn();
+        param(QbParams.KUDOS_SELL_ENABLED, "true");
+        advance(Duration.ofDays(1));
+        String sponsor = newSponsor("ai-budget-return-" + UUID.randomUUID());
+        credit(sponsor, 50_000);
+        run(KudosExchanges.SELL, sponsorToken(sponsor), body("amount", 50_000));
+        param(QbParams.AI_FEE_ENABLED, "true");
+        try {
+            buy(sponsor);
+            counted(() -> giveBack(sponsor));
+            List<String> returning = counted(() -> giveBack(sponsor));
+            List<String> locks = SqlStatementLog.locks();
+            System.out.println("[statement-budget] AI credit return: " + returning.size() + "\n" + listing(returning));
+            System.out.println("[statement-budget] return locks: " + locks);
+            assertThat(locks).containsExactly("qb.ai:" + sponsor, "qb.wallet:SPONSOR:" + sponsor);
+            assertThat(returning).as("return:\n" + listing(returning)).hasSize(RETURN);
+        } finally {
+            param(QbParams.AI_FEE_ENABLED, "false");
+        }
+    }
+
+    /**
+     * #699 review M4/L4: the month's charge item: the sponsor's AI lock, then their wallet lock (never everybody's), and
+     * its statements with one job and with 200 jobs of two groups (the most an item takes), fixed here.
+     */
+    @Test
+    void theStatementsAndLocksOfAMonthsCharge() {
+        aiOn();
+        param(QbParams.KUDOS_SELL_ENABLED, "true");
+        advance(Duration.ofDays(1));
+        String sponsor = newSponsor("ai-budget-settle-" + UUID.randomUUID());
+        credit(sponsor, 50_000);
+        run(KudosExchanges.SELL, sponsorToken(sponsor), body("amount", 50_000));
+        String token = sponsorFull(sponsor);
+        param(QbParams.AI_FEE_ENABLED, "true");
+        try {
+            run(AiCredits.BUY, sponsorToken(sponsor), body("amount", 40_000, "requestKey", UUID.randomUUID().toString()));
+            List<String> quiz = quizWithArticle(token, "AI budget " + UUID.randomUUID(), "Material for the budget.");
+            Object aiJobId = request(token, quiz.get(0), List.of(quiz.get(1)), 2).get("aiJobId");
+            runJobs();
+            Map<String, Object> done = job(aiJobId);
+            String period = String.valueOf(done.get("fee_period"));
+            String next = java.time.YearMonth.parse(period).plusMonths(1).toString();
+            String later = java.time.YearMonth.parse(period).plusMonths(2).toString();
+            List<String> one = counted(() -> systemRun(com.jabiz.quizbuks.content.ai.AiFeeSettlements.SETTLE,
+                body("sponsorId", sponsor, "month", next)));
+            List<String> oneLocks = SqlStatementLog.locks();
+            // 200 more of the job, a hundred of each of two months: two groups.
+            execute(("DO $$ DECLARE cols text; BEGIN SELECT string_agg(CASE column_name "
+                + "WHEN 'ai_job_id' THEN 'gen_random_uuid()::text' WHEN 'external_job_id' THEN 'gen_random_uuid()::text' "
+                + "WHEN 'fee_charge_id' THEN 'NULL' WHEN 'fee_period' THEN 'CASE WHEN g %% 2 = 0 THEN ''%s'' ELSE ''%s'' END' "
+                + "ELSE quote_ident(column_name) END, ', ' ORDER BY ordinal_position) INTO cols "
+                + "FROM information_schema.columns WHERE table_name = 'qb_ai_job' AND table_schema = current_schema(); "
+                + "EXECUTE format('INSERT INTO qb_ai_job SELECT %%s FROM qb_ai_job, generate_series(1, 200) g "
+                + "WHERE ai_job_id = %%L', cols, '%s'); END $$").formatted(period, next, aiJobId));
+            List<String> many = counted(() -> systemRun(com.jabiz.quizbuks.content.ai.AiFeeSettlements.SETTLE,
+                body("sponsorId", sponsor, "month", later)));
+            System.out.println("[statement-budget] AI month's charge, one job: " + one.size() + "\n" + listing(one));
+            System.out.println("[statement-budget] AI month's charge, 200 jobs: " + many.size() + "\n" + listing(many));
+            System.out.println("[statement-budget] settle locks: " + oneLocks);
+            assertThat(oneLocks).containsExactly("qb.ai:" + sponsor, "qb.wallet:SPONSOR:" + sponsor);
+            assertThat(one).as("one job:\n" + listing(one)).hasSize(SETTLE_ONE);
+            assertThat(many).as("200 jobs:\n" + listing(many)).hasSize(SETTLE_MANY);
+        } finally {
+            param(QbParams.AI_FEE_ENABLED, "false");
+        }
+    }
+
+    private Map<String, Object> giveBack(String sponsor) {
+        return run(com.jabiz.quizbuks.content.ai.AiCreditReturns.RETURN, sponsorToken(sponsor), body("amount", 100,
+            "requestKey", UUID.randomUUID().toString()));
     }
 
     private List<String> counted(Runnable action) {

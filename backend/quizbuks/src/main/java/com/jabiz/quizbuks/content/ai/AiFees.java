@@ -78,6 +78,11 @@ final class AiFees {
         BigDecimal available(BigDecimal taxRate) {
             return AiFeeRules.available(remaining, AiFeeRules.unbilledWithTax(unbilled.values(), taxRate), reserved);
         }
+
+        /** What the open jobs hold of the credit: the unbilled fees with their tax, and the reservations (F-M9a-2). */
+        BigDecimal occupied(BigDecimal taxRate) {
+            return AiFeeRules.unbilledWithTax(unbilled.values(), taxRate).add(reserved);
+        }
     }
 
     /** The reads of a sponsor's standing, for the statement of a request or an outcome. */

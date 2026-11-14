@@ -15,15 +15,17 @@ list:
   key: [itemKey]
 permissions: [qb.fee.system]
 ---*/
--- The same condition as the item's read (AiFeeSettlements.settle): finished, charged (CREDIT), with a fee, not in a
+-- The same condition as the item's read (qb.system.ai-fee-batch): finished, charged (CREDIT), with a fee, not in a
 -- charge, of an earlier month. A sponsor with more jobs than an item charges (200) is given one row a batch; each item
--- takes the earliest jobs still waiting, so the batches are taken in turn. The item reads everything again under the
--- sponsor's AI and wallet locks. An item's key is at most 36 characters (the platform's): the sponsor's id hashed and
--- the batch.
-SELECT CAST(left(md5(b.sponsorId), 30) || ':' || b.batch AS varchar(36)) AS itemKey,
-       CAST(b.sponsorId AS varchar(128)) AS sponsorId
-FROM (SELECT j.{{QbAiJob.sponsorId}} AS sponsorId, generate_series(1, CAST(ceil(count(*) / 200.0) AS int)) AS batch
+-- takes the earliest jobs still waiting, so the batches are taken in turn. An item's key is the earliest job of its
+-- batch (#699 review M1): a job whose outcome was recorded after the month's run (its fee_period still the month
+-- before) gives its sponsor a key not run yet, so a run requested again for the same time (JOB_RUN_REQUEST) charges
+-- it, while the items that charged stay done. The item reads everything again under the sponsor's AI and wallet locks.
+SELECT CAST(b.aiJobId AS varchar(36)) AS itemKey, CAST(b.sponsorId AS varchar(128)) AS sponsorId
+FROM (SELECT j.{{QbAiJob.sponsorId}} AS sponsorId, j.{{QbAiJob.aiJobId}} AS aiJobId,
+             row_number() OVER (PARTITION BY j.{{QbAiJob.sponsorId}}
+                                ORDER BY j.{{QbAiJob.finishedAt}}, j.{{QbAiJob.aiJobId}}) AS n
       FROM {{QbAiJob}} j
       WHERE j.{{QbAiJob.feeMode}} = 'CREDIT' AND j.{{QbAiJob.feeChargeId}} IS NULL
-        AND j.{{QbAiJob.finishedAt}} IS NOT NULL AND j.{{QbAiJob.feeYen}} > 0 AND j.{{QbAiJob.feePeriod}} < :month
-      GROUP BY j.{{QbAiJob.sponsorId}}) b
+        AND j.{{QbAiJob.finishedAt}} IS NOT NULL AND j.{{QbAiJob.feeYen}} > 0 AND j.{{QbAiJob.feePeriod}} < :month) b
+WHERE (b.n - 1) % 200 = 0
