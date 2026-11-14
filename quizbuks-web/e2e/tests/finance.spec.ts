@@ -3,12 +3,6 @@ import { bookingMonthOf, expectOverviewAccounts, transferInReview, transfersOf }
 import { query } from './content'
 import { adminToken, expect, prepareQuizbuks, test } from './support'
 
-/**
- * The rows the funds switch card adds to the server's: WAITING_ROWS (1) and MANUAL_ROWS (2) of the extension. F-M9a-1
- * moved the AI fee's switch from WAITING_ROWS to the template (its key exists now: KEY_BEFORE_MEANING_ROWS).
- */
-const CARD_ONLY_ROWS = 3
-
 /*
  * Finance's pages in the administration (docs/quizbuks/plans/Q9c-admin-finance.md): the overview counts the large
  * transfer waiting for review and leads to it; its review shows the transfer and the payee and approves it through the
@@ -33,13 +27,20 @@ test('finance reviews a large transfer and issues the monthly report', async ({ 
   await expectOverviewAccounts(page, request)
   // F-F10b: the first launch's money switches, one row for each parameter of the registry (setup.FirstLaunchSwitches):
   // the rows from the server (the template qb.admin.first-launch-switches, read here so that a charge that turns active
-  // adds its rows to the expectation by itself), and the rows the card adds: the 1 that waits for a feature of the charge
-  // groups whose key does not exist yet (WAITING_ROWS) and the 2 set up by hand (MANUAL_ROWS).
+  // adds its rows to the expectation by itself), and the rows the card adds (data-source="card"): those that wait for a
+  // feature whose key does not exist yet and those set up by hand. Counted apart, so that a switch that moves from the
+  // card's lists to the template (#684, #692) changes no number here.
   // What the active rows say depends on the system (this one proposes the declared values, other specs change some),
   // so only the states that cannot change are fixed here.
   const fromServer = (await query(request, await adminToken(request), 'qb.admin.first-launch-switches', {})).length
   await expect(page.getByTestId('fund-switches')).toBeVisible()
-  await expect(page.getByTestId('fund-switch')).toHaveCount(fromServer + CARD_ONLY_ROWS)
+  await expect(page.locator('[data-testid="fund-switch"][data-source="template"]')).toHaveCount(fromServer)
+  const cardRows = page.locator('[data-testid="fund-switch"][data-source="card"]')
+  expect(await cardRows.count()).toBeGreaterThan(0)
+  for (const state of await cardRows.evaluateAll((rows) => rows.map((r) => r.getAttribute('data-state')))) {
+    expect(state).toMatch(/^(waiting|manual)$/)
+  }
+  await expect(page.getByTestId('fund-switch')).toHaveCount(fromServer + await cardRows.count())
   // F-M8c: the exposure fee's switch is an ordinary one, read against its launch value like the audience fee's.
   const exposure = page.locator('[data-testid="fund-switch"][data-key="qb.exposure.billing.enabled"]')
   await expect(exposure).toHaveAttribute('data-state', /^(match|differs|proposed|proposedDiffers|missing)$/)

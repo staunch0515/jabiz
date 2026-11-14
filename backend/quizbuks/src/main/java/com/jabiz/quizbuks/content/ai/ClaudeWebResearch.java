@@ -41,6 +41,12 @@ public final class ClaudeWebResearch {
     public static final String FETCH_TOOL = "web_fetch_20260318";
     /** Usage metric: the searches the provider ran (billed apart from tokens). */
     public static final String SEARCHES = "webSearches";
+    /**
+     * The calls an attempt made (one each, its continuations included): the usage is recorded summed over the
+     * attempt, so what one call used is the sum over this count (#692 re-review L-f, {@code operations.md} §7.56).
+     * Read by nothing that prices or limits.
+     */
+    public static final String CALLS = "webCalls";
     /** What one search costs (the provider's price: ten dollars per thousand searches). */
     public static final BigDecimal SEARCH_PRICE_USD = new BigDecimal("0.01");
     /** The most of a fetched page that reaches Claude. */
@@ -303,6 +309,7 @@ public final class ClaudeWebResearch {
     /** Records one call's tokens (priced as {@link ClaudeCalls#record} prices them) and its searches. */
     private static void record(ExternalJobContext ctx, String model, ClaudeApi.Usage usage, long searches) {
         ClaudeCalls.record(ctx, model, usage, null);
+        ctx.recordUsage(CALLS, 1);
         if (searches > 0) {
             ctx.recordUsage(SEARCHES, searches);
         }

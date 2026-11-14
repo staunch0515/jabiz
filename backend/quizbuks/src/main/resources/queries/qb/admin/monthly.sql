@@ -178,6 +178,10 @@ kinds AS (
                WHEN p.src = 'QbFeeCharge' AND NOT p.reversal AND p.accts IN ('1130,4120', '1130,2150,4120')
                     AND p.a1130 > 0 AND p.a4120 < 0 AND p.a2150 <= 0 AND left(p.ref, 13) = 'fee_exposure_'
                     THEN 'EXPOSURE_CHARGED'
+               -- F-M9: the AI fee charged (the reference fee_ai_<month>).
+               WHEN p.src = 'QbFeeCharge' AND NOT p.reversal AND p.accts IN ('1130,4120', '1130,2150,4120')
+                    AND p.a1130 > 0 AND p.a4120 < 0 AND p.a2150 <= 0 AND left(p.ref, 7) = 'fee_ai_'
+                    THEN 'AI_CHARGED'
                -- Q87b: a platform fee charged (1130 against 4120 and the tax), paid from the cash account, voided.
                WHEN p.src = 'QbFeeCharge' AND NOT p.reversal AND p.accts IN ('1130,4120', '1130,2150,4120')
                     AND p.a1130 > 0 AND p.a4120 < 0 AND p.a2150 <= 0 THEN 'FEE_CHARGED'
@@ -220,6 +224,17 @@ kinds AS (
                WHEN p.src = 'QbPrepayment' AND NOT p.reversal AND p.ref = 'prepay_exposure'
                     AND p.accts IN ('2160,2180', '2180,2190', '2160,2180,2190')
                     AND p.a2180 > 0 AND p.a2160 <= 0 AND p.a2190 <= 0 THEN 'EXPOSURE_RELEASED'
+               -- F-M9: the AI credit bought (prepay_ai), given back (the same reference, out of 2180), and its expired
+               -- fee credit taken out of it (prepay_ai_expired: back to 2190, voided there at once as FEE_CREDIT_VOIDED,
+               -- the source the grant).
+               WHEN p.src = 'QbPrepayment' AND NOT p.reversal AND p.ref = 'prepay_ai'
+                    AND p.accts IN ('2160,2180', '2180,2190', '2160,2180,2190')
+                    AND p.a2180 < 0 AND p.a2160 >= 0 AND p.a2190 >= 0 THEN 'AI_CREDIT_BOUGHT'
+               WHEN p.src = 'QbPrepayment' AND NOT p.reversal AND p.ref = 'prepay_ai'
+                    AND p.accts IN ('2160,2180', '2180,2190', '2160,2180,2190')
+                    AND p.a2180 > 0 AND p.a2160 <= 0 AND p.a2190 <= 0 THEN 'AI_CREDIT_RETURNED'
+               WHEN p.src = 'QbPrepayment' AND NOT p.reversal AND p.ref = 'prepay_ai_expired'
+                    AND p.accts = '2180,2190' AND p.a2180 > 0 AND p.a2190 < 0 THEN 'AI_CREDIT_VOIDED'
                -- F-M5: what a publication's submission set aside of the fee credit and the cash (2190, 2160 to 2180,
                -- the source the prepayment), what was given back (2180 to them), and a fee paid from it (2180 to 1130).
                WHEN p.src = 'QbPrepayment' AND NOT p.reversal
@@ -228,6 +243,9 @@ kinds AS (
                WHEN p.src = 'QbPrepayment' AND NOT p.reversal
                     AND p.accts IN ('2160,2180', '2180,2190', '2160,2180,2190')
                     AND p.a2180 > 0 AND p.a2160 <= 0 AND p.a2190 <= 0 THEN 'PREPAYMENT_RELEASED'
+               -- F-M9: an AI fee paid from the AI credit (its reference the fee's, fee_ai_<month>).
+               WHEN p.src = 'QbFeeCharge' AND NOT p.reversal AND p.accts = '1130,2180'
+                    AND p.a2180 > 0 AND p.a1130 < 0 AND left(p.ref, 7) = 'fee_ai_' THEN 'AI_CREDIT_USED'
                WHEN p.src = 'QbFeeCharge' AND NOT p.reversal AND p.accts = '1130,2180'
                     AND p.a2180 > 0 AND p.a1130 < 0 THEN 'PREPAYMENT_USED'
                -- F-M7: a credit note (4120 and the tax against 1130, the source the note), and what it gives back of a
@@ -277,7 +295,9 @@ FROM (VALUES (1, 'TOPUP'), (2, 'BANK_TOPUP'), (3, 'MANUAL_TOPUP'), (4, 'GRANT'),
              (32, 'OPERATOR_TRANSFER_TO_DIRECT'), (33, 'PREPAYMENT_FROZEN'), (34, 'PREPAYMENT_USED'),
              (35, 'PREPAYMENT_RELEASED'), (36, 'DISTRIBUTION_CHARGED'), (37, 'DISTRIBUTION_DEPOSIT'),
              (38, 'DISTRIBUTION_RELEASED'), (39, 'FEE_CREDIT_NOTE'), (40, 'FEE_CREDIT_RECOVERED'),
-             (41, 'EXPOSURE_CHARGED'), (42, 'EXPOSURE_DEPOSIT'), (43, 'EXPOSURE_RELEASED'), (44, 'OTHER'))
+             (41, 'EXPOSURE_CHARGED'), (42, 'EXPOSURE_DEPOSIT'), (43, 'EXPOSURE_RELEASED'), (44, 'AI_CHARGED'),
+             (45, 'AI_CREDIT_BOUGHT'), (46, 'AI_CREDIT_USED'), (47, 'AI_CREDIT_RETURNED'), (48, 'AI_CREDIT_VOIDED'),
+             (49, 'OTHER'))
          AS c (seq, kind)
 LEFT JOIN kinds k ON k.kind = c.kind
 GROUP BY c.seq, c.kind

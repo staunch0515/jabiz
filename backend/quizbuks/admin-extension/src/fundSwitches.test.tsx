@@ -134,6 +134,10 @@ describe('FundSwitches', () => {
     // Three of the six with a value to compare match (the amount, the rows that wait and the manual ones are not counted).
     expect(screen.getByTestId('fund-switches-summary')).toHaveAttribute('data-match', '3')
     expect(screen.getByTestId('fund-switches-summary')).toHaveAttribute('data-total', '8')
+    // The e2e counts the template's rows and the card's own apart (data-source), not by a number written in it.
+    expect(stateOfRow('qb.help.enabled')).toHaveAttribute('data-source', 'template')
+    expect(stateOfRow(WAITING_ROWS[0].key)).toHaveAttribute('data-source', 'card')
+    expect(stateOfRow(MANUAL_ROWS[0].key)).toHaveAttribute('data-source', 'card')
   })
 
   it('lists the rows that wait for a feature and the ones set up by hand, with what they wait for', async () => {

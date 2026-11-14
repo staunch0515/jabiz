@@ -271,6 +271,13 @@ public class FeeConfig {
         return AiCredits.buy();
     }
 
+    /** F-M9a-2: part of an AI credit back to its lots (a return, an expiry; later F-M15). */
+    @Bean
+    ProcessDefinition<AiCreditGiveBack.GiveBackInput, AiCreditGiveBack.GiveBackOutput, ProcessContext>
+        qbAiCreditGiveBack() {
+        return AiCreditGiveBack.giveBack();
+    }
+
     /** F-M8: the operators' exposure prices, the publications' settlements and the reminders. */
     @Bean
     EntityDefinition qbExposurePriceEntity() {
@@ -512,7 +519,8 @@ public class FeeConfig {
             .item(FeeRules.MANUAL, "en", "Fee charged by hand", "zh", "手工记费", "ja", "手動の料金")
             .item(FeeRules.AUDIENCE, "en", "Audience rules", "zh", "受众规则费", "ja", "対象者ルール料")
             .item(FeeRules.DISTRIBUTION, "en", "Distribution fee", "zh", "配送费", "ja", "配信料")
-            .item(FeeRules.EXPOSURE, "en", "Exposure fee", "zh", "曝光费", "ja", "露出料"));
+            .item(FeeRules.EXPOSURE, "en", "Exposure fee", "zh", "曝光费", "ja", "露出料")
+            .item(FeeRules.AI, "en", "AI fee", "zh", "AI 费", "ja", "AI 利用料"));
     }
 
     @Bean
