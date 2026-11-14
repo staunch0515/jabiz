@@ -162,6 +162,8 @@ public final class QbFees {
             .asCode(INVOICE_STATUS_DICTIONARY, INVOICE_STATUSES.toArray(String[]::new)));
         eb.field("issuedAt", f -> f.physicalColumn("issued_at").immutable(true).required(true).processOnly()
             .asTemporal(TemporalRole.EVENT_TIME));
+        // F-M13: the day it was issued (the fiscal zone's), which its document states instead of the instant.
+        eb.field("issuedOn", f -> f.physicalColumn("issued_on").immutable(true).required(true).processOnly().asDate());
         eb.field("dueOn", f -> f.physicalColumn("due_on").immutable(true).required(true).processOnly().asDate());
         // What has been paid of the total (F-M1: an invoice may be paid in part); the total once PAID.
         eb.field("paidAmount", f -> f.physicalColumn("paid_amount").required(true).processOnly()

@@ -37,7 +37,7 @@ import { EmptyState, LoadFailed, StatusBadge } from './components'
 import { FeeCreditGrants } from './FeeCreditGrants'
 import { FeeCreditNoteDialog } from './FeeCreditNoteDialog'
 import { FeeCreditNotes } from './FeeCreditNotes'
-import { FEES_KEY, INVOICE_STATUSES, invoiceOwed, readFeeCharges, readFeeInvoices, readFeeRequests, recordFeeRequest, REQUEST_REVIEW,
+import { FEES_KEY, INVOICE_STATUSES, invoiceOwed, readFeeCharges, readFeeInvoices, readFeeRequests, readInvoiceSources, recordFeeRequest, REQUEST_REVIEW,
   REQUEST_STATUSES, type FeeCharge, type FeeInvoice, type FeeRequest, type RequestKind } from './fee-api'
 import { parseAmount } from './finance'
 import { StatusFilter } from './finance-components'
@@ -288,6 +288,35 @@ function Charges({ onCreditNote }: { onCreditNote: ((chargeId: string) => void) 
   )
 }
 
+/** F-M13: what an invoice was paid with, as of now (the statement the sponsor's page and the document use). */
+function InvoiceSources({ invoiceId }: { invoiceId: string }) {
+  const { t } = useTranslation(EXTENSION_NAMESPACE)
+  const sources = useQuery({ queryKey: [...FEES_KEY, 'invoice-sources', invoiceId],
+    queryFn: () => readInvoiceSources(invoiceId) })
+  if (sources.isError) return <LoadFailed error={sources.error} onRetry={() => void sources.refetch()} />
+  if (!sources.data) return null
+  const s = sources.data
+  return (
+    <dl className="grid grid-cols-2 gap-x-6 gap-y-1 text-sm md:grid-cols-5" data-testid="fee-invoice-sources">
+      {([['gift', s.gift], ['prepayment', s.prepayment], ['cash', s.cash], ['creditNote', s.creditNote],
+        ['unpaid', s.unpaid]] as const).filter(([, value]) => value !== null).map(([key, value]) => (
+        <div key={key}>
+          <dt className="text-muted-foreground">{t(`fee.sources.${key}`)}</dt>
+          <dd data-testid={`fee-invoice-source-${key}`}>{money(String(value))}
+            {key === 'prepayment' && (s.prepaymentGift ?? 0) > 0
+              && <span className="text-muted-foreground block text-xs">{t('fee.sources.prepaymentGift', { amount: money(String(s.prepaymentGift ?? 0)) })}</span>}
+          </dd>
+        </div>
+      ))}
+      {s.gift === null && (
+        <p className="text-muted-foreground col-span-full" data-testid="fee-invoice-sources-unavailable">
+          {t('fee.sources.unavailable')}
+        </p>
+      )}
+    </dl>
+  )
+}
+
 /** The invoices (`qb.admin.fee-invoices`), by state; finance voids one from here (another administrator approves). */
 function Invoices({ onVoid }: { onVoid: ((invoiceId: string) => void) | null }) {
   const { t } = useTranslation(EXTENSION_NAMESPACE)
@@ -377,6 +406,7 @@ function Invoices({ onVoid }: { onVoid: ((invoiceId: string) => void) | null }) 
         : (
           <DataTable label={t('fee.invoices.table')} columns={sortable(columns)} {...table}
             getRowId={(row) => row.invoiceId} empty={<EmptyState art="money" title={t('fee.invoices.none')} />}
+            renderExpanded={(row) => <InvoiceSources invoiceId={row.invoiceId} />}
             rowProps={(row) => ({ 'data-testid': 'fee-invoice-row', 'data-id': row.invoiceId, 'data-status': row.status })} />
         )}
     </div>

@@ -13,7 +13,7 @@ results:
   contactName: { from: QbSponsor.contactName }
   period:      { from: QbFeeInvoice.period }
   billingMode: { from: QbFeeInvoice.billingMode }
-  issuedAt:    { from: QbFeeInvoice.issuedAt }
+  issuedOn:    { from: QbFeeInvoice.issuedOn }
   dueOn:       { from: QbFeeInvoice.dueOn }
   status:      { from: QbFeeInvoice.status }
   creditApplied: { from: QbFeeInvoice.creditApplied }
@@ -30,7 +30,7 @@ SELECT
     s.{{QbSponsor.contactName}}    AS contactName,
     i.{{QbFeeInvoice.period}}      AS period,
     i.{{QbFeeInvoice.billingMode}} AS billingMode,
-    i.{{QbFeeInvoice.issuedAt}}    AS issuedAt,
+    i.{{QbFeeInvoice.issuedOn}}    AS issuedOn,
     i.{{QbFeeInvoice.dueOn}}       AS dueOn,
     i.{{QbFeeInvoice.status}}      AS status,
     i.{{QbFeeInvoice.creditApplied}} AS creditApplied,

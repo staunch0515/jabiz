@@ -36,6 +36,7 @@
       "total" : "1100",
       "status" : "PARTIAL",
       "issuedAt" : "2026-11-02T00:00:00Z",
+      "issuedOn" : "2026-11-02",
       "dueOn" : "2026-12-02",
       "paidAmount" : "0",
       "creditApplied" : "440",

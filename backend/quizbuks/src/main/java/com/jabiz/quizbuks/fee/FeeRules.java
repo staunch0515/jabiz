@@ -88,6 +88,11 @@ public final class FeeRules {
         return YearMonth.parse(period, MONTH).plusMonths(1).atDay(1).atStartOfDay(zone).toInstant();
     }
 
+    /** The day an invoice is issued: that day in the fiscal zone (the instant is kept too). */
+    public static LocalDate issuedOn(Instant issuedAt, ZoneId zone) {
+        return issuedAt.atZone(zone).toLocalDate();
+    }
+
     /** The day an invoice issued at {@code issuedAt} is due: that day in the fiscal zone plus the due days. */
     public static LocalDate dueOn(Instant issuedAt, BigDecimal dueDays, ZoneId zone) {
         long days = dueDays == null || dueDays.signum() < 0 ? 0 : dueDays.longValue();

@@ -16,8 +16,10 @@ results:
   creditApplied: { from: QbFeeInvoice.creditApplied }
   status:        { from: QbFeeInvoice.status }
   issuedAt:      { from: QbFeeInvoice.issuedAt }
+  issuedOn:      { from: QbFeeInvoice.issuedOn }
   dueOn:         { from: QbFeeInvoice.dueOn }
   paidAt:        { from: QbFeeInvoice.paidAt }
+  voidedAt:      { from: QbFeeInvoice.voidedAt }
   documentRunId: { from: QbFeeInvoice.documentRunId }
 list:
   filters: [status, period, issuedAt]
@@ -38,7 +40,9 @@ SELECT
     i.{{QbFeeInvoice.creditApplied}} AS creditApplied,
     i.{{QbFeeInvoice.status}}        AS status,
     i.{{QbFeeInvoice.issuedAt}}      AS issuedAt,
+    i.{{QbFeeInvoice.issuedOn}}      AS issuedOn,
     i.{{QbFeeInvoice.dueOn}}         AS dueOn,
     i.{{QbFeeInvoice.paidAt}}        AS paidAt,
+    i.{{QbFeeInvoice.voidedAt}}      AS voidedAt,
     i.{{QbFeeInvoice.documentRunId}} AS documentRunId
 FROM {{QbFeeInvoice}} i

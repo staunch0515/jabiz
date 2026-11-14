@@ -163,6 +163,12 @@ class PrepaymentIT extends PrepaymentItSupport {
         assertThat(query("SELECT status FROM qb_fee_invoice WHERE charge_id = ?", String.valueOf(charge.get(
             "charge_id")))).singleElement()
             .satisfies(row -> assertThat(row).containsEntry("status", "PAID"));
+        // F-M13: the invoice's line names the publication (the source key of an audience fee is 'publication:<id>').
+        String audienceInvoice = String.valueOf(query("SELECT invoice_id FROM qb_fee_invoice WHERE charge_id = ?",
+            String.valueOf(charge.get("charge_id"))).getFirst().get("invoice_id"));
+        assertThat(items("qb.sponsor.fee-invoice-lines", sponsorToken(sponsor), Map.of("params",
+            Map.of("invoiceId", audienceInvoice)))).singleElement().satisfies(line -> assertThat(line)
+            .containsEntry("description", "FM5 live"));
         assertThat(prepayments(publicationId)).singleElement().satisfies(p ->
             assertThat((BigDecimal) p.get("remaining")).isEqualByComparingTo("0"));
         assertThat(ledger("2180", sponsor)).isEqualByComparingTo("0");
