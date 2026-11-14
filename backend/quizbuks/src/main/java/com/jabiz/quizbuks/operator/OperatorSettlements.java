@@ -81,6 +81,9 @@ public final class OperatorSettlements {
     public static final String PAY = "QB_OPERATOR_SETTLEMENT_PAY";
     public static final String APPROVAL_RESULT = "QB_OPERATOR_SETTLEMENT_APPROVAL_RESULT";
     public static final String STATEMENT = "QB_OPERATOR_SETTLEMENT_STATEMENT";
+    /** Finance's list of the operators whose settlement waits (#701 review M2: the month and zone are the server's). */
+    public static final String WAITING = "QB_OPERATOR_SETTLEMENTS_WAITING";
+    public static final String WAITING_TEMPLATE = "qb.system.operator-settlements-waiting";
     public static final String JOB = "qb.operator-settlement";
     public static final String DUE_TEMPLATE = "qb.system.operator-settlements-due";
     /** F-M12 b (§3.1): the steps before the settlement not done yet (distribution fees, invoices). */
@@ -233,7 +236,8 @@ public final class OperatorSettlements {
         eb.field("version", f -> f.physicalColumn("version").asVersion());
         eb.unique("uk_qb_operator_settlement_month", "operatorId", "month");
         eb.listView("default", lv -> lv
-            .columns("operatorId", "month", "revenue", "operatorShare", "payable", "status", "paidAt")
+            // revenue is the old way's commission (0 from F-M12 on): the platform fees instead (#701 review L1).
+            .columns("operatorId", "month", "platformFees", "operatorShare", "payable", "status", "paidAt")
             .filters("operatorId", "month", "status")
             .sorts("month", "payable")
             .defaultSort("month", false));
@@ -1243,6 +1247,46 @@ public final class OperatorSettlements {
      * first time, and gives the same one after. A person issues it: the platform issues a document only for a caller
      * holding its layout's permissions, and the monthly job runs as the system, which holds none.
      */
+    public record WaitingInput() {}
+
+    /**
+     * An operator whose earliest month without a settlement is before the current one.
+     *
+     * @param steps what the month still waits for ({@code DISTRIBUTION}, {@code INVOICE}, {@code EXPOSURE}); empty
+     *              when it only waits for the daily run
+     */
+    public record WaitingOperator(String operatorId, String operatorName, String month, List<String> steps) {}
+
+    /** @param current the current month in the fiscal year's zone, by the server's clock */
+    public record WaitingOutput(String current, List<WaitingOperator> operators) {}
+
+    /**
+     * Finance's list of the settlements that wait (F-M12 §6). The current month comes from the server's clock in
+     * {@code jabiz.fiscal-year-zone}, not from the browser (#701 review M2), and every operator is listed: one row
+     * each at most (review L6). Writes nothing.
+     */
+    public static ProcessDefinition<WaitingInput, WaitingOutput, ProcessContext> waiting(ZoneId zone) {
+        return ProcessDefinition.define(WAITING, 1, WaitingInput.class, WaitingOutput.class, ProcessContext.class,
+            pb -> pb
+                .description("Lists the operators whose earliest month without a settlement waits, and for what; "
+                    + "writes nothing.")
+                .permissions(QbPermissions.ADMIN_FINANCE_READ)
+                .contextFactory(OperatorSettlements::context)
+                .outputMapper(ctx -> new WaitingOutput(currentMonth(ctx.opTime(), zone), rows(ctx, WAITING_ROWS)
+                    .stream().map(row -> new WaitingOperator(String.valueOf(row.get("operatorId")),
+                        row.get("operatorName") == null ? null : String.valueOf(row.get("operatorName")),
+                        String.valueOf(row.get("month")), steps(row.get("steps")))).toList()))
+                .step("Read the waiting months", RunTemplate.<ProcessContext>of(WAITING_TEMPLATE,
+                    ctx -> Map.of("current", currentMonth(ctx.opTime(), zone), "zone", zone.getId()), WAITING_ROWS)));
+    }
+
+    private static final String WAITING_ROWS = "waitingRows";
+
+    private static List<String> steps(Object value) {
+        return value == null || String.valueOf(value).isBlank() ? List.of()
+            : List.of(String.valueOf(value).split(","));
+    }
+
     public static ProcessDefinition<StatementInput, SettlementOutput, ProcessContext> statement() {
         return ProcessDefinition.define(STATEMENT, 1, StatementInput.class, SettlementOutput.class,
             ProcessContext.class, pb -> pb

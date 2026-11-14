@@ -61,9 +61,19 @@ class OperatorReadinessTemplateTest {
      */
     @Test
     void theDailyChecksStepsAreTheReadinessBranchesWrittenTheSame() throws IOException {
+        assertStepsWrittenTheSame(Path.of("src/main/resources/queries/qb/system/recon-operator-settlement.sql"));
+    }
+
+    /** F-M12 d: the waiting settlements' list for finance names the steps with the same conditions, too. */
+    @Test
+    void theWaitingListsStepsAreTheReadinessBranchesWrittenTheSame() throws IOException {
+        assertStepsWrittenTheSame(Path.of("src/main/resources/queries/qb/system/operator-settlements-waiting.sql"));
+    }
+
+    private static void assertStepsWrittenTheSame(Path copy) throws IOException {
         Path system = Path.of("src/main/resources/queries/qb/system");
         String readiness = code(Files.readString(system.resolve("operator-settlement-readiness.sql")));
-        String check = code(Files.readString(system.resolve("recon-operator-settlement.sql")));
+        String check = code(Files.readString(copy));
         // The steps are the readiness template's own: a branch added there and not to the check fails here.
         List<String> steps = new java.util.ArrayList<>();
         Matcher blocked = Pattern.compile("SELECT '(\\w+)' AS blockedBy").matcher(readiness);
@@ -76,10 +86,10 @@ class OperatorReadinessTemplateTest {
                 .matcher(readiness);
             assertThat(a.find()).as(step + " in the readiness template").isTrue();
             Matcher b = Pattern.compile("CASE WHEN EXISTS \\(((?:(?!CASE WHEN).)*?)\\) THEN '" + step + "' END").matcher(check);
-            assertThat(b.find()).as(step + " in the check").isTrue();
+            assertThat(b.find()).as(step + " in " + copy.getFileName()).isTrue();
             String expected = a.group(1).replace(":operatorId", "b.r_operator").replace(":month", "b.r_month")
                 .replace(":periodStart", "b.r_from").replace(":periodEnd", "b.r_to");
-            assertThat(b.group(1)).as(step).isEqualTo(expected);
+            assertThat(b.group(1)).as(step + " in " + copy.getFileName()).isEqualTo(expected);
         }
     }
 

@@ -1,4 +1,4 @@
-import { useQueryClient } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useId, useMemo, useState, type FormEvent } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useSearchParams } from 'react-router'
@@ -27,10 +27,12 @@ import {
   useAuth,
   type ColumnDef,
 } from '@jabiz/admin'
-import { EmptyState, LoadFailed, StatusBadge } from './components'
+import { EmptyState, LoadFailed, Section, StatusBadge } from './components'
 import { money, useLabels, usePaged, usePoints } from './hooks'
 import { DICTIONARY, PERMISSION } from './ids'
-import { downloadStatement, issueStatement, paySettlement, readSettlements, SETTLEMENTS_KEY, type Settlement } from './settlement-api'
+import { SettlementLines } from './SettlementLines'
+import { downloadStatement, issueStatement, paySettlement, readSettlements, readWaitingSettlements, SETTLEMENTS_KEY,
+  WAITING_KEY, type Settlement, type WaitingSettlement } from './settlement-api'
 
 /** The columns sorted on the server, by the template's `list.sorts` field (Q53a). */
 const SORTS = { month: 'month', payable: 'payable', status: 'status' } as const
@@ -102,6 +104,40 @@ function PayDialog({ settlement, onClose }: { settlement: Settlement; onClose: (
 }
 
 /**
+ * The settlements that wait (F-M12 §6): each operator's earliest month without a settlement and the steps it still
+ * waits for; with no step, only the daily run is missing. Finance's only; read only.
+ */
+function WaitingSettlements() {
+  const { t } = useTranslation(EXTENSION_NAMESPACE)
+  // The list changes about once a day (the daily run): kept five minutes before it is read again (#701 re-review L-6).
+  const waiting = useQuery({ queryKey: [...WAITING_KEY], queryFn: readWaitingSettlements, staleTime: 5 * 60_000 })
+  const columns = useMemo<ColumnDef<WaitingSettlement, unknown>[]>(() => [
+    { id: 'operator', header: t('settlement.waiting.operator'), cell: ({ row }) => row.original.operatorName },
+    { id: 'month', header: t('settlement.waiting.month'), cell: ({ row }) => row.original.month },
+    { id: 'steps', header: t('settlement.waiting.waitingFor'),
+      cell: ({ row }) => (
+        <span data-testid="waiting-steps">
+          {(row.original.steps.length > 0 ? row.original.steps : ['NONE'])
+            .map((step) => t(`settlement.waiting.steps.${step}`, { defaultValue: step })).join(' / ')}
+        </span>
+      ) },
+  ], [t])
+  return (
+    <Section title={t('settlement.waiting.title')} testId="settlements-waiting">
+      <p className="text-muted-foreground text-sm">{t('settlement.waiting.description')}</p>
+      {waiting.isError
+        ? <LoadFailed error={waiting.error} onRetry={() => void waiting.refetch()} />
+        : (
+          <DataTable label={t('settlement.waiting.title')} columns={columns} data={waiting.data?.operators ?? []}
+            loading={waiting.isPending} getRowId={(row) => row.operatorId}
+            empty={<EmptyState art="money" title={t('settlement.waiting.none')} />}
+            rowProps={(row) => ({ 'data-testid': 'waiting-row', 'data-id': row.operatorId })} />
+        )}
+    </Section>
+  )
+}
+
+/**
  * The operators' monthly settlements (Q48b). Finance (`qb.admin.finance.read`) sees every operator's, downloads the
  * statement as issued and records a payment (`qb.operator.settlement.pay`; another administrator approves it in the
  * approvals); an operator's member sees its own, without the payment's record. Since Q48e-2 a month is credited to
@@ -121,21 +157,35 @@ export default function SettlementsPage() {
   const [search, setSearch] = useSearchParams()
   const status = search.get('status') ?? ALL
   const [paying, setPaying] = useState<Settlement | null>(null)
+  const [lines, setLines] = useState<Settlement | null>(null)
   const { query, table, sortable } = usePaged([...SETTLEMENTS_KEY, finance, status],
     (offset, limit, sorts) => readSettlements(finance, status === ALL ? null : status, offset, limit, sorts), true, SORTS)
   const amount = finance ? money : points
   const columns = useMemo<ColumnDef<Settlement, unknown>[]>(() => [
     ...(finance ? [{ id: 'operator', header: t('settlement.operator'),
       cell: ({ row }) => row.original.operatorName ?? row.original.operatorId } as ColumnDef<Settlement, unknown>] : []),
-    { id: 'month', header: t('settlement.month'), cell: ({ row }) => row.original.month },
+    { id: 'month', header: t('settlement.month'),
+      cell: ({ row }) => (
+        <Button variant="link" className="h-auto p-0" data-testid="settlement-lines-open"
+          onClick={() => setLines(row.original)}>
+          {row.original.month}<span className="sr-only">: {t('settlement.viewLines')}</span>
+        </Button>
+      ) },
     { id: 'plan', header: t('settlement.plan'), cell: ({ row }) => planLabel(row.original.plan) },
-    { id: 'revenue', header: t('settlement.revenue'), meta: right, cell: ({ row }) => amount(row.original.revenue) },
     { id: 'platformFees', header: t('settlement.platformFees'), meta: right,
       cell: ({ row }) => <span data-testid="settlement-platform-fees">{amount(row.original.platformFees)}</span> },
+    { id: 'costExcluded', header: t('settlement.costExcluded'), meta: right,
+      cell: ({ row }) => <span data-testid="settlement-cost-excluded">{amount(row.original.costExcluded)}</span> },
+    { id: 'giftPaid', header: t('settlement.giftPaid'), meta: right,
+      cell: ({ row }) => <span data-testid="settlement-gift-paid">{amount(row.original.giftPaid)}</span> },
     { id: 'share', header: t('settlement.share'), meta: right, cell: ({ row }) => amount(row.original.operatorShare) },
     // F-M7: what credit notes on the operator's Sponsors' fees took off the share.
     { id: 'creditNoteDeduction', header: t('settlement.creditNoteDeduction'), meta: right,
       cell: ({ row }) => <span data-testid="settlement-credit-note-deduction">{amount(row.original.creditNoteDeduction)}</span> },
+    { id: 'giftRecovered', header: t('settlement.giftRecovered'), meta: right,
+      cell: ({ row }) => <span data-testid="settlement-gift-recovered">{amount(row.original.giftRecovered)}</span> },
+    { id: 'giftCarriedOut', header: t('settlement.giftCarriedOut'), meta: right,
+      cell: ({ row }) => <span data-testid="settlement-gift-carried-out">{amount(row.original.giftCarriedOut)}</span> },
     { id: 'fixedFee', header: t('settlement.fixedFee'), meta: right, cell: ({ row }) => amount(row.original.fixedFee) },
     { id: 'payable', header: t('settlement.payable'), meta: right, cell: ({ row }) => amount(row.original.payable) },
     { id: 'status', header: t('settlement.status'),
@@ -202,7 +252,9 @@ export default function SettlementsPage() {
             getRowId={(row) => row.settlementId} empty={<EmptyState art="money" title={t('settlement.none')} />}
             rowProps={(row) => ({ 'data-testid': 'settlement-row', 'data-id': row.settlementId })} />
         )}
+      {finance && <WaitingSettlements />}
       {paying && <PayDialog settlement={paying} onClose={() => setPaying(null)} />}
+      {lines && <SettlementLines settlement={lines} finance={finance} amount={amount} onClose={() => setLines(null)} />}
     </div>
   )
 }
