@@ -769,13 +769,13 @@ test.describe.serial('the first launch\'s loop', () => {
 
   test('9. F-M14: after the loop\'s money, the daily check finds no difference', async ({ page, request }) => {
     test.setTimeout(STEP_TIMEOUT_MS)
-    // A run checked after everything above (the server reconciles every minute here; asked once more so as not to
-    // wait for it), told by the server's own times: later than the latest run checked before this step. A difference
-    // blocks the month's journal export: the loop must leave none.
+    // A run checked after everything above, told by the server's own times: later than the latest run checked before
+    // this step. The server reconciles every minute here (QB_RECONCILE_RUN_CRON), so the step waits for the next run;
+    // asking for a run again would only replay a scheduled time already run. A difference blocks the month's journal
+    // export: the loop must leave none.
     const admin = await adminToken(request)
     const checked = (rows: Record<string, unknown>[]) => rows.map((row) => Date.parse(String(row.checkedAt)))
     const before = Math.max(0, ...checked(await query(request, admin, 'qb.admin.recon-runs', {})))
-    await runJobNow(request, 'qb.reconcile')
     let latest: Record<string, unknown> | undefined
     await expect.poll(async () => {
       latest = (await query(request, admin, 'qb.admin.recon-runs', {}))
