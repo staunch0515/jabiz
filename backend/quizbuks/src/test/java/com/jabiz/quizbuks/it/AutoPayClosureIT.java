@@ -1,7 +1,9 @@
 package com.jabiz.quizbuks.it;
 
 import com.jabiz.job.JobDefinition;
+import com.jabiz.quizbuks.QbPermissions;
 import com.jabiz.quizbuks.fee.FeeAutoPay;
+import com.jabiz.runtime.test.TestTokens;
 import com.jabiz.quizbuks.setup.QbParams;
 import com.jabiz.quizbuks.wallet.KudosExchanges;
 import com.jabiz.runtime.job.JobRunner;
@@ -72,6 +74,30 @@ class AutoPayClosureIT extends PlayItSupport {
             assertThat(status(erasedInvoice)).isEqualTo("OPEN");
             assertThat((BigDecimal) query("SELECT balance FROM qb_wallet WHERE owner_id = ? AND kind = 'CASH'", erased)
                 .getFirst().get("balance")).isEqualByComparingTo("1100");
+        } finally {
+            param(QbParams.FEE_AUTO_PAY_ENABLED, "false");
+        }
+    }
+
+    @Test
+    void aSponsorWoundUpWithFeesOwedIsNotPaidByTheEventEitherTheWindUpPaysWhatArrivesLater() {
+        param(QbParams.FEE_AUTO_PAY_ENABLED, "true");
+        param(QbParams.KUDOS_SELL_ENABLED, "true");
+        try {
+            String erased = newSponsor(unique("s-fm13c-closed"));
+            String invoiceId = invoice(erased);
+            execute("INSERT INTO qb_sponsor_closure (closure_id, sponsor_id, status, reason_code, erased_at, closed_at) "
+                + "VALUES (?, ?, 'CLOSED', 'FEE_OWED', ?, ?)", java.util.UUID.randomUUID().toString(), erased,
+                java.sql.Timestamp.from(clock.instant()), java.sql.Timestamp.from(clock.instant()));
+            // Money arrives afterwards (a top-up confirmed late): the event's path leaves it, the wind-up's job takes it
+            // up (its items include a sponsor closed with fees owed and cash that arrived since).
+            credit(erased, 1100);
+            run(KudosExchanges.SELL, sponsorToken(erased), body("amount", 1100));
+            assertThat(((FeeAutoPay.AutoPayOutput) systemRun(FeeAutoPay.AUTO_PAY, body("sponsorId", erased))).outcome())
+                .isEqualTo("NONE");
+            assertThat(status(invoiceId)).isEqualTo("OPEN");
+            assertThat(items("qb.system.money-close-due", TestTokens.bearer(tokens, "closure-test",
+                QbPermissions.FEE_SYSTEM), Map.of())).anySatisfy(row -> assertThat(row).containsEntry("sponsorId", erased));
         } finally {
             param(QbParams.FEE_AUTO_PAY_ENABLED, "false");
         }

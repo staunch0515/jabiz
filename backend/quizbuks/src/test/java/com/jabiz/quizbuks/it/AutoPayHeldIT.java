@@ -29,6 +29,14 @@ class AutoPayHeldIT extends PlayItSupport {
     @Test
     void theCashHeldForAPublicationIsLeftAlone() {
         param(QbParams.FEE_AUTO_PAY_ENABLED, "true");
+        try {
+            heldScenario();
+        } finally {
+            param(QbParams.FEE_AUTO_PAY_ENABLED, "false");
+        }
+    }
+
+    void heldScenario() {
         param(QbParams.KUDOS_SELL_ENABLED, "true");
         String sponsor = newSponsor(unique("s-fm13c-held"));
         String invoiceId = java.util.UUID.randomUUID().toString();
@@ -48,11 +56,13 @@ class AutoPayHeldIT extends PlayItSupport {
             sponsor).getFirst();
         assertThat((BigDecimal) wallet.get("balance")).isEqualByComparingTo("800");
         assertThat((BigDecimal) wallet.get("held")).isEqualByComparingTo("800");
+        // The lots too: what the wallet keeps is what the held part stands for.
+        assertThat((BigDecimal) query("SELECT sum(remaining) AS n FROM qb_cash_lot WHERE sponsor_id = ?", sponsor)
+            .getFirst().get("n")).isEqualByComparingTo("800");
         assertThat(query("SELECT status, paid_amount FROM qb_fee_invoice WHERE invoice_id = ?", invoiceId).getFirst())
             .containsEntry("status", QbFees.PARTIAL);
         // Nothing free is left: a second run pays nothing.
         assertThat(((FeeAutoPay.AutoPayOutput) systemRun(FeeAutoPay.AUTO_PAY, body("sponsorId", sponsor))).outcome())
             .isEqualTo("NONE");
-        param(QbParams.FEE_AUTO_PAY_ENABLED, "false");
     }
 }
