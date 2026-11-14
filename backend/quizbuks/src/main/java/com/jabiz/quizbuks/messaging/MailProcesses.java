@@ -468,6 +468,7 @@ public final class MailProcesses {
 
     static final String VOIDED_INVOICE = "voidedInvoice";
     static final String VOIDED_PAYMENTS = "voidedPayments";
+    static final String VOIDED_GRANTS = "voidedGrants";
 
     /** The sponsor is told an invoice was voided and what went back to their account (never the reason). */
     public static ProcessDefinition<FeeVoidedMailInput, MailOutput, ProcessContext> feeInvoiceVoided(
@@ -487,7 +488,14 @@ public final class MailProcesses {
                     QueryEntities.query(QbAccounts.defaultDataset(QbAccounts.BAN), ctx -> byId("userId",
                         uuid(sponsorOf(ctx))), BAN),
                     QueryEntities.query(SecurityEntities.USER_DATASET, ctx -> byId("userId",
-                        uuid(sponsorOf(ctx))), USER))),
+                        uuid(sponsorOf(ctx))), USER)))
+                // The grants the payments came from: what went back to one that has expired is not back in the account.
+                .step("Load the grants", QueryEntities.<ProcessContext>of(
+                    com.jabiz.quizbuks.fee.QbFeeAccount.defaultDataset(com.jabiz.quizbuks.fee.QbFeeAccount.GRANT),
+                    ctx -> EntityQuery.builder().where(new QueryPredicate.In("grantId", new ArrayList<Object>(
+                        list(ctx, VOIDED_PAYMENTS).stream().map(payment -> payment.get("grantId")).filter(java.util.Objects::nonNull)
+                            .map(id -> (Object) String.valueOf(id)).distinct().toList()))).limit(INVOICE_ROWS).build(),
+                    VOIDED_GRANTS)),
             ctx -> {
                 EntityInstance invoice = first(ctx, VOIDED_INVOICE);
                 EntityInstance ban = first(ctx, BAN);
@@ -500,19 +508,32 @@ public final class MailProcesses {
                 // invoice paid before the parts existed has none and went back as it was paid. Unpaid when voided: nothing
                 // is said of money.
                 java.math.BigDecimal refunded = java.math.BigDecimal.ZERO;
+                java.math.BigDecimal given = java.math.BigDecimal.ZERO;
                 boolean parts = false;
+                java.util.Set<String> expired = new java.util.HashSet<>();
+                for (EntityInstance grant : list(ctx, VOIDED_GRANTS)) {
+                    if (grant.get("voidedAt") != null) {
+                        expired.add(String.valueOf(grant.id()));
+                    }
+                }
                 for (EntityInstance payment : list(ctx, VOIDED_PAYMENTS)) {
                     parts = true;
                     java.math.BigDecimal amount = new java.math.BigDecimal(String.valueOf((Object) payment.get("amount")));
                     if (amount.signum() < 0) {
-                        refunded = refunded.add(amount.negate());
+                        given = given.add(amount.negate());
+                        // Back to a grant that has expired: not back in the account.
+                        if (payment.get("grantId") == null || !expired.contains(String.valueOf((Object) payment.get("grantId")))) {
+                            refunded = refunded.add(amount.negate());
+                        }
                     }
                 }
                 if (!parts && invoice.get("paidAmount") != null) {
                     refunded = new java.math.BigDecimal(String.valueOf((Object) invoice.get("paidAmount")));
+                    given = refunded;
                 }
                 String detail = refunded.signum() > 0
                     ? text(messages, ctx, "qb.mail.invoice-voided.refunded").replace("{refunded}", MailValues.amount(refunded))
+                    : given.signum() > 0 ? text(messages, ctx, "qb.mail.invoice-voided.expired")
                     : text(messages, ctx, "qb.mail.invoice-voided.unpaid");
                 decide(ctx, NotificationMails.FEE_INVOICE_VOIDED, Map.of("invoiceNo",
                     String.valueOf((Object) invoice.get("invoiceNo")), "detail", detail));

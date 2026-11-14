@@ -355,6 +355,54 @@ class FeeAccountIT extends PlayItSupport {
             "2190 DEBIT 1100", "5140 CREDIT 1100");
         assertThat(balance(sponsor, QbWallets.FEE_CREDIT)).isEqualByComparingTo("0");
         assertThat(differences(sponsor)).isEmpty();
+        // F-M13c (review L-3): all of it went back to a grant that had expired: the mail does not say money came back.
+        deliverEvents();
+        assertThat(mailTo(sponsor)).filteredOn(row -> "qb.fee.invoice-voided".equals(row.get("template")))
+            .singleElement().satisfies(row -> assertThat(String.valueOf(row.get("params")))
+                .contains("has expired").doesNotContain("each part"));
+    }
+
+    /**
+     * F-M13c (review M-A): money given back to an old lot by a void is there with no event; the check does not report
+     * the sponsor's other unpaid invoice that night (it does once the hours since the refund have passed).
+     */
+    @Test
+    void aSponsorWhoseVoidJustGaveMoneyBackIsNotReportedAsMissedThatNight() {
+        String sponsor = newSponsor(unique("s-fm13c-voidback"));
+        cash(sponsor, 2000);
+        execute("UPDATE qb_cash_lot SET arrived_at = arrived_at - interval '200 hours' WHERE sponsor_id = ?", sponsor);
+        assertThat(monthly(sponsor)).isEqualTo("CHARGED");
+        String invoiceId = String.valueOf(invoice(sponsor).get("invoice_id"));
+        Map<String, Object> voiding = run(FeeRequests.RECORD, finance(), body("kind", "VOID", "invoiceId", invoiceId,
+            "reason", "Charged by mistake"));
+        run("APPROVAL_DECIDE", content(), body("requestId", voiding.get("approvalRequestId"), "decision", "APPROVE"));
+        deliverEvents();
+        assertThat(invoice(sponsor)).containsEntry("status", QbFees.VOID);
+        // Another invoice, unpaid for days, while the voided one's money is back in the old lot.
+        java.time.Instant issued = clock.instant().minus(Duration.ofDays(5));
+        execute("INSERT INTO qb_fee_invoice (invoice_id, invoice_no, sponsor_id, billing_mode, period, amount, tax, "
+            + "total, paid_amount, credit_applied, status, issued_at, issued_on, due_on) VALUES (?, ?, ?, 'POSTPAID', "
+            + "'2099-01', 1000, 100, 1100, 0, 0, 'OPEN', ?, ?::date, ?::date)", java.util.UUID.randomUUID().toString(),
+            "VB-" + sponsor.substring(0, 8), sponsor, java.sql.Timestamp.from(issued), issued.toString().substring(0, 10),
+            issued.plus(Duration.ofDays(30)).toString().substring(0, 10));
+        Map<String, Object> change = run("CONTROL_CHANGE_PROPOSE", proposer(), body("targetEntity", "SysParam",
+            "values", Map.of("paramKey", "qb.fee.auto-pay.enabled", "value", "true"), "reason", "F-M13c test"));
+        run("CONTROL_CHANGE_PUBLISH", financeAdmin(), body("changeId", change.get("changeId")));
+        try {
+            String system = TestTokens.bearer(tokens, "recon-test", QbPermissions.WALLET_SYSTEM);
+            java.util.function.IntFunction<List<Map<String, Object>>> found = hours -> feeAccountItems(system,
+                Map.of("params", Map.of("at", clock.instant().plus(Duration.ofHours(hours)).toString(), "refundHours", 24,
+                    "missedHours", 48))).stream().filter(row -> sponsor.equals(row.get("sponsorId"))
+                    && "AUTO_PAY_MISSED".equals(row.get("checkCode"))).toList();
+            // The refund was 30 hours before the check: the nightly run has not had its turn with it yet.
+            assertThat(found.apply(30)).isEmpty();
+            // 60 hours on, the money has been there for a night's run and the invoice is still unpaid: reported.
+            assertThat(found.apply(60)).hasSize(1);
+        } finally {
+            Map<String, Object> off = run("CONTROL_CHANGE_PROPOSE", proposer(), body("targetEntity", "SysParam",
+                "values", Map.of("paramKey", "qb.fee.auto-pay.enabled", "value", "false"), "reason", "F-M13c test"));
+            run("CONTROL_CHANGE_PUBLISH", financeAdmin(), body("changeId", off.get("changeId")));
+        }
     }
 
     /** F-M13c (review M3): an invoice voided with nothing paid says so, and does not speak of money given back. */
