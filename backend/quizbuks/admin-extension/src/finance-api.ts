@@ -330,12 +330,13 @@ export async function readReconItems(runId: string, offset: number, limit: numbe
 
 /**
  * F-M14b: the items of one level, asked of the server (a page holds at most {@link PAGE_LIMIT} items, so a level is
- * not picked out of the first page): attention and notes by their checks, differences as every other check.
+ * not picked out of the first page): attention and notes by their checks, differences as every other check (one `ne`
+ * a check, the filters joined by AND: the list has no `notIn`).
  */
 export function levelFilters(level?: ReconLevel | null): Filter[] {
   if (!level) return []
-  const attentionAndNotes = [...ATTENTION_CHECKS, ...NOTE_CHECKS]
-  return level === 'DIFFERENCE' ? [{ field: 'checkCode', op: 'notIn', values: attentionAndNotes }]
+  return level === 'DIFFERENCE'
+    ? [...ATTENTION_CHECKS, ...NOTE_CHECKS].map((check) => ({ field: 'checkCode', op: 'ne', value: check }))
     : [{ field: 'checkCode', op: 'in', values: [...(level === 'ATTENTION' ? ATTENTION_CHECKS : NOTE_CHECKS)] }]
 }
 

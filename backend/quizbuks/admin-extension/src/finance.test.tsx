@@ -122,13 +122,19 @@ beforeEach(() => {
   ])
   server.datasets = new Map([['urn:jabiz:dataset:default:QbUserBan', []]])
   server.runQuery.mockReset().mockImplementation(async (id: string, options: { offset?: number; limit?: number;
-    count?: boolean; filters?: { field: string; op: string; values?: unknown[] }[] } = {}) => {
+    count?: boolean; filters?: { field: string; op: string; value?: unknown; values?: unknown[] }[] } = {}) => {
     const rows = server.templates.get(id)
     if (rows instanceof Error) throw rows
-    // The list filters `in` and `notIn` as the server applies them (F-M14b: the reconciliation's levels).
+    // The list filters `in` and `ne` as the server applies them (F-M14b: the reconciliation's levels); any other
+    // operator is refused, as the server refuses one it does not know.
+    for (const filter of options.filters ?? []) {
+      if (!['in', 'ne', 'eq', 'like', 'gte', 'lte', 'between'].includes(filter.op)) {
+        throw new ApiError(400, { detail: `Unknown operator ${filter.op}` })
+      }
+    }
     const all = (rows ?? []).filter((row: Record<string, unknown>) => (options.filters ?? []).every((filter) =>
       filter.op === 'in' ? filter.values!.includes(row[filter.field])
-        : filter.op === 'notIn' ? !filter.values!.includes(row[filter.field]) : true))
+        : filter.op === 'ne' ? row[filter.field] !== filter.value : true))
     const offset = options.offset ?? 0
     const limit = options.limit ?? 100
     return { items: all.slice(offset, offset + limit), offset, limit, ...(options.count ? { total: all.length } : {}) }
@@ -405,14 +411,14 @@ describe('ReconciliationPage by level (F-M14)', () => {
       .toEqual(expect.arrayContaining(['LEDGER_ZERO', 'TAKER_WALLET_LAG']))
   })
 
-  it('asks for the differences as every check that is neither for attention nor a note', async () => {
+  it('asks for the differences as every check that is neither for attention nor a note (one ne each)', async () => {
     server.templates.set(TEMPLATE.reconItems, items())
     renderAt(`/qb/finance/reconciliation?run=${RUN}&level=DIFFERENCE`, '/qb/finance/reconciliation',
       <ReconciliationPage />)
     const groups = await screen.findAllByTestId('recon-group')
     expect(groups.every((group) => within(group).getByTestId('recon-level').dataset.level === 'DIFFERENCE')).toBe(true)
-    expect(calledWith(TEMPLATE.reconItems).at(-1)![1].filters).toEqual([{ field: 'checkCode', op: 'notIn',
-      values: [...ATTENTION_CHECKS, ...NOTE_CHECKS] }])
+    expect(calledWith(TEMPLATE.reconItems).at(-1)![1].filters).toEqual([...ATTENTION_CHECKS, ...NOTE_CHECKS]
+      .map((check) => ({ field: 'checkCode', op: 'ne', value: check })))
   })
 
   it('shows the whole run for a level it does not know', async () => {

@@ -42,17 +42,16 @@ function ReconNotes() {
     body = <LoadFailed error={query.error} onRetry={() => void query.refetch()} />
   } else if (query.isPending) {
     body = <PageState kind="loading" />
-  } else if (query.data.length === 0) {
-    body = <p className="text-muted-foreground text-sm" data-testid="operator-recon-notes-none">
-      {t('operator.billingPage.notes.none')}</p>
   } else {
-    const notes = query.data
+    const { asOf, notes } = query.data
     body = (
       <>
-        {notes[0].scheduledTime && (
-          <p className="text-muted-foreground text-sm" data-testid="operator-recon-notes-as-of">
-            {t('operator.billingPage.notes.asOf', { when: when(notes[0].scheduledTime) })}
-          </p>
+        <p className="text-muted-foreground text-sm" data-testid="operator-recon-notes-as-of">
+          {asOf ? t('operator.billingPage.notes.asOf', { when: when(asOf) }) : t('operator.billingPage.notes.noRun')}
+        </p>
+        {asOf && notes.length === 0 && (
+          <p className="text-muted-foreground text-sm" data-testid="operator-recon-notes-none">
+            {t('operator.billingPage.notes.none')}</p>
         )}
         {OPERATOR_NOTE_CHECKS.map((check) => {
           const rows = notes.filter((note) => note.checkCode === check)

@@ -154,11 +154,14 @@ class CreditNoteReconIT extends CreditNoteItSupport {
             publicationId);
         execute("DELETE FROM qb_publication_card WHERE publication_id = ?::uuid", publicationId);
         try {
-            assertThat(codes(sponsor)).containsAll(before).contains("AUDIENCE_FEE_NOT_LIVE");
+            // Exactly the codes found before, and this one (review L4: nothing else changes with the card gone).
+            List<String> expected = new ArrayList<>(before);
+            expected.add("AUDIENCE_FEE_NOT_LIVE");
+            assertThat(codes(sponsor)).containsExactlyInAnyOrderElementsOf(expected);
         } finally {
             execute("INSERT INTO qb_publication_card SELECT * FROM fm14b_card");
             execute("DROP TABLE fm14b_card");
         }
-        assertThat(codes(sponsor)).doesNotContain("AUDIENCE_FEE_NOT_LIVE");
+        assertThat(codes(sponsor)).containsExactlyInAnyOrderElementsOf(before);
     }
 }

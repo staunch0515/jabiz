@@ -381,10 +381,20 @@ export interface OperatorReconNote {
   scheduledTime: string | null
 }
 
-/** The latest run's notes about the operator's own sponsors (the server keeps them to its own, D64). */
-export async function readOperatorReconNotes(): Promise<OperatorReconNote[]> {
+/** The latest run's time (null: no run yet) and its notes about the operator's sponsors. */
+export interface OperatorReconNotes {
+  asOf: string | null
+  notes: OperatorReconNote[]
+}
+
+/**
+ * The latest run's notes about the sponsors assigned to the operator now (the server keeps them to its own, D64); a
+ * run that noted nothing about them still gives its time.
+ */
+export async function readOperatorReconNotes(): Promise<OperatorReconNotes> {
   const page = await runQuery<Row>(TEMPLATE.operatorReconNotes, { offset: 0, limit: 500 })
-  return page.items.flatMap((row): OperatorReconNote[] => {
+  const asOf = page.items.map((row) => str(row.scheduledTime)).find((time) => time !== null) ?? null
+  return { asOf, notes: page.items.flatMap((row): OperatorReconNote[] => {
     const checkCode = OPERATOR_NOTE_CHECKS.find((check) => check === row.checkCode)
     return checkCode ? [{
       checkCode,
@@ -394,7 +404,7 @@ export async function readOperatorReconNotes(): Promise<OperatorReconNote[]> {
       publications: num(row.publications),
       scheduledTime: str(row.scheduledTime),
     }] : []
-  })
+  }) }
 }
 
 /** The sponsors, newest application first: only the operator's own when `mine`, searched by `q`. */

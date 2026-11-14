@@ -77,7 +77,8 @@ beforeEach(() => {
     PERMISSION.usersRead])
   server.entry = 'admin'
   server.operators = [operator()]
-  server.reconNotes = []
+  server.reconNotes = [{ checkCode: null, sponsorId: null, company: null, contactName: null, publications: null,
+    scheduledTime: '2026-11-13T18:37:00Z' }]
   server.members = [
     { memberId: 'm1', userId: LEAD, displayName: 'Lena Lead', email: 'lena@kansai.example', lead: true,
       addedAt: '2026-10-21T01:00:00Z', removedAt: null, hasRole: true },
@@ -437,9 +438,17 @@ describe('the operator', () => {
     })
     const empty = renderAt('/qb/operator/billing', '/qb/operator/billing', <OperatorBillingPage />)
     const none = await within(await screen.findByTestId('operator-recon-notes')).findByTestId('operator-recon-notes-none')
-    expect(none).toHaveTextContent('No notes about your Sponsors from the daily check.')
+    expect(none).toHaveTextContent('The latest check noted nothing about these Sponsors.')
     expect(server.runQuery).toHaveBeenCalledWith(TEMPLATE.operatorReconNotes, expect.anything())
+    // A run that noted nothing still says when it looked.
+    expect(screen.getByTestId('operator-recon-notes-as-of')).toHaveTextContent('Latest check:')
     empty.unmount()
+    // No run at all yet: said so, never "nothing noted".
+    server.reconNotes = []
+    const never = renderAt('/qb/operator/billing', '/qb/operator/billing', <OperatorBillingPage />)
+    expect(await screen.findByTestId('operator-recon-notes-as-of')).toHaveTextContent('The daily check has not run yet.')
+    expect(screen.queryByTestId('operator-recon-notes-none')).not.toBeInTheDocument()
+    never.unmount()
     server.reconNotes = [
       { checkCode: 'DISTRIBUTION_AT_FLOOR', sponsorId: SPONSOR, company: 'Acme', contactName: 'Alice', publications: 2,
         scheduledTime: '2026-11-13T18:37:00Z' },
@@ -453,8 +462,8 @@ describe('the operator', () => {
     const section = await screen.findByTestId('operator-recon-notes')
     const groups = await within(section).findAllByTestId('operator-recon-note-group')
     expect(groups.map((group) => group.dataset.check)).toEqual(['DISTRIBUTION_AT_FLOOR', 'EXPOSURE_UNPURCHASED'])
-    expect(groups[0]).toHaveTextContent('Charged your floor price')
-    expect(groups[0]).toHaveTextContent('Consider whether your floor suits them')
+    expect(groups[0]).toHaveTextContent('Charged the operator’s least distribution price')
+    expect(groups[0]).toHaveTextContent('Consider whether the least price suits them')
     const floor = within(groups[0]).getByTestId('operator-recon-note')
     expect(floor).toHaveTextContent('2 publications')
     expect(within(floor).getByRole('link', { name: 'Acme' })).toHaveAttribute('href', `/qb/reviews/sponsors/${SPONSOR}`)

@@ -78,6 +78,13 @@ export function toFilters(filters: readonly MoreFilter[], values: FilterValues):
 export function useMoreFilters(filters: readonly MoreFilter[], testId?: string, initial: FilterValues = {}) {
   const { t } = useTranslation(EXTENSION_NAMESPACE)
   const [values, setValues] = useState<FilterValues>(() => filledFilters(initial))
+  // Another link to the page (or back and forward) brings other values: the bar follows them.
+  const linked = JSON.stringify(initial)
+  const [seen, setSeen] = useState(linked)
+  if (linked !== seen) {
+    setSeen(linked)
+    setValues(filledFilters(initial))
+  }
   const dictionaries = filters.filter((filter) => filter.kind === 'dictionary')
   const items = useQueries({
     queries: dictionaries.map((filter) => ({
