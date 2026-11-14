@@ -444,18 +444,25 @@ public final class FeeCredits {
                     QueryEntities.query(QbAccounts.defaultDataset(QbAccounts.BAN), ctx -> EntityQuery.builder()
                         .where(new QueryPredicate.In("userId", AccountEditing.uuids(sponsorRef(ctx).sponsorId())))
                         .limit(1).build(), BAN)))
-                .step("Read what the AI credit holds by lot", RunTemplate.<ProcessContext>when(FeeCredits::aiCreditHolds,
-                    Prepayments.HELD_TEMPLATE, ctx -> Map.of("prepaymentId",
+                .step("Read what the AI credit holds by lot", RunTemplate.<ProcessContext>when(
+                    FeeCredits::readsAiCredit, Prepayments.HELD_TEMPLATE, ctx -> Map.of("prepaymentId",
                         String.valueOf(FeeGate.first(ctx, AI_CREDIT).id())), AI_HELD))
                 .compute("Decide", (metadata, ctx) -> remind(ctx))
                 .step("Ask the mail to tell the sponsor", PublishEvent.<ProcessContext>when(
                     ctx -> "REMINDED".equals(ctx.get(OUTCOME)), EXPIRING_EVENT, ctx -> ctx.get(PAYLOAD))));
     }
 
-    /** Whether the sponsor's open AI credit holds something (then its lots are read). */
-    static boolean aiCreditHolds(ProcessContext ctx) {
+    /**
+     * Whether the AI credit's lots are read (#718 review L1): the open AI credit holds something, and a lot not told of
+     * yet may be held in it (one spent from the account, or one with something left in both).
+     */
+    static boolean readsAiCredit(ProcessContext ctx) {
         EntityInstance credit = FeeGate.first(ctx, AI_CREDIT);
-        return credit != null && FeeGate.money(credit.get("remaining")).signum() > 0;
+        if (credit == null || FeeGate.money(credit.get("remaining")).signum() <= 0) {
+            return false;
+        }
+        return !FeeGate.list(ctx, SPENT_LOTS).isEmpty()
+            || FeeGate.list(ctx, LOTS).stream().anyMatch(lot -> lot.get("remindedAt") == null);
     }
 
     /** F-M9c: what the AI credit holds of each grant ({@value Prepayments#HELD_TEMPLATE}); none read: nothing. */
@@ -494,14 +501,17 @@ public final class FeeCredits {
         lots.sort(java.util.Comparator.comparing(lot -> (Instant) lot.get("expiresAt")));
         List<EntityInstance> due = new ArrayList<>();
         BigDecimal amount = BigDecimal.ZERO;
+        BigDecimal amountInAiCredit = BigDecimal.ZERO;
         for (EntityInstance lot : lots) {
-            // What is left of the grant: in the account, and (F-M9c) in the AI credit.
-            BigDecimal left = FeeGate.money(lot.get("remaining"))
-                .add(inAiCredit.getOrDefault(String.valueOf(lot.id()), BigDecimal.ZERO));
+            // What is left of the grant: in the account, and (F-M9c) in the AI credit. The amounts are as read now, under
+            // the wallet lock; fees and requests may still take from them before they expire (#718 review L2).
+            BigDecimal held = inAiCredit.getOrDefault(String.valueOf(lot.id()), BigDecimal.ZERO);
+            BigDecimal left = FeeGate.money(lot.get("remaining")).add(held);
             if (FeeCreditRules.remindable(left, (Instant) lot.get("expiresAt"), (Instant) lot.get("remindedAt"),
                 ctx.opTime(), noticeDays)) {
                 due.add(lot);
                 amount = amount.add(left);
+                amountInAiCredit = amountInAiCredit.add(held);
             }
         }
         if (due.isEmpty()) {
@@ -514,6 +524,7 @@ public final class FeeCredits {
         payload.put("sponsorId", sponsorRef(ctx).sponsorId());
         payload.put("amount", amount.setScale(0).toPlainString());
         payload.put("count", due.size());
+        payload.put("inAiCredit", amountInAiCredit.setScale(0).toPlainString());
         // The lots are read the earliest to expire first.
         payload.put("expiresAt", String.valueOf((Object) due.getFirst().get("expiresAt")));
         ctx.put(PAYLOAD, payload);

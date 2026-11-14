@@ -26,32 +26,43 @@ WITH params AS (
     FROM {{SysParam}} p
     WHERE p.{{SysParam.paramKey}} = 'qb.fee-credit.expiry-notice-days')
 -- F-M9c: a grant bought into the AI credit is spent from the account (remaining 0) but expires in the credit (the AI
--- credit's daily job voids it), so what the open AI credit holds of it counts as left: its parts there, signed, less the
--- positive parts fees took of it (as qb.system.ai-credit-held). Only the grants due and not voided are looked at.
-, due AS (
-    SELECT g.{{QbFeeCreditGrant.grantId}} AS d_id, g.{{QbFeeCreditGrant.sponsorId}} AS d_sponsor,
-           g.{{QbFeeCreditGrant.remaining}} AS d_left, g.{{QbFeeCreditGrant.voidedAt}} AS d_voided
+-- credit's daily job voids it), so what an open AI credit holds of it counts as left: its parts there, signed, less the
+-- positive parts fees took of it (as qb.system.ai-credit-held), summed once by credit and grant (#718 review H1: no
+-- subquery per grant). Each branch reads by an index: the account's lots by qb_fee_credit_grant_expiry_idx (remaining
+-- > 0); the AI credits by qb_prepayment_ai_open_idx, their parts by target_id and prepayment_id, their grants by key.
+-- A grant voided before it expired is as good as expired and not told of.
+, account AS (
+    SELECT g.{{QbFeeCreditGrant.sponsorId}} AS a_sponsor
     FROM {{QbFeeCreditGrant}} g
     CROSS JOIN params
-    WHERE g.{{QbFeeCreditGrant.remindedAt}} IS NULL
+    WHERE g.{{QbFeeCreditGrant.remaining}} > 0
+      AND g.{{QbFeeCreditGrant.remindedAt}} IS NULL
       AND g.{{QbFeeCreditGrant.expiresAt}} > :at
       AND g.{{QbFeeCreditGrant.expiresAt}} <= CAST(:at AS timestamptz) + make_interval(days => params.days)
 ), credits AS (
-    SELECT CAST(c.{{QbPrepayment.prepaymentId}} AS text) AS c_id
+    SELECT CAST(c.{{QbPrepayment.prepaymentId}} AS text) AS c_id, c.{{QbPrepayment.sponsorId}} AS c_sponsor
     FROM {{QbPrepayment}} c
-    WHERE c.{{QbPrepayment.purpose}} = 'AI' AND c.{{QbPrepayment.status}} = 'OPEN'
-      AND c.{{QbPrepayment.sponsorId}} IN (SELECT d_sponsor FROM due WHERE d_left = 0 AND d_voided IS NULL)
+    WHERE c.{{QbPrepayment.purpose}} = 'AI' AND c.{{QbPrepayment.status}} = 'OPEN' AND c.{{QbPrepayment.remaining}} > 0
 ), held AS (
-    SELECT p.{{QbFeePayment.grantId}} AS h_id, p.{{QbFeePayment.amount}} AS h_amount
-    FROM {{QbFeePayment}} p JOIN credits c ON p.{{QbFeePayment.targetId}} = c.c_id
-    WHERE p.{{QbFeePayment.grantId}} IN (SELECT d_id FROM due)
+    SELECT c.c_sponsor AS h_sponsor, p.{{QbFeePayment.grantId}} AS h_id, p.{{QbFeePayment.amount}} AS h_amount
+    FROM credits c JOIN {{QbFeePayment}} p ON p.{{QbFeePayment.targetId}} = c.c_id
+    WHERE p.{{QbFeePayment.grantId}} IS NOT NULL
     UNION ALL
-    SELECT u.{{QbFeePayment.grantId}}, -u.{{QbFeePayment.amount}}
-    FROM {{QbFeePayment}} u JOIN credits c ON u.{{QbFeePayment.prepaymentId}} = c.c_id
-    WHERE u.{{QbFeePayment.amount}} > 0 AND u.{{QbFeePayment.grantId}} IN (SELECT d_id FROM due)
+    SELECT c.c_sponsor, u.{{QbFeePayment.grantId}}, -u.{{QbFeePayment.amount}}
+    FROM credits c JOIN {{QbFeePayment}} u ON u.{{QbFeePayment.prepaymentId}} = c.c_id
+    WHERE u.{{QbFeePayment.amount}} > 0 AND u.{{QbFeePayment.grantId}} IS NOT NULL
+), in_credit AS (
+    SELECT h.h_sponsor AS i_sponsor
+    FROM held h
+    JOIN {{QbFeeCreditGrant}} g ON g.{{QbFeeCreditGrant.grantId}} = h.h_id
+    CROSS JOIN params
+    WHERE g.{{QbFeeCreditGrant.remindedAt}} IS NULL
+      AND g.{{QbFeeCreditGrant.voidedAt}} IS NULL
+      AND g.{{QbFeeCreditGrant.expiresAt}} > :at
+      AND g.{{QbFeeCreditGrant.expiresAt}} <= CAST(:at AS timestamptz) + make_interval(days => params.days)
+    GROUP BY h.h_sponsor, h.h_id
+    HAVING sum(h.h_amount) > 0
 )
-SELECT DISTINCT d.d_sponsor AS sponsorId
-FROM due d
-WHERE d.d_left > 0
-   OR (d.d_voided IS NULL
-       AND (SELECT coalesce(sum(h.h_amount), 0) FROM held h WHERE h.h_id = d.d_id) > 0)
+SELECT a_sponsor AS sponsorId FROM account
+UNION
+SELECT i_sponsor FROM in_credit

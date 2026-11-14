@@ -107,12 +107,16 @@ class AiReconcileIT extends AiCreditItSupport {
         deliverEvents();
         List<Map<String, Object>> notes = query("SELECT * FROM qb_fee_credit_note_version WHERE sponsor_id = ?",
             sponsor);
-        assertThat(notes).singleElement().satisfies(note -> assertThat(money(note.get("refunded_credit"))
-            .add(money(note.get("refunded_cash")))).isPositive());
+        assertThat(notes).hasSize(1);
+        BigDecimal refunded = money(notes.getFirst().get("refunded_credit"))
+            .add(money(notes.getFirst().get("refunded_cash")));
+        // 1 yen and its tax (10 %, rounded down: 0).
+        assertThat(refunded).isEqualByComparingTo("1");
 
-        // Back to the account (2160 or 2190), not to the AI credit (2180, its remaining).
+        // Back to the account (2160 or 2190: liabilities, so their net goes down by it), not to the AI credit (2180).
         assertThat(money(aiCredit(sponsor).get("remaining"))).isEqualByComparingTo(creditBefore);
-        assertThat(net("2160", sponsor).add(net("2190", sponsor))).isLessThan(accountBefore);
+        assertThat(accountBefore.subtract(net("2160", sponsor).add(net("2190", sponsor))))
+            .isEqualByComparingTo(refunded);
         advance(Duration.ofDays(3));
         assertThat(reconcile(sponsor)).isEmpty();
     }
