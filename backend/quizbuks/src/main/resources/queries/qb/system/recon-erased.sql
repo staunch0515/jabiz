@@ -35,7 +35,7 @@ permissions: [qb.wallet.system]
 --   (one closure a sponsor: the sponsor names it): expected 0, actual the whole days waited (an item is what differs).
 -- ERASED_FEE_OWED (a note): a sponsor wound up whose invoices still owe (total - credit applied - paid), plus the
 --   postpaid fees charged since and not invoiced yet (Fable's re-review; the condition of
---   qb.system.money-close-uninvoiced): expected 0, actual what is owed (nothing owed: equal, so no item). It is the record of an erased sponsor's
+--   qb.system.money-close-uninvoiced): expected 0, actual what is owed (only a sponsor who owes something: re-review L3). It is the record of an erased sponsor's
 --   fees owed (their overdue reminders stop, §9 M4).
 -- ERASED_NO_CLOSURE (attention, review M1): an erasure qb.erasure.close.alert-days or more ago of a user who had the
 --   platform fee account (a CASH or FEE_CREDIT wallet, a grant, an invoice, a prepayment, a postpaid fee, a
@@ -62,8 +62,9 @@ WHERE c.{{QbSponsorClosure.status}} = 'WAITING'
         AND CAST(:alertDays AS numeric) = trunc(CAST(:alertDays AS numeric)) THEN CAST(:alertDays AS int) ELSE 0 END))
       <= CAST(:at AS timestamptz)
 UNION ALL
-SELECT CAST('ERASED_FEE_OWED' AS varchar(30)), CAST(c.{{QbSponsorClosure.sponsorId}} AS varchar(128)),
-       CAST(NULL AS varchar(128)), CAST(0 AS numeric),
+SELECT owed.checkCode, owed.sponsorId, owed.reference, owed.expected, owed.actual FROM (
+SELECT CAST('ERASED_FEE_OWED' AS varchar(30)) AS checkCode, CAST(c.{{QbSponsorClosure.sponsorId}} AS varchar(128)) AS sponsorId,
+       CAST(NULL AS varchar(128)) AS reference, CAST(0 AS numeric) AS expected,
        CAST(coalesce((SELECT sum(i.{{QbFeeInvoice.total}} - i.{{QbFeeInvoice.creditApplied}} - i.{{QbFeeInvoice.paidAmount}})
                       FROM {{QbFeeInvoice}} i
                       WHERE i.{{QbFeeInvoice.sponsorId}} = c.{{QbSponsorClosure.sponsorId}}
@@ -76,9 +77,11 @@ SELECT CAST('ERASED_FEE_OWED' AS varchar(30)), CAST(c.{{QbSponsorClosure.sponsor
                                           AND ((ni.{{QbFeeInvoice.period}} = f.{{QbFeeCharge.period}}
                                                 AND ni.{{QbFeeInvoice.chargeId}} IS NULL)
                                                OR ni.{{QbFeeInvoice.chargeId}} = CAST(f.{{QbFeeCharge.chargeId}} AS text)))), 0)
-          AS numeric)
+          AS numeric) AS actual
 FROM {{QbSponsorClosure}} c
 WHERE c.{{QbSponsorClosure.status}} = 'CLOSED'
+) owed
+WHERE owed.actual > 0
 UNION ALL
 SELECT CAST('ERASED_NO_CLOSURE' AS varchar(30)), CAST(e.{{Erasure.userId}} AS varchar(128)),
        CAST(NULL AS varchar(128)), CAST(1 AS numeric), CAST(0 AS numeric)

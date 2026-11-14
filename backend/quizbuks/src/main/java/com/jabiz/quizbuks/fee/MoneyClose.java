@@ -105,6 +105,8 @@ public final class MoneyClose {
     static final String ALERT = "alert";
     static final String REGISTERED_CLOSURE = "registeredClosure";
     static final String UNPAID_AFTER = "unpaidAfter";
+    static final String PURGED = "purged";
+    public static final String PURGED_TEMPLATE = "qb.system.erasure-purged";
     static final String CREDITS_AFTER = "creditsAfter";
     static final String CASH_WALLET_AFTER = "cashWalletAfter";
     static final String PAID = "paid";
@@ -286,6 +288,10 @@ public final class MoneyClose {
                     .where(new QueryPredicate.And(List.of(new QueryPredicate.Eq("sponsorId", sponsorId(ctx)),
                         new QueryPredicate.Eq("status", QbFees.REVIEW)))).limit(FeeGate.MAX_UNPAID).build(),
                     IN_REVIEW_REQUESTS)))
+            // Re-review L2: when the erasure's purge was done (it overwrites every row naming the sponsor then); read
+            // only when something is under review.
+            .step("Read when the purge was done", RunTemplate.<ProcessContext>when(MoneyClose::somethingUnderReview,
+                PURGED_TEMPLATE, ctx -> Map.of("userId", sponsorId(ctx)), PURGED))
             .step("Withdraw what is under review", CallProcess.forEach(WITHDRAW, 1, MoneyClose::withdrawInputs,
                 WITHDRAWN))
             .step("Lock the sponsor's wallet", HoldLock.<ProcessContext>exclusive(
@@ -341,26 +347,43 @@ public final class MoneyClose {
     }
 
     /**
-     * What step 0 withdraws: only what was asked for before the erasure (at its time at the latest; re-review M1). The erasure overwrote the
-     * reasons those were bound to; one asked for after it (finance's void of an invoice the wind-up waits on) is bound
-     * to what is there now, and is decided as usual.
+     * What step 0 withdraws: what was asked for until the erasure's purge was done (re-review M1, L2). The purge
+     * overwrites the reason of every row naming the sponsor at that moment, so a decision on one could not land; one
+     * asked for after it (finance's void of an invoice the wind-up waits on) keeps its reason and is decided as usual.
+     * While the purge is still to run, everything under review is withdrawn (the purge would overwrite it).
      */
     static List<WithdrawInput> withdrawInputs(ProcessContext ctx) {
         List<WithdrawInput> inputs = new ArrayList<>();
-        EntityInstance closure = FeeGate.first(ctx, REGISTERED_CLOSURE);
-        if (closure == null) {
+        if (!somethingUnderReview(ctx)) {
             return inputs;
         }
-        Instant erasedAt = (Instant) closure.get("erasedAt");
-        FeeGate.list(ctx, IN_REVIEW_TOPUPS).stream().filter(row -> before(row.get("createdAt"), erasedAt))
+        Instant until = purgedAt(ctx);
+        FeeGate.list(ctx, IN_REVIEW_TOPUPS).stream().filter(row -> before(row.get("createdAt"), until))
             .forEach(row -> inputs.add(new WithdrawInput(TOPUP, String.valueOf(row.id()))));
-        FeeGate.list(ctx, IN_REVIEW_REQUESTS).stream().filter(row -> before(row.get("requestedAt"), erasedAt))
+        FeeGate.list(ctx, IN_REVIEW_REQUESTS).stream().filter(row -> before(row.get("requestedAt"), until))
             .forEach(row -> inputs.add(new WithdrawInput(REQUEST, String.valueOf(row.id()))));
         return inputs;
     }
 
-    private static boolean before(Object at, Instant erasedAt) {
-        return at instanceof Instant instant && !instant.isAfter(erasedAt);
+    static boolean somethingUnderReview(ProcessContext ctx) {
+        return FeeGate.first(ctx, REGISTERED_CLOSURE) != null
+            && (!FeeGate.list(ctx, IN_REVIEW_TOPUPS).isEmpty() || !FeeGate.list(ctx, IN_REVIEW_REQUESTS).isEmpty());
+    }
+
+    /** When the purge was done; none (everything is before it) while it is still to run. */
+    @SuppressWarnings("unchecked")
+    static Instant purgedAt(ProcessContext ctx) {
+        if (ctx.get(PURGED) instanceof List<?> rows && !rows.isEmpty()) {
+            Object at = ((List<Map<String, Object>>) rows).getFirst().get("purgedTime");
+            if (at != null) {
+                return at instanceof Instant instant ? instant : Instant.parse(String.valueOf(at));
+            }
+        }
+        return null;
+    }
+
+    private static boolean before(Object at, Instant until) {
+        return until == null || at instanceof Instant instant && !instant.isAfter(until);
     }
 
     /** Whether the run winds up now: a closure that is not done (or done with fees owed), the switch on, nothing held. */

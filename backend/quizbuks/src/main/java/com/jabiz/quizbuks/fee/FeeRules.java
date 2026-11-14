@@ -81,20 +81,38 @@ public final class FeeRules {
     }
 
     /**
-     * The month a postpaid fee is charged to (F-M6 §9.6; F-M15 b, Fable's re-review): its own month, unless that
-     * month's invoice is out, then the month it is charged in, unless that one's is out too (a wind-up invoices the
-     * current month), then the month after that. Never a month whose invoice is out: its fee would stay receivable
-     * without an invoice. {@code invoiced} holds the months among the two whose invoice is out.
+     * The month a postpaid fee is charged to (F-M6 §9.6; F-M15 b, Fable's re-reviews): its own month, unless that
+     * month's invoice is out; then from the month it is charged in (when later), the first month whose invoice is not
+     * out (a wind-up invoices the current month, then the next ones as late fees come). Never a month whose invoice is
+     * out: its fee would stay receivable without an invoice. {@code invoiced} holds every month from the earlier of
+     * the two on whose invoice is out.
      */
     public static String chargePeriod(String own, String now, java.util.Set<String> invoiced) {
         if (!invoiced.contains(own)) {
             return own;
         }
-        if (!invoiced.contains(now) && now.compareTo(own) > 0) {
-            return now;
+        YearMonth month = YearMonth.parse(now.compareTo(own) > 0 ? now : own, MONTH);
+        while (invoiced.contains(MONTH.format(month))) {
+            month = month.plusMonths(1);
         }
-        String next = MONTH.format(YearMonth.parse(now, MONTH).plusMonths(1));
-        return next.compareTo(own) > 0 ? next : MONTH.format(YearMonth.parse(own, MONTH).plusMonths(1));
+        return MONTH.format(month);
+    }
+
+    /**
+     * The months from the earlier of the two to {@code ahead} months past the later, in order; a text that is not a
+     * month only itself (the charge reports it as such).
+     */
+    public static java.util.List<String> monthsFrom(String a, String b, int ahead) {
+        if (!period(a) || !period(b)) {
+            return java.util.List.of(String.valueOf(a));
+        }
+        YearMonth from = YearMonth.parse(a.compareTo(b) <= 0 ? a : b, MONTH);
+        YearMonth to = YearMonth.parse(a.compareTo(b) <= 0 ? b : a, MONTH).plusMonths(ahead);
+        java.util.List<String> months = new java.util.ArrayList<>();
+        for (YearMonth month = from; !month.isAfter(to); month = month.plusMonths(1)) {
+            months.add(MONTH.format(month));
+        }
+        return java.util.List.copyOf(months);
     }
 
     public static Instant periodStart(String period, ZoneId zone) {

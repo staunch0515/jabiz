@@ -309,6 +309,32 @@ class MoneyCloseIT extends MoneyCloseItSupport {
     }
 
     @Test
+    void aSecondFeeAfterTheWindUpInvoicedTheNextMonthTooGoesOnAMonthNotInvoiced() {
+        // Fable's second look (H1): wound up (the current month invoiced), fee A (on the next month), the next run
+        // invoices the next month; fee B in the same month must go on the month after, not on an invoiced one.
+        String sponsor = newSponsor(unique("s-fm15b-h1b"));
+        billing(sponsor, "POSTPAID", 50_000);
+        manualFee(sponsor, 300);
+        spentLot(sponsor);
+        assertThat(((MoneyClose.RegisterOutput) systemRun(MoneyClose.REGISTER, Map.of("userId", sponsor,
+            "erasedAt", clock.instant().toString()))).registered()).isTrue();
+        deliverEvents();
+        assertThat(closure(sponsor)).containsEntry("status", QbSponsorClosures.CLOSED);
+        manualFee(sponsor, 200);
+        assertThat(close(sponsor).invoicesIssued()).isEqualTo(1);
+        assertThat(query("SELECT period FROM qb_fee_invoice WHERE sponsor_id = ?", sponsor)).hasSize(2);
+
+        Object b = manualFee(sponsor, 100);
+        Object period = query("SELECT period FROM qb_fee_charge_version WHERE charge_id = CAST(? AS uuid)",
+            String.valueOf(b)).getFirst().get("period");
+        assertThat(query("SELECT 1 FROM qb_fee_invoice WHERE sponsor_id = ? AND period = ? AND charge_id IS NULL",
+            sponsor, period)).as("fee B's month " + period + " has no invoice").isEmpty();
+        assertThat(due()).contains(sponsor);
+        assertThat(close(sponsor).invoicesIssued()).isEqualTo(1);
+        assertThat(query("SELECT period FROM qb_fee_invoice WHERE sponsor_id = ?", sponsor)).hasSize(3);
+    }
+
+    @Test
     void aWindUpDoneWithFeesOwedKeepsItsReasonWhenALaterRunStopsAndIsTakenAgain() {
         // Review M1: done with fees owed, cash arrives later; a run the switch stops keeps FEE_OWED and the daily job
         // still takes it.
@@ -623,6 +649,10 @@ class MoneyCloseIT extends MoneyCloseItSupport {
         String invoiceId = String.valueOf(query("SELECT invoice_id FROM qb_fee_invoice WHERE sponsor_id = ?", sponsor)
             .getFirst().get("invoice_id"));
         erase(sponsor);
+        // The erasure's purge runs on its event (it overwrites what names the sponsor now).
+        deliverEvents();
+        assertThat(query("SELECT 1 FROM sys_erasure_purge p JOIN sys_erasure e ON e.erasure_id = p.erasure_id "
+            + "WHERE e.user_id = CAST(? AS uuid)", sponsor)).hasSize(1);
         assertThat(close(sponsor).outcome()).isEqualTo(MoneyClose.WAITING_DEPOSITS);
 
         clock.set(clock.instant().plus(Duration.ofMinutes(5)));
@@ -652,6 +682,32 @@ class MoneyCloseIT extends MoneyCloseItSupport {
         assertThat(openTasks("erasure-close:" + sponsor)).singleElement()
             .satisfies(task -> assertThat(String.valueOf(task.get("title_key")))
                 .isEqualTo(MoneyClose.SLOW_TASK_TITLE + ".DEPOSIT_OPEN_AI"));
+    }
+
+    @Test
+    void aRequestMadeAfterTheErasureButBeforeItsPurgeIsWithdrawnForThePurgeOverwritesIt() {
+        // Re-review L2: ERASURE_PURGE overwrites the reason of every row naming the sponsor when it runs, a request
+        // asked for after the erasure too. So until the purge is done, what is under review is withdrawn.
+        String sponsor = newSponsor(unique("s-fm15b-l2"));
+        billing(sponsor, "POSTPAID", 50_000);
+        manualFee(sponsor, 300);
+        invoicePeriod(sponsor, clock.instant());
+        String invoiceId = String.valueOf(query("SELECT invoice_id FROM qb_fee_invoice WHERE sponsor_id = ?", sponsor)
+            .getFirst().get("invoice_id"));
+        param(QbParams.ERASURE_CLOSE_ENABLED, "false");
+        erase(sponsor);
+        clock.set(clock.instant().plus(Duration.ofMinutes(5)));
+        String requestId = String.valueOf(run(FeeRequests.RECORD, finance(), body("kind", QbFees.REQUEST_VOID,
+            "invoiceId", invoiceId, "reason", "Charged by mistake")).get("requestId"));
+        // The purge is still to run: withdrawn.
+        assertThat(close(sponsor).withdrawn()).isEqualTo(1);
+        assertThat(query("SELECT status, ended_code FROM qb_fee_request WHERE request_id = ?", requestId))
+            .singleElement().satisfies(row -> assertThat(row).containsEntry("status", QbFees.REJECTED)
+                .containsEntry("ended_code", "ERASED"));
+        // And the purge does overwrite a request asked for after the erasure: the reason the approval was bound to.
+        deliverEvents();
+        assertThat(query("SELECT reason FROM qb_fee_request WHERE request_id = ?", requestId)).singleElement()
+            .satisfies(row -> assertThat(row).containsEntry("reason", "***"));
     }
 
     @Test
@@ -725,7 +781,8 @@ class MoneyCloseIT extends MoneyCloseItSupport {
         // Before the alert days: only what does not wait for them.
         Map<String, List<String>> early = erasedItems();
         assertThat(early.get(owes)).containsExactly(com.jabiz.quizbuks.wallet.ReconChecks.ERASED_FEE_OWED);
-        assertThat(early.get(left)).contains(com.jabiz.quizbuks.wallet.ReconChecks.ERASED_GIFT_LEFT);
+        // Re-review L3: wound up with nothing owed: no ERASED_FEE_OWED item.
+        assertThat(early.get(left)).containsExactly(com.jabiz.quizbuks.wallet.ReconChecks.ERASED_GIFT_LEFT);
         assertThat(early).doesNotContainKeys(waits, lost);
 
         clock.set(clock.instant().plus(Duration.ofDays(3)));

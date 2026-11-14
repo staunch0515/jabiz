@@ -73,4 +73,26 @@ class FeeRulesTest {
         assertThat(FeeRules.chargePeriod("2026-11", "2026-11", java.util.Set.of("2026-11"))).isEqualTo("2026-12");
         assertThat(FeeRules.chargePeriod("2026-12", "2026-12", java.util.Set.of("2026-12"))).isEqualTo("2027-01");
     }
+
+    @Test
+    void aPostpaidFeeSkipsEveryMonthInARowWhoseInvoiceIsOut() {
+        // Fable's second look (H1): a wind-up invoices the current month, then the next ones as fees come.
+        assertThat(FeeRules.chargePeriod("2026-11", "2026-11", java.util.Set.of("2026-11", "2026-12")))
+            .isEqualTo("2027-01");
+        assertThat(FeeRules.chargePeriod("2026-11", "2026-11", java.util.Set.of("2026-11", "2026-12", "2027-01")))
+            .isEqualTo("2027-02");
+        assertThat(FeeRules.chargePeriod("2026-10", "2026-11", java.util.Set.of("2026-10", "2026-11", "2026-12")))
+            .isEqualTo("2027-01");
+        // A gap is used.
+        assertThat(FeeRules.chargePeriod("2026-11", "2026-11", java.util.Set.of("2026-11", "2027-01")))
+            .isEqualTo("2026-12");
+    }
+
+    @Test
+    void theMonthsSearchedForAPostpaidFeeRunFromTheEarlierToAheadOfTheLater() {
+        assertThat(FeeRules.monthsFrom("2026-11", "2026-12", 2))
+            .containsExactly("2026-11", "2026-12", "2027-01", "2027-02");
+        assertThat(FeeRules.monthsFrom("2026-12", "2026-11", 0)).containsExactly("2026-11", "2026-12");
+        assertThat(FeeRules.monthsFrom("2026-13", "2026-11", 2)).containsExactly("2026-13");
+    }
 }

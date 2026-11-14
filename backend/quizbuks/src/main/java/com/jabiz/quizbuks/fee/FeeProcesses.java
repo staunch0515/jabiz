@@ -261,6 +261,11 @@ public final class FeeProcesses {
     static final String FOUND = "found";
     static final String BILLING_MODE = "billingMode";
     static final String MONTH_INVOICE = "monthInvoice";
+    /**
+     * How many months past the later of a postpaid fee's own and the current one its month's search reads (a wind-up
+     * opens a month ahead only as late fees come; far more than it ever does).
+     */
+    static final int MONTHS_AHEAD = 24;
     static final String TOTAL = "total";
     /** The month the charge is written for (review L3: a late postpaid one is the current month, not the input's). */
     static final String CHARGE_PERIOD = "chargePeriod";
@@ -308,10 +313,12 @@ public final class FeeProcesses {
                 QueryEntities.query(QbFees.defaultDataset(QbFees.INVOICE), ctx -> EntityQuery.builder()
                     .where(new QueryPredicate.And(List.of(
                         new QueryPredicate.Eq("sponsorId", chargeInput(ctx).sponsorId()),
-                        // F-M15 b: and the current month's (a wind-up invoices it), in the same statement.
-                        new QueryPredicate.In("period", List.of(chargeInput(ctx).period(),
-                            FeeRules.period(ctx.opTime(), zone))),
-                        new QueryPredicate.IsNull("chargeId")))).limit(2).build(), MONTH_INVOICE)))
+                        // F-M15 b: and every later month's (a wind-up invoices the current month and, as late
+                        // fees come, the next ones), in the same statement.
+                        new QueryPredicate.In("period", new ArrayList<Object>(FeeRules.monthsFrom(
+                            chargeInput(ctx).period(), FeeRules.period(ctx.opTime(), zone), MONTHS_AHEAD))),
+                        new QueryPredicate.IsNull("chargeId")))).limit(FeeGate.MAX_UNPAID).build(),
+                    MONTH_INVOICE)))
             // F-M7 (§10.3-4): a prepaid fee's invoice takes the credit notes' credit left first. Read (H1 of the
             // review: summed in SQL) before anything is written, and only when the prepayment cannot pay it all.
             .step("Read the credit left", RunTemplate.<ProcessContext>when(FeeProcesses::creditMayPay,
