@@ -90,6 +90,54 @@ public final class AiCost {
         return total.divide(MILLION, 6, RoundingMode.HALF_UP);
     }
 
+    /**
+     * F-M9 (plan §3, review M7; #692 review M1): the most a request may cost, in dollars to six places, which it
+     * reserves of the sponsor's AI credit, a strict bound. Every attempt may run on the requested model and, refused, be
+     * handed whole to the model it may fall back to (A-10: the provider charges the refused call's tokens and runs the
+     * input again), so an attempt is its usage at the requested model's price (at the long-prompt rate where
+     * {@code attempt} carries that part) plus all of it at the fallback's (the smallest model has none); the searches are
+     * at their price. Null when a price is missing.
+     *
+     * @param attempt  the most one attempt may use (every call of it: {@link ClaudeWebResearch#mostOfAttempt} for the web
+     *                 reader; its reserved input and all the output it asks for otherwise)
+     * @param attempts the attempts the job may make (all of them, those whose lease expired included)
+     * @param searches the most searches one attempt may make
+     * @param fallback the price of a model QuizBuks does not know (the parameters), or null
+     */
+    public static BigDecimal maxOf(String model, ClaudeApi.Usage attempt, int attempts, long searches, Price fallback) {
+        return maxOf(model, attempt, attempts, searches, fallback, true);
+    }
+
+    /**
+     * The same, for a request that may not fall back ({@code mayFallBack} false: a request with PDF documents is sent
+     * without the provider's fallback, {@link ClaudeApi}; #692 re-review L4), counted on its own model only. In the
+     * provider's {@code "default"} mode a refusal is run again on the one model recommended for its category, never on
+     * a chain (the provider's documentation), so a fallback is counted once.
+     */
+    public static BigDecimal maxOf(String model, ClaudeApi.Usage attempt, int attempts, long searches, Price fallback,
+        boolean mayFallBack) {
+        BigDecimal most = of(model, null, attempt, fallback);
+        if (most == null) {
+            return null;
+        }
+        if (mayFallBack && !ClaudeService.HAIKU.equals(model)) {
+            ClaudeApi.Usage fellBack = new ClaudeApi.Usage(attempt.inputTokens(), attempt.outputTokens(),
+                attempt.inputTokens(), attempt.outputTokens(), 0, 0);
+            BigDecimal other = of(model, null, fellBack, fallback);
+            if (other == null) {
+                return null;
+            }
+            most = most.add(other);
+        }
+        return most.add(searches(searches)).multiply(BigDecimal.valueOf(Math.max(1, attempts)))
+            .setScale(6, RoundingMode.HALF_UP);
+    }
+
+    /** F-M9: what web searches cost, at the provider's price ({@link ClaudeWebResearch#SEARCH_PRICE_USD}). */
+    public static BigDecimal searches(long searches) {
+        return ClaudeWebResearch.searchCost(searches);
+    }
+
     /** What a prompt-cache write costs above the input price it is already counted at: a quarter more (5 minutes). */
     static final BigDecimal CACHE_WRITE_PREMIUM = new BigDecimal("0.25");
 

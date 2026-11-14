@@ -96,7 +96,8 @@ public final class FirstLaunchSwitches {
         keep(QbParams.EXPOSURE_UNIT_MAX, "exposure"),
         keep(QbParams.EXPOSURE_MIN_PURCHASE, "exposure"),
         keep(QbParams.EXPOSURE_TOP_UP_MAX, "exposure"),
-        waiting("qb.ai.fee.enabled", "aifee", true, "F-M9"),
+        // F-M9a-1's key exists (declared off, controlled): requests are only charged once a-2 can charge the month's fees.
+        waiting(QbParams.AI_FEE_ENABLED, "aifee", true, "F-M9"),
         // F-C7a's key exists (declared off, controlled) but drafting from a website is only charged once F-M9 can
         // charge the AI credit: it stays off at the launch and its row turns ACTIVE with F-M9's pull request.
         waiting(QbParams.SITE_PROFILE_ENABLED, "aifee", true, "F-M9"),
@@ -113,7 +114,8 @@ public final class FirstLaunchSwitches {
      * The keys that are already in {@link QbParams#ALL} while their row still {@link Status#WAITING}: the key exists,
      * what it means does not do yet. Any other waiting key found in {@code ALL} is a feature that forgot its row.
      */
-    public static final Set<String> KEY_BEFORE_MEANING = Set.of(QbParams.SITE_PROFILE_ENABLED);
+    public static final Set<String> KEY_BEFORE_MEANING = Set.of(QbParams.SITE_PROFILE_ENABLED,
+        QbParams.AI_FEE_ENABLED);
 
     /** Whether a system of this {@code jabiz.web.environment} proposes the first launch's values. */
     public static boolean appliesTo(String environment) {

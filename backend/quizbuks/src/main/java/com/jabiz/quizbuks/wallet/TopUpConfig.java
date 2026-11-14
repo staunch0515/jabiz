@@ -279,6 +279,8 @@ class TopUpConfig {
                 "zh", "从未上架的发布的受众规则费", "ja", "公開されなかった公開の対象者ルール料")
             .item(ReconChecks.HELP_USAGE_TOTAL, "en", "AI help usage of a month: everybody's row below the people's",
                 "zh", "AI 帮助某月用量：全平台行小于各人之和", "ja", "AIヘルプの月間利用量：全体の行が個人の合計を下回る")
+            .item(ReconChecks.AI_RESERVATION_SHORT, "en", "AI jobs whose fee went beyond their reservation (a note)",
+                "zh", "AI 费用超出预留的作业（仅提示）", "ja", "AI 利用料が予約額を超えたジョブ（お知らせのみ）")
             .item(ReconChecks.EXPOSURE_DEPOSITS, "en", "Exposure fee deposits (2180, by publication)",
                 "zh", "曝光费预付（2180，按发布）", "ja", "露出料の前払い（2180、掲載ごと）")
             .item(ReconChecks.EXPOSURE_SETTLED_OVER, "en", "Exposures charged beyond what was bought",
