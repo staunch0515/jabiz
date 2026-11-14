@@ -7,6 +7,7 @@ import {
   expectAccessible,
   PASSWORD,
   prepareQuizbuks,
+  rows,
   run,
   setAppearance,
   signIn,
@@ -76,7 +77,10 @@ test('a Taker asks the AI a question the FAQ answers and follows the link in the
     await expect(page.getByTestId('help-gaps').or(page.getByTestId('help-gaps-none'))).toBeVisible()
     await expectAccessible(page, at('admin help gaps'))
     await page.goto('/admin/qb/help-manuals')
-    await expect(page.getByTestId('help-manual')).toHaveCount(2)
+    // A card for every manual kept (one an entry), as many as the server has.
+    const manuals = await rows(request, content.token, 'urn:jabiz:dataset:default:QbHelpManual', [], 100)
+    expect(manuals.length).toBeGreaterThan(0)
+    await expect(page.getByTestId('help-manual')).toHaveCount(manuals.length)
     await expectAccessible(page, at('admin help manuals'))
   }
 })

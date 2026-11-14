@@ -26,7 +26,7 @@ test('a phone has the bottom menu of five, scanning raised in the middle, and ev
   await expect(page.getByTestId('home')).toBeVisible()
 
   const bar = page.getByRole('navigation', { name: 'App' })
-  await expect(bar.getByRole('link')).toHaveCount(5)
+  await expect(bar.getByRole('link')).toHaveCount(AREAS.length)
   await expect(page.getByTestId('side-rail')).toBeHidden()
   await expect(page.getByTestId('bottom-bar-more')).toHaveCount(0)
 
@@ -64,7 +64,7 @@ test('a wide screen has the left column of five and no bottom menu', async ({ pa
 
   const rail = page.getByTestId('side-rail')
   await expect(rail).toBeVisible()
-  await expect(rail.getByRole('link')).toHaveCount(5)
+  await expect(rail.getByRole('link')).toHaveCount(AREAS.length)
   await expect(page.getByTestId('bottom-menu')).toBeHidden()
   await expect(page.getByTestId('bottom-bar-scan')).toBeHidden()
   // The column is at the left edge, and the page is in what it leaves.
