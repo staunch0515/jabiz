@@ -288,6 +288,19 @@ describe('the publication list', () => {
     await waitFor(() => expect(posted.some((p) => p.path === '/api/queries/qb.sponsor.publications'
       && (p.body.params as Record<string, unknown>)?.q === 'cof')).toBe(true))
   })
+
+  it('opens filtered to the publications running low on exposures from the home\'s to-do link, and can be switched off (F-M8e)', async () => {
+    const { posted } = server()
+    window.history.replaceState(null, '', '/publications?exposureLow=1')
+    render(<App />)
+    await screen.findByTestId('publication-row')
+    const asked = () => posted.filter((p) => p.path === '/api/queries/qb.sponsor.publications')
+      .map((p) => (p.body.params as Record<string, unknown>) ?? {})
+    expect(asked().some((params) => params.exposureLow === true)).toBe(true)
+    await userEvent.click(screen.getByTestId('publication-exposure-filter'))
+    await userEvent.click(await screen.findByRole('option', { name: 'All' }))
+    await waitFor(() => expect(asked().at(-1)?.exposureLow).toBeUndefined())
+  })
 })
 
 describe('the list views (Q34b)', () => {

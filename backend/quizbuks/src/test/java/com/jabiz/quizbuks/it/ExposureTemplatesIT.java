@@ -162,10 +162,34 @@ class ExposureTemplatesIT extends ExposureFeeItSupport {
                 assertThat(row).containsEntry("publicationId", publicationId);
                 assertThat(row).doesNotContainKey("operatorId");
                 // F-M8e: the operator reads the Sponsor's company beside the number (the page shows it, not the number).
-                assertThat(row).containsKey("company");
+                assertThat(row).containsEntry("company", query("SELECT company FROM qb_sponsor WHERE user_id = ?",
+                    sponsor).getFirst().get("company"));
             });
         assertThat(items("qb.operator.exposure-settlements", operatorSession(stranger, otherOperator), Map.of()))
             .isEmpty();
+        // A settlement of a publication that was no operator's (the direct Sponsors': no frozen operator) is read by
+        // no operator session, whoever asks.
+        execute("INSERT INTO qb_exposure_settlement_version SELECT (jsonb_populate_record(NULL::"
+            + "qb_exposure_settlement_version, to_jsonb(t) || jsonb_build_object('settlement_id', ?::text, "
+            + "'period', '2000-01', 'operator_id', NULL, 'final', false))).* FROM qb_exposure_settlement_version t "
+            + "WHERE t.publication_id = ?", UUID.randomUUID().toString(), publicationId);
+        assertThat(items("qb.operator.exposure-settlements", operatorSession(lead, operatorId), Map.of()))
+            .singleElement().satisfies(row -> assertThat(row).containsEntry("publicationId", publicationId));
+        assertThat(items("qb.operator.exposure-settlements", operatorSession(stranger, otherOperator), Map.of()))
+            .isEmpty();
+        // The Sponsor moved to the other operator since: the first operator keeps the settlement (its fee, frozen at the
+        // submission) but no longer reads the Sponsor's company; the other operator reads nothing of it.
+        run(com.jabiz.quizbuks.operator.OperatorProcesses.ASSIGN, hq(), body("userId", sponsor, "operatorId",
+            otherOperator, "reason", "F-M8e"));
+        assertThat(items("qb.operator.exposure-settlements", operatorSession(lead, operatorId), Map.of()))
+            .singleElement().satisfies(row -> {
+                assertThat(row).containsEntry("publicationId", publicationId);
+                assertThat(row.get("company")).isNull();
+            });
+        assertThat(items("qb.operator.exposure-settlements", operatorSession(stranger, otherOperator), Map.of()))
+            .isEmpty();
+        run(com.jabiz.quizbuks.operator.OperatorProcesses.ASSIGN, hq(), body("userId", sponsor, "operatorId",
+            operatorId, "reason", "F-M8e back"));
         assertThat(items("qb.operator.exposure-price", operatorSession(lead, operatorId), Map.of()))
             .singleElement().satisfies(row -> {
                 assertThat(dec(row.get("unit"))).isEqualByComparingTo("1");
