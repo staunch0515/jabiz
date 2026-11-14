@@ -125,6 +125,8 @@ class ProcessAccessIT extends QbItSupport {
         Map.entry("QB_AI_JOB_FAILED", ProcessAccess.INTERNAL),
         Map.entry("QB_AI_CREDIT_EXPIRE_ITEM", ProcessAccess.INTERNAL),
         Map.entry("QB_AI_CREDIT_GIVE_BACK", ProcessAccess.SUB_PROCESS_ONLY),
+        Map.entry("QB_AI_JOBS_ERASED_CANCEL", ProcessAccess.SUB_PROCESS_ONLY),
+        Map.entry("QB_AI_JOB_ERASED_CANCEL", ProcessAccess.SUB_PROCESS_ONLY),
         Map.entry("QB_AI_EXPIRE", ProcessAccess.INTERNAL),
         Map.entry("QB_AI_FEE_SETTLE", ProcessAccess.INTERNAL),
         Map.entry("QB_AI_JOB_CANCELLED", ProcessAccess.INTERNAL),

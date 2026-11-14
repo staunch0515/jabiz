@@ -6,6 +6,7 @@ import com.jabiz.quizbuks.QbPermissions;
 import com.jabiz.runtime.process.steps.CallProcess;
 import com.jabiz.runtime.process.steps.CancelExternalJob;
 import com.jabiz.runtime.process.steps.RunTemplate;
+import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
 
@@ -24,7 +25,8 @@ import java.util.Map;
  *
  * <ul>
  *   <li>{@value #CANCEL_ALL} ({@code subProcessOnly}): the sponsor's jobs that may be open, at most {@value #MAX_JOBS}
- *       a run, each by {@value #CANCEL_ONE};</li>
+ *       a run, the latest first, each by {@value #CANCEL_ONE}; a run that read a full batch says where it stopped, and the
+ *       next goes on below it (the wind-up keeps the place on its closure);</li>
  *   <li>{@value #CANCEL_ONE} ({@code subProcessOnly}): the platform's step, for the jobs of these types that the sponsor
  *       asked for only, and nothing for one that has ended.</li>
  * </ul>
@@ -55,13 +57,23 @@ public final class ErasedAiJobs {
 
     private ErasedAiJobs() {}
 
-    public record SponsorRef(@NotBlank @Size(max = 128) String sponsorId) {}
+    /**
+     * @param beforeSeq only the jobs before this one (the platform's {@code jobSeq}): where the last run that read a full
+     *                  batch stopped; none from the latest
+     */
+    public record SponsorRef(@NotBlank @Size(max = 128) String sponsorId, @Min(1) Long beforeSeq) {
+        public SponsorRef(String sponsorId) {
+            this(sponsorId, null);
+        }
+    }
 
     /**
-     * @param cancelled the jobs cancelled now
-     * @param more      whether more jobs may be open than this run read (the wind-up waits for the next)
+     * @param cancelled     the jobs cancelled now
+     * @param more          whether this run read a full batch: older jobs may be open still (the wind-up waits, and
+     *                      goes on below {@code nextBeforeSeq} next run)
+     * @param nextBeforeSeq the oldest job this run read, when it read a full batch
      */
-    public record CancelOutput(int cancelled, boolean more) {}
+    public record CancelOutput(int cancelled, boolean more, Long nextBeforeSeq) {}
 
     public record JobRef(@NotBlank @Size(max = 128) String sponsorId, @NotBlank @Size(max = 36) String jobId) {}
 
@@ -81,7 +93,7 @@ public final class ErasedAiJobs {
                 .outputMapper(ErasedAiJobs::cancelOutput)
                 .step("Read the sponsor's AI jobs not ended", RunTemplate.<ProcessContext>of(TEMPLATE,
                     ctx -> Map.of("userId", sponsor(ctx), "types", List.copyOf(TYPES.keySet()), "open", open(),
-                        "max", MAX_JOBS),
+                        "beforeSeq", beforeSeq(ctx), "max", MAX_JOBS),
                     JOBS))
                 .step("Cancel them", CallProcess.forEach(CANCEL_ONE, 1, ErasedAiJobs::jobs, CANCELLED)));
     }
@@ -127,10 +139,11 @@ public final class ErasedAiJobs {
     @SuppressWarnings("unchecked")
     static CancelOutput cancelOutput(ProcessContext ctx) {
         List<Map<String, Object>> rows = (List<Map<String, Object>>) ctx.get(JOBS);
-        long total = rows.isEmpty() ? 0 : number(rows.getFirst().get("total"));
         int cancelled = ctx.get(CANCELLED) instanceof List<?> outputs
             ? (int) outputs.stream().filter(o -> ((JobOutput) o).cancelled()).count() : 0;
-        return new CancelOutput(cancelled, total > rows.size());
+        boolean more = rows.size() >= MAX_JOBS;
+        Long next = more ? rows.stream().mapToLong(row -> number(row.get("jobSeq"))).min().orElseThrow() : null;
+        return new CancelOutput(cancelled, more, next);
     }
 
     /**
@@ -146,6 +159,12 @@ public final class ErasedAiJobs {
 
     private static long number(Object value) {
         return value instanceof Number n ? n.longValue() : new BigDecimal(String.valueOf(value)).longValue();
+    }
+
+    /** The first job not to read: the input's, or past the latest. */
+    private static long beforeSeq(ProcessContext ctx) {
+        Long before = ctx.get(INPUT, SponsorRef.class).beforeSeq();
+        return before == null ? Long.MAX_VALUE : before;
     }
 
     private static String sponsor(ProcessContext ctx) {

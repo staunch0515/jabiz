@@ -318,9 +318,9 @@ public final class MoneyClose {
                 WITHDRAWN))
             // F-M15c: the sponsor's AI jobs still open are cancelled (QB_SPONSOR_ERASED did it already; again here,
             // whatever the switch, until none is left): a wind-up with more than one run reads waits for the next.
-            .step("Cancel the AI jobs still open", CallProcess.<ProcessContext>when(
-                ctx -> FeeGate.first(ctx, REGISTERED_CLOSURE) != null, ErasedAiJobs.CANCEL_ALL, 1,
-                ctx -> new ErasedAiJobs.SponsorRef(sponsorId(ctx)), AI_JOBS))
+            .step("Cancel the AI jobs still open", CallProcess.<ProcessContext>when(MoneyClose::cancelsAiJobs,
+                ErasedAiJobs.CANCEL_ALL, 1, ctx -> new ErasedAiJobs.SponsorRef(sponsorId(ctx), aiJobsBefore(ctx)),
+                AI_JOBS))
             // F-M15c: the AI lock before the wallet's (F-M9's order qb.ai:<sponsor> → qb.wallet), only when an AI
             // credit is to be closed; nothing this process calls takes qb.account or qb.quiz.
             .step("Lock the sponsor's AI", HoldLock.<ProcessContext>exclusive(
@@ -421,6 +421,22 @@ public final class MoneyClose {
     static boolean closesAiCredit(ProcessContext ctx) {
         return FeeGate.first(ctx, REGISTERED_CLOSURE) != null && FeeGate.first(ctx, AI_CREDIT) != null
             && switchOn(ctx.get(PARAMS, ParamValues.class)) && !aiJobsLeft(ctx);
+    }
+
+    /**
+     * Whether this run looks for the sponsor's AI jobs: a wind-up registered whose look is not done (its cursor 0). Once
+     * every job was looked at, none is looked at again: an erased sponsor starts none.
+     */
+    static boolean cancelsAiJobs(ProcessContext ctx) {
+        EntityInstance closure = FeeGate.first(ctx, REGISTERED_CLOSURE);
+        return closure != null && !Long.valueOf(0).equals(aiJobsBefore(ctx));
+    }
+
+    /** Where the look goes on (the closure's cursor); none from the latest. */
+    static Long aiJobsBefore(ProcessContext ctx) {
+        EntityInstance closure = FeeGate.first(ctx, REGISTERED_CLOSURE);
+        Object before = closure == null ? null : closure.get("aiJobsBeforeSeq");
+        return before == null ? null : ((Number) before).longValue();
     }
 
     /** Whether more of the sponsor's AI jobs may be open than this run cancelled. */
@@ -668,6 +684,10 @@ public final class MoneyClose {
         String outcome = (String) ctx.get(OUTCOME);
         Map<String, Object> values = new LinkedHashMap<>();
         values.put("lastRunAt", ctx.opTime());
+        if (ctx.get(AI_JOBS) instanceof ErasedAiJobs.CancelOutput jobs) {
+            // Where the next run goes on, or 0: every job was looked at.
+            values.put("aiJobsBeforeSeq", jobs.more() ? BigDecimal.valueOf(jobs.nextBeforeSeq()) : BigDecimal.ZERO);
+        }
         if (CLOSED.equals(outcome)) {
             values.put("status", QbSponsorClosures.CLOSED);
             values.put("closedAt", closure.get("closedAt") == null ? ctx.opTime() : closure.get("closedAt"));

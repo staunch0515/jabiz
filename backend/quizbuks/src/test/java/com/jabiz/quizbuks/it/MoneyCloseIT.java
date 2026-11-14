@@ -846,9 +846,11 @@ class MoneyCloseIT extends MoneyCloseItSupport {
     }
 
     @Test
-    void moreAiJobsOpenThanARunReadsHoldTheWindUpAndTellFinance() {
-        // F-M15c (总控 2026-11-14): more of the erased sponsor's AI jobs may be open than a run reads (the platform's
-        // datasets read a thousand rows): the run cancels those it read and waits; the AI credit is not closed yet.
+    void moreAiJobsOpenThanARunReadsHoldTheWindUpUntilTheNextRunGoesOnBelowIt() {
+        // F-M15c (总控 2026-11-14 M1): more of the erased sponsor's AI jobs than a run reads (the platform's datasets
+        // read a thousand rows). The first run cancels the latest thousand and waits (the AI credit not closed yet),
+        // keeping its place; the next goes on below it, cancels the rest and winds up; later runs look no more (the
+        // jobs cancelled before, still read, never hold it up).
         String sponsor = newSponsor(unique("s-fm15c-jobs"));
         cash(sponsor, 300);
         param(QbParams.AI_FEE_ENABLED, "true");
@@ -858,22 +860,39 @@ class MoneyCloseIT extends MoneyCloseItSupport {
         } finally {
             param(QbParams.AI_FEE_ENABLED, "false");
         }
+        int max = com.jabiz.quizbuks.content.ai.ErasedAiJobs.MAX_JOBS;
         execute("INSERT INTO sys_external_job (job_id, job_type, input, requested_by, process_seq_id, created_time) "
             + "SELECT gen_random_uuid()::text, 'qb.ai.questions', '{}', ?, (SELECT max(process_seq_id) FROM op_process), "
-            + "now() FROM generate_series(1, ?)", sponsor, com.jabiz.quizbuks.content.ai.ErasedAiJobs.MAX_JOBS + 1);
+            + "now() FROM generate_series(1, ?)", sponsor, max + 1);
         erase(sponsor);
         clock.set(clock.instant().plus(Duration.ofDays(4)));
 
         assertThat(close(sponsor).outcome()).isEqualTo(MoneyClose.WAITING_AI_JOBS);
-        assertThat(((Number) query("SELECT count(*) AS n FROM sys_external_job_cancel c JOIN sys_external_job j "
-            + "ON j.job_id = c.job_id WHERE j.requested_by = ?", sponsor).getFirst().get("n")).intValue())
-            .isEqualTo(com.jabiz.quizbuks.content.ai.ErasedAiJobs.MAX_JOBS);
+        assertThat(cancelledJobs(sponsor)).isEqualTo(max);
         assertThat(closure(sponsor)).containsEntry("reason_code", QbSponsorClosures.AI_JOBS_OPEN);
+        assertThat(closure(sponsor).get("ai_jobs_before_seq")).isNotNull();
         assertThat(query("SELECT status FROM qb_prepayment WHERE sponsor_id = ? AND purpose = 'AI'", sponsor)
             .getFirst()).containsEntry("status", "OPEN");
         assertThat(openTasks("erasure-close:" + sponsor)).singleElement()
             .satisfies(task -> assertThat(String.valueOf(task.get("title_key")))
                 .isEqualTo(MoneyClose.SLOW_TASK_TITLE + ".AI_JOBS_OPEN"));
+
+        assertThat(close(sponsor).outcome()).isEqualTo(MoneyClose.CLOSED);
+        assertThat(cancelledJobs(sponsor)).isEqualTo(max + 1);
+        assertThat(money(closure(sponsor).get("ai_jobs_before_seq"))).isZero();
+        assertThat(query("SELECT status, release_reason FROM qb_prepayment WHERE sponsor_id = ? AND purpose = 'AI'",
+            sponsor).getFirst()).containsEntry("status", "RELEASED").containsEntry("release_reason", "ERASED");
+        assertThat(openTasks("erasure-close:" + sponsor)).isEmpty();
+        // Done: a later run does not look again.
+        assertThat(close(sponsor).outcome()).isEqualTo(MoneyClose.CLOSED);
+        assertThat(cancelledJobs(sponsor)).isEqualTo(max + 1);
+        assertBooksBalance();
+        assertThat(differences(sponsor)).isEmpty();
+    }
+
+    private static int cancelledJobs(String sponsor) {
+        return ((Number) query("SELECT count(*) AS n FROM sys_external_job_cancel c JOIN sys_external_job j "
+            + "ON j.job_id = c.job_id WHERE j.requested_by = ?", sponsor).getFirst().get("n")).intValue();
     }
 
     @Test

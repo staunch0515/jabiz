@@ -25,3 +25,7 @@ ALTER TABLE qb_fee_credit_note_use_version ADD CONSTRAINT qb_fee_credit_note_use
 ALTER TABLE qb_sponsor_closure DROP CONSTRAINT qb_sponsor_closure_reason_code_check;
 ALTER TABLE qb_sponsor_closure ADD CONSTRAINT qb_sponsor_closure_reason_code_check
     CHECK (reason_code IN ('SWITCH_OFF', 'DEPOSIT_OPEN', 'FEE_OWED', 'AI_JOBS_OPEN'));
+-- Where the cancelling of the erased sponsor's AI jobs goes on (a cursor over the platform's job sequence): none from
+-- the latest, 0 when every job was looked at.
+ALTER TABLE qb_sponsor_closure ADD COLUMN ai_jobs_before_seq numeric(19, 0)
+    CONSTRAINT qb_sponsor_closure_ai_jobs_before_seq CHECK (ai_jobs_before_seq >= 0);
