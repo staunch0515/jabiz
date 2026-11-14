@@ -119,6 +119,13 @@ class MoneyCloseIT extends CreditNoteItSupport {
         assertThat(differences(sponsor)).isEmpty();
         // FEE_CREDIT_PROMOTION for this lot: 5140 debited when granted, credited back as much when voided.
         assertThat(promotion(lot)).isEqualByComparingTo("0");
+        // Finance's page: the amounts summed from the ledger and the parts; done, nothing owed.
+        assertThat(items("qb.admin.money-closure-amounts", finance(), Map.of("params", Map.of("sponsorId", sponsor))))
+            .singleElement().satisfies(row -> {
+                assertThat(new BigDecimal(String.valueOf(row.get("creditVoided")))).isEqualByComparingTo("1000");
+                assertThat(new BigDecimal(String.valueOf(row.get("owed")))).isZero();
+            });
+        assertThat(closuresShown("OPEN")).doesNotContain(sponsor);
     }
 
     @Test
@@ -131,6 +138,9 @@ class MoneyCloseIT extends CreditNoteItSupport {
         erase(sponsor);
         assertThat(close(sponsor).outcome()).isEqualTo(MoneyClose.CLOSED);
         assertThat(closure(sponsor)).containsEntry("reason_code", QbSponsorClosures.FEE_OWED);
+        // Finance's list: done with fees owed, not among those not done.
+        assertThat(closuresShown("OWED")).contains(sponsor);
+        assertThat(closuresShown("OPEN")).doesNotContain(sponsor);
 
         // Cash that arrives after it (a top-up confirmed late): its lot and the wallet's cache, as the crediting writes.
         SyntheticRows.rows("qb_wallet", null, 1, null, n -> Map.of("owner_id", text(sponsor), "kind", "'CASH'",
@@ -328,6 +338,8 @@ class MoneyCloseIT extends CreditNoteItSupport {
         clock.set(clock.instant().plus(Duration.ofDays(3)));
         Map<String, List<String>> late = erasedItems();
         assertThat(late.get(waits)).containsExactly(com.jabiz.quizbuks.wallet.ReconChecks.ERASED_CLOSE_OPEN);
+        assertThat(closuresShown("SLOW")).contains(waits).doesNotContain(owes, left);
+        assertThat(closuresShown("OPEN")).contains(waits);
         assertThat(late.get(lost)).containsExactly(com.jabiz.quizbuks.wallet.ReconChecks.ERASED_NO_CLOSURE);
 
         // The daily sweep registers the one whose event was lost; the reconciliation no longer finds it.
@@ -369,6 +381,12 @@ class MoneyCloseIT extends CreditNoteItSupport {
         assertThat(query("SELECT status, reminders_sent FROM qb_fee_invoice WHERE invoice_id = ?", invoiceId)
             .getFirst()).containsEntry("status", QbFees.OPEN);
         assertThat(openTasks(QbFees.overdueTaskSource(invoiceId))).isEmpty();
+    }
+
+    /** Finance's list of wind-ups, filtered as the page does, at the clock's time. */
+    private List<Object> closuresShown(String show) {
+        return items("qb.admin.money-closures", finance(), Map.of("limit", 1000, "params", Map.of("show", show,
+            "at", clock.instant().toString()))).stream().map(row -> row.get("sponsorId")).toList();
     }
 
     private List<Object> due() {
