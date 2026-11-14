@@ -624,6 +624,9 @@ class SetupIT extends QbItSupport {
         // F-M13b: the automatic payment of invoices (the switch off, controlled; the limit ordinary).
         expected.putAll(Map.of(QbParams.FEE_AUTO_PAY_MAX_INVOICES, "20", QbParams.FEE_AUTO_PAY_ENABLED, "false",
             QbParams.FEE_AUTO_PAY_MISSED_AFTER_HOURS, "48"));
+        // F-M15 b: the wind-up of an erased sponsor's money (off, controlled) and when finance hears it takes long.
+        expected.putAll(Map.of(QbParams.ERASURE_CLOSE_ENABLED, "false", QbParams.ERASURE_CLOSE_ALERT_DAYS, "3",
+            QbParams.ERASURE_CLOSE_REGISTER_DAYS, "30"));
         assertThat(values).containsExactlyInAnyOrderEntriesOf(expected);
     }
 

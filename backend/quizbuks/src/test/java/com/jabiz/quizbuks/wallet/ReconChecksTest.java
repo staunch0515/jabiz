@@ -139,6 +139,7 @@ class ReconChecksTest {
             + "\"CREDIT_NOTE_LIMITS\":0,\"CREDIT_NOTE_USES\":0,\"CREDIT_NOTE_USE_VOID\":0,\"CREDIT_UNUSED_WITH_DUE\":0,"
             + "\"DISTRIBUTION_AT_FLOOR\":0,\"DISTRIBUTION_DEPOSITS\":0,\"DISTRIBUTION_FINAL_MISSING\":0,"
             + "\"DISTRIBUTION_PRICE_RANGE\":0,\"DISTRIBUTION_UNSETTLED\":0,\"ENTRY_FEES_UNSETTLED\":0,"
+            + "\"ERASED_CLOSE_OPEN\":0,\"ERASED_FEE_OWED\":0,\"ERASED_GIFT_LEFT\":0,\"ERASED_NO_CLOSURE\":0,"
             + "\"EXPOSURE_AMOUNT_MISMATCH\":0,\"EXPOSURE_DEPOSITS\":0,\"EXPOSURE_FINAL_MISSING\":0,"
             + "\"EXPOSURE_PRICE_RANGE\":0,\"EXPOSURE_SETTLED_OVER\":0,\"EXPOSURE_SETTLED_SHORT\":0,"
             + "\"EXPOSURE_UNIT_MISMATCH\":0,\"EXPOSURE_UNPURCHASED\":0,"
@@ -230,18 +231,23 @@ class ReconChecksTest {
         // are differences.
         assertThat(ReconChecks.ATTENTION).containsExactlyInAnyOrder(ReconChecks.DISTRIBUTION_PRICE_RANGE,
             ReconChecks.AUDIENCE_REFUND_NO_PERIOD, ReconChecks.CREDIT_UNUSED_WITH_DUE, ReconChecks.AUTO_PAY_MISSED,
-            ReconChecks.HELP_USAGE_TOTAL,
-            ReconChecks.EXPOSURE_PRICE_RANGE);
+            ReconChecks.HELP_USAGE_TOTAL, ReconChecks.EXPOSURE_PRICE_RANGE, ReconChecks.ERASED_CLOSE_OPEN,
+            ReconChecks.ERASED_NO_CLOSURE);
         assertThat(ReconChecks.NOTES).containsExactlyInAnyOrder(ReconChecks.TAKER_WALLET_LAG,
             ReconChecks.DISTRIBUTION_AT_FLOOR, ReconChecks.EXPOSURE_UNPURCHASED, ReconChecks.OPERATOR_GIFT_CARRY_OPEN,
-            ReconChecks.AI_RESERVATION_SHORT);
+            ReconChecks.AI_RESERVATION_SHORT, ReconChecks.ERASED_FEE_OWED);
+        // F-M15 b: two for attention (a wind-up waiting long, an erased Sponsor with none) and a note (fees an erased
+        // Sponsor still owes, finance's to waive); ERASED_GIFT_LEFT is a difference.
+        assertThat(ReconChecks.level(ReconChecks.ERASED_GIFT_LEFT)).isEqualTo(ReconChecks.Level.DIFFERENCE);
+        assertThat(ReconChecks.owner(ReconChecks.ERASED_CLOSE_OPEN)).isEqualTo(QbPermissions.RECONCILE);
+        assertThat(ReconChecks.owner(ReconChecks.ERASED_NO_CLOSURE)).isEqualTo(QbPermissions.RECONCILE);
         assertThat(ReconChecks.owner(ReconChecks.HELP_USAGE_TOTAL)).isEqualTo(QbPermissions.ADMIN_HELP_GAPS);
         assertThat(ReconChecks.link(ReconChecks.HELP_USAGE_TOTAL)).isEqualTo("/qb/ai");
         assertThat(ReconChecks.link(ReconChecks.DISTRIBUTION_PRICE_RANGE)).isEqualTo(ReconTasks.RECONCILIATION_PAGE);
         assertThat(ReconChecks.ALL.stream().filter(c -> ReconChecks.level(c) == ReconChecks.Level.DIFFERENCE))
             .hasSize(ReconChecks.ALL.size() - ReconChecks.ATTENTION.size() - ReconChecks.NOTES.size());
-        assertThat(ReconChecks.ATTENTION).hasSize(6);
-        assertThat(ReconChecks.NOTES).hasSize(5);
+        assertThat(ReconChecks.ATTENTION).hasSize(8);
+        assertThat(ReconChecks.NOTES).hasSize(6);
         assertThat(ReconChecks.NOTES).contains(ReconChecks.OPERATOR_GIFT_CARRY_OPEN);
         // F-M12 c: the settlement's checks are differences, owned by finance (qb.reconcile), none for attention.
         for (String check : List.of(ReconChecks.OPERATOR_SETTLEMENT_WAITING, ReconChecks.OPERATOR_SETTLEMENT_COVERAGE,

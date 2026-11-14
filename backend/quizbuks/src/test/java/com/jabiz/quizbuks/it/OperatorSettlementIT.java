@@ -154,7 +154,8 @@ class OperatorSettlementIT extends PlayItSupport {
             operatorId, member);
         assertThat(items("qb.operator.settlements", tokenOf(member, QbRoles.OPERATOR), Map.of())).singleElement()
             .satisfies(row -> assertThat(row).containsEntry("month", "2026-11")
-                .doesNotContainKeys("paymentRecordedBy", "approvalRequestId"));
+                // #701 review M4: the part of the fees not shared (cost) is a column of the list.
+                .containsKey("costExcluded").doesNotContainKeys("paymentRecordedBy", "approvalRequestId", "revenue"));
         String session = operatorSession(member, operatorId);
         assertThat(items("qb.operator.account", session, Map.of())).singleElement()
             .satisfies(row -> assertThat(new BigDecimal(String.valueOf(row.get("balance")))).isEqualByComparingTo("3"));

@@ -326,6 +326,15 @@ class TopUpConfig {
             .item(ReconChecks.OPERATOR_GIFT_CARRY_OPEN, "en", "Suspended operators that still carry credit to take "
                 + "back (a note)", "zh", "已停用的运营商仍有待扣回的赠送额度（仅提示）",
                 "ja", "停止中の運営パートナーに回収待ちのクレジットが残っている（お知らせのみ）")
+            // F-M15 b: the wind-ups of erased sponsors' platform fee accounts.
+            .item(ReconChecks.ERASED_GIFT_LEFT, "en", "Granted credit left after an erased Sponsor's wind-up",
+                "zh", "已注销发起方收尾后仍有剩余的赠送额度", "ja", "削除された主催者の精算後に残る付与クレジット")
+            .item(ReconChecks.ERASED_CLOSE_OPEN, "en", "Erased Sponsors' wind-ups taking long",
+                "zh", "迟迟未完成的已注销发起方收尾", "ja", "完了しない削除済み主催者の精算")
+            .item(ReconChecks.ERASED_FEE_OWED, "en", "Fees an erased Sponsor still owes (a note)",
+                "zh", "已注销发起方仍欠的平台费（仅提示）", "ja", "削除された主催者の未払い料金（お知らせのみ）")
+            .item(ReconChecks.ERASED_NO_CLOSURE, "en", "Erased Sponsors with money and no wind-up",
+                "zh", "有资金却没有收尾记录的已注销发起方", "ja", "資金があるのに精算記録のない削除済み主催者")
 
             // Retired: named in the summaries of runs written before its rename (ReconChecks.RETIRED).
             .disabledItem(ReconChecks.DISTRIBUTION_PRICE_OUT_OF_RANGE, "en", "Distribution prices outside the "

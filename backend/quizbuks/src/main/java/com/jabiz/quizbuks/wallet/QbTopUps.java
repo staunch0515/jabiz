@@ -129,6 +129,8 @@ public final class QbTopUps {
         eb.field("manualReason", f -> f.physicalColumn("manual_reason").immutable(true).processOnly()
             .asText(MANUAL_REASON_LENGTH));
         eb.field("sponsorVisible", f -> f.physicalColumn("sponsor_visible").processOnly().asBool());
+        // F-M15 b: why a manual credit ended under review without a decision (ERASED: its sponsor was erased).
+        eb.field("endedCode", f -> f.physicalColumn("ended_code").processOnly().asText(20));
         eb.field("version", f -> f.physicalColumn("version").asVersion());
         eb.unique("uk_qb_topup_session", "checkoutSessionId");
         eb.unique("uk_qb_topup_payment", "paymentIntentId");

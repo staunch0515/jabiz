@@ -55,6 +55,7 @@ import RegionPage from './RegionPage'
 import SharedVideosPage from './SharedVideosPage'
 import SharedVideoPage from './SharedVideoPage'
 import SponsorVerificationsPage from './SponsorVerificationsPage'
+import MoneyClosuresPage from './MoneyClosuresPage'
 import SponsorVerificationPage from './SponsorVerificationPage'
 import AiPage from './AiPage'
 import { HelpThreadPage, HelpThreadsPage } from './HelpDeskPages'
@@ -178,6 +179,8 @@ export default defineExtension({
     { path: '/qb/finance/manual-credits/:topUpId', element: <ManualCreditPage /> },
     // Q87: the platform's fees, their invoices, and the requests another administrator approves.
     { path: PATH.fees, element: <FeesPage /> },
+    // F-M15 b: the wind-ups of erased Sponsors' platform fee accounts (finance, read only).
+    { path: PATH.moneyClosures, element: <MoneyClosuresPage /> },
     { path: '/qb/finance/fees/requests/:requestId', element: <FeeRequestPage /> },
     { path: PATH.reconciliation, element: <ReconciliationPage /> },
     { path: PATH.reports, element: <ReportsPage /> },
@@ -398,6 +401,8 @@ export default defineExtension({
           permission: PERMISSION.bankApprove },
         // Q87: the platform's fees charged to sponsors and their invoices.
         { key: 'qb-fees', label: 'menu.fees', path: PATH.fees, icon: FileText,
+          permission: PERMISSION.financeRead },
+        { key: 'qb-money-closures', label: 'menu.moneyClosures', path: PATH.moneyClosures, icon: FileText,
           permission: PERMISSION.financeRead },
         // Q13b: finance reviews (the transfers' review), pays and records them.
         { key: 'qb-bank-withdrawals', label: 'menu.bankWithdrawals', path: PATH.bankWithdrawals, icon: Landmark,

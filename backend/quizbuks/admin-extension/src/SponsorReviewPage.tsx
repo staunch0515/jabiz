@@ -28,6 +28,7 @@ import { readRewardDefaults, readSponsorMethods, REWARD_METHODS, setSponsorMetho
 import { AVATAR_VARIANTS, DICTIONARY, isUserId, PATH, PERMISSION, SPONSOR_PENDING } from './ids'
 import { AfterDecision, LoadFailed, Section, StatusBadge } from './components'
 import { SponsorAssets } from './SponsorAssets'
+import { SponsorClosure } from './SponsorClosure'
 import { SponsorFeeAccount } from './SponsorFeeAccount'
 import { SponsorVerificationLine } from './SponsorVerificationLine'
 import { SponsorPackageImports } from './SponsorPackageImports'
@@ -240,6 +241,8 @@ export default function SponsorReviewPage() {
       {can(PERMISSION.publicationRead) && <SponsorAssets userId={userId} />}
       {/* F-M1: the account that pays the platform's fees, read only: finance's, or an operator's own Sponsors'. */}
       {(operator || can(PERMISSION.financeRead)) && <SponsorFeeAccount userId={userId} operator={operator} />}
+      {/* F-M15 b: the wind-up after the account was deleted (headquarters' finance; nothing without one). */}
+      {!operator && can(PERMISSION.financeRead) && <SponsorClosure userId={userId} />}
       {/* F-C4: the Sponsor's imports of sponsor packages, read only (an operator's: its own Sponsors'). */}
       {can(PERMISSION.publicationRead) && <SponsorPackageImports userId={userId} />}
     </div>

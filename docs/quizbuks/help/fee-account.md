@@ -87,6 +87,18 @@ A credit note lowers what you owe in platform fees; the fee and its invoice stay
 
 No. An invoice's PDF is made the **day you first download it**, and states the payment status as of that day: how much was paid with Granted credit, the prepayment, cash and credit notes, and what is still owed. Later payments do not change the PDF (it is a fixed document); the latest status is under "Money → Invoices", on the row you open. The amounts, tax and lines never change; tax is subtotalled by rate. A voided invoice's original can still be downloaded, and the page says the day it was voided.
 
+### 中文 · 账户被暂停时，我的钱怎么办？
+
+账户被暂停期间不能登录，进行中的发布也随之暂停；**钱不会被没收**。平台费账户里的现金冻结：不能充值、不能提现，解除暂停后照常使用。赠送额度不能自己使用，也不再发放新的，但仍**按原来的有效期到期**，暂停期间到期的照常失效。暂停的发布到结束时间（或由管理员结束）后照常结算，预付款里没用完的退回原处：现金回到平台费账户，赠送额度回到原来那一笔（已过期的随即失效）。未付的平台费照常计入，账单照常到期。欠学者的现金奖励仍须结清。解除暂停后，可以在发起方页面"资金 → 平台费账户"查看余额与明细。有疑问请联系客服。
+
+### 日本語 · アカウントが停止されたとき、お金はどうなりますか？
+
+アカウントの停止中はログインできず、実施中の公開も一時停止になります。**お金が没収されることはありません**。プラットフォーム利用料アカウントの現金は凍結され、チャージや出金はできません。停止が解除されると通常どおり使えます。付与クレジットは自分では使えず、新しい付与もありませんが、**もとの有効期限どおりに失効**し、停止中に期限が来たものは通常どおり失効します。一時停止した公開は、終了時刻（または管理者による終了）の後に通常どおり精算され、前払金の使われなかった分はもとの場所に戻ります。現金はプラットフォーム利用料アカウントへ、付与クレジットはもとの付与分へ戻ります（期限切れのものはその場で失効します）。未払いのプラットフォーム利用料は通常どおり計上され、請求書は通常どおり期限を迎えます。テイカーへの現金特典の支払いは引き続き必要です。停止が解除された後、主催者ページの「資金 → プラットフォーム利用料アカウント」で残高と明細を確認できます。ご不明な点はサポートにお問い合わせください。
+
+### English · What happens to my money while my account is suspended?
+
+While your account is suspended you cannot sign in, and your running publications are paused; **your money is not taken away**. The cash in your Platform fee account is frozen: you cannot top up or withdraw it, and you can use it as usual once the suspension is lifted. You cannot spend Granted credit yourself and no new credit is granted, but it still **expires on its original date**, also during the suspension. A paused publication is settled as usual when it ends (at its end time, or when an administrator ends it), and what its prepayment did not use goes back where it came from: cash to your Platform fee account, Granted credit to the grant it came from (voided at once if that grant has expired). Platform fees still count and invoices still fall due. Cash rewards owed to Takers still have to be paid. Once the suspension is lifted, see the balance and its details under "Money → Platform fee account" in the Sponsor app. If anything is unclear, please contact support.
+
 ### 中文 · 删除账户时，账户里的钱怎么办？
 
 申请删除账户时，页面会先列出与您有关的事项，每一条都要确认后才能申请；里面的数字是申请那一刻的，账户在冷静期过后才删除，实际**按删除那一刻的账户为准**。删除时：进行中的发布随之结束；它们的预付款要等结算完（通常一两天）才释放，所以钱的收尾会晚一两天。之后把还没开账单的平台费一并开出账单，用平台费账户里的钱从最早的账单起付清，先用赠送额度、再用现金；付不完的部分仍然是欠款。付完之后，剩下的赠送额度全部作废，不能折现；剩下的现金留在已关闭的账户里，**不会退到银行**。删除后才到账的充值同样进入已关闭的账户，仍有欠款时自动用来付。删除后才开出的账单上没有公司名，账单与金额照常存档。建议删除前先付清账单，并等充值到账或取消。

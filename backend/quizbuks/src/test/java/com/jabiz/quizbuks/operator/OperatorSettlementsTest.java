@@ -14,6 +14,13 @@ class OperatorSettlementsTest {
     static final ZoneId TOKYO = ZoneId.of("Asia/Tokyo");
 
     @Test
+    void theDefaultListShowsThePlatformFeesNotTheOldCommission() {
+        // #701 review L1: revenue is 0 from F-M12 on; kept as a field, labelled as the old way's.
+        assertThat(OperatorSettlements.SETTLEMENT_ENTITY.listView("default").orElseThrow().columns())
+            .contains("platformFees").doesNotContain("revenue");
+    }
+
+    @Test
     void theShareIsRoundedDownAndNothingOfANegativeMonth() {
         assertThat(OperatorSettlements.operatorShare(new BigDecimal("22"), new BigDecimal("0.2")))
             .isEqualByComparingTo("17");

@@ -145,4 +145,20 @@ class AutoPayReconIT extends PlayItSupport {
             switchOn("false");
         }
     }
+
+    @Test
+    void anErasedSponsorIsNotReportedAsMissedTheErasedChecksAreTheirs() {
+        String sponsor = newSponsor(unique("s-fm13c-erased"));
+        invoice(sponsor, 1100, 72, 0);
+        cash(sponsor, 500);
+        switchOn("true");
+        try {
+            assertThat(found(sponsor, ReconChecks.AUTO_PAY_MISSED, 60)).hasSize(1);
+            execute("INSERT INTO qb_sponsor_closure (closure_id, sponsor_id, status, erased_at) VALUES (?, ?, 'WAITING', ?)",
+                UUID.randomUUID().toString(), sponsor, java.sql.Timestamp.from(clock.instant()));
+            assertThat(found(sponsor, ReconChecks.AUTO_PAY_MISSED, 60)).isEmpty();
+        } finally {
+            switchOn("false");
+        }
+    }
 }

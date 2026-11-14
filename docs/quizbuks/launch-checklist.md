@@ -38,7 +38,7 @@
       确认人： ／ 日期： ／ 依据：
 - [ ] 特定商取引法的表示列出首次上线收的费用（配送费、受众规则费、AI 额度、曝光费）与计价方式
       确认人： ／ 日期： ／ 依据：
-- [ ] **发起方条款的自动付款一句**（F-M13）：发起方条款写明"到账后自动支付未付账单"（平台在充值、赠送额度或运营商转入到账后，替发起方支付最早的未付账单，不需要本人操作），并随上线前那一版一起同意（是否另发新版、已有发起方是否重新同意，由法务定）；自动付款开关（`qb.fee.auto-pay.enabled`）**发布即打开**（没有发布时为关），所以发布前已通知有未付账单的发起方
+- [ ] **发起方条款的自动付款一句**（F-M13）：发起方条款写明"到账后自动支付未付账单"（平台在充值、赠送额度或运营商转入到账后，替发起方支付最早的未付账单，不需要本人操作），并随上线前那一版一起同意（是否另发新版、已有发起方是否重新同意，由法务定）；自动付款开关（`qb.fee.auto-pay.enabled`）**发布即打开**（没有发布时为关），所以发布前已通知有未付账单的发起方（且：①平台费账户的邮件文字 `qb.fee.auto-paid`、`qb.fee.invoice-voided` 已由另一位管理员发布；②夜间任务 `qb.fee-auto-pay` 与 `qb.mail-fee-paid-due` 在运行、`qb.reconcile` 的持有人知道 `AUTO_PAY_MISSED`；③`jabiz.mail.enabled` 已开（否则付款通知与作废通知两封邮件都不发）；④`qb.fee.auto-pay.missed-after-hours` 的值已确认（缺省 48），并知道打开后第一夜 `AUTO_PAY_MISSED` 可能报出（见 `operations.md` §7.58，付清后自行消失）；⑤同一次受控变更之外不另开别的钱的开关；⑥先在 staging 上以真实的未付账单走过一次付款、作废与邮件）
       确认人： ／ 日期： ／ 依据：
 - [ ] 上面四种文本都是需求方或律师提供的**正式文本**（日文为准据文本、英文一并提供），经 `QB_LEGAL_PUBLISH` 发布且已生效：页面上不再出现 `[TEST PLACEHOLDER]`；
       正式模式启动日志中没有 `legal:TERMS_APP` / `legal:TERMS_SPONSOR` / `legal:PRIVACY` 的告警（`operations.md` §3 第 9 步）
@@ -87,9 +87,18 @@
 - [ ] **曝光的最少购买次数**（F-M8 问题 3）：提交发布时最少购买的曝光次数（`qb.exposure.min-purchase`）现为占位的 100 次；上线前由需求方定数并以受控变更设好（追加购买不设最少）
 - [ ] **曝光价格范围与单次追加上限**（F-M8）：运营商可设的单价范围（`qb.exposure.unit.min` 现为占位 1、`qb.exposure.unit.max` 现为占位 100，日元 / 次）与一次追加购买的上限（`qb.exposure.top-up.max` 现为占位 1,000,000）上线前由需求方定数并以受控变更设好；**开关 `qb.exposure.billing.enabled` 在曝光费的结算（F-M8c）合并之前不要打开**（它在首次上线登记表里为“等待”，F-M8c 才改为生效）
       确认人： ／ 日期： ／ 依据：
-- [ ] **F-M15b 合并前不上线生产**（总控 2026-11-14）：注销前的提示（F-M15 a，`erasure.notice.qb.fee-*`、`qb.deposits-held`、`qb.gift-void`、`qb.cash-left`、`qb.topup-pending`）描述的是 F-M15b 的注销收尾（付欠费、作废赠送额度）；b 合并之前，删除账户时这些收尾还不会发生
+- [ ] **法务：注销时现金余额不退**（F-M15 问题 6）：发起方注销后，平台费账户里剩下的现金留在已关闭的账户、不退银行（注销前的提示写明，`operations.md` §7.59）；请法务确认这一做法与预付性质余额的退款规定（前払式支払手段）是否相容，不相容时由财务定线下退款的流程并改提示
+      确认人： ／ 日期： ／ 依据：
+- [ ] **财务与法务：注销后开出的账单**（F-M15 问题 12）：注销之后才开出的账单没有收件方名称（个人信息已抹除），编号、日期、金额完整并存档；请确认能否作为凭证（适格请求书的收件方名称），不能时另定替代办法
+      确认人： ／ 日期： ／ 依据：
+- [ ] **注销收尾的开关 `qb.erasure.close.enabled`**（F-M15 b，受控，首次上线登记为开）：F-M13 的自动付款已合并（#696），收尾以它的单项付款、不看 `qb.fee.auto-pay.enabled`；发布后注销的发起方会先用账户里的钱付欠费、再作废剩余的赠送额度，由财务确认发布时点
+      确认人： ／ 日期： ／ 依据：
+- [ ] **AI 额度与注销收尾**（F-M15 b，复核 M2）：有 AI 额度（用途 `AI` 的预付款）的发起方注销后，收尾停在 `DEPOSIT_OPEN`，直到 F-M15c 关闭那笔预付款，属预期；F-M15c 合并之前不打开 `qb.ai.fee.enabled`（首次上线本来就关着）
+      确认人： ／ 日期： ／ 依据：
 
 - [ ] **运营商分成的 8 个设置**（F-M12 a）：部署后，`QB_SETUP` 提出的 `qb.operator.share.kinds`、`qb.operator.share.ai-cost-in-base`、`qb.operator.credit-recovery.rate`、`qb.operator.gift.treatment.*`（4 个）、`qb.operator.gift.recover-outside-base` 已由另一位管理员发布（四眼）；未发布时结算任务对每个运营商都 422 `QB_OPERATOR_NO_SHARE_SETTING`。**必须在部署后的第一次结算任务之前完成**（staging：12 月的第一次任务之前）
+      确认人： ／ 日期： ／ 依据：
+- [ ] **数据库连接与结算的索引**（F-M12 d，#701）：部署后确认应用的连接上 PostgreSQL 的 JIT 为关（`operations.md` §7.60"数据库的 JIT 关闭"：环境变量 `SPRING_R2DBC_PROPERTIES_OPTIONS` 没有覆盖 `application.yml` 的 `jit=off`；开着 `pg_stat_statements` 时应用语句的 `jit_functions` 为 0），以及迁移 V129 并发建的两个索引都有效：`SELECT c.relname, x.indisvalid FROM pg_index x JOIN pg_class c ON c.oid = x.indexrelid WHERE c.relname IN ('qb_fee_charge_version_operator_period_idx', 'qb_fee_payment_version_credit_paid_idx')` 两行都为 `t`（为 `f` 照 V129 的注释处理）。
       确认人： ／ 日期： ／ 依据：
 
 ## 内容与运营
