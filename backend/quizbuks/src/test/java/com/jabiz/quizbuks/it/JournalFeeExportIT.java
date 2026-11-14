@@ -70,7 +70,7 @@ class JournalFeeExportIT extends CreditNoteItSupport {
         clock.set(one.end().plus(Duration.ofHours(1)));
         mapAll();
         clock.set(reconciled);
-        assertThat(reconcile(reconciled)).isEqualTo("OK");
+        assertThat(reconcileRun(reconciled)).isEqualTo("OK");
         advance(JournalPeriods.SETTLE.plusMinutes(1));
         Map<String, Object> exportOne = export(first.toString());
 
@@ -104,7 +104,7 @@ class JournalFeeExportIT extends CreditNoteItSupport {
         deliverEvents();
         reconciled = two.end().plus(Duration.ofHours(10));
         clock.set(reconciled);
-        assertThat(reconcile(reconciled)).isEqualTo("OK");
+        assertThat(reconcileRun(reconciled)).isEqualTo("OK");
         advance(JournalPeriods.SETTLE.plusMinutes(1));
         Map<String, Object> exportTwo = export(first.plusMonths(1).toString());
         assertThat(exportTwo.get("voucherNo")).isNotEqualTo(exportOne.get("voucherNo"));
@@ -248,13 +248,6 @@ class JournalFeeExportIT extends CreditNoteItSupport {
 
     private Map<String, Object> export(String month) {
         return run("QB_JOURNAL_EXPORT", finance(), body("month", month));
-    }
-
-    private String reconcile(Instant at) {
-        deliverEvents();
-        Reconciliation.ReconcileOutput output = (Reconciliation.ReconcileOutput) systemRun("QB_RECONCILE_RUN",
-            body("scheduledTime", at.toString()));
-        return output.status();
     }
 
     private void mapAll() {
