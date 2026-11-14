@@ -41,15 +41,27 @@ import static org.assertj.core.api.Assertions.assertThat;
     "quizbuks.invitations.sends-per-day=3"})
 class InvitationIT extends PlayItSupport {
 
+    /**
+     * How long a test mail server may take to start. GreenMail's default (2 s) is too short on a busy CI runner: the
+     * SMTPS server, which makes its key at startup, once missed it there and failed the class before any test ran.
+     */
+    static final long MAIL_SERVER_STARTUP_MILLIS = Duration.ofSeconds(20).toMillis();
+
     @RegisterExtension
-    static final GreenMailExtension MAIL = new GreenMailExtension(new ServerSetup(3048, null,
-        ServerSetup.PROTOCOL_SMTP));
+    static final GreenMailExtension MAIL = new GreenMailExtension(patient(new ServerSetup(3048, null,
+        ServerSetup.PROTOCOL_SMTP)));
 
     /** The sponsors' own server (Q29): invitations leave through it, never through the platform's. */
     @RegisterExtension
-    static final GreenMailExtension SHOP = new GreenMailExtension(new ServerSetup(3467, null,
-        ServerSetup.PROTOCOL_SMTPS)).withConfiguration(GreenMailConfiguration.aConfig()
+    static final GreenMailExtension SHOP = new GreenMailExtension(patient(new ServerSetup(3467, null,
+        ServerSetup.PROTOCOL_SMTPS))).withConfiguration(GreenMailConfiguration.aConfig()
         .withUser("shop@example.com", "shop", "shop-secret-1"));
+
+    /** The server's setup with the longer startup time. */
+    static ServerSetup patient(ServerSetup setup) {
+        setup.setServerStartupTimeout(MAIL_SERVER_STARTUP_MILLIS);
+        return setup;
+    }
 
     static final Pattern LINK = Pattern.compile(
         "https://quizbuks\\.example\\.com/taker/auth/email-link\\?entry=app&token=([A-Za-z0-9_-]+)&to=([^)\\s&]*)"
