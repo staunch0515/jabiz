@@ -452,10 +452,11 @@ export interface InvoiceRow {
 
 /** F-M13: what an invoice was paid with: the five that add up to the total, and the gift part inside the prepayment's. */
 export interface InvoiceSources {
-  gift: number
-  prepayment: number
-  prepaymentGift: number
-  cash: number
+  /** None of the three ways of paying when the invoice was paid before the payments were kept (the details are not available). */
+  gift: number | null
+  prepayment: number | null
+  prepaymentGift: number | null
+  cash: number | null
   creditNote: number
   unpaid: number
 }
@@ -787,11 +788,12 @@ export const readCashSources = (): Promise<DictionaryItem[]> => readDictionary(W
 /** F-M13: what the invoice was paid with, as of now (the document's is as of its issue). */
 export async function readInvoiceSources(invoiceId: string): Promise<InvoiceSources> {
   const row = (await runQuery<Row>(WALLET_TEMPLATE.invoiceSources, { params: { invoiceId }, limit: 1 })).items[0] ?? {}
+  const some = (value: unknown) => (value == null ? null : num(value))
   return {
-    gift: num(row.sourceGift),
-    prepayment: num(row.sourcePrepayment),
-    prepaymentGift: num(row.sourcePrepaymentGift),
-    cash: num(row.sourceCash),
+    gift: some(row.sourceGift),
+    prepayment: some(row.sourcePrepayment),
+    prepaymentGift: some(row.sourcePrepaymentGift),
+    cash: some(row.sourceCash),
     creditNote: num(row.sourceCreditNote),
     unpaid: num(row.sourceUnpaid),
   }

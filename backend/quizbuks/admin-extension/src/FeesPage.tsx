@@ -299,15 +299,20 @@ function InvoiceSources({ invoiceId }: { invoiceId: string }) {
   return (
     <dl className="grid grid-cols-2 gap-x-6 gap-y-1 text-sm md:grid-cols-5" data-testid="fee-invoice-sources">
       {([['gift', s.gift], ['prepayment', s.prepayment], ['cash', s.cash], ['creditNote', s.creditNote],
-        ['unpaid', s.unpaid]] as const).map(([key, value]) => (
+        ['unpaid', s.unpaid]] as const).filter(([, value]) => value !== null).map(([key, value]) => (
         <div key={key}>
           <dt className="text-muted-foreground">{t(`fee.sources.${key}`)}</dt>
           <dd data-testid={`fee-invoice-source-${key}`}>{money(String(value))}
-            {key === 'prepayment' && s.prepaymentGift > 0
-              && <span className="text-muted-foreground block text-xs">{t('fee.sources.prepaymentGift', { amount: money(String(s.prepaymentGift)) })}</span>}
+            {key === 'prepayment' && (s.prepaymentGift ?? 0) > 0
+              && <span className="text-muted-foreground block text-xs">{t('fee.sources.prepaymentGift', { amount: money(String(s.prepaymentGift ?? 0)) })}</span>}
           </dd>
         </div>
       ))}
+      {s.gift === null && (
+        <p className="text-muted-foreground col-span-full" data-testid="fee-invoice-sources-unavailable">
+          {t('fee.sources.unavailable')}
+        </p>
+      )}
     </dl>
   )
 }

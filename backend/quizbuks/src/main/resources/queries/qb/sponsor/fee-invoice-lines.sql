@@ -13,7 +13,7 @@ results:
   kind:        { from: QbFeeCharge.kind }
   period:      { from: QbFeeCharge.period }
   description: { kind: { type: text, maxLength: 500 } }
-  taxRate:     { from: QbFeeCharge.taxRate }
+  taxPercent:  { kind: { type: numeric, precision: 5, scale: 2 } }
   amount:      { from: QbFeeCharge.amount }
   tax:         { from: QbFeeCharge.tax }
   total:       { from: QbFeeCharge.total }
@@ -31,7 +31,7 @@ SELECT
     c.{{QbFeeCharge.kind}}     AS kind,
     c.{{QbFeeCharge.period}}   AS period,
     CAST(coalesce(c.{{QbFeeCharge.reason}}, pb.{{QbPublication.name}}, '') AS varchar(500)) AS description,
-    c.{{QbFeeCharge.taxRate}}  AS taxRate,
+    CAST(c.{{QbFeeCharge.taxRate}} * 100 AS numeric(5, 2)) AS taxPercent,
     c.{{QbFeeCharge.amount}}   AS amount,
     c.{{QbFeeCharge.tax}}      AS tax,
     c.{{QbFeeCharge.total}}    AS total

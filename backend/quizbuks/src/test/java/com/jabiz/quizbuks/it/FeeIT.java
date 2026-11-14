@@ -405,6 +405,11 @@ class FeeIT extends PlayItSupport {
             assertThat(lines(QbFees.CHARGE, chargeId)).containsExactly("1130 DEBIT 1100 @" + sponsor, "4120 CREDIT 1000",
                 "2150 CREDIT 100", "2160 DEBIT 1100 @" + sponsor, "1130 CREDIT 1100 @" + sponsor);
         }
+        // F-M13: each own invoice of a fee paid early was paid with cash, all of it.
+        for (Map<String, Object> early : invoices) {
+            assertThat(sources(sponsorToken(sponsor), early.get("invoice_id"))).containsEntry("sourceCash", 1100)
+                .containsEntry("sourceGift", 0).containsEntry("sourceUnpaid", 0);
+        }
         assertThat(balance(sponsor, QbWallets.CASH)).isEqualByComparingTo("2800");
         assertThat(items("qb.sponsor.wallet", sponsorToken(sponsor), Map.of()).getFirst())
             .containsEntry("uninvoicedTotal", 0);
@@ -440,6 +445,143 @@ class FeeIT extends PlayItSupport {
             Map.of("invoiceId", String.valueOf(monthInvoice.get("invoice_id")))))).hasSize(1);
         assertThat(items("qb.sponsor.wallet", sponsorToken(sponsor), Map.of()).getFirst())
             .containsEntry("uninvoicedTotal", 0).containsEntry("unpaidTotal", 1100);
+    }
+
+    /** F-M13: what the invoice was paid with, as its sponsor reads it. */
+    Map<String, Object> sources(String token, Object invoiceId) {
+        return items("qb.sponsor.fee-invoice-sources", token, Map.of("params", Map.of("invoiceId",
+            String.valueOf(invoiceId)))).getFirst();
+    }
+
+    @Test
+    @Order(101)
+    void anInvoicePaidBeforeThePaymentsWereKeptSaysSoAndNeverPrintsAWrongNumber() throws Exception {
+        switches();
+        String sponsor = newSponsor(unique("s-fm13-legacy"));
+        String invoiceId = java.util.UUID.randomUUID().toString();
+        // As F-M1 found them: paid in full, with no payment rows to tell with what.
+        execute("INSERT INTO qb_fee_invoice (invoice_id, invoice_no, sponsor_id, billing_mode, period, amount, tax, "
+            + "total, paid_amount, status, issued_at, issued_on, due_on, paid_at, payment_transaction_id) VALUES (?, ?, "
+            + "?, 'PREPAID', '2026-09', 1000, 100, 1100, 1100, 'PAID', now(), current_date, current_date, now(), 'old')",
+            invoiceId, "OLD-" + invoiceId.substring(0, 8), sponsor);
+        Map<String, Object> row = sources(sponsorToken(sponsor), invoiceId);
+        assertThat(row.get("sourceGift")).isNull();
+        assertThat(row.get("sourcePrepayment")).isNull();
+        assertThat(row.get("sourceCash")).isNull();
+        assertThat(row).containsEntry("sourceCreditNote", 0).containsEntry("sourceUnpaid", 0);
+        // Another sponsor reads nothing of it.
+        assertThat(items("qb.sponsor.fee-invoice-sources", sponsorToken(newSponsor(unique("s-fm13-legacy-else"))),
+            Map.of("params", Map.of("invoiceId", invoiceId)))).isEmpty();
+        // A document of it states what it can: nothing owed.
+        Map<String, Object> document = run(FeeProcesses.DOCUMENT, sponsorToken(sponsor),
+            body("invoiceId", invoiceId, "language", "en"));
+        String text = documentText(sponsorToken(sponsor), document.get("documentRunId"));
+        assertThat(text).contains("Still owed").doesNotContain("null");
+    }
+
+    @Test
+    @Order(102)
+    void aMonthWithTwoTaxRatesIsSubtotalledByRateAndIssuedInEveryLanguage() throws Exception {
+        switches();
+        String sponsor = newSponsor(unique("s-fm13-rates"));
+        run(FeeProcesses.BILLING_SET, hq(), body("userId", sponsor, "billingMode", "POSTPAID", "creditLimit", 20_000,
+            "reason", "Known company"));
+        assertThat(monthly(sponsor)).containsEntry("outcome", "CHARGED");
+        // The rate changes within the month: the next fee is charged at 8%.
+        param(QbParams.FEE_TAX_RATE, "0.08");
+        try {
+            Map<String, Object> requested = run(FeeRequests.RECORD, finance(), body("kind", "MANUAL", "sponsorId",
+                sponsor, "amount", 2000, "reason", "Rate test"));
+            approve((String) requested.get("approvalRequestId"));
+        } finally {
+            param(QbParams.FEE_TAX_RATE, "0.10");
+        }
+        assertThat(item(FeeProcesses.INVOICE_ITEM, body("sponsorId", sponsor, "period", period()))).isEqualTo("ISSUED");
+        String invoiceId = String.valueOf(invoices(sponsor).getFirst().get("invoice_id"));
+        String token = sponsorToken(sponsor);
+        // By rate: 10% on 1,000 (tax 100), 8% on 2,000 (tax 160); the lines carry their rates and the fee's reason.
+        List<Map<String, Object>> rates = items("qb.sponsor.fee-invoice-rates", token,
+            Map.of("params", Map.of("invoiceId", invoiceId)));
+        assertThat(rates).hasSize(2);
+        assertThat(rates.getFirst()).containsEntry("rateNet", 1000).containsEntry("rateTax", 100)
+            .containsEntry("rateGross", 1100);
+        assertThat(((Number) rates.getFirst().get("taxPercent")).doubleValue()).isEqualTo(10.0);
+        assertThat(rates.getLast()).containsEntry("rateNet", 2000).containsEntry("rateTax", 160)
+            .containsEntry("rateGross", 2160);
+        assertThat(((Number) rates.getLast().get("taxPercent")).doubleValue()).isEqualTo(8.0);
+        assertThat(items("qb.sponsor.fee-invoice-lines", token, Map.of("params", Map.of("invoiceId", invoiceId))))
+            .extracting(row -> row.get("description")).contains("Rate test");
+        // Paid with cash, all of it (a month's invoice is paid by rows that name it).
+        cash(sponsor, 5000);
+        run(FeeProcesses.PAY, token, body("invoiceId", invoiceId));
+        assertThat(sources(token, invoiceId)).containsEntry("sourceCash", 3260).containsEntry("sourceGift", 0)
+            .containsEntry("sourceUnpaid", 0);
+        // The document, in Japanese (the tests' fonts have no CJK glyphs, so the text is read for its figures: the
+        // labels in each language are the messages', MessagesTest): the lines with their rates, the subtotals by rate.
+        Map<String, Object> ja = run(FeeProcesses.DOCUMENT, token, body("invoiceId", invoiceId, "language", "ja"));
+        String text = documentText(token, ja.get("documentRunId"));
+        assertThat(text).contains("10.00 1,000 100 1,100 8.00 2,000 160 2,160").doesNotContain("(UTC)");
+        assertThat(text).contains("3,000").contains("260").contains("3,260");
+        // In English: the labels, the lines (the reason as the description) and the subtotals under their heading.
+        String en = newSponsor(unique("s-fm13-en"));
+        cash(en, 5000);
+        assertThat(monthly(en)).containsEntry("outcome", "CHARGED");
+        String enInvoice = String.valueOf(invoices(en).getFirst().get("invoice_id"));
+        Map<String, Object> enDocument = run(FeeProcesses.DOCUMENT, sponsorToken(en), body("invoiceId", enInvoice,
+            "language", "en"));
+        assertThat(documentText(sponsorToken(en), enDocument.get("documentRunId")))
+            .contains("Subtotals by tax rate").contains("Subtotal before tax (JPY)").contains("Tax rate (%)")
+            .contains("Paid with cash (JPY)").contains("Still owed (JPY)");
+        // And in Chinese, for another sponsor's invoice: issued all the same.
+        String other = newSponsor(unique("s-fm13-zh"));
+        cash(other, 5000);
+        assertThat(monthly(other)).containsEntry("outcome", "CHARGED");
+        String otherInvoice = String.valueOf(invoices(other).getFirst().get("invoice_id"));
+        Map<String, Object> zh = run(FeeProcesses.DOCUMENT, sponsorToken(other), body("invoiceId", otherInvoice,
+            "language", "zh"));
+        assertThat(documentText(sponsorToken(other), zh.get("documentRunId"))).contains("1,100");
+    }
+
+    @Test
+    @Order(103)
+    void whatIsPaidWhileTheDocumentIsIssuedNeverMakesItsFiguresDisagree() throws Exception {
+        switches();
+        String sponsor = newSponsor(unique("s-fm13-race"));
+        run(FeeProcesses.BILLING_SET, hq(), body("userId", sponsor, "billingMode", "POSTPAID", "creditLimit", 5000,
+            "reason", "Known company"));
+        assertThat(monthly(sponsor)).containsEntry("outcome", "CHARGED");
+        assertThat(item(FeeProcesses.INVOICE_ITEM, body("sponsorId", sponsor, "period", period()))).isEqualTo("ISSUED");
+        String invoiceId = String.valueOf(invoices(sponsor).getFirst().get("invoice_id"));
+        String token = sponsorToken(sponsor);
+        java.util.concurrent.atomic.AtomicBoolean paying = new java.util.concurrent.atomic.AtomicBoolean(true);
+        java.util.concurrent.ExecutorService pool = java.util.concurrent.Executors.newFixedThreadPool(2);
+        java.util.concurrent.Future<Integer> reads = pool.submit(() -> {
+            int n = 0;
+            while (paying.get()) {
+                Map<String, Object> row = sources(token, invoiceId);
+                BigDecimal sum = BigDecimal.ZERO;
+                for (String key : List.of("sourceGift", "sourcePrepayment", "sourceCash", "sourceCreditNote",
+                    "sourceUnpaid")) {
+                    sum = sum.add(new BigDecimal(String.valueOf(row.get(key))));
+                }
+                // One statement, one snapshot: whatever is paid meanwhile, the figures add up to the total.
+                assertThat(sum).isEqualByComparingTo("1100");
+                n++;
+            }
+            return n;
+        });
+        try {
+            // Paid in parts of 220 each, the sponsor's cash coming in between: five payments, six states of the invoice.
+            for (int i = 0; i < 5; i++) {
+                cash(sponsor, 220);
+                run(FeeProcesses.PAY, token, body("invoiceId", invoiceId));
+            }
+        } finally {
+            paying.set(false);
+        }
+        assertThat(reads.get()).isPositive();
+        pool.shutdown();
+        assertThat(sources(token, invoiceId)).containsEntry("sourceCash", 1100).containsEntry("sourceUnpaid", 0);
     }
 
     @Test

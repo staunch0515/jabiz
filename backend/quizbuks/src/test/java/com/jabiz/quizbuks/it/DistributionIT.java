@@ -193,6 +193,17 @@ class DistributionIT extends PrepaymentItSupport {
         assertThat(ledger("2180", sponsor)).isEqualByComparingTo("149");
         assertThat(query("SELECT status FROM qb_fee_invoice WHERE charge_id = ?", String.valueOf(
             charge.get("charge_id")))).singleElement().satisfies(row -> assertThat(row).containsEntry("status", "PAID"));
+        // F-M13: what the invoice was paid with: all of it from the deposit, which was set aside of the fee credit; and its
+        // line is named by the publication its fee is for (the source key 'distribution:<publication>:<month>').
+        String invoiceId = String.valueOf(query("SELECT invoice_id FROM qb_fee_invoice WHERE charge_id = ?",
+            String.valueOf(charge.get("charge_id"))).getFirst().get("invoice_id"));
+        assertThat(items("qb.sponsor.fee-invoice-sources", sponsorToken(sponsor), Map.of("params",
+            Map.of("invoiceId", invoiceId)))).singleElement().satisfies(sources -> assertThat(sources)
+            .containsEntry("sourcePrepayment", 16).containsEntry("sourcePrepaymentGift", 16)
+            .containsEntry("sourceGift", 0).containsEntry("sourceCash", 0).containsEntry("sourceUnpaid", 0));
+        assertThat(items("qb.sponsor.fee-invoice-lines", sponsorToken(sponsor), Map.of("params",
+            Map.of("invoiceId", invoiceId)))).singleElement().satisfies(line -> assertThat(line)
+            .containsEntry("description", "FM6 main"));
 
         // A start more, then the end; the final settlement after the grace gives the rest back.
         starts(publicationId, 1, "fm6-main-late");
@@ -590,6 +601,13 @@ class DistributionIT extends PrepaymentItSupport {
             .map(p -> (BigDecimal) p.get("amount")).reduce(BigDecimal.ZERO, BigDecimal::add)).isEqualByComparingTo("9");
         assertThat(parts.stream().filter(p -> "CASH".equals(p.get("sub_account")))
             .map(p -> (BigDecimal) p.get("amount")).reduce(BigDecimal.ZERO, BigDecimal::add)).isEqualByComparingTo("30");
+        // F-M13: the deposit's 11 (of the fee credit), the fee credit's 9 and the cash's 30; 5 are owed.
+        String partialInvoice = String.valueOf(query("SELECT invoice_id FROM qb_fee_invoice WHERE charge_id = ?",
+            String.valueOf(first.get("charge_id"))).getFirst().get("invoice_id"));
+        assertThat(items("qb.sponsor.fee-invoice-sources", sponsorToken(sponsor), Map.of("params",
+            Map.of("invoiceId", partialInvoice)))).singleElement().satisfies(sources -> assertThat(sources)
+            .containsEntry("sourcePrepayment", 11).containsEntry("sourcePrepaymentGift", 11)
+            .containsEntry("sourceGift", 9).containsEntry("sourceCash", 30).containsEntry("sourceUnpaid", 5));
         assertThat(query("SELECT status, total, paid_amount FROM qb_fee_invoice WHERE charge_id = ?",
             String.valueOf(first.get("charge_id")))).singleElement().satisfies(invoice -> {
                 assertThat(invoice).containsEntry("status", "PARTIAL");

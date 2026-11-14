@@ -252,14 +252,21 @@ function InvoiceSources({ invoiceId, total }: { invoiceId: string; total: number
     <div data-testid="invoice-sources" data-total={total}>
       <h3 className="mb-2 text-sm font-semibold">{t('wallet.invoices.sources.title')}</h3>
       <DescriptionList columns={3} items={[
-        { key: 'gift', label: t('wallet.invoices.sources.gift'), value: formatKudos(s.gift) },
-        { key: 'prepayment', label: t('wallet.invoices.sources.prepayment'),
-          value: formatKudos(s.prepayment) + (s.prepaymentGift > 0
-            ? ` (${t('wallet.invoices.sources.prepaymentGift', { amount: formatKudos(s.prepaymentGift) })})` : '') },
-        { key: 'cash', label: t('wallet.invoices.sources.cash'), value: formatKudos(s.cash) },
+        ...(s.gift === null || s.prepayment === null || s.cash === null ? [] : [
+          { key: 'gift', label: t('wallet.invoices.sources.gift'), value: formatKudos(s.gift) },
+          { key: 'prepayment', label: t('wallet.invoices.sources.prepayment'),
+            value: formatKudos(s.prepayment) + ((s.prepaymentGift ?? 0) > 0
+              ? ` (${t('wallet.invoices.sources.prepaymentGift', { amount: formatKudos(s.prepaymentGift ?? 0) })})` : '') },
+          { key: 'cash', label: t('wallet.invoices.sources.cash'), value: formatKudos(s.cash) },
+        ]),
         { key: 'creditNote', label: t('wallet.invoices.sources.creditNote'), value: formatKudos(s.creditNote) },
         { key: 'unpaid', label: t('wallet.invoices.sources.unpaid'), value: formatKudos(s.unpaid) },
       ]} />
+      {s.gift === null && (
+        <p className="text-muted-foreground mt-2 text-sm" data-testid="invoice-sources-unavailable">
+          {t('wallet.invoices.sources.unavailable')}
+        </p>
+      )}
       <p className="text-muted-foreground mt-2 text-xs">{t('wallet.invoices.sources.note')}</p>
     </div>
   )

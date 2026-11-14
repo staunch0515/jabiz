@@ -26,6 +26,7 @@ const server = vi.hoisted(() => ({
   chargeCredit: [] as Record<string, unknown>[],
   sponsors: [] as Record<string, unknown>[],
   onboarding: [] as Record<string, unknown>[],
+  sources: null as Record<string, unknown> | null,
   runQuery: vi.fn(),
   runProcess: vi.fn(),
   get: vi.fn(),
@@ -105,6 +106,7 @@ beforeEach(() => {
   server.creditNotes = [creditNote()]
   server.chargeCredit = [chargeCredit()]
   server.onboarding = [{ enabled: true, grantedAt: null, amount: null, expiresAt: null }]
+  server.sources = null
   server.sponsors = [{ userId: SPONSOR, company: 'Acme', contactName: 'Alice', reviewStatus: 'APPROVED' }]
   server.runQuery.mockReset().mockImplementation(async (id: string, options: { filters?: { field: string;
     value: unknown }[]; count?: boolean } = {}) => {
@@ -124,8 +126,9 @@ beforeEach(() => {
                   : id === TEMPLATE.feeCreditSummary ? SUMMARY
                     : id === TEMPLATE.feeCreditGrants ? GRANTS
                       : id === TEMPLATE.operatorFeeCreditOnboarding ? server.onboarding
-                        : id === TEMPLATE.feeInvoiceSources ? [{ sourceGift: 200, sourcePrepayment: 300,
-                          sourcePrepaymentGift: 100, sourceCash: 0, sourceCreditNote: 0, sourceUnpaid: 600 }] : []
+                        : id === TEMPLATE.feeInvoiceSources ? [server.sources ?? { sourceGift: 200,
+                          sourcePrepayment: 300, sourcePrepaymentGift: 100, sourceCash: 0, sourceCreditNote: 0,
+                          sourceUnpaid: 600 }] : []
     return { items, offset: 0, limit: 20, ...(options.count ? { total: items.length } : {}) }
   })
   server.runProcess.mockReset().mockResolvedValue({ requestId: REQUEST, kind: 'MANUAL', status: 'REVIEW',
@@ -244,6 +247,17 @@ describe('FeesPage', () => {
     expect(sources).toHaveTextContent('of which granted credit: ¥100')
     expect(within(sources).getByTestId('fee-invoice-source-unpaid')).toHaveTextContent('600')
     await expectAccessible(sources)
+  })
+
+  it('says when the details of how an invoice was paid are not available (F-M13)', async () => {
+    server.sources = { sourceGift: null, sourcePrepayment: null, sourcePrepaymentGift: null, sourceCash: null,
+      sourceCreditNote: 0, sourceUnpaid: 0 }
+    renderAt('/qb/finance/fees?tab=invoices', '/qb/finance/fees', <FeesPage />)
+    const row = await screen.findByTestId('fee-invoice-row')
+    await userEvent.setup().click(within(row).getByRole('button', { name: 'dataTable.expandRow' }))
+    expect(await screen.findByTestId('fee-invoice-sources-unavailable')).toBeInTheDocument()
+    expect(screen.queryByTestId('fee-invoice-source-cash')).toBeNull()
+    expect(screen.getByTestId('fee-invoice-source-unpaid')).toHaveTextContent('0')
   })
 
   it('lists the credit notes for finance, with who issued one by hand (F-M7)', async () => {

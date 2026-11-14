@@ -257,6 +257,19 @@ describe('what an invoice was paid with (F-M13)', () => {
     await expectAccessible()
   })
 
+  it('says so when the details of how it was paid are not available, and shows only what the invoice itself says', async () => {
+    server({ invoices: [{ ...INVOICE, status: 'PAID', paidAmount: '1100' }], sources: { sourceGift: null,
+      sourcePrepayment: null, sourcePrepaymentGift: null, sourceCash: null, sourceCreditNote: '0', sourceUnpaid: '0' } })
+    window.history.replaceState(null, '', '/money/bills')
+    render(<App />)
+    const row = (await screen.findAllByTestId('invoice-row'))[0]
+    await userEvent.click(within(row).getByRole('button', { name: /expand row/i }))
+    const sources = await screen.findByTestId('invoice-sources')
+    expect(within(sources).getByTestId('invoice-sources-unavailable')).toBeInTheDocument()
+    expect(sources).not.toHaveTextContent('Granted credit')
+    expect(sources).toHaveTextContent('Still owed')
+  })
+
   it('says when a voided invoice was voided, and keeps its original to download once it was issued', async () => {
     server({ invoices: [
       { ...INVOICE, invoiceId: 'v1', invoiceNo: 'QBF-2026-00009', status: 'VOID', voidedAt: '2026-02-03T05:00:00Z',

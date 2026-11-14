@@ -193,19 +193,21 @@ export async function readFeeInvoice(invoiceId: string): Promise<FeeInvoice | nu
 
 /** F-M13: what an invoice was paid with, now: the five that add up to the total and the gift part inside the prepayment's. */
 export interface InvoiceSources {
-  gift: number
-  prepayment: number
-  prepaymentGift: number
-  cash: number
+  /** None of the three ways of paying when the invoice was paid before the payments were kept (not available). */
+  gift: number | null
+  prepayment: number | null
+  prepaymentGift: number | null
+  cash: number | null
   creditNote: number
   unpaid: number
 }
 
 export async function readInvoiceSources(invoiceId: string): Promise<InvoiceSources> {
   const row = (await runQuery<Row>(TEMPLATE.feeInvoiceSources, { params: { invoiceId }, limit: 1 })).items[0] ?? {}
-  return { gift: num(row.sourceGift), prepayment: num(row.sourcePrepayment),
-    prepaymentGift: num(row.sourcePrepaymentGift), cash: num(row.sourceCash), creditNote: num(row.sourceCreditNote),
-    unpaid: num(row.sourceUnpaid) }
+  const some = (value: unknown) => (value == null ? null : num(value))
+  return { gift: some(row.sourceGift), prepayment: some(row.sourcePrepayment),
+    prepaymentGift: some(row.sourcePrepaymentGift), cash: some(row.sourceCash),
+    creditNote: num(row.sourceCreditNote), unpaid: num(row.sourceUnpaid) }
 }
 
 /** The requests, newest first, of a state (all when null), with the bar's filters. */
