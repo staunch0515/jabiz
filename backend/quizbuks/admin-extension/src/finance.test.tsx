@@ -197,8 +197,10 @@ describe('FinanceOverviewPage', () => {
     expect(screen.getByTestId('finance-tasks')).toHaveAttribute('href', '/tasks')
     // F-M14: the latest run's counts by level, from its summary, leading to that run.
     const levels = screen.getByTestId('finance-last-run-levels')
-    expect(levels).toHaveAttribute('href', `/qb/finance/reconciliation?run=${RUN}`)
     expect(levels).toHaveTextContent('Differences 3 / needs attention 4 / notes 5')
+    // F-M14 review L6: each count leads to the run's items of that level.
+    expect(within(levels).getAllByTestId('finance-last-run-level').map((link) => link.getAttribute('href'))).toEqual(
+      ['DIFFERENCE', 'ATTENTION', 'NOTE'].map((level) => `/qb/finance/reconciliation?run=${RUN}&level=${level}`))
     // The staleness is the server's: the page only says since when.
     expect(calledWith(TEMPLATE.financeSummary)[0][1].params.staleBefore).toMatch(/^\d{4}-\d{2}-\d{2}T/)
     const accounts = await screen.findAllByTestId('finance-account')
@@ -380,6 +382,30 @@ describe('ReconciliationPage by level (F-M14)', () => {
       { itemId: 'a4', checkCode: 'LEDGER_ZERO', partyId: null, reference: null, expected: 0, actual: 1, difference: 1 },
     ]
   }
+
+  it('shows only the level the overview links, and the whole run again (F-M14 review L6)', async () => {
+    server.templates.set(TEMPLATE.reconItems, items())
+    renderAt(`/qb/finance/reconciliation?run=${RUN}&level=ATTENTION`, '/qb/finance/reconciliation',
+      <ReconciliationPage />)
+    const groups = await screen.findAllByTestId('recon-group')
+    expect(groups.map((group) => group.dataset.check)).toEqual(
+      expect.arrayContaining(['DISTRIBUTION_PRICE_RANGE', 'CREDIT_UNUSED_WITH_DUE']))
+    expect(groups.every((group) => within(group).getByTestId('recon-level').dataset.level === 'ATTENTION')).toBe(true)
+    expect(screen.getByTestId('recon-level-filter')).toHaveTextContent('Showing only: Needs attention')
+    expect(screen.getByTestId('recon-show-all')).toHaveAttribute('href', `/qb/finance/reconciliation?run=${RUN}`)
+    await userEvent.setup().click(screen.getByTestId('recon-show-all'))
+    await waitFor(() => expect(screen.queryByTestId('recon-level-filter')).not.toBeInTheDocument())
+    expect((await screen.findAllByTestId('recon-group')).map((group) => group.dataset.check))
+      .toEqual(expect.arrayContaining(['LEDGER_ZERO', 'TAKER_WALLET_LAG']))
+  })
+
+  it('shows the whole run for a level it does not know', async () => {
+    server.templates.set(TEMPLATE.reconItems, items())
+    renderAt(`/qb/finance/reconciliation?run=${RUN}&level=SOMETHING`, '/qb/finance/reconciliation',
+      <ReconciliationPage />)
+    expect((await screen.findAllByTestId('recon-group')).length).toBeGreaterThan(2)
+    expect(screen.queryByTestId('recon-level-filter')).not.toBeInTheDocument()
+  })
 
   it('shows each group its level, what to do and, for attention, for how many days', async () => {
     server.templates.set(TEMPLATE.reconItems, items())

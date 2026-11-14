@@ -420,6 +420,14 @@ export const NOTE_CHECKS: ReadonlySet<string> = new Set(['TAKER_WALLET_LAG', 'DI
 
 export type ReconLevel = 'DIFFERENCE' | 'ATTENTION' | 'NOTE'
 
+/** The levels, most serious first. */
+export const RECON_LEVELS: readonly ReconLevel[] = ['DIFFERENCE', 'ATTENTION', 'NOTE']
+
+/** A level named in a link, or null for anything else (a hand-edited address shows the whole run). */
+export function parseReconLevel(text: string | null): ReconLevel | null {
+  return RECON_LEVELS.find((level) => level === text) ?? null
+}
+
 /** The level of a check (backend `ReconChecks.level`). */
 export function reconLevel(check: string): ReconLevel {
   return NOTE_CHECKS.has(check) ? 'NOTE' : ATTENTION_CHECKS.has(check) ? 'ATTENTION' : 'DIFFERENCE'
@@ -771,7 +779,9 @@ export const PATH = {
   /** Bank withdrawals: reviewing, paying and returning them (Q13b). */
   bankWithdrawals: '/qb/finance/bank-withdrawals',
   reconciliation: '/qb/finance/reconciliation',
-  reconRun: (runId: string) => `/qb/finance/reconciliation?${new URLSearchParams({ run: runId })}`,
+  /** A run's items; with a level, only that level's (the overview's counts lead here, F-M14 review L6). */
+  reconRun: (runId: string, level?: ReconLevel) =>
+    `/qb/finance/reconciliation?${new URLSearchParams(level ? { run: runId, level } : { run: runId })}`,
   reports: '/qb/finance/reports',
   reportsOf: (month: string) => `/qb/finance/reports?${new URLSearchParams({ month })}`,
   /** The investors' figures by month (Q27). */

@@ -23,8 +23,8 @@ import { attentionKey, readAttentionDays, readReconItems, readReconRuns, type Re
 import { EmptyState, LoadFailed, Section } from './components'
 import { money, useLabels, usePaged, when } from './hooks'
 import { useMoreFilters } from './moreFilters'
-import { DICTIONARY, isUserId, PAGE_LIMIT, PATH, PERMISSION, reconLevel, referenceKind, type ReconLevel,
-  type ReferenceKind } from './ids'
+import { DICTIONARY, isUserId, PAGE_LIMIT, parseReconLevel, PATH, PERMISSION, reconLevel, referenceKind,
+  type ReconLevel, type ReferenceKind } from './ids'
 
 /** The columns sorted on the server, by the template's `list.sorts` field (Q53a). */
 const SORTS = { scheduledTime: 'scheduledTime' } as const
@@ -82,7 +82,7 @@ const LEVEL_VARIANT = { DIFFERENCE: 'warning', ATTENTION: 'secondary', NOTE: 'ou
  * One run's differences, grouped by check (the first {@link PAGE_LIMIT}: a run that finds more says so); read only
  * (C-3: a difference is handled through the money tasks and by hand).
  */
-function Items({ runId }: { runId: string }) {
+function Items({ runId, level }: { runId: string; level: ReconLevel | null }) {
   const { t, i18n } = useTranslation(EXTENSION_NAMESPACE)
   const checkLabel = useLabels(DICTIONARY.reconCheck)
   const levelLabel = useLabels(DICTIONARY.reconLevel)
@@ -94,10 +94,18 @@ function Items({ runId }: { runId: string }) {
     queryFn: () => readAttentionDays(runId) })
   if (query.isError) return <LoadFailed error={query.error} onRetry={() => void query.refetch()} />
   if (query.isPending) return <PageState kind="loading" />
-  const groups = byCheck(query.data.items)
+  const groups = byCheck(query.data.items).filter(([check]) => level === null || reconLevel(check) === level)
   const total = query.data.total ?? query.data.items.length
   return (
     <div className="flex flex-col gap-4" data-testid="recon-items">
+      {level && (
+        <p className="flex flex-wrap items-center gap-2 text-sm" data-testid="recon-level-filter" data-level={level}>
+          {t('finance.recon.levelOnly', { level: t(`finance.recon.levelName.${level}`) })}
+          <Link to={PATH.reconRun(runId)} className={linkClass} data-testid="recon-show-all">
+            {t('finance.recon.showAll')}
+          </Link>
+        </p>
+      )}
       {groups.length === 0 && <p className="text-muted-foreground text-sm">{t('finance.recon.noItems')}</p>}
       {groups.map(([check, items]) => (
         <div key={check} className="flex flex-col gap-2" data-testid="recon-group" data-check={check}>
@@ -158,6 +166,7 @@ export default function ReconciliationPage() {
   const [search] = useSearchParams()
   const selected = search.get('run')
   const runId = selected && isUserId(selected) ? selected : null
+  const level = parseReconLevel(search.get('level'))
   const more = useMoreFilters([
     { kind: 'choice', name: 'status', label: t('finance.recon.result'),
       options: ['OK', 'DIFF'].map((code) => ({ value: code, label: t(`finance.recon.status.${code}`) })) },
@@ -218,7 +227,7 @@ export default function ReconciliationPage() {
       </Section>
       {runId && (
         <Section title={t('finance.recon.differences')} testId="recon-run">
-          <Items runId={runId} />
+          <Items runId={runId} level={level} />
         </Section>
       )}
     </div>
