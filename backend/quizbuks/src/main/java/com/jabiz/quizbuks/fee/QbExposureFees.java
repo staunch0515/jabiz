@@ -21,6 +21,8 @@ public final class QbExposureFees {
     public static final String SETTLEMENT = "QbExposureSettlement";
     public static final String NOTICE = "QbExposureNotice";
     public static final String SPONSOR_SETTLEMENTS = "urn:jabiz:dataset:sponsor:" + SETTLEMENT;
+    /** The caller operator's: limited to the session's entry scope by the settlement's frozen operator (D64). */
+    public static final String OPERATOR_SETTLEMENTS = "urn:jabiz:dataset:operator:" + SETTLEMENT;
 
     public static final int REASON_LENGTH = 500;
 
