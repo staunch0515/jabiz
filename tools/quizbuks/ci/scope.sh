@@ -9,7 +9,8 @@
 # skip the end-to-end tests for a change to the pages they drive).
 #
 # With the argument `docs-tests` it answers another question: whether a changed path is a document that a backend test
-# reads (the help pages and the prompt documents the tests of backend/quizbuks check against the product). The platform's
+# reads (the help pages and the prompt documents the tests of backend/quizbuks check against the product, and the daily
+# checks' table in operations.md, F-M14b). The platform's
 # ci.yml skips the backend's check for a pull request that changes only documents, so the job `docs` runs those few
 # tests itself when this prints "true". The list is the one place that knows the documents; tools/quizbuks/test/
 # ci-scope.test.sh fails when a backend test reads a document that is not listed (and so would be skipped unseen).
@@ -18,7 +19,8 @@ set -euo pipefail
 if [[ "${1:-}" == docs-tests ]]; then
   while IFS= read -r path || [[ -n "$path" ]]; do
     case "$path" in
-      docs/quizbuks/help/* | docs/quizbuks/profile-package-prompts.md | docs/quizbuks/quiz-file-prompts.md) echo true; exit 0 ;;
+      docs/quizbuks/help/* | docs/quizbuks/profile-package-prompts.md | docs/quizbuks/quiz-file-prompts.md \
+        | docs/quizbuks/operations.md) echo true; exit 0 ;;
     esac
   done
   echo false
