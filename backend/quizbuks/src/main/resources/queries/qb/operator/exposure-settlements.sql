@@ -1,10 +1,10 @@
 /*---
 id: qb.operator.exposure-settlements
 description: "The caller operator's exposure fee settlements (F-M8): of the publications whose fee is the operator's (the operator frozen at their submission), the month, the exposures, the price per exposure, the fee, its tax and whether it is the final one"
-entities: [QbOperatorMember, QbExposureSettlement]
+entities: [QbExposureSettlement, QbSponsor]
 datasets:
-  QbOperatorMember: urn:jabiz:dataset:operator:QbOperatorMember
-  QbExposureSettlement: urn:jabiz:dataset:default:QbExposureSettlement
+  QbExposureSettlement: urn:jabiz:dataset:operator:QbExposureSettlement
+  QbSponsor: urn:jabiz:dataset:default:QbSponsor
 params:
   period:        { like: QbExposureSettlement.period, description: Only this month }
   sponsorId:     { like: QbExposureSettlement.sponsorId, description: Only this Sponsor }
@@ -13,6 +13,7 @@ results:
   settlementId:  { from: QbExposureSettlement.settlementId }
   publicationId: { from: QbExposureSettlement.publicationId }
   sponsorId:     { from: QbExposureSettlement.sponsorId }
+  company:       { from: QbSponsor.company }
   period:        { from: QbExposureSettlement.period }
   fromCount:     { from: QbExposureSettlement.fromCount }
   toCount:       { from: QbExposureSettlement.toCount }
@@ -30,12 +31,14 @@ list:
   key: [settlementId]
 permissions: [qb.operator.use]
 ---*/
--- Only through the caller's current membership (the view holds the caller's own), as the other operator templates:
--- the settlements whose fee is the caller's operator's (frozen at the submission), so a sponsor moved to another
--- operator since stays with the operator whose fee it was.
+-- The operator dataset limits the rows to the session's entry scope (D64) by the operator frozen at the submission,
+-- so a sponsor moved to another operator since stays with the operator whose fee it was. The sponsor's company is read
+-- through the sponsors' own dataset (the caller's sponsors only): a sponsor moved away has none here, and the page
+-- shows the number then.
 SELECT d.{{QbExposureSettlement.settlementId}} AS settlementId,
        d.{{QbExposureSettlement.publicationId}} AS publicationId,
        d.{{QbExposureSettlement.sponsorId}} AS sponsorId,
+       sp.{{QbSponsor.company}} AS company,
        d.{{QbExposureSettlement.period}} AS period,
        d.{{QbExposureSettlement.fromCount}} AS fromCount,
        d.{{QbExposureSettlement.toCount}} AS toCount,
@@ -47,10 +50,8 @@ SELECT d.{{QbExposureSettlement.settlementId}} AS settlementId,
        d.{{QbExposureSettlement.final}} AS final,
        d.{{QbExposureSettlement.chargeId}} AS chargeId,
        d.{{QbExposureSettlement.settledAt}} AS settledAt
-FROM {{QbOperatorMember}} me
-JOIN {{QbExposureSettlement}} d
-    ON d.{{QbExposureSettlement.operatorId}} = CAST(me.{{QbOperatorMember.operatorId}} AS text)
-WHERE me.{{QbOperatorMember.removedAt}} IS NULL
-  AND (CAST(:period AS text) IS NULL OR d.{{QbExposureSettlement.period}} = :period)
+FROM {{QbExposureSettlement}} d
+LEFT JOIN {{QbSponsor}} sp ON CAST(sp.{{QbSponsor.userId}} AS text) = d.{{QbExposureSettlement.sponsorId}}
+WHERE (CAST(:period AS text) IS NULL OR d.{{QbExposureSettlement.period}} = :period)
   AND (CAST(:sponsorId AS text) IS NULL OR d.{{QbExposureSettlement.sponsorId}} = :sponsorId)
   AND (CAST(:publicationId AS text) IS NULL OR d.{{QbExposureSettlement.publicationId}} = :publicationId)
