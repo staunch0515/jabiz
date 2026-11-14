@@ -97,7 +97,7 @@ class MailTextIT extends AccountItSupport {
         // The notices that ask for a payment or speak of a payout account carry no token and are protected by
         // declaration; the verification mail carries one.
         for (String template : List.of("qb.bank-account.changed", "qb.transfer.sent", "qb.transfer.failed",
-            "qb.payout.action-needed", "qb.fee.invoice-issued", "qb.fee.invoice-overdue", "qb.topup.paid-cash",
+            "qb.payout.action-needed", "qb.fee.invoice-issued", "qb.fee.invoice-overdue", "qb.fee.auto-paid", "qb.topup.paid-cash",
             "qb.publication.funds-short", "qb.sponsor-verification.confirm")) {
             @SuppressWarnings("unchecked")
             Map<String, Object> language = english(template);

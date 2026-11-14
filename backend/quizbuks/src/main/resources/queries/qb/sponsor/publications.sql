@@ -1,7 +1,7 @@
 /*---
 id: qb.sponsor.publications
 description: The sponsor's own publications (M-34) with their quiz, state, regions and counts; searched by name
-entities: [QbPublication, QbQuizVersion, QbPublicationCounter, QbPublicationStartCounter, QbWallet, QbAttempt]
+entities: [QbPublication, QbQuizVersion, QbPublicationCounter, QbPublicationStartCounter, QbWallet, QbAttempt, QbPublicationCard, QbExposure, SysParam]
 datasets:
   QbAttempt: urn:jabiz:dataset:default:QbAttempt
   QbPublication: urn:jabiz:dataset:sponsor:QbPublication
@@ -9,8 +9,12 @@ datasets:
   QbPublicationCounter: urn:jabiz:dataset:default:QbPublicationCounter
   QbPublicationStartCounter: urn:jabiz:dataset:default:QbPublicationStartCounter
   QbWallet: urn:jabiz:dataset:default:QbWallet
+  QbPublicationCard: urn:jabiz:dataset:sponsor:QbPublicationCard
+  QbExposure: urn:jabiz:dataset:default:QbExposure
+  SysParam: urn:jabiz:dataset:now:SysParam
 params:
   q: { kind: { type: text, maxLength: 100 }, description: Only publications whose name contains this text }
+  exposureLow: { kind: { type: bool }, description: "When true, only the running publications that bought exposures and have few left (the home's to-do item exposureLow counts the same)" }
 results:
   publicationId: { from: QbPublication.publicationId }
   name:          { from: QbPublication.name }
@@ -93,3 +97,17 @@ LEFT JOIN LATERAL (
     FROM {{QbAttempt}} m
     WHERE m.{{QbAttempt.publicationId}} = p.{{QbPublication.publicationId}} AND m.{{QbAttempt.entryFee}} > 0) ef ON true
 WHERE (CAST(:q AS text) IS NULL OR strpos(lower(p.{{QbPublication.name}}), lower(CAST(:q AS text))) > 0)
+  AND (CAST(:exposureLow AS boolean) IS NOT TRUE OR EXISTS (
+    SELECT 1 FROM {{QbPublicationCard}} c
+      CROSS JOIN LATERAL (SELECT count(*) AS n FROM {{QbExposure}} e
+                          WHERE e.{{QbExposure.publicationId}} = CAST(c.{{QbPublicationCard.publicationId}} AS text)
+                            AND e.{{QbExposure.countedAt}} IS NOT NULL) x
+      CROSS JOIN LATERAL (SELECT least(CAST(r.{{SysParam.value}} AS numeric), 0.5) AS ratio FROM {{SysParam}} r
+                          WHERE r.{{SysParam.paramKey}} = 'qb.exposure.low-ratio'
+                            AND r.{{SysParam.value}} ~ '^[0-9]+(\.[0-9]+)?$') q
+      WHERE CAST(c.{{QbPublicationCard.publicationId}} AS text) = CAST(p.{{QbPublication.publicationId}} AS text)
+        AND c.{{QbPublicationCard.exposurePurchased}} IS NOT NULL
+        AND c.{{QbPublicationCard.status}} IN ('SCHEDULED', 'LIVE', 'PAUSED', 'FUNDS_SHORT')
+        AND q.ratio > 0
+        AND x.n < c.{{QbPublicationCard.exposurePurchased}}
+        AND c.{{QbPublicationCard.exposurePurchased}} - x.n <= c.{{QbPublicationCard.exposurePurchased}} * q.ratio))

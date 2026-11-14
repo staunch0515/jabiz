@@ -281,3 +281,30 @@ groups:
         annotations:
           summary: 'The estimated dollars of the AI help and the reviewers translation checks reached $JABIZ_ALERT_QB_HELP_COST_PERCENT% of qb.help.global-monthly-usd-alert this month (the gauge qb.help.cost.percent). Look at the AI page and the provider bill; finance gets a task at the next daily check. Nothing is stopped by dollars.'
           runbook: docs/quizbuks/operations.md section 7.53
+      - uid: qb-ai-expire-items
+        title: AI credit expiry items above the expected
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange: { from: 93600, to: 0 }
+            datasourceUid: prometheus
+            model:
+              refId: A
+              expr: 'sum(increase(jabiz_process_milliseconds_count{job="$JABIZ_ALERT_SERVICE", process="QB_AI_CREDIT_EXPIRE_ITEM"}[26h])) > $JABIZ_ALERT_QB_AI_EXPIRE_ITEMS_MAX'
+              instant: true
+              range: false
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              refId: C
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator: { type: gt, params: [0] }
+        for: 0s
+        noDataState: OK
+        execErrState: Error
+        labels: { severity: warning, area: ai }
+        annotations:
+          summary: 'The daily job qb.ai-credit-expire ran more than $JABIZ_ALERT_QB_AI_EXPIRE_ITEMS_MAX items in a day (one a sponsor whose AI credit holds expired or voided fee credit; a run takes at most 10000 and leaves the rest to the next day). A sponsor whose open AI jobs hold all of it is listed every day until the month''s charge spends it.'
+          runbook: docs/quizbuks/operations.md section 7.56

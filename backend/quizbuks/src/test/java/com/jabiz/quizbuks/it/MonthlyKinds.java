@@ -35,7 +35,7 @@ final class MonthlyKinds {
         source("QbKudosExchange", "KUDOS_BOUGHT", "KUDOS_SOLD");
         // The platform's fees: charged, paid (from the cash, the credit, a prepayment), voided, the distribution fee.
         source("QbFeeCharge", "DISTRIBUTION_CHARGED", "EXPOSURE_CHARGED", "FEE_CHARGED", "FEE_PAID", "FEE_VOIDED",
-            "PREPAYMENT_USED");
+            "PREPAYMENT_USED", "AI_CHARGED", "AI_CREDIT_USED");
         source("QbFeeInvoice", "FEE_PAID", "FEE_VOIDED");
         source("QbFeeCreditNote", "FEE_CREDIT_NOTE", "FEE_PAID");
         // The entry fees settled into the sponsor's cash account are posted from the cash wallet row.
@@ -43,7 +43,9 @@ final class MonthlyKinds {
         source("QbFeeCreditGrant", "FEE_CREDIT_GRANTED", "FEE_CREDIT_VOIDED");
         // F-M8c: the exposure fee's deposit (set aside and topped up) and its release have kinds of their own.
         source("QbPrepayment", "PREPAYMENT_FROZEN", "PREPAYMENT_RELEASED", "EXPOSURE_DEPOSIT", "EXPOSURE_RELEASED",
-            "DISTRIBUTION_DEPOSIT", "DISTRIBUTION_RELEASED");
+            "DISTRIBUTION_DEPOSIT", "DISTRIBUTION_RELEASED",
+            // F-M9a-2: the AI credit bought, given back, and its expired fee credit taken out of it.
+            "AI_CREDIT_BOUGHT", "AI_CREDIT_RETURNED", "AI_CREDIT_VOIDED");
     }
 
     private static void source(String entity, String... categories) {

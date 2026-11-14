@@ -140,7 +140,9 @@ class CounterSplitMigrationIT {
     /** The application's scripts up to {@code target} (all when null), as the platform runs them. */
     private static void migrate(String schema, String target) {
         var config = Flyway.configure().dataSource(DB.jdbcUrl(), DB.username(), DB.password()).schemas(schema)
-            .defaultSchema(schema).locations("classpath:db/migration").baselineOnMigrate(true).baselineVersion("0");
+            .defaultSchema(schema).locations("classpath:db/migration").baselineOnMigrate(true).baselineVersion("0")
+            // V127 builds an index with ${concurrently}: empty here, as in the application's test configuration.
+            .placeholders(java.util.Map.of("concurrently", ""));
         if (target != null) {
             config.target(target);
         }
