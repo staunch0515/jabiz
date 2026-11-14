@@ -132,7 +132,7 @@ describe('the home\'s to-do list (F-F3b)', () => {
       ['invoicesOverdue', '1', '/money/bills'],
       ['feeInvoicesUncovered', '2', '/money/bills'],
       ['creditsExpiring', '1', '/money/account'],
-      ['exposureLow', '2', '/publications'],
+      ['exposureLow', '2', '/publications?exposureLow=1'],
       ['publicationsInReview', '2', '/publications?status=PENDING_REVIEW'],
       ['pageInReview', '1', '/profile/page'],
       ['sharedVideosInReview', '1', '/assets/media'],

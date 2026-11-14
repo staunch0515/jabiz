@@ -160,6 +160,24 @@ class MessagingConfig {
     }
 
     @Bean
+    ProcessDefinition<MailProcesses.FeeAutoPaidMailInput, MailProcesses.MailOutput, ProcessContext> qbMailFeeAutoPaid(
+        MessageCatalog messages) {
+        return MailProcesses.feeAutoPaid(messages);
+    }
+
+    @Bean
+    MailTemplate qbFeeAutoPaidMail() {
+        return NotificationMails.FEE_AUTO_PAID;
+    }
+
+    @Bean
+    EventSubscription<MailProcesses.FeeAutoPaidMailInput> qbMailFeeAutoPaidSubscription(
+        ProcessDefinition<MailProcesses.FeeAutoPaidMailInput, MailProcesses.MailOutput, ProcessContext> qbMailFeeAutoPaid) {
+        return EventSubscription.of(MailProcesses.FEE_AUTO_PAID_CONSUMER,
+            com.jabiz.quizbuks.fee.FeeAutoPay.PAID_EVENT, qbMailFeeAutoPaid, MailProcesses::feeAutoPaidInput);
+    }
+
+    @Bean
     ProcessDefinition<MailProcesses.FeeCreditMailInput, MailProcesses.MailOutput, ProcessContext> qbMailFeeCredit(
         MessageCatalog messages, MailValues qbMailValues) {
         return MailProcesses.feeCredit(messages, qbMailValues);

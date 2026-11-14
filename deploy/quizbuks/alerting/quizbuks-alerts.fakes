@@ -19,3 +19,5 @@ qb-ai-paused gauge jabiz.external.job.held - 5 job_type=qb.ai.questions
 qb-help-usage-high gauge qb.help.usage.percent - 95
 # At or above JABIZ_ALERT_QB_HELP_COST_PERCENT (100 by default) of qb.help.global-monthly-usd-alert (F-M10).
 qb-help-cost-high gauge qb.help.cost.percent - 120
+# Above JABIZ_ALERT_QB_AI_EXPIRE_ITEMS_MAX (1000 by default) expiry items in 26 hours.
+qb-ai-expire-items timer jabiz.process 1500 process=QB_AI_CREDIT_EXPIRE_ITEM version=1 outcome=success status=200

@@ -13,6 +13,7 @@ import com.jabiz.numbering.NumberSequence;
 import com.jabiz.process.ProcessContext;
 import com.jabiz.process.ProcessDefinition;
 import com.jabiz.quizbuks.QbPermissions;
+import com.jabiz.quizbuks.operator.QbOperators;
 import com.jabiz.quizbuks.wallet.TransferProcesses;
 import com.jabiz.retention.RetentionPolicy;
 import com.jabiz.runtime.approval.ApprovalProcesses;
@@ -270,6 +271,13 @@ public class FeeConfig {
         return AiCredits.buy();
     }
 
+    /** F-M9a-2: part of an AI credit back to its lots (a return, an expiry; later F-M15). */
+    @Bean
+    ProcessDefinition<AiCreditGiveBack.GiveBackInput, AiCreditGiveBack.GiveBackOutput, ProcessContext>
+        qbAiCreditGiveBack() {
+        return AiCreditGiveBack.giveBack();
+    }
+
     /** F-M8: the operators' exposure prices, the publications' settlements and the reminders. */
     @Bean
     EntityDefinition qbExposurePriceEntity() {
@@ -289,6 +297,20 @@ public class FeeConfig {
     @Bean
     DatasetDefinition qbExposureSettlementDataset() {
         return processOnly(QbExposureFees.SETTLEMENT);
+    }
+
+    /**
+     * The operator reads only the settlements of the publications whose fee is its own (D64): by the operator frozen
+     * at the submission, so a Sponsor moved to another operator since stays with the operator whose fee it was.
+     */
+    @Bean
+    DatasetDefinition qbOperatorExposureSettlementDataset() {
+        return DatasetDefinition.define(QbExposureFees.OPERATOR_SETTLEMENTS, d -> d
+            .targetEntityType(QbExposureFees.SETTLEMENT)
+            .permissions(QbPermissions.OPERATOR_USE, QbPermissions.SPONSOR_VIEW_WRITE)
+            .policy(p -> p.readOnly(true).allowTimeTravel(false))
+            .scope(s -> s.withinEntryScope(QbOperators.SCOPE, "operatorId"))
+            .storage(s -> s.driver("r2dbc-postgresql").connectionPoolRef(poolRef)));
     }
 
     @Bean
@@ -497,7 +519,8 @@ public class FeeConfig {
             .item(FeeRules.MANUAL, "en", "Fee charged by hand", "zh", "手工记费", "ja", "手動の料金")
             .item(FeeRules.AUDIENCE, "en", "Audience rules", "zh", "受众规则费", "ja", "対象者ルール料")
             .item(FeeRules.DISTRIBUTION, "en", "Distribution fee", "zh", "配送费", "ja", "配信料")
-            .item(FeeRules.EXPOSURE, "en", "Exposure fee", "zh", "曝光费", "ja", "露出料"));
+            .item(FeeRules.EXPOSURE, "en", "Exposure fee", "zh", "曝光费", "ja", "露出料")
+            .item(FeeRules.AI, "en", "AI fee", "zh", "AI 费", "ja", "AI 利用料"));
     }
 
     @Bean
@@ -865,6 +888,40 @@ public class FeeConfig {
     @Bean
     ProcessDefinition<ExposureSettlements.SettleRef, FeeProcesses.ItemOutput, ProcessContext> qbExposureSettle() {
         return ExposureSettlements.settle(zone);
+    }
+
+    @Bean
+    ProcessDefinition<FeeAutoPay.AutoPayInput, FeeAutoPay.AutoPayOutput, ProcessContext> qbFeeAutoPay() {
+        return FeeAutoPay.autoPay();
+    }
+
+    @Bean
+    ProcessDefinition<FeeAutoPay.ItemInput, FeeAutoPay.ItemPaid, ProcessContext> qbFeeAutoPayItem() {
+        return FeeAutoPay.autoPayItem();
+    }
+
+    /** F-M13b: money arriving in the fee account asks for the sponsor's unpaid invoices to be paid, to be quick. */
+    @Bean
+    EventSubscription<FeeAutoPay.AutoPayInput> qbFeeAutoPayFundedSubscription(
+        ProcessDefinition<FeeAutoPay.AutoPayInput, FeeAutoPay.AutoPayOutput, ProcessContext> qbFeeAutoPay) {
+        return EventSubscription.of("qb.fee-auto-pay-funded", FeeAutoPay.FUNDED_EVENT, qbFeeAutoPay,
+            FeeAutoPay::input);
+    }
+
+    /**
+     * F-M13: every day at 02:27 in the fiscal year's zone (before the overdue reminders' 02:37): the sponsors with an
+     * unpaid invoice and something to pay it with, whatever way the account grew (the event of money arriving is only
+     * for being quick).
+     */
+    @Bean
+    JobDefinition<FeeAutoPay.AutoPayInput> qbFeeAutoPayJob(
+        ProcessDefinition<FeeAutoPay.AutoPayInput, FeeAutoPay.AutoPayOutput, ProcessContext> qbFeeAutoPay,
+        @Value("${quizbuks.fee.auto-pay.cron:0 27 2 * * *}") String cron) {
+        return JobDefinition.forEach(FeeAutoPay.JOB, cron, zone,
+                JobItems.template(FeeAutoPay.DUE_TEMPLATE, scheduledTime -> Map.of("at", scheduledTime), "invoiceId"),
+                qbFeeAutoPay, (scheduledTime, row) -> new FeeAutoPay.AutoPayInput(String.valueOf(row.get("sponsorId")),
+                    String.valueOf(row.get("invoiceId")), 0))
+            .maxItems(10_000);
     }
 
     /** F-M8: the exposure fees of the month that ended, on the 2nd at 00:47 in the fiscal year's zone. */

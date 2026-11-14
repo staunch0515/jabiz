@@ -161,9 +161,25 @@ class ExposureTemplatesIT extends ExposureFeeItSupport {
             .singleElement().satisfies(row -> {
                 assertThat(row).containsEntry("publicationId", publicationId);
                 assertThat(row).doesNotContainKey("operatorId");
+                // F-M8e: the operator reads the Sponsor's company beside the number (the page shows it, not the number).
+                assertThat(row).containsEntry("company", query("SELECT company FROM qb_sponsor_version WHERE user_id = ? ORDER BY version_no DESC LIMIT 1",
+                    sponsor).getFirst().get("company"));
             });
         assertThat(items("qb.operator.exposure-settlements", operatorSession(stranger, otherOperator), Map.of()))
             .isEmpty();
+        // The Sponsor moved to the other operator since: the first operator keeps the settlement (its fee, frozen at the
+        // submission) but no longer reads the Sponsor's company; the other operator reads nothing of it.
+        run(com.jabiz.quizbuks.operator.OperatorProcesses.ASSIGN, hq(), body("userId", sponsor, "operatorId",
+            otherOperator, "reason", "F-M8e"));
+        assertThat(items("qb.operator.exposure-settlements", operatorSession(lead, operatorId), Map.of()))
+            .singleElement().satisfies(row -> {
+                assertThat(row).containsEntry("publicationId", publicationId);
+                assertThat(row.get("company")).isNull();
+            });
+        assertThat(items("qb.operator.exposure-settlements", operatorSession(stranger, otherOperator), Map.of()))
+            .isEmpty();
+        run(com.jabiz.quizbuks.operator.OperatorProcesses.ASSIGN, hq(), body("userId", sponsor, "operatorId",
+            operatorId, "reason", "F-M8e back"));
         assertThat(items("qb.operator.exposure-price", operatorSession(lead, operatorId), Map.of()))
             .singleElement().satisfies(row -> {
                 assertThat(dec(row.get("unit"))).isEqualByComparingTo("1");
@@ -184,6 +200,21 @@ class ExposureTemplatesIT extends ExposureFeeItSupport {
                 .header(HttpHeaders.AUTHORIZATION, operatorSession(lead, operatorId)).bodyValue(Map.of())
                 .exchange().expectStatus().isForbidden();
         }
+        // A settlement of a publication that was no operator's (the direct Sponsors': no frozen operator) is read by
+        // no operator session, whoever asks.
+        String direct = UUID.randomUUID().toString();
+        execute("INSERT INTO entity_registry (entity_id, entity_type, created_seq_id) SELECT ?::uuid, r.entity_type, "
+            + "r.created_seq_id FROM entity_registry r WHERE r.entity_id = (SELECT settlement_id::uuid FROM "
+            + "qb_exposure_settlement_version WHERE publication_id = ? LIMIT 1)", direct, publicationId);
+        execute("INSERT INTO qb_exposure_settlement_version OVERRIDING SYSTEM VALUE SELECT (jsonb_populate_record(NULL::"
+            + "qb_exposure_settlement_version, to_jsonb(t) || jsonb_build_object('row_id', nextval(pg_get_serial_sequence('"
+            + "qb_exposure_settlement_version', 'row_id')), 'settlement_id', ?::text, "
+            + "'period', '2000-01', 'operator_id', NULL, 'final', false))).* FROM qb_exposure_settlement_version t "
+            + "WHERE t.publication_id = ?", direct, publicationId);
+        assertThat(items("qb.operator.exposure-settlements", operatorSession(lead, operatorId), Map.of()))
+            .singleElement().satisfies(row -> assertThat(row).containsEntry("publicationId", publicationId));
+        assertThat(items("qb.operator.exposure-settlements", operatorSession(stranger, otherOperator), Map.of()))
+            .isEmpty();
     }
 
     @Test
@@ -207,8 +238,13 @@ class ExposureTemplatesIT extends ExposureFeeItSupport {
         }
         // 5 of 100 left, at or below a tenth (qb.exposure.low-ratio): counted; the reminder off (0): not.
         assertThat(String.valueOf(low.get())).isEqualTo("1");
+        // The home's item leads to the list with the same condition: the publication is in it, filtered to the low ones.
+        java.util.function.Supplier<List<Object>> listed = () -> items("qb.sponsor.publications", sponsorToken(sponsor),
+            Map.of("params", Map.of("exposureLow", true))).stream().map(row -> row.get("publicationId")).toList();
+        assertThat(listed.get()).containsExactly(publicationId);
         run("PARAM_SET", admin(), body("key", com.jabiz.quizbuks.setup.QbParams.EXPOSURE_LOW_RATIO, "value", "0"));
         try {
+            assertThat(listed.get()).isEmpty();
             assertThat(String.valueOf(low.get())).isEqualTo("0");
         } finally {
             run("PARAM_SET", admin(), body("key", com.jabiz.quizbuks.setup.QbParams.EXPOSURE_LOW_RATIO, "value", "0.1"));

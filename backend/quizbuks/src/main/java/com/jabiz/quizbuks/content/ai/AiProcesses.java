@@ -344,6 +344,11 @@ public final class AiProcesses {
             .step("Load everybody's unfinished jobs", RunTemplate.<ProcessContext>of(OPEN_TEMPLATE,
                     ctx -> Map.of(), GLOBAL_OPEN))
             .step("Load where the sponsor stands", QueryEntities.<ProcessContext>all(standingQueries(zone)))
+            // #699 re-review L2: a charged request with the fee on reads the credit by lot, so that expired or voided
+            // fee credit is not counted as available (one statement more, only then).
+            .step("Read what the AI credit holds by lot", RunTemplate.<ProcessContext>when(AiFees::readsLots,
+                com.jabiz.quizbuks.fee.Prepayments.HELD_TEMPLATE, AiFees::lotsParams,
+                com.jabiz.quizbuks.fee.Prepayments.HELD_LOTS))
             .compute("Check the limits", (metadata, ctx) -> checkLimits(ctx, zone));
     }
 

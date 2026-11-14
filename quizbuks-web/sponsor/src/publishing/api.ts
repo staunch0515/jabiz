@@ -511,17 +511,19 @@ async function readTierRows(publicationId: string): Promise<Row[]> {
 export interface PublicationSearch {
   q?: string
   status?: PublicationStatus | null
+  /** Only the running publications whose exposures bought are running low (the home's to-do item). */
+  exposureLow?: boolean
   sorts?: Sort[]
   offset: number
   limit: number
 }
 
 /** The sponsor's publications, one page, counted. */
-export async function searchPublications({ q, status, sorts, offset, limit }: PublicationSearch) {
+export async function searchPublications({ q, status, exposureLow, sorts, offset, limit }: PublicationSearch) {
   const text = q?.trim()
   const filters: Filter[] = status ? [{ field: 'status', op: 'eq', value: status }] : []
   const page = await runQuery<Row>(PUBLISHING_TEMPLATE.publications, {
-    params: text ? { q: text } : {},
+    params: { ...(text ? { q: text } : {}), ...(exposureLow ? { exposureLow: true } : {}) },
     filters,
     sorts,
     offset,

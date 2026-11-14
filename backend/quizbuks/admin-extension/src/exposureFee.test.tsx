@@ -132,6 +132,19 @@ describe('the exposure fee pages (F-M8)', () => {
     await expectAccessible(container)
   })
 
+  it('shows the Sponsor\'s company in the operator\'s own settlements, and the number when there is none', async () => {
+    server.own = [{ operatorId: NORTH, lead: false, priceId: 'p1', unit: 0.4, reason: 'Launch',
+      updatedAt: '2026-11-02T01:00:00Z', updatedBy: 'u2', range: '{}' }]
+    server.settlements = [
+      { ...server.settlements[0], settlementId: 's1', sponsorId: 'sp1', company: 'Acme Ltd' },
+      { ...server.settlements[0], settlementId: 's2', sponsorId: 'sp-moved', company: null, period: '2026-09' }]
+    renderPage(<OperatorExposurePricePage />)
+    const rows = await screen.findAllByTestId('exposure-fee-settlement-row')
+    expect(rows[0]).toHaveTextContent('Acme Ltd')
+    expect(rows[0]).not.toHaveTextContent('sp1')
+    expect(rows[1]).toHaveTextContent('sp-moved')
+  })
+
   it('lists the settlements and filters them by month', async () => {
     const { container } = renderPage(<ExposureSettlementsPage />)
     const row = await screen.findByTestId('exposure-fee-settlement-row')

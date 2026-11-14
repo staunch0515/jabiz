@@ -29,7 +29,7 @@ export const TODO_PATH: Record<TodoKey, string> = {
   invoicesOverdue: BILLS_PATH,
   feeInvoicesUncovered: BILLS_PATH,
   creditsExpiring: FEE_ACCOUNT_PATH,
-  exposureLow: PUBLICATIONS_PATH,
+  exposureLow: `${PUBLICATIONS_PATH}?exposureLow=1`,
   onboardingInReview: PROFILE_PATH,
   publicationsInReview: `${PUBLICATIONS_PATH}?status=PENDING_REVIEW`,
   pageInReview: profilePath('page'),

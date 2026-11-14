@@ -155,4 +155,187 @@ class AiFeeRulesTest {
         // Never less than nothing.
         assertThat(AiFeeRules.available(yen(100), yen(30), yen(495))).isEqualByComparingTo("0");
     }
+
+    // ---- the month's charges (F-M9a-2; #699 review M2, M4) ----------------------------------------------------------
+
+    private static AiFeeRules.Job job(String id, String operator, String period, long fee, long costPart, long absorbed) {
+        return new AiFeeRules.Job(id, operator, period, BigDecimal.valueOf(fee), BigDecimal.valueOf(costPart),
+            BigDecimal.valueOf(absorbed));
+    }
+
+    private static final BigDecimal TEN = new BigDecimal("0.10");
+
+    @Test
+    void aChargeIsOneGroupOfOperatorAndMonthInTheOrderOfTheMonthsThenTheOperators() {
+        List<AiFeeRules.Charge> charges = AiFeeRules.charges(List.of(
+            job("a", "op-b", "2026-10", 101, 0, 0), job("b", null, "2026-10", 50, 0, 0),
+            job("c", "op-a", "2026-09", 33, 0, 0), job("d", "op-b", "2026-10", 104, 0, 0)), TEN, BigDecimal.valueOf(10_000));
+        assertThat(charges).extracting(c -> c.period() + "/" + c.operatorId() + "/" + c.amount().toPlainString() + "+"
+            + c.tax().toPlainString())
+            // The tax of each group's total, rounded down once (205 at 10%: 20, not 10 + 10).
+            .containsExactly("2026-09/op-a/33+3", "2026-10/null/50+5", "2026-10/op-b/205+20");
+        assertThat(charges.get(2).fees()).containsEntry("a", BigDecimal.valueOf(101)).containsEntry("d",
+            BigDecimal.valueOf(104));
+    }
+
+    @Test
+    void theCreditIsSpentOnTheEarliestGroupsFirstAndAGroupGivesWayFromItsLatestJob() {
+        // 330 left: the September group's 110 + 11, then October's 300 (with tax 330) lowered to 190 (+19 = 209).
+        List<AiFeeRules.Charge> charges = AiFeeRules.charges(List.of(
+            job("sep", "op", "2026-09", 110, 0, 0), job("oct-1", "op", "2026-10", 150, 0, 0),
+            job("oct-2", "op", "2026-10", 150, 0, 0)), TEN, BigDecimal.valueOf(330));
+        assertThat(charges.get(0).amount()).isEqualByComparingTo("110");
+        assertThat(charges.get(1).amount()).isEqualByComparingTo("190");
+        assertThat(charges.get(1).total()).isEqualByComparingTo("209");
+        // The latest job gives way first: oct-2 keeps 40, oct-1 all of its 150.
+        assertThat(charges.get(1).fees()).containsEntry("oct-1", BigDecimal.valueOf(150))
+            .containsEntry("oct-2", BigDecimal.valueOf(40));
+        // Nothing left: a further group is charged nothing, all of it the platform's.
+        assertThat(AiFeeRules.charges(List.of(job("x", "op", "2026-10", 80, 0, 0)), TEN, BigDecimal.ZERO))
+            .singleElement().satisfies(c -> {
+                assertThat(c.amount()).isZero();
+                assertThat(c.tax()).isZero();
+                assertThat(c.fees()).containsEntry("x", BigDecimal.ZERO);
+            });
+    }
+
+    @Test
+    void aJobWhoseFeeWasAllTakenOnAtItsEndAddsNothing() {
+        List<AiFeeRules.Charge> charges = AiFeeRules.charges(List.of(job("gone", "op", "2026-10", 0, 40, 60),
+            job("kept", "op", "2026-10", 100, 30, 0)), TEN, BigDecimal.valueOf(1_000));
+        assertThat(charges).singleElement().satisfies(c -> {
+            assertThat(c.amount()).isEqualByComparingTo("100");
+            assertThat(c.shareExcluded()).isEqualByComparingTo("30");
+            assertThat(c.fees()).containsEntry("gone", BigDecimal.ZERO);
+        });
+    }
+
+    /**
+     * #699 review M2: a job of which the platform took a part on at its end is charged that part short of its answered
+     * usage; its cost part shrinks with it (fee / (fee + absorbed)) and never takes the markup of the group's others.
+     */
+    @Test
+    void theCostPartKeptOutOfTheShareShrinksWithWhatThePlatformTookOn() {
+        // Half of the first job's fee was taken on: its cost part counts half (120 * 100 / 200 = 60), the other's all.
+        assertThat(AiFeeRules.charges(List.of(job("half", "op", "2026-10", 100, 120, 100),
+            job("whole", "op", "2026-10", 100, 10, 0)), TEN, BigDecimal.valueOf(1_000)).getFirst().shareExcluded())
+            .isEqualByComparingTo("70");
+        // Never more than what is charged of the job itself (the rest is the other jobs' markup).
+        assertThat(AiFeeRules.charges(List.of(job("cheap", "op", "2026-10", 10, 50, 0),
+            job("dear", "op", "2026-10", 100, 0, 0)), TEN, BigDecimal.valueOf(1_000)).getFirst().shareExcluded())
+            .isEqualByComparingTo("10");
+        // Lowered by the credit too: what is charged of the job, against its whole fee (20 of 100 + 100 absorbed: 12).
+        assertThat(AiFeeRules.charges(List.of(job("short", "op", "2026-10", 100, 120, 100)), TEN, BigDecimal.valueOf(22))
+            .getFirst()).satisfies(c -> {
+                assertThat(c.amount()).isEqualByComparingTo("20");
+                assertThat(c.shareExcluded()).isEqualByComparingTo("12");
+            });
+    }
+
+    @Test
+    void theLargestAmountWithinIsWhatFitsWithItsTax() {
+        assertThat(AiFeeRules.largestWithin(BigDecimal.valueOf(10_000), TEN, BigDecimal.valueOf(5_000)))
+            .isEqualByComparingTo("4546");
+        assertThat(AiFeeRules.largestWithin(BigDecimal.valueOf(100), TEN, BigDecimal.valueOf(5_000)))
+            .isEqualByComparingTo("100");
+        assertThat(AiFeeRules.largestWithin(BigDecimal.valueOf(100), TEN, BigDecimal.ZERO)).isZero();
+        // 9 + 0 fits in 9; 10 + 1 does not.
+        assertThat(AiFeeRules.largestWithin(BigDecimal.valueOf(100), TEN, BigDecimal.valueOf(10)))
+            .isEqualByComparingTo("9");
+    }
+
+    /** Whatever the jobs and the credit: never more than it holds, no group negative, the cost part within the amount. */
+    @Property
+    void theChargesNeverTakeMoreThanTheCreditHolds(
+        @ForAll @Size(max = 250) List<@IntRange(max = 3_000) Integer> fees,
+        @ForAll @IntRange(max = 200_000) int remaining) {
+        java.util.List<AiFeeRules.Job> jobs = new java.util.ArrayList<>();
+        for (int i = 0; i < fees.size(); i++) {
+            jobs.add(job("j" + i, i % 3 == 0 ? null : "op" + (i % 3), "2026-" + (10 + i % 2), fees.get(i),
+                fees.get(i) / 2, i % 5 == 0 ? fees.get(i) / 3 : 0));
+        }
+        List<AiFeeRules.Charge> charges = AiFeeRules.charges(jobs, TEN, BigDecimal.valueOf(remaining));
+        BigDecimal total = charges.stream().map(AiFeeRules.Charge::total).reduce(BigDecimal.ZERO, BigDecimal::add);
+        assertThat(total).isLessThanOrEqualTo(BigDecimal.valueOf(remaining));
+        for (AiFeeRules.Charge c : charges) {
+            assertThat(c.amount()).isGreaterThanOrEqualTo(BigDecimal.ZERO);
+            assertThat(c.shareExcluded()).isBetween(BigDecimal.ZERO, c.amount());
+            assertThat(c.fees().values().stream().reduce(BigDecimal.ZERO, BigDecimal::add)).isEqualByComparingTo(c.amount());
+        }
+        // When all fits, all is charged.
+        BigDecimal wanted = charges.stream().map(c -> c.fees().values().stream().reduce(BigDecimal.ZERO,
+            BigDecimal::add)).reduce(BigDecimal.ZERO, BigDecimal::add);
+        if (AiFeeRules.charges(jobs, TEN, BigDecimal.valueOf(Integer.MAX_VALUE)).stream()
+            .map(AiFeeRules.Charge::total).reduce(BigDecimal.ZERO, BigDecimal::add)
+            .compareTo(BigDecimal.valueOf(remaining)) <= 0) {
+            assertThat(wanted).isEqualByComparingTo(BigDecimal.valueOf(fees.stream().mapToInt(Integer::intValue).sum()));
+        }
+    }
+
+    // ---- what leaves the credit otherwise (F-M9a-2) -----------------------------------------------------------------
+
+    private static AiFeeRules.Lot lot(boolean credit, String id, long amount, String expires) {
+        return new AiFeeRules.Lot(credit, id, BigDecimal.valueOf(amount),
+            expires == null ? null : java.time.Instant.parse(expires));
+    }
+
+    @Test
+    void aReturnTakesTheLastCashFirstThenTheFeeCreditLatestToExpireFirst() {
+        List<AiFeeRules.Lot> lots = List.of(lot(true, "g-early", 100, "2027-01-01T00:00:00Z"),
+            lot(true, "g-late", 100, "2027-06-01T00:00:00Z"), lot(false, "c-1", 50, null), lot(false, "c-2", 50, null));
+        assertThat(AiFeeRules.giveBack(lots, BigDecimal.valueOf(180))).extracting(l -> l.lotId() + ":" + l.amount())
+            .containsExactly("c-2:50", "c-1:50", "g-late:80");
+    }
+
+    @Test
+    void expiredFeeCreditIsVoidedButForWhatTheOpenJobsHoldAtTheFront() {
+        java.time.Instant now = java.time.Instant.parse("2027-02-01T00:00:00Z");
+        List<AiFeeRules.Lot> inOrder = List.of(lot(true, "g-expired", 100, "2027-01-01T00:00:00Z"),
+            lot(true, "g-live", 100, "2027-06-01T00:00:00Z"), lot(false, "c-1", 50, null));
+        // The jobs hold 30: taken from the expired lot first, the other 70 of it voided.
+        assertThat(AiFeeRules.expired(inOrder, BigDecimal.valueOf(30), now)).extracting(l -> l.lotId() + ":" + l.amount())
+            .containsExactly("g-expired:70");
+        // They hold more than it: nothing of it is voided now.
+        assertThat(AiFeeRules.expired(inOrder, BigDecimal.valueOf(150), now)).isEmpty();
+        // Not expired yet: nothing.
+        assertThat(AiFeeRules.expired(inOrder, BigDecimal.ZERO, java.time.Instant.parse("2026-12-01T00:00:00Z")))
+            .isEmpty();
+    }
+
+    /** #699 re-review M1: a grant voided before it expired (its expiry still late) is as good as expired. */
+    @Test
+    void aVoidedGrantsFeeCreditIsNeverGivenBackAndIsVoidedLikeAnExpiredOnes() {
+        java.time.Instant now = java.time.Instant.parse("2027-02-01T00:00:00Z");
+        AiFeeRules.Lot voided = new AiFeeRules.Lot(true, "g-voided", BigDecimal.valueOf(100),
+            java.time.Instant.parse("2027-12-01T00:00:00Z"), true);
+        List<AiFeeRules.Lot> inOrder = List.of(lot(true, "g-live", 100, "2027-06-01T00:00:00Z"), voided,
+            lot(false, "c-1", 50, null));
+        assertThat(voided.expiredBy(now)).isTrue();
+        assertThat(lot(true, "g-live", 1, "2027-06-01T00:00:00Z").expiredBy(now)).isFalse();
+        assertThat(lot(false, "c", 1, null).expiredBy(now)).isFalse();
+        // Not returnable: 250 held, 150 usable; a return of it all never reaches the voided lot.
+        assertThat(AiFeeRules.usable(inOrder, BigDecimal.ZERO, now)).isEqualByComparingTo("150");
+        assertThat(AiFeeRules.giveBack(inOrder, BigDecimal.valueOf(150))).extracting(l -> l.lotId() + ":" + l.amount())
+            .containsExactly("c-1:50", "g-live:100");
+        // Voided by the expiry, but for what the open jobs hold at the front of the order.
+        assertThat(AiFeeRules.expired(inOrder, BigDecimal.ZERO, now)).extracting(l -> l.lotId() + ":" + l.amount())
+            .containsExactly("g-voided:100");
+        assertThat(AiFeeRules.expired(inOrder, BigDecimal.valueOf(130), now)).extracting(l -> l.lotId() + ":"
+            + l.amount()).containsExactly("g-voided:70");
+        assertThat(AiFeeRules.usable(inOrder, BigDecimal.valueOf(130), now)).isEqualByComparingTo("50");
+    }
+
+    /** #699 re-review L2: what a new request may reserve leaves out expired fee credit the open jobs do not hold. */
+    @Test
+    void whatMayBeUsedLeavesOutTheExpiredFeeCreditBeyondWhatTheJobsHold() {
+        java.time.Instant now = java.time.Instant.parse("2027-02-01T00:00:00Z");
+        List<AiFeeRules.Lot> inOrder = List.of(lot(true, "g-expired", 100, "2027-01-01T00:00:00Z"),
+            lot(true, "g-live", 100, "2027-06-01T00:00:00Z"), lot(false, "c-1", 50, null));
+        assertThat(AiFeeRules.usable(inOrder, BigDecimal.ZERO, now)).isEqualByComparingTo("150");
+        assertThat(AiFeeRules.usable(inOrder, BigDecimal.valueOf(30), now)).isEqualByComparingTo("150");
+        assertThat(AiFeeRules.usable(inOrder, BigDecimal.valueOf(120), now)).isEqualByComparingTo("130");
+        assertThat(AiFeeRules.usable(inOrder, BigDecimal.valueOf(400), now)).isZero();
+        assertThat(AiFeeRules.usable(inOrder, BigDecimal.ZERO, java.time.Instant.parse("2026-12-01T00:00:00Z")))
+            .isEqualByComparingTo("250");
+    }
 }
