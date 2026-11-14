@@ -21,6 +21,7 @@ public class AiTranslateHandler implements ExternalJobHandler<AiTranslateJob.Inp
 
     @Override
     public ExternalJobResult<AiTranslateJob.Result> run(AiTranslateJob.Input input, ExternalJobContext ctx) {
+        ErasedAiJobs.refuseErased(input.model());
         return ExternalJobResult.of(translator.translate(input, ctx));
     }
 }

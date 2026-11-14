@@ -25,6 +25,7 @@ public class AiQuestionsHandler implements ExternalJobHandler<AiQuestionsJob.Inp
 
     @Override
     public ExternalJobResult<AiQuestionsJob.Result> run(AiQuestionsJob.Input input, ExternalJobContext ctx) {
+        ErasedAiJobs.refuseErased(input.model());
         return ExternalJobResult.of(writer.write(input, ctx));
     }
 }
