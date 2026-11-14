@@ -35,7 +35,9 @@ SELECT
     f.{{QbFaqEntry.answer}}   AS answer,
     f.{{QbFaqEntry.seq}}      AS seq
 FROM {{QbFaqEntry}} f
+-- The operators' help (audience OPERATOR) is for signed-in operators (qb.operator.faq): never public, whatever is asked.
 WHERE f.{{QbFaqEntry.audience}} IN (CAST(:audience AS text), 'ALL')
+  AND f.{{QbFaqEntry.audience}} <> 'OPERATOR'
   AND (CAST(:category AS text) IS NULL OR f.{{QbFaqEntry.category}} = CAST(:category AS text))
   AND (CAST(:q AS text) IS NULL
        OR EXISTS (SELECT 1 FROM jsonb_each_text(f.{{QbFaqEntry.question}}) e

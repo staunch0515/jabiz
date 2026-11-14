@@ -178,7 +178,9 @@ public class LegalConfig {
         return StaticDictionary.define(QbLegal.FAQ_AUDIENCE_DICTIONARY, d -> d
             .item(QbLegal.AUDIENCE_APP, "en", "App", "zh", "App", "ja", "アプリ")
             .item(QbLegal.AUDIENCE_SPONSOR, "en", "Sponsor app", "zh", "发起方页面", "ja", "主催者ページ")
-            .item(QbLegal.AUDIENCE_ALL, "en", "Both", "zh", "两者", "ja", "両方"));
+            .item(QbLegal.AUDIENCE_ALL, "en", "Both", "zh", "两者", "ja", "両方")
+            .item(QbLegal.AUDIENCE_OPERATOR, "en", "Operator's help (signed in)", "zh", "运营商帮助（登录后）",
+                "ja", "運営パートナー向けヘルプ（ログイン後）"));
     }
 
     @Bean

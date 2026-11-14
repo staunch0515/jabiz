@@ -79,7 +79,13 @@ public final class QbLegal {
     public static final String AUDIENCE_APP = "APP";
     public static final String AUDIENCE_SPONSOR = "SPONSOR";
     public static final String AUDIENCE_ALL = "ALL";
-    public static final List<String> AUDIENCES = List.of(AUDIENCE_APP, AUDIENCE_SPONSOR, AUDIENCE_ALL);
+    /**
+     * The operators' own help (read by an operator's members after signing in, {@code qb.operator.faq}): never public,
+     * and not part of {@value #AUDIENCE_ALL}, which is the app's and the sponsors' both.
+     */
+    public static final String AUDIENCE_OPERATOR = "OPERATOR";
+    public static final List<String> AUDIENCES = List.of(AUDIENCE_APP, AUDIENCE_SPONSOR, AUDIENCE_ALL,
+        AUDIENCE_OPERATOR);
 
     /** The help centre's categories (Q7-7): the takers' four, then the sponsors' three. */
     public static final List<String> FAQ_CATEGORIES = List.of("ACCOUNT", "QUIZ_RULES", "REWARDS", "OTHER",
