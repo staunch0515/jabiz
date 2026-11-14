@@ -71,6 +71,14 @@ public final class FeeCodes {
     public static final String EXPOSURE_NOT_BOUGHT = "QB_EXPOSURE_NOT_BOUGHT";
     /** F-M8: a publication's exposures were topped up so often that its prepayment would have too many parts to give back. */
     public static final String EXPOSURE_PARTS_LIMIT = "QB_EXPOSURE_PARTS_LIMIT";
+    /** F-M9: AI credit cannot be bought while the AI fee ({@code qb.ai.fee.enabled}) is off. */
+    public static final String AI_FEE_OFF = "QB_AI_FEE_OFF";
+    /** F-M9: below the least purchase of AI credit ({@code qb.ai.credit.min-purchase}, detail {@code minPurchase}). */
+    public static final String AI_CREDIT_MIN = "QB_AI_CREDIT_MIN";
+    /** F-M9: a purchase of AI credit with a key the sponsor already used. */
+    public static final String AI_CREDIT_REPEATED = "QB_AI_CREDIT_REPEATED";
+    /** F-M9: the account cannot pay the purchase (detail {@code available}). */
+    public static final String AI_CREDIT_FUNDS_SHORT = "QB_AI_CREDIT_FUNDS_SHORT";
     /** F-M8: a top-up that asks for more at once than {@code qb.exposure.top-up.max}, or beyond what a publication buys. */
     public static final String EXPOSURE_TOP_UP_RANGE = "QB_EXPOSURE_TOP_UP_RANGE";
 
@@ -90,7 +98,8 @@ public final class FeeCodes {
         DISTRIBUTION_RANGE_MISSING, CREDIT_NOTE_VOIDED, CREDIT_NOTE_EXCEEDS, INVOICE_HAS_CREDIT_NOTE,
         AUDIENCE_REFUND_NOT_OPEN, EXPOSURE_PRICE_REQUIRED, EXPOSURE_PRICE_RANGE, EXPOSURE_RANGE_MISSING,
         EXPOSURE_DEPOSIT_RANGE, EXPOSURE_PURCHASE_REQUIRED, EXPOSURE_PURCHASED_CHANGED, EXPOSURE_PREPAYMENT_CLOSED,
-        EXPOSURE_TOP_UP_RANGE, EXPOSURE_NOT_BOUGHT, EXPOSURE_PARTS_LIMIT);
+        EXPOSURE_TOP_UP_RANGE, EXPOSURE_NOT_BOUGHT, EXPOSURE_PARTS_LIMIT, AI_FEE_OFF, AI_CREDIT_MIN, AI_CREDIT_REPEATED,
+        AI_CREDIT_FUNDS_SHORT);
 
     private FeeCodes() {}
 }

@@ -409,11 +409,27 @@ class CreditNoteIT extends CreditNoteItSupport {
         assertThat(ledger("1130", sponsor)).isEqualByComparingTo("0");
         assertThat(differences(sponsor)).isEmpty();
 
+        // The counters first: nothing was updated or deleted by the processes.
         for (String table : List.of("qb_fee_credit_note_version", "qb_fee_credit_note_use_version")) {
             assertThat(query("SELECT coalesce(n_tup_upd, 0) + coalesce(n_tup_del, 0) AS changed "
                 + "FROM pg_stat_user_tables WHERE schemaname = current_schema() AND relname = ?", table))
                 .as(table).singleElement()
                 .satisfies(row -> assertThat(((Number) row.get("changed")).longValue()).as(table).isZero());
+        }
+        // The guard fires per row: a table with no row would let the UPDATE and DELETE through untested. This test's
+        // note was refunded, not used, so the uses table has a row only when another test ran first; one is inserted
+        // here (the note's own sponsor, an invoice of no one's, after the checks above) so the guard is always tried.
+        Object noteId = notes(sponsor).getFirst().get("credit_note_id");
+        Object seq = query("SELECT max(process_seq_id) AS s FROM op_process").getFirst().get("s");
+        Timestamp now = Timestamp.from(clock.instant());
+        execute("WITH registered AS (INSERT INTO entity_registry (entity_id, entity_type, created_seq_id) "
+            + "VALUES (gen_random_uuid(), 'QbFeeCreditNoteUse', ?) RETURNING entity_id) "
+            + "INSERT INTO qb_fee_credit_note_use_version (use_id, version_no, effect_start_time, created_time, "
+            + "process_seq_id, credit_note_id, sponsor_id, invoice_id, amount, used_at) "
+            + "SELECT entity_id, 1, ?, ?, ?, ?, ?, gen_random_uuid()::text, 1, ? FROM registered",
+            seq, now, now, seq, noteId, sponsor, now);
+        for (String table : List.of("qb_fee_credit_note_version", "qb_fee_credit_note_use_version")) {
+            assertThat(query("SELECT 1 FROM " + table + " LIMIT 1")).as(table).isNotEmpty();
             assertThatThrownBy(() -> execute("UPDATE " + table + " SET process_seq_id = process_seq_id"))
                 .as(table).hasMessageContaining("append-only");
             assertThatThrownBy(() -> execute("DELETE FROM " + table)).as(table).hasMessageContaining("append-only");

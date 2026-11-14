@@ -1167,8 +1167,10 @@ public final class ProspectProcesses {
      * Prices a job's usage: the tokens its attempts recorded, each attempt that recorded nothing at
      * {@link ClaudeWebResearch#unanswered} of an empty request, and the searches.
      */
-    static void charge(ProcessContext ctx, Map<String, Long> metrics, int unrecordedAttempts, String servedModel,
-        Instant finished, ZoneId zone) {
+    static void charge(ProcessContext ctx, Map<String, Long> recordedMetrics, int unrecordedAttempts,
+        String servedModel, Instant finished, ZoneId zone) {
+        // The estimates of the calls that got no answer have names of their own (F-M9); prospecting counts them as before.
+        Map<String, Long> metrics = com.jabiz.quizbuks.content.ai.AiUsageMetrics.merged(recordedMetrics);
         long in = value(metrics, AiQuestionsJob.INPUT_TOKENS);
         long out = value(metrics, AiQuestionsJob.OUTPUT_TOKENS);
         if (unrecordedAttempts > 0) {

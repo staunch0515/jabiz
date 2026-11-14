@@ -199,6 +199,19 @@ abstract class PlayItSupport extends AccountItSupport {
         return output;
     }
 
+    /**
+     * Runs the daily reconciliation at {@code at}, after delivering what events are pending; its status. The operators'
+     * months are settled by a job these tests switch off, so the wait of F-M12 c's waiting check is put at its longest first
+     * (the check is tried in OperatorSettlementReconIT).
+     */
+    String reconcileRun(Instant at) {
+        deliverEvents();
+        settlementsAreNotWaitedFor();
+        com.jabiz.quizbuks.wallet.Reconciliation.ReconcileOutput output = (com.jabiz.quizbuks.wallet.Reconciliation
+            .ReconcileOutput) systemRun("QB_RECONCILE_RUN", body("scheduledTime", at.toString()));
+        return output.status();
+    }
+
     /** Runs an {@code internal()} process as the system (D41), as its job or event would; returns its output. */
     @SuppressWarnings("unchecked")
     Object systemRun(String process, Map<String, ?> body) {

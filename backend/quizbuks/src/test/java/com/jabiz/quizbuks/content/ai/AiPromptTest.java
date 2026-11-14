@@ -172,8 +172,10 @@ class AiPromptTest {
         assertThat(waited).containsExactly(Duration.ofSeconds(45));
         long bytes = AiPrompt.user(input, JSON).getBytes(StandardCharsets.UTF_8).length
             + AiPrompt.SYSTEM.getBytes(StandardCharsets.UTF_8).length;
-        assertThat(usage).containsEntry(AiQuestionsJob.INPUT_TOKENS, AiLimits.inputEstimate(bytes))
-            .containsEntry(AiQuestionsJob.OUTPUT_TOKENS, (long) ClaudeApi.maxTokens(input.count()));
+        // F-M9 (H1): recorded as an estimate, under its own metrics (the job is charged it; the sponsor's fee is not).
+        assertThat(usage).containsEntry(AiUsageMetrics.ESTIMATED_INPUT_TOKENS, AiLimits.inputEstimate(bytes))
+            .containsEntry(AiUsageMetrics.ESTIMATED_OUTPUT_TOKENS, (long) ClaudeApi.maxTokens(input.count()))
+            .doesNotContainKeys(AiQuestionsJob.INPUT_TOKENS, AiQuestionsJob.OUTPUT_TOKENS);
         // A connection never made was never billed.
         Map<String, Long> none = new LinkedHashMap<>();
         ExternalHttp refused = call -> {

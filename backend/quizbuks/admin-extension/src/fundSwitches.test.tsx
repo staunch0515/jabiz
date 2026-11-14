@@ -157,11 +157,16 @@ describe('FundSwitches', () => {
     // F-M7: the audience fee's switch is an active row now (on at the launch), with no waiting note.
     server.switches = [...(server.switches as Row[]), row('qb.audience.billing.enabled', 'audience', 'true', 'true', true),
       row('qb.exposure.billing.enabled', 'exposure', 'true', 'true', true),
+      row('qb.ai.fee.enabled', 'aifee', 'false', 'true', true),
       row('qb.ai.site-profile.enabled', 'aifee', 'false', 'true', true)]
     renderCard()
     await screen.findByTestId('fund-switches')
     await screen.findAllByTestId('fund-switch-proposal')
-    expect(KEY_BEFORE_MEANING_ROWS.map((r) => r.key)).toEqual(['qb.ai.site-profile.enabled', 'qb.fee.auto-pay.enabled'])
+    expect(KEY_BEFORE_MEANING_ROWS.map((r) => r.key)).toEqual(['qb.ai.fee.enabled', 'qb.ai.site-profile.enabled',
+      'qb.fee.auto-pay.enabled'])
+    // F-M9a-1: the AI fee's key exists before a-2 can charge the months.
+    expect(within(stateOfRow('qb.ai.fee.enabled') as HTMLElement).getByTestId('fund-switch-note'))
+      .toHaveTextContent('Waits for F-M9')
     // F-M8c: the exposure fee's switch is an ordinary active row now (on at the launch), with no waiting note.
     expect(stateOfRow('qb.exposure.billing.enabled')).toHaveAttribute('data-state', 'match')
     expect(within(stateOfRow('qb.exposure.billing.enabled') as HTMLElement).queryByText(/Waits for/)).toBeNull()

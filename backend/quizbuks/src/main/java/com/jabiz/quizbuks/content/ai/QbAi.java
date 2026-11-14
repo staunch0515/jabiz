@@ -43,6 +43,11 @@ public final class QbAi {
     public static final List<String> STATUSES = List.of(QUEUED, READY, FAILED, CANCELLED, ACCEPTED, DISCARDED,
         EXPIRED);
 
+    /** F-M9: whether a job is charged to the sponsor's AI credit, frozen at its request. */
+    public static final String FEE_MODE_DICTIONARY = "urn:jabiz:dict:quizbuks:ai-job-fee-mode";
+    public static final String FEE_NONE = "NONE";
+    public static final String FEE_CREDIT = "CREDIT";
+
     public static final String KIND_QUESTIONS = "QUESTIONS";
     /** Candidate covers (Q8b, M-25; platform 16t): pictures drawn from Claude's designs. */
     public static final String KIND_COVER = "COVER";
@@ -153,6 +158,25 @@ public final class QbAi {
             .asTemporal(TemporalRole.EVENT_TIME));
         eb.field("expiresAt", f -> f.physicalColumn("expires_at").processOnly().asTemporal(TemporalRole.EVENT_TIME));
         eb.field("closedAt", f -> f.physicalColumn("closed_at").processOnly().asTemporal(TemporalRole.EVENT_TIME));
+        // F-M9 (docs/quizbuks/plans/impl/F-M9.md §2): frozen at the request, whether the job is charged (NONE: the
+        // switch was off, or a kind the platform pays for) and the operator, markup and rate its fee is worked out with.
+        eb.field("feeMode", f -> f.physicalColumn("fee_mode").immutable(true).required(true).processOnly()
+            .asCode(FEE_MODE_DICTIONARY, FEE_NONE, FEE_CREDIT));
+        eb.field("feeOperatorId", f -> f.physicalColumn("fee_operator_id").immutable(true).processOnly().asText(36));
+        eb.field("feeMarkup", f -> f.physicalColumn("fee_markup").immutable(true).processOnly().asNumeric(6, 2));
+        eb.field("feeUsdJpy", f -> f.physicalColumn("fee_usd_jpy").immutable(true).processOnly().asNumeric(8, 2));
+        // The most the job may cost with its tax, held of the credit until it finishes (then 0).
+        eb.field("reservedYen", f -> f.physicalColumn("reserved_yen").required(true).processOnly()
+            .asMonetary("JPY", 0));
+        // At the job's end: the dollars of the answered calls (the sponsor's), and of the estimates (the platform's).
+        eb.field("billableUsd", f -> f.physicalColumn("billable_usd").processOnly().asNumeric(14, 6));
+        eb.field("unrecordedUsd", f -> f.physicalColumn("unrecorded_usd").processOnly().asNumeric(14, 6));
+        // The fee before tax, and what of it the platform took on when the credit fell short (before tax).
+        eb.field("feeYen", f -> f.physicalColumn("fee_yen").processOnly().asMonetary("JPY", 0));
+        eb.field("absorbedYen", f -> f.physicalColumn("absorbed_yen").processOnly().asMonetary("JPY", 0));
+        // The month of the outcome (the fiscal year's zone): the AI fee of that month; and the charge it went into.
+        eb.field("feePeriod", f -> f.physicalColumn("fee_period").processOnly().asText(7));
+        eb.field("feeChargeId", f -> f.physicalColumn("fee_charge_id").processOnly().asText(36));
         eb.field("version", f -> f.physicalColumn("version").asVersion());
         eb.unique("uk_qb_ai_job_external", "externalJobId");
         eb.stateTransitions("status", st -> st

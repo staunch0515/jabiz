@@ -125,6 +125,43 @@ public final class ClaudeWebResearch {
         return new ClaudeApi.Usage(Math.max(text, request.inputTokens()), request.outputTokens());
     }
 
+    /** The calls one attempt may make: the first and every continuation of a paused turn. */
+    public static final int MAX_CALLS = MAX_CONTINUATIONS + 1;
+
+    /**
+     * F-M9 (#692 review M1): the most one attempt may use, for the reservation of a charged request. It may make
+     * {@value #MAX_CALLS} calls; each is sent with all the input before it (a continuation carries the assistant's content
+     * as it came, so its input is the first call's and the output so far), so call {@code k} (from 0) is counted at
+     * {@code reservedInput + k * outputTokens} in and {@code outputTokens} out, each at the long-prompt rate when it is
+     * above that line.
+     *
+     * @param reservedInput the input one call may read (the pages and the framing, {@link Request#inputTokens})
+     * @param outputTokens  the output one call asks for
+     */
+    public static ClaudeApi.Usage mostOfAttempt(String model, long reservedInput, int outputTokens) {
+        return attempt(model, reservedInput, outputTokens, MAX_CALLS);
+    }
+
+    /**
+     * #692 re-review: one attempt counted at {@code calls} calls (1 to {@value #MAX_CALLS}), as
+     * {@link #mostOfAttempt} counts each; what a website draft reserves when its limits are set below the job's.
+     */
+    public static ClaudeApi.Usage attempt(String model, long reservedInput, int outputTokens, int calls) {
+        long in = 0;
+        long out = 0;
+        long longIn = 0;
+        long longOut = 0;
+        for (int call = 0; call < Math.max(1, Math.min(MAX_CALLS, calls)); call++) {
+            ClaudeApi.Usage one = ClaudeCalls.priced(model,
+                ClaudeApi.unrecorded(reservedInput + (long) call * outputTokens, outputTokens));
+            in += one.inputTokens();
+            out += one.outputTokens();
+            longIn += one.longPromptInputTokens();
+            longOut += one.longPromptOutputTokens();
+        }
+        return new ClaudeApi.Usage(in, out, 0, 0, longIn, longOut);
+    }
+
     /** What the search tools cost, in dollars. */
     public static BigDecimal searchCost(long searches) {
         return SEARCH_PRICE_USD.multiply(BigDecimal.valueOf(Math.max(0, searches)));
@@ -148,7 +185,8 @@ public final class ClaudeWebResearch {
                 root = send(request, messages, timeout);
             } catch (ExternalCallException e) {
                 if (ClaudeApi.mayHaveBeenBilled(e)) {
-                    record(ctx, request.model(), unanswered(request), 0);
+                    // F-M9 (H1): an estimate, under its own metrics.
+                    ClaudeCalls.recordEstimate(ctx, request.model(), unanswered(request));
                 }
                 throw e;
             }

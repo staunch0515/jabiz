@@ -3,8 +3,11 @@ import { bookingMonthOf, expectOverviewAccounts, transferInReview, transfersOf }
 import { query } from './content'
 import { adminToken, expect, prepareQuizbuks, test } from './support'
 
-/** The rows the funds switch card adds to the server's: WAITING_ROWS (2) and MANUAL_ROWS (2) of the extension. */
-const CARD_ONLY_ROWS = 4
+/**
+ * The rows the funds switch card adds to the server's: WAITING_ROWS (1) and MANUAL_ROWS (2) of the extension. F-M9a-1
+ * moved the AI fee's switch from WAITING_ROWS to the template (its key exists now: KEY_BEFORE_MEANING_ROWS).
+ */
+const CARD_ONLY_ROWS = 3
 
 /*
  * Finance's pages in the administration (docs/quizbuks/plans/Q9c-admin-finance.md): the overview counts the large
@@ -30,7 +33,7 @@ test('finance reviews a large transfer and issues the monthly report', async ({ 
   await expectOverviewAccounts(page, request)
   // F-F10b: the first launch's money switches, one row for each parameter of the registry (setup.FirstLaunchSwitches):
   // the rows from the server (the template qb.admin.first-launch-switches, read here so that a charge that turns active
-  // adds its rows to the expectation by itself), and the rows the card adds: the 2 that wait for a feature of the charge
+  // adds its rows to the expectation by itself), and the rows the card adds: the 1 that waits for a feature of the charge
   // groups whose key does not exist yet (WAITING_ROWS) and the 2 set up by hand (MANUAL_ROWS).
   // What the active rows say depends on the system (this one proposes the declared values, other specs change some),
   // so only the states that cannot change are fixed here.
