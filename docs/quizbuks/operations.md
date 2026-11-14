@@ -603,7 +603,7 @@ FROM pg_stat_statements ORDER BY total_exec_time DESC LIMIT 20;
 - **现金奖励的争议**（F-S1）：平台不处理。学者提出争议只通知发起方；双方解决后由发起方再次"标记已支付"（确认期限重新起算），或学者直接确认。平台的现金奖励列表只读、可按运营商筛选，没有裁决。
 - **已有安装的授权**（F-S1）：`QB_SETUP` 只补、不收回。F-S1 之前已执行过 `QB_SETUP` 的安装，在「用户与角色」中从角色 `QB_ADMIN_CONTENT` 去掉 `qb.review.sponsor`、`qb.review.publication`、`qb.admin.reward-methods`、`qb.redemption.void`、`qb.digital.resolve`、`qb.prospect.use`、`qb.certification.manage`（`approval.decide` 保留，财务四眼要它），并去掉已删除的 `qb.cash.resolve`（任何角色上都去掉）；超级管理员角色补上 `approval.scope.move`（不是受保护的权限：再执行一次 `QB_SETUP` 即补）。原来由内容管理员做审核的人，改为某个运营商（通常是默认运营商）的成员并取得 `QB_OPERATOR`。测试系统直接重置数据库。
 - **方案**（Q48e-2）：五种方案（每月固定费、平台分成；受控参数 `qb.operator.plan.<1..5>.fee|share`，`QB_SETUP` 提出 0/50%、20,000/40%、40,000/30%、60,000/20%、100,000/10%）。新运营商为方案 1；总部在运营商页面提出从以后某月起的方案，另一位管理员（`qb.topup.bank.approve`）在待办中批准后生效。
-- **月结算**（Q48b、Q48e-2）：每月 2 日 01:13（日本时间）任务 `qb.operator-settlement` 为每个运营商结算上个月：其发起方发布的抽成 ×（1 − 当月方案的平台分成），减去当月方案的固定费（停用的运营商不收）与获客费用，记入运营商的账户（不够扣的结转到下月），并可签发结算单。前提：`qb.creator-fee-rate` 大于 0、分录导出的 `qb.journal.account.2140` / `5130` 已设。
+- **月结算**（Q48b、Q48e-2、F-M12）：每天 02:13（日本时间，1 日除外）任务 `qb.operator-settlement` 为每个运营商结算它最早的、已结束而还没有结算的月份：它的发起方的平台费（税前，种类在 `qb.operator.share.kinds` 中的，去掉成本部分）减去用平台承担的赠送额度付的部分，×（1 − 当月方案的平台分成），再减去当月方案的固定费（停用的运营商不收）、获客费用与扣除，余下的分成扣回运营商承担的赠送额度，记入运营商的账户（不够扣的结转到下月），并可签发结算单。发起方发布的奖励抽成不再进运营商的结算（需求方 2026-11-13 同意）。规则、就绪条件与核对见 §7.56。前提：分录导出的 `qb.journal.account.2140` / `5130` / `5140` / `4110` 已设。
 - **提现**（Q48e-2）：钱都在平台。运营商负责人在运营商管理系统「账户」设银行账户（改后 `qb.operator.withdrawal.cooldown-hours` 小时内不能提现）、申请提现（至少 `qb.operator.withdrawal.min`，至多余额，同时一笔）；财务在「运营商提现」银行付款后点"登记付款"，另一位管理员在待办中批准后才过账（2140 / 1120），驳回即回到"已申请"；财务也可驳回申请并写理由。手续费由平台承担。Q48e-2 之前签发的结算单照旧逐张付款。
 - **平台运营商不开放提现**（F-M12 a0，需求方 2026-11-13）：平台运营商（`defaultForNew` 为真的那一个，即自助注册的发起方所归的默认运营商）的账户不能提现：负责人申请即 422 `QB_OPERATOR_WITHDRAWAL_PLATFORM`，什么也不写；「账户」页不显示提现表单，改为一行说明。结算照常记入它的账户，转给直营发起方照常可用。默认运营商改为另一家后，以申请时的标志为准：新的默认运营商被拒，原来的可以申请。**部署本项前**查一次有没有平台运营商未结的提现申请：`SELECT w.withdrawal_id, w.amount, w.status FROM qb_operator_withdrawal w JOIN qb_operator o ON o.operator_id = w.operator_id WHERE o.default_for_new AND w.status IN ('REQUESTED', 'PAYING')`；有的照现有流程由财务处理（驳回或登记付款），本项不自动改它们。
 
@@ -1513,6 +1513,28 @@ Quiz 与发布有主题词（平台词表中的词与自定义词），学者可
 - 核对按 UTC 18:37 运行；按 `jabiz.fiscal-year-zone` 排的任务随该设置移动，表中的先后以 `Asia/Tokyo` 为前提。
 
 **月报分类**（`qb.admin.monthly`，按来源单据、是否冲正、所动科目与方向归类，每笔只归一类）：`TOPUP`、`BANK_TOPUP`、`MANUAL_TOPUP`、`GRANT`、`REFUND`、`DISPUTE`、`STRIPE_FEE`、`REWARD`、`TRANSFER_SENT`、`TRANSFER_SETTLED`、`WITHDRAWAL_PAID`、`TRANSFER_FAILED`、`TRANSFER_REVERSED`、`PAYOUT`、`PAYOUT_FAILED`、`OPERATOR_SHARE`、`OPERATOR_PAID`、`REFERRAL_REWARD`、`CASH_TOPUP`、`CASH_BANK_TOPUP`、`CASH_REFUND`、`CASH_DISPUTE`、`KUDOS_BOUGHT`、`KUDOS_SOLD`、`FEE_CHARGED`、`FEE_PAID`、`FEE_VOIDED`、`ENTRY_FEE`、`ENTRY_FEE_SETTLED`、`FEE_CREDIT_GRANTED`、`FEE_CREDIT_VOIDED`、`OPERATOR_TRANSFER_TO_DIRECT`、`PREPAYMENT_FROZEN`、`PREPAYMENT_USED`、`PREPAYMENT_RELEASED`、`DISTRIBUTION_CHARGED`、`DISTRIBUTION_DEPOSIT`、`DISTRIBUTION_RELEASED`、`FEE_CREDIT_NOTE`、`FEE_CREDIT_RECOVERED`、`EXPOSURE_CHARGED`、`EXPOSURE_DEPOSIT`（冻结与追加）、`EXPOSURE_RELEASED`、`OTHER`。规则一句话：**退回与扣回不另立类，按它在账上的方向落进已有的类**——退回到预付款的是 `FEE_PAID` 的负数，预付款退回账户是 `PREPAYMENT_RELEASED`，到期赠送的作废是 `FEE_CREDIT_VOIDED`；运营商结算中对赠送额度的扣回（及其退还）是 `FEE_CREDIT_RECOVERED`（F-M12，按结算记账，不另是退回）；凭证本身是 `FEE_CREDIT_NOTE`；抵用不过账。`PREPAYMENT_USED` 不分用途（各费用的记账已按种类分行）。归不进去的才是 `OTHER`（只应有开发期没有来源的入账）；新增一种过账时，同一个 PR 里加它的类（`backend/quizbuks/CLAUDE.md`）。
+
+### 7.56 运营商结算：不分成与扣回（F-M12）
+
+§7.13 "月结算"的细节。设计见 `plans/impl/F-M12.md`；结算单上每一行的意思见帮助 `help/operator-settlement.md`。
+
+- **切换点**：每个运营商从它最后一张旧做法的结算（部署本项之前签发的）所覆盖的期间之后起按新做法结算，写在新结算的"覆盖起点"（`coveredFrom`）上；之前的月份、旧结算单与旧分录都不动，旧费用上用过的赠送额度不追溯扣回。部署后才建的运营商从第一笔费用算起。
+- **每笔费用恰好算一次**：每次结算算入"期间不晚于结算月、还没有被算过"的费用，每笔写一行明细（`CHARGE`）；期间早于结算月的（如次月才记的配送费 `final` 行）照常算入并标"迟到"，按结算月的比例分成。之后才作废的账单在作废后的第一次结算写一行 `VOID`，按原来那次结算的比例扣回。费用上没有运营商的不算入，由核对报出（`OPERATOR_CHARGE_NO_OPERATOR`）。
+- **哪些种类分成**：受控参数 `qb.operator.share.kinds`（缺省 `MONTHLY,MANUAL,AUDIENCE,DISTRIBUTION,EXPOSURE`，不含 `AI`）。不在清单里的种类也写明细，但不进分成基数；把一个种类加进清单只影响以后的费用。
+- **赠送额度**：用赠送额度付的部分按来源由受控参数 `qb.operator.gift.treatment.<来源>` 决定：`PLATFORM`（平台承担：那部分不分成、不扣回；缺省为手工追加与点亮）或 `OPERATOR`（运营商承担：照常分成，再从分成中扣回含税的赠送额；缺省为入驻赠送与认证补发）。扣回的比例 `qb.operator.credit-recovery.rate`（缺省 1）；不在基数里的费用（如 AI）上用掉的赠送缺省不扣回（`qb.operator.gift.recover-outside-base`）。同一次结算中算入的费用与它的赠送成对相抵；费用先结算、赠送后付（后付账单晚付、贷项凭证退回）的，在付的那个月按原结算的比例带符号扣除或还给运营商。
+- **扣回与结转**：先扣固定费、获客费用、贷项凭证、赠送与作废的扣除和上月结转，余下的分成再扣回赠送；不够扣的赠送单独结转到下月（与获客费用的结转分开两列）。赠送退回多于本月用掉的，差额还给运营商。结算从不使应付为负，也不向运营商追现金。
+- **合同结束**：停用的运营商仍照常结算（不收固定费）；到最后一次结算仍结转着要扣回的赠送，不追缴：核对给出提示 `OPERATOR_GIFT_CARRY_OPEN`，由财务与运营商商定，系统不再自动扣。
+- **就绪与期限**：一个月要等它的前一步都完成才结算：配送费与曝光费已结算该月（或 `final`），后付费用已有月账单。最多等到月末之后 `qb.operator.settlement.readiness-max-days` 天（缺省 5），过了期限照结，没到的费用下次作为"迟到"算入，不丢。上个月没结算的不会越过它先结下一个月。要立即放行，把天数改小（受控变更，另一位管理员发布；0 即当天照结）。
+- **补跑**：漏跑或失败的时刻用 `JOB_RUN_REQUEST`（`job.run`，带原因），补跑 `qb.operator-settlement` 当天的计划时刻即可（取的是最早未结算的月份，不论哪天跑）；补跑不绕过就绪条件。不改 cron、不重启。
+- **行数上限**：一次结算至多 20 000 行明细（部署设置 `quizbuks.operator-settlement.max-lines`）；放不下的费用留给下一次，按被留下那个月的比例与设置算入，钱只是推迟。连续两个月被截或最旧的未算入费用超过一个月，财务（`qb.reconcile`）收到待办；通常是某个运营商一个月的费用异常多，先查清来源。
+- **分录**（每次结算至多两笔，来源都是这张结算）：分成：借 5130 分成 / 贷 2140 扣回赠送之前的应付 / 贷 4110 回收的成本（固定费、获客费用、贷项凭证、赠送与作废的扣除；为负时借 4110，即还给运营商）；扣回：借 2140 / 贷 5140 扣回额（还给运营商时反向，先抵掉的成本结转记贷 4110）。两笔合起来 2140 的净贷方 = 结算单的应付。
+- **5130 与 4110 的往返（已知取舍）**：赠送与作废的扣除、贷项凭证的扣减从运营商的分成中扣回，现在记贷 4110（还给运营商时借 4110），所以损益表上 5130 与 4110 各自多出（或少了）同一数额，净额正确。月报在"运营商分成"处注明；要不要拆开由财务以后决定（`launch-checklist.md` 的财务确认）。
+- **核对差异的处理**（每日核对，模板 `qb.system.recon-operator-settlement`，只核切换点之后）：
+  - `OPERATOR_SETTLEMENT_WAITING`：某运营商最早未结算的月份过了起算点之后 `qb.operator.settlement.waiting-after-hours` 小时（缺省 48）仍没有结算。起算点：在等某一步时为期限（月末 + 等待天数），什么都不等时为月末与就绪时刻中较晚的一个（不晚于期限）。引用 `<月>:<步骤>` 说明它在等什么：`DISTRIBUTION` / `EXPOSURE` 去查该运营商发布的配送费或曝光费结算，`INVOICE` 去查后付费用的月账单任务；没有步骤只有月份时是结算任务本身失败，看任务记录与待办，修好后补跑。这一项会拦住分录导出，到结算完成为止。
+  - `OPERATOR_SETTLEMENT_COVERAGE`：`<月>:<列>` 是结算单上的一列与它的明细不符（结算写错，交开发查）；`fee:<期间>` 是应当已被两次结算算入而没有明细的费用；`gift:<月>` 是应当已被两次结算算入而没有明细的赠送付款。后两种先看该运营商的结算是否连续被截（行数上限的待办），否则交开发查。
+  - `GIFT_RECOVERY`：`recovered` 是结算上的扣回合计与来源为结算的 5140 净贷方不符（按 5140 核，不按 2140：还给运营商时先抵的成本记 4110）；`<月>` 是该月应扣 ≠ 实扣 + 结转出 − 结转入；`<月>:carried` 是本月结转入 ≠ 上月结转出。都交开发查，不手工改分录。
+  - `OPERATOR_CHARGE_NO_OPERATOR`：费用上没有运营商（按发起方、期间）；查明它当时属于哪个运营商后交开发处理，不手工补。
+  - `OPERATOR_GIFT_CARRY_OPEN`（提示）：见上"合同结束"。
 
 ## 8. 升级到线 1.3（S0 的迁移 V29、V30）
 
