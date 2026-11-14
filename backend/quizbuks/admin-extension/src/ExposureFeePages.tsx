@@ -238,7 +238,7 @@ function SettlementsList({ own }: { own: boolean }) {
   const columns = useMemo<ColumnDef<ExposureSettlementRow, unknown>[]>(() => [
     { id: 'period', header: t('exposureFee.period'), cell: ({ row }) => row.original.period },
     { id: 'publication', header: t('exposureFee.publication'), cell: ({ row }) => row.original.publicationId },
-    { id: 'sponsor', header: t('exposureFee.sponsor'), cell: ({ row }) => (own ? row.original.sponsorId
+    { id: 'sponsor', header: t('exposureFee.sponsor'), cell: ({ row }) => (own ? (row.original.company ?? row.original.sponsorId)
       : <UserName id={row.original.sponsorId} />) },
     { id: 'counted', header: t('exposureFee.counted'), meta: right, cell: ({ row }) => row.original.counted },
     { id: 'unit', header: t('exposureFee.unit'), meta: right, cell: ({ row }) => String(row.original.unit) },

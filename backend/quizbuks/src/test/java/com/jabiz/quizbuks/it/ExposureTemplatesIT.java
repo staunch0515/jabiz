@@ -161,6 +161,8 @@ class ExposureTemplatesIT extends ExposureFeeItSupport {
             .singleElement().satisfies(row -> {
                 assertThat(row).containsEntry("publicationId", publicationId);
                 assertThat(row).doesNotContainKey("operatorId");
+                // F-M8e: the operator reads the Sponsor's company beside the number (the page shows it, not the number).
+                assertThat(row).containsKey("company");
             });
         assertThat(items("qb.operator.exposure-settlements", operatorSession(stranger, otherOperator), Map.of()))
             .isEmpty();
@@ -207,8 +209,13 @@ class ExposureTemplatesIT extends ExposureFeeItSupport {
         }
         // 5 of 100 left, at or below a tenth (qb.exposure.low-ratio): counted; the reminder off (0): not.
         assertThat(String.valueOf(low.get())).isEqualTo("1");
+        // The home's item leads to the list with the same condition: the publication is in it, filtered to the low ones.
+        java.util.function.Supplier<List<Object>> listed = () -> items("qb.sponsor.publications", sponsorToken(sponsor),
+            Map.of("params", Map.of("exposureLow", true))).stream().map(row -> row.get("publicationId")).toList();
+        assertThat(listed.get()).containsExactly(publicationId);
         run("PARAM_SET", admin(), body("key", com.jabiz.quizbuks.setup.QbParams.EXPOSURE_LOW_RATIO, "value", "0"));
         try {
+            assertThat(listed.get()).isEmpty();
             assertThat(String.valueOf(low.get())).isEqualTo("0");
         } finally {
             run("PARAM_SET", admin(), body("key", com.jabiz.quizbuks.setup.QbParams.EXPOSURE_LOW_RATIO, "value", "0.1"));

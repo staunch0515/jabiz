@@ -13,6 +13,7 @@ import com.jabiz.numbering.NumberSequence;
 import com.jabiz.process.ProcessContext;
 import com.jabiz.process.ProcessDefinition;
 import com.jabiz.quizbuks.QbPermissions;
+import com.jabiz.quizbuks.operator.QbOperators;
 import com.jabiz.quizbuks.wallet.TransferProcesses;
 import com.jabiz.retention.RetentionPolicy;
 import com.jabiz.runtime.approval.ApprovalProcesses;
@@ -273,6 +274,20 @@ public class FeeConfig {
     @Bean
     DatasetDefinition qbExposureSettlementDataset() {
         return processOnly(QbExposureFees.SETTLEMENT);
+    }
+
+    /**
+     * The operator reads only the settlements of the publications whose fee is its own (D64): by the operator frozen
+     * at the submission, so a Sponsor moved to another operator since stays with the operator whose fee it was.
+     */
+    @Bean
+    DatasetDefinition qbOperatorExposureSettlementDataset() {
+        return DatasetDefinition.define(QbExposureFees.OPERATOR_SETTLEMENTS, d -> d
+            .targetEntityType(QbExposureFees.SETTLEMENT)
+            .permissions(QbPermissions.OPERATOR_USE, QbPermissions.SPONSOR_VIEW_WRITE)
+            .policy(p -> p.readOnly(true).allowTimeTravel(false))
+            .scope(s -> s.withinEntryScope(QbOperators.SCOPE, "operatorId"))
+            .storage(s -> s.driver("r2dbc-postgresql").connectionPoolRef(poolRef)));
     }
 
     @Bean
