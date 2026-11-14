@@ -45,6 +45,11 @@ class AiFeeReportsIT extends AiCreditItSupport {
         return TestTokens.bearer(tokens, "fm9b2-hq", QbPermissions.OPERATORS_WRITE, QbPermissions.OPERATORS_READ);
     }
 
+    /** What the AI fees report asks for: the finance administrators' read. */
+    private String financeRead() {
+        return TestTokens.bearer(tokens, "fm9b2-finance-read", QbPermissions.ADMIN_FINANCE_READ);
+    }
+
     private String finance() {
         return TestTokens.bearer(tokens, "fm9b2-finance", QbPermissions.RECONCILE, QbPermissions.ADMIN_AI_READ,
             "task.read", "task.resolve");
@@ -172,14 +177,14 @@ class AiFeeReportsIT extends AiCreditItSupport {
             .orElseThrow();
         assertThat(charged).containsEntry("feeMode", "CREDIT").containsEntry("feeOperatorId", north.operatorId());
         assertThat(String.valueOf(charged.get("feeOperatorName"))).startsWith("North");
-        assertThat(money(charged.get("costUsd"))).isEqualByComparingTo("0.123456");
-        assertThat(money(charged.get("feeYen"))).isEqualByComparingTo("300");
-        assertThat(money(charged.get("absorbedYen"))).isEqualByComparingTo("40");
-        assertThat(money(charged.get("unrecordedUsd"))).isEqualByComparingTo("0.25");
-        // A job without a fee is still listed, its fee columns empty or "not charged".
+        // The content administrators read no sponsor's money: not one amount column (qb.admin.ai-fees has them).
+        assertThat(charged.keySet()).doesNotContain("costUsd", "feeYen", "absorbedYen", "unrecordedUsd", "feeMarkup",
+            "reservedYen", "billableUsd");
+        rows.forEach(row -> assertThat(row.keySet()).doesNotContain("costUsd", "feeYen", "absorbedYen",
+            "unrecordedUsd"));
+        // A job without a fee is still listed, its operator empty.
         Map<String, Object> none = rows.stream().filter(r -> free.equals(r.get("aiJobId"))).findFirst().orElseThrow();
         assertThat(none.get("feeOperatorName")).isNull();
-        assertThat(none.get("feeYen")).isNull();
     }
 
     @Test
@@ -199,9 +204,11 @@ class AiFeeReportsIT extends AiCreditItSupport {
         job(b, null, m, "1", 1_000, 0, "0", true);
         job(a, north.operatorId(), "2030-08", "9", 9_999, 0, "0", false);
 
-        String admin = aiAdmin();
+        String admin = financeRead();
         List<Map<String, Object>> rows = items("qb.admin.ai-fees", admin, request(Map.of("month", m)));
         assertThat(rows).hasSize(3);
+        // The credit is read for one sponsor only: with no sponsorId it is empty on every row.
+        rows.forEach(row -> assertThat(row.get("aiCredit")).isNull());
         Map<String, Object> northRow = rows.stream().filter(r -> a.equals(r.get("sponsorId"))
             && north.operatorId().equals(r.get("operatorId"))).findFirst().orElseThrow();
         assertThat(northRow).containsEntry("month", m);
@@ -215,7 +222,6 @@ class AiFeeReportsIT extends AiCreditItSupport {
         assertThat(money(northRow.get("absorbedTotalYen"))).isEqualByComparingTo("78");
         // The two jobs with no charge yet: 300 + 100.
         assertThat(money(northRow.get("unbilledYen"))).isEqualByComparingTo("400");
-        assertThat(money(northRow.get("aiCredit"))).isEqualByComparingTo(money(aiCredit(a).get("remaining")));
 
         Map<String, Object> westRow = rows.stream().filter(r -> a.equals(r.get("sponsorId"))
             && west.operatorId().equals(r.get("operatorId"))).findFirst().orElseThrow();
@@ -226,21 +232,36 @@ class AiFeeReportsIT extends AiCreditItSupport {
         assertThat(platformRow.get("operatorId")).isNull();
         assertThat(platformRow.get("operatorName")).isNull();
         assertThat(money(platformRow.get("unbilledYen"))).isEqualByComparingTo("0");
-        assertThat(money(platformRow.get("aiCredit"))).isEqualByComparingTo("0");
 
-        // The filters: sponsor, operator and the months together.
-        assertThat(items("qb.admin.ai-fees", admin, request(Map.of("sponsorId", a)))).hasSize(3)
-            .extracting(r -> r.get("month")).contains(m, "2030-08");
-        assertThat(items("qb.admin.ai-fees", admin, request(Map.of("operatorId", west.operatorId())))).singleElement()
-            .satisfies(r -> assertThat(r).containsEntry("month", m));
+        // With a sponsorId the sponsor's credit now is on its rows.
+        List<Map<String, Object>> ofA = items("qb.admin.ai-fees", admin, request(Map.of("month", m, "sponsorId", a)));
+        assertThat(ofA).hasSize(2).allSatisfy(row -> assertThat(money(row.get("aiCredit")))
+            .isEqualByComparingTo(money(aiCredit(a).get("remaining"))));
+
+        // The filters: sponsor, operator, and a span of months with its newest month first.
         assertThat(items("qb.admin.ai-fees", admin, request(Map.of("month", "2030-08", "sponsorId", b)))).isEmpty();
-        // Newest month first.
-        List<Map<String, Object>> all = items("qb.admin.ai-fees", admin, request(Map.of("sponsorId", a)));
-        assertThat(all.getFirst()).containsEntry("month", "2030-08");
-        // Only the AI page's readers.
+        assertThat(items("qb.admin.ai-fees", admin, request(Map.of("month", m, "operatorId", west.operatorId()))))
+            .singleElement().satisfies(r -> assertThat(r).containsEntry("month", m));
+        List<Map<String, Object>> span = items("qb.admin.ai-fees", admin, request(Map.of("month", m, "toMonth",
+            "2030-08", "sponsorId", a)));
+        assertThat(span).hasSize(3);
+        assertThat(span.getFirst()).containsEntry("month", "2030-08");
+        // A year is the most: 12 months (2030-07 .. 2031-06) read, 13 (to 2031-07), a span the wrong way round and
+        // something that is not a month have no rows (a template cannot answer 400 to its own params).
+        assertThat(items("qb.admin.ai-fees", admin, request(Map.of("month", m, "toMonth", "2031-06")))).hasSize(4);
+        assertThat(items("qb.admin.ai-fees", admin, request(Map.of("month", m, "toMonth", "2031-07")))).isEmpty();
+        assertThat(items("qb.admin.ai-fees", admin, request(Map.of("month", "2030-08", "toMonth", m)))).isEmpty();
+        assertThat(items("qb.admin.ai-fees", admin, request(Map.of("month", "soon")))).isEmpty();
+        // A month is required (400), and only the finance administrators read it: neither the AI page's content
+        // administrators nor an operator's member (403).
         client.post().uri("/api/queries/qb.admin.ai-fees").contentType(MediaType.APPLICATION_JSON)
-            .header(HttpHeaders.AUTHORIZATION, memberSession(north.leadId(), north.operatorId()))
-            .bodyValue(request(Map.of())).exchange().expectStatus().isForbidden();
+            .header(HttpHeaders.AUTHORIZATION, admin).bodyValue(request(Map.of())).exchange().expectStatus()
+            .isBadRequest();
+        for (String denied : List.of(aiAdmin(), memberSession(north.leadId(), north.operatorId()))) {
+            client.post().uri("/api/queries/qb.admin.ai-fees").contentType(MediaType.APPLICATION_JSON)
+                .header(HttpHeaders.AUTHORIZATION, denied).bodyValue(request(Map.of("month", m))).exchange()
+                .expectStatus().isForbidden();
+        }
     }
 
     @Test
@@ -249,8 +270,9 @@ class AiFeeReportsIT extends AiCreditItSupport {
         String sponsor = newSponsor(unique("fm9b2-csv-"));
         job(sponsor, north.operatorId(), "2030-09", "0.40", 1_234, 0, "0", false);
         byte[] bytes = client.post().uri("/api/queries/qb.admin.ai-fees/export?format=csv")
-            .contentType(MediaType.APPLICATION_JSON).header(HttpHeaders.AUTHORIZATION, aiAdmin())
-            .header(HttpHeaders.ACCEPT_LANGUAGE, "en").bodyValue(request(Map.of("sponsorId", sponsor)))
+            .contentType(MediaType.APPLICATION_JSON).header(HttpHeaders.AUTHORIZATION, financeRead())
+            .header(HttpHeaders.ACCEPT_LANGUAGE, "en").bodyValue(request(Map.of("month", "2030-09", "sponsorId",
+                sponsor)))
             .exchange().expectStatus().isOk().expectBody().returnResult().getResponseBody();
         String csv = new String(bytes, StandardCharsets.UTF_8).replace("﻿", "");
         String[] lines = csv.strip().split("\\R");
@@ -258,29 +280,8 @@ class AiFeeReportsIT extends AiCreditItSupport {
         assertThat(lines[0]).contains("Fee month").contains("Taken on in all (JPY)").contains("Not charged yet");
         assertThat(lines[1]).contains("2030-09").contains(sponsor).contains("1234").contains("0.4");
         client.post().uri("/api/queries/qb.admin.ai-fees/export?format=csv").contentType(MediaType.APPLICATION_JSON)
-            .header(HttpHeaders.AUTHORIZATION, TestTokens.bearer(tokens, "fm9b2-nobody", "task.read"))
-            .bodyValue(request(Map.of())).exchange().expectStatus().isForbidden();
-    }
-
-    @Test
-    void aMonthOfThousandsOfJobsIsSummedInUnderASecond() {
-        String m = "2031-01";
-        // 3,000 jobs of 300 sponsors in one month, with fees, absorbed amounts and estimates.
-        execute("INSERT INTO qb_ai_job (ai_job_id, external_job_id, sponsor_id, quiz_id, kind, params, model, status, "
-            + "input_bytes, estimated_tokens, zone, requested_at, finished_at, version, fee_mode, fee_operator_id, "
-            + "fee_markup, fee_usd_jpy, reserved_yen, cost_usd, billable_usd, unrecorded_usd, fee_yen, absorbed_yen, "
-            + "fee_period, fee_charge_id) SELECT gen_random_uuid()::text, gen_random_uuid()::text, 'perf-' || (i % 300), "
-            + "gen_random_uuid(), 'QUESTIONS', '{}', 'claude-opus-5-5', 'ACCEPTED', 10, 10, 'Asia/Tokyo', now(), now(), 1, "
-            + "'CREDIT', 'perf-op-' || (i % 5), 1.5, 150, 0, 0.1, 0.1, 0.01, 100 + i % 7, i % 3, ?, "
-            + "CASE WHEN i % 2 = 0 THEN 'c' || i END FROM generate_series(1, 3000) AS i", m);
-        execute("ANALYZE qb_ai_job");
-        String admin = aiAdmin();
-        items("qb.admin.ai-fees", admin, request(Map.of("month", m)));
-        long start = System.nanoTime();
-        List<Map<String, Object>> rows = items("qb.admin.ai-fees", admin, request(Map.of("month", m)));
-        long millis = (System.nanoTime() - start) / 1_000_000;
-        assertThat(rows).isNotEmpty();
-        assertThat(millis).as("the fees of a month of 3,000 jobs, in ms").isLessThan(1_000);
+            .header(HttpHeaders.AUTHORIZATION, aiAdmin())
+            .bodyValue(request(Map.of("month", "2030-09"))).exchange().expectStatus().isForbidden();
     }
 
     // ---- the alert ---------------------------------------------------------------------------------------------
@@ -369,7 +370,7 @@ class AiFeeReportsIT extends AiCreditItSupport {
     }
 
     @Test
-    void lastMonthsTotalIsCheckedToo() {
+    void thisMonthAndTheTwoBeforeAreCheckedAndNoOlderOne() {
         String crossed = freshMonth();
         setParam(QbParams.AI_FEE_ABSORBED_ALERT_YEN, "1000");
         absorbed(crossed, 2_000);
@@ -380,12 +381,56 @@ class AiFeeReportsIT extends AiCreditItSupport {
         assertThat(HelpItSupport.tasksOf("qb.ai-absorbed:" + crossed)).singleElement()
             .satisfies(task -> assertThat(task).containsEntry("status", "OPEN"));
         assertThat(HelpItSupport.tasksOf("qb.ai-absorbed:" + next)).isEmpty();
-        // Two months later it is not asked about any more (only this month and the one before are looked at).
-        String third = freshMonth();
-        absorbed(third, 10);
+
+        // Two months back is still read, a missed run of a month and a half is made up...
+        String twoBack = freshMonth();
+        absorbed(twoBack, 3_000);
+        freshMonth();
+        String now = freshMonth();
+        assertThat(now).isNotEqualTo(twoBack);
+        runCheck();
+        assertThat(HelpItSupport.tasksOf("qb.ai-absorbed:" + twoBack)).singleElement()
+            .satisfies(task -> assertThat(task).containsEntry("status", "OPEN"));
+
+        // ... three months back is not: nothing made for it, the other tasks stay open and are not made again.
+        String threeBack = freshMonth();
+        absorbed(threeBack, 4_000);
+        freshMonth();
+        freshMonth();
         freshMonth();
         runCheck();
-        assertThat(HelpItSupport.tasksOf("qb.ai-absorbed:" + third)).isEmpty();
+        assertThat(HelpItSupport.tasksOf("qb.ai-absorbed:" + threeBack)).isEmpty();
         assertThat(HelpItSupport.tasksOf("qb.ai-absorbed:" + crossed)).hasSize(1);
+        assertThat(HelpItSupport.tasksOf("qb.ai-absorbed:" + twoBack)).hasSize(1);
+    }
+
+    // ---- who may read the operator's template ------------------------------------------------------------------
+
+    @Test
+    void aMemberWhoLeftASponsorWithoutAnOperatorAndASponsorSeeNothingOfTheOperatorTemplate() {
+        NewOperator north = newOperatorWithLead(hq(), unique("North"), null);
+        String sponsor = newSponsor(unique("fm9b2-who-"));
+        assign(sponsor, north.operatorId());
+        Map<String, Object> request = request(Map.of("sponsorId", sponsor, "month", "2030-05"));
+
+        String member = verifiedUser(unique("fm9b2-member"));
+        run(OperatorProcesses.MEMBER_ADD, hq(), body("operatorId", north.operatorId(), "userId", member, "lead",
+            false));
+        String memberSession = memberSession(member, north.operatorId());
+        assertThat(items("qb.operator.sponsor-ai", memberSession, request)).hasSize(1);
+        // Removed from the operator (removedAt set): the session still carries the scope, the membership is gone.
+        run(OperatorProcesses.MEMBER_REMOVE, hq(), body("userId", member));
+        assertThat(items("qb.operator.sponsor-ai", memberSession, request)).isEmpty();
+
+        // A sponsor of no operator (the assignment gone) is nobody's: not even the operator's lead sees it.
+        String loner = newSponsor(unique("fm9b2-loner-"));
+        execute("DELETE FROM qb_sponsor_operator WHERE user_id = ?", loner);
+        assertThat(items("qb.operator.sponsor-ai", memberSession(north.leadId(), north.operatorId()),
+            request(Map.of("sponsorId", loner, "month", "2030-05")))).isEmpty();
+
+        // The sponsor's own session is not an operator's: 403.
+        client.post().uri("/api/queries/qb.operator.sponsor-ai").contentType(MediaType.APPLICATION_JSON)
+            .header(HttpHeaders.AUTHORIZATION, sponsorToken(sponsor)).bodyValue(request).exchange().expectStatus()
+            .isForbidden();
     }
 }

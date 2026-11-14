@@ -27,6 +27,9 @@ permissions: [qb.operator.use]
 -- caller's own, so a sponsor assigned to another operator (or to none any more) has no row. The credit is what its open
 -- AI prepayments still hold (before tax, as the sponsor sees it); the month's fee is what the jobs whose result was
 -- recorded in the month charged (feeYen, before tax) under the caller's operator, counting the jobs that carry a fee.
+-- QbAiJob and QbPrepayment are default datasets with no scope of their own: the limit to the caller's operator comes
+-- from s alone (QbSponsor joined to the sponsor's assignment and to the caller's own membership). Keep the two
+-- subqueries LATERAL below s; as plain joins or a template of their own they would show another operator's sponsor.
 SELECT
     s.{{QbSponsor.userId}}  AS userId,
     s.{{QbSponsor.company}} AS company,
@@ -48,7 +51,8 @@ LEFT JOIN LATERAL (
     FROM {{QbAiJob}} x
     WHERE x.{{QbAiJob.sponsorId}} = s.{{QbSponsor.userId}}
       AND x.{{QbAiJob.feePeriod}} = :month
-      -- Only the jobs whose fee is the caller's operator's (frozen on the job, as the settlement counts them): after
-      -- the sponsor moves, the new operator does not see the fees of before (the coordinator, 2026-11-14).
+      -- Only the jobs whose fee is the caller's operator's: the operator is frozen on the job when it is asked (as the
+      -- operators' settlements count the fees by the operator of the charge), so a sponsor who moves takes none of the
+      -- fees of before to the new operator.
       AND x.{{QbAiJob.feeOperatorId}} = CAST(me.{{QbOperatorMember.operatorId}} AS text)) j ON true
 WHERE s.{{QbSponsor.userId}} = :sponsorId

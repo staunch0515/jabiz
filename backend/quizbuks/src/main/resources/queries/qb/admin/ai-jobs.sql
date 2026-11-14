@@ -3,9 +3,8 @@ id: qb.admin.ai-jobs
 description: >-
   AI jobs of every sponsor, newest first (Q8a; covers since Q8b): their kind, state, the model asked and the one that answered (another one
   after a refusal, A-10), attempts, tokens and the failure's code and explanation; never the candidates. F-M9: with
-  how it is charged (feeMode), what it cost the platform in dollars, the fee in yen, what the platform took on
-  (absorbedYen with the fee's markup, unrecordedUsd as the estimate of calls with no answer) and the operator the fee
-  was frozen with
+  how it is charged (feeMode) and the operator the fee was frozen with; no amounts (the sponsors' money is the finance
+  administrators', qb.admin.ai-fees)
 entities: [QbAiJob, QbOperator]
 datasets:
   QbAiJob: urn:jabiz:dataset:default:QbAiJob
@@ -34,10 +33,6 @@ results:
   requestedAt:    { from: QbAiJob.requestedAt }
   finishedAt:     { from: QbAiJob.finishedAt }
   feeMode:        { from: QbAiJob.feeMode }
-  costUsd:        { from: QbAiJob.costUsd }
-  feeYen:         { from: QbAiJob.feeYen }
-  absorbedYen:    { from: QbAiJob.absorbedYen }
-  unrecordedUsd:  { from: QbAiJob.unrecordedUsd }
   feeOperatorId:  { from: QbAiJob.feeOperatorId }
   feeOperatorName: { from: QbOperator.name }
 list:
@@ -69,10 +64,6 @@ SELECT
     j.{{QbAiJob.requestedAt}}    AS requestedAt,
     j.{{QbAiJob.finishedAt}}     AS finishedAt,
     j.{{QbAiJob.feeMode}}        AS feeMode,
-    j.{{QbAiJob.costUsd}}        AS costUsd,
-    j.{{QbAiJob.feeYen}}         AS feeYen,
-    j.{{QbAiJob.absorbedYen}}    AS absorbedYen,
-    j.{{QbAiJob.unrecordedUsd}}  AS unrecordedUsd,
     j.{{QbAiJob.feeOperatorId}}  AS feeOperatorId,
     o.{{QbOperator.name}}        AS feeOperatorName
 FROM {{QbAiJob}} j

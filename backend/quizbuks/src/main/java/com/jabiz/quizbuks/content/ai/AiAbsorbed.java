@@ -23,8 +23,11 @@ import java.util.Map;
  * the estimated dollars of the calls with no answer in yen at each job's frozen rate ({@code unrecordedUsd}, a cost
  * with no markup); the template {@value #TEMPLATE} reads it with the alert {@code qb.ai.fee.absorbed-alert-yen} and
  * whether the month's task exists. The daily check {@value #JOB} asks finance ({@code qb.reconcile}) to look once for
- * each month that is above the alert, this month and last (a month that crossed it after the last check of the month
- * still gets its task on the first check of the next one). Modelled on the AI help's cost alert ({@code HelpCosts}).
+ * each month that is above the alert: this month and the two before it. A month's total can still grow after it ends
+ * (a job's outcome is recorded in the month it ends in, but the monthly charge, the reconciliation and the late
+ * calls of retried jobs follow in the next weeks), and a check that did not run (a missed run is run again by hand,
+ * a deployment in between) must not let a month that crossed the alert go without its task: three months are read, each
+ * with its own task, so two missed months are found too and older ones are left to finance's own monthly look. Modelled on the AI help's cost alert ({@code HelpCosts}).
  */
 public final class AiAbsorbed {
 
@@ -41,10 +44,11 @@ public final class AiAbsorbed {
 
     private static final String NOW = "absorbedNow";
     private static final String BEFORE = "absorbedBefore";
+    private static final String BEFORE_THAT = "absorbedBeforeThat";
 
     public record CheckInput(@NotNull Instant scheduledTime) {}
 
-    /** @param tasks how many months were asked about by this run (0, 1 or 2) */
+    /** @param tasks how many months were asked about by this run (0 to 3) */
     public record CheckOutput(int tasks) {}
 
     private AiAbsorbed() {}
@@ -89,16 +93,21 @@ public final class AiAbsorbed {
                 ctx.put("input", input);
                 return ctx;
             })
-            .outputMapper(ctx -> new CheckOutput((due(ctx, NOW) ? 1 : 0) + (due(ctx, BEFORE) ? 1 : 0)))
+            .outputMapper(ctx -> new CheckOutput((due(ctx, NOW) ? 1 : 0) + (due(ctx, BEFORE) ? 1 : 0)
+                + (due(ctx, BEFORE_THAT) ? 1 : 0)))
             .step("Take the check's turn", HoldLock.<ProcessContext>exclusive(ctx -> LOCK))
             .step("Read this month's total", RunTemplate.<ProcessContext>of(TEMPLATE,
                 ctx -> Map.of("month", month(ctx, zone)), NOW))
             .step("Read last month's total", RunTemplate.<ProcessContext>of(TEMPLATE,
                 ctx -> Map.of("month", before(month(ctx, zone))), BEFORE))
+            .step("Read the total of the month before last", RunTemplate.<ProcessContext>of(TEMPLATE,
+                ctx -> Map.of("month", before(before(month(ctx, zone)))), BEFORE_THAT))
             .step("Ask finance about this month", CreateTask.<ProcessContext>when(ctx -> due(ctx, NOW),
                 ctx -> task(month(ctx, zone), total(ctx, NOW))))
             .step("Ask finance about last month", CreateTask.<ProcessContext>when(ctx -> due(ctx, BEFORE),
-                ctx -> task(before(month(ctx, zone)), total(ctx, BEFORE)))));
+                ctx -> task(before(month(ctx, zone)), total(ctx, BEFORE))))
+            .step("Ask finance about the month before last", CreateTask.<ProcessContext>when(
+                ctx -> due(ctx, BEFORE_THAT), ctx -> task(before(before(month(ctx, zone))), total(ctx, BEFORE_THAT)))));
     }
 
     /** The month of the run's time (opTime, the injected clock's), in the fiscal year's zone, as {@code feePeriod}. */

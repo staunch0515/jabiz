@@ -21,9 +21,11 @@ list:
   key: [absorbedYen]
 permissions: [qb.ai.system]
 ---*/
--- The alert as ai.AiAbsorbed reads it (not a whole number, or none yet: its default, 1,000; within 0 to 10,000,000).
+-- absorbedYen is the same total as absorbedTotalYen of qb.admin.ai-fees (what finance reads there): change the one with
+-- the other. The alert as content.ai.AiAbsorbed reads it (not a whole number, or none yet: its default, 1,000; within 0 to 10,000,000).
 -- The month's task is named qb.ai-absorbed:<month> (whether it is still open or closed by a person).
 SELECT
+    -- The same total as g_total of qb.admin.ai-fees (absorbed yen + the estimate's dollars at the frozen rate, rounded up).
     CAST(coalesce((SELECT sum(coalesce(j.{{QbAiJob.absorbedYen}}, 0)
                               + ceil(coalesce(j.{{QbAiJob.unrecordedUsd}}, 0) * coalesce(j.{{QbAiJob.feeUsdJpy}}, 0)))
                    FROM {{QbAiJob}} j WHERE j.{{QbAiJob.feePeriod}} = :month), 0) AS numeric(19, 0)) AS absorbedYen,
