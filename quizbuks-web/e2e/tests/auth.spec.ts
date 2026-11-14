@@ -10,6 +10,7 @@ import {
   run,
   signIn,
   signUp,
+  submitSignIn,
   test,
   tokenOf,
   verifiedUser,
@@ -68,7 +69,7 @@ test('a Taker registers, verifies at the app\'s own page, completes the profile 
   await again.goto('/sponsor/')
   await expect(again).toHaveURL(/\/sponsor\/login$/)
   // Nor does a taker's account open it: the console takes sponsors only.
-  await signIn(again, '/sponsor/', email)
+  await submitSignIn(again, '/sponsor/', email)
   await expect(again.getByTestId('login-error')).toBeVisible()
 })
 

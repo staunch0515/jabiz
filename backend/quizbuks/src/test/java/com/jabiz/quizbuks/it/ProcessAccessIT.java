@@ -130,6 +130,7 @@ class ProcessAccessIT extends QbItSupport {
         Map.entry("QB_AI_JOB_ERASED_CANCEL", ProcessAccess.SUB_PROCESS_ONLY),
         Map.entry("QB_AI_EXPIRE", ProcessAccess.INTERNAL),
         Map.entry("QB_AI_FEE_SETTLE", ProcessAccess.INTERNAL),
+        Map.entry("QB_AI_ABSORBED_CHECK", ProcessAccess.INTERNAL),
         Map.entry("QB_AI_JOB_CANCELLED", ProcessAccess.INTERNAL),
         // Mail (Q7a): the consumers of the transfer, payout account, top-up and publication events, and the items of the
         // hourly job of deferred short-of-funds mail.
