@@ -51,6 +51,8 @@ interface Options {
   mustAccept?: boolean
   requestFails?: boolean
   quizFails?: boolean
+  /** F-M9 b1: the quote of the request (none: not found, as before the credit). */
+  quote?: Record<string, unknown>
 }
 
 function server(options: Options = {}) {
@@ -90,6 +92,8 @@ function server(options: Options = {}) {
       case '/api/datasets/urn:jabiz:dataset:sponsor:QbSponsor/query':
         return json(200, { items: [{ attributes: { contactName: 'Sara', company: 'Acme', reviewStatus: 'APPROVED',
           revision: 1 } }], offset: 0, limit: 1 })
+      case '/api/processes/QB_SITE_PROFILE_QUOTE/latest':
+        return options.quote ? json(200, { output: options.quote }) : json(404, {})
       case '/api/processes/QB_SITE_PROFILE_REQUEST/latest':
         return options.requestFails
           ? json(422, { title: 'Refused', violations: [{ field: 'siteAddress', ruleCode: 'QB_AI_SITE_URL_INVALID',
@@ -247,6 +251,60 @@ describe('the menu item and the dialog', () => {
     expect(await within(dialog).findByTestId('site-ready')).toHaveTextContent('A draft from https://www.aini.example/ is ready.')
     await userEvent.click(within(dialog).getByTestId('site-discard'))
     await waitFor(() => expect(calls.of('/api/processes/QB_AI_DISCARD/latest')).toEqual([{ aiJobId: 'j1' }]))
+  })
+})
+
+describe('the cost of drafting from a website (F-M9 b1)', () => {
+  const ENOUGH = { charged: true, maxYen: '880', availableYen: '5000', enough: true, shortYen: '0', minPurchase: null }
+  const SHORT = { charged: true, maxYen: '880', availableYen: '100', enough: false, shortYen: '780', minPurchase: '1000' }
+
+  it('says what it may cost once there is an address, and lets it be sent when the credit covers it', async () => {
+    const calls = server({ quote: ENOUGH })
+    renderMenu()
+    const dialog = await openDialog()
+    // Nothing is asked before there is an address.
+    await within(dialog).findByTestId('site-form')
+    expect(calls.of('/api/processes/QB_SITE_PROFILE_QUOTE/latest')).toHaveLength(0)
+    await userEvent.type(within(dialog).getByTestId('site-address'), 'https://www.aini.example/')
+    expect(await within(dialog).findByTestId('ai-quote')).toHaveTextContent(
+      'This request may cost up to 880 Kudos; 5,000 Kudos available.')
+    expect(calls.of('/api/processes/QB_SITE_PROFILE_QUOTE/latest').at(-1)).toMatchObject({
+      siteAddress: 'https://www.aini.example/', profile: true, products: true, quiz: true })
+    expect(within(dialog).getByTestId('site-submit')).toBeEnabled()
+    await expectAccessible()
+  })
+
+  it('asks only when the text looks like a web address', async () => {
+    const calls = server({ quote: ENOUGH })
+    renderMenu()
+    const dialog = await openDialog()
+    const address = await within(dialog).findByTestId('site-address')
+    await userEvent.type(address, 'abc')
+    await new Promise((resolve) => setTimeout(resolve, 700))
+    expect(calls.of('/api/processes/QB_SITE_PROFILE_QUOTE/latest')).toHaveLength(0)
+    expect(within(dialog).queryByTestId('ai-quote')).toBeNull()
+    for (const bad of ['http://127.0.0.1/', 'https://user@www.aini.example/', 'https://www.aini.example:8443/', 'ftp://www.aini.example/']) {
+      await userEvent.clear(address)
+      await userEvent.type(address, bad)
+      await new Promise((resolve) => setTimeout(resolve, 700))
+      expect(calls.of('/api/processes/QB_SITE_PROFILE_QUOTE/latest'), bad).toHaveLength(0)
+    }
+    await userEvent.clear(address)
+    await userEvent.type(address, 'https://www.example.com/')
+    expect(await within(dialog).findByTestId('ai-quote')).toBeInTheDocument()
+    expect(calls.of('/api/processes/QB_SITE_PROFILE_QUOTE/latest').length).toBeGreaterThan(0)
+  })
+
+  it('says what is short with a way to buy, and does not let the request be sent', async () => {
+    const calls = server({ quote: SHORT })
+    renderMenu()
+    const dialog = await openDialog()
+    await userEvent.type(await within(dialog).findByTestId('site-address'), 'https://www.aini.example/')
+    expect(await within(dialog).findByTestId('ai-quote-short')).toHaveTextContent('780 Kudos short')
+    expect(within(dialog).getByTestId('ai-quote-buy')).toHaveAttribute('href', expect.stringContaining('/money/ai'))
+    expect(within(dialog).getByTestId('site-submit')).toBeDisabled()
+    expect(calls.of('/api/processes/QB_SITE_PROFILE_REQUEST/latest')).toHaveLength(0)
+    await expectAccessible()
   })
 })
 

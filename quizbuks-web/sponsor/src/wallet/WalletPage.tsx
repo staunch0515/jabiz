@@ -66,8 +66,6 @@ import './messages'
 import { AreaPageHeader } from '../shell/AreaPageHeader'
 import { mainAction } from '../shell/mainAction'
 import { useShellState } from '../shell/context'
-import { AiUsageMetric } from '../ai/AiUsageMetric'
-import { useDashboard } from '../analytics/hooks'
 import { VerificationTopUpLink } from '../verification/VerificationPage'
 
 /** The labels of the top-up states, from the server's dictionary (the code until it answered). */
@@ -640,20 +638,6 @@ export function BillsPage() {
     <section className="flex flex-col gap-6" data-testid="bills">
       <AreaPageHeader title={t('shell.bills.title')} description={t('shell.bills.intro')} />
       {wallet.data ? <Invoices wallet={wallet.data} /> : <WalletState wallet={wallet} />}
-    </section>
-  )
-}
-
-/** The money area's "AI credit" tab (F-F3): this month's use of the AI (Q8a); F-M9 adds buying credit here. */
-export function AiCreditPage() {
-  const { t } = useTranslation(SPONSOR)
-  const dashboard = useDashboard()
-  return (
-    <section className="flex flex-col gap-6" data-testid="ai-credit">
-      <AreaPageHeader title={t('shell.ai.title')} description={t('shell.ai.intro')} />
-      {dashboard.data
-        ? <div className="grid gap-4 sm:grid-cols-2"><AiUsageMetric zone={dashboard.data.zone} /></div>
-        : <PageState kind={dashboard.isError ? 'error' : 'loading'} />}
     </section>
   )
 }

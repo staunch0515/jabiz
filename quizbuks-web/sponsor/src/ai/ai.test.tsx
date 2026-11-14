@@ -10,6 +10,7 @@ import { EditingProvider, type Editing } from '../content/editing'
 import '../messages'
 import { resetServerClock } from '../qb/legal'
 import { AiQuestionsPanel } from './AiQuestionsPanel'
+import { TranslateDialog } from './AiTranslatePanel'
 import { AiUsageMetric } from './AiUsageMetric'
 import { materialBytes, parseCandidates, stillPolling, toAiJob } from './api'
 
@@ -53,6 +54,10 @@ interface Server {
   usages?: Record<string, unknown>[]
   jobs?: Record<string, unknown>[][]
   mustAccept?: boolean
+  /** F-M9 b1: the quote the server gives for the questions (none: not found, as before the credit). */
+  quote?: Record<string, unknown>
+  /** The request is refused for the credit. */
+  creditShort?: boolean
 }
 
 /** The server as the AI panel sees it; records what was asked. */
@@ -83,7 +88,15 @@ function server(options: Server = {}) {
         return page([{ kind: 'AI_NOTICE', versionNo: 2, title: { en: 'AI notice' },
           body: { en: '## What is sent\n\nYour quiz content.' }, changeSummary: null, requiresConsent: true,
           effectiveAt: '2026-10-01T00:00:00Z', upcomingVersionNo: null, upcomingEffectiveAt: null }])
+      case '/api/processes/QB_AI_TRANSLATE_QUOTE/latest':
+      case '/api/processes/QB_AI_PUBLICATION_TRANSLATE_QUOTE/latest':
+      case '/api/processes/QB_AI_QUESTIONS_QUOTE/latest':
+        return options.quote ? json(200, { output: options.quote }) : json(404, {})
       case '/api/processes/QB_AI_QUESTIONS_REQUEST/latest':
+        if (options.creditShort) {
+          return json(422, { title: 'Refused', violations: [{ ruleCode: 'QB_AI_CREDIT_SHORT',
+            message: 'Your AI credit does not cover this request.' }] })
+        }
         return json(200, { output: { aiJobId: 'j1', externalJobId: 'x1', status: 'QUEUED', estimatedTokens: 18000 } })
       case '/api/processes/QB_AI_ACCEPT/latest':
         return json(200, { output: { quizId: 'q1', revision: 8, aiJobId: 'j1', questionIds: ['n1'] } })
@@ -317,5 +330,96 @@ describe('the dashboard\'s AI usage', () => {
     server({ usage: { ...USAGE, enabled: false } })
     wrap(<AiUsageMetric zone="Asia/Tokyo" />)
     expect(await screen.findByTestId('metric-ai')).toHaveTextContent('AI questions are off')
+  })
+})
+
+describe('the cost of an AI request (F-M9 b1)', () => {
+  const FREE = { charged: false, maxYen: '0', availableYen: '0', enough: true, shortYen: '0', minPurchase: null }
+  const ENOUGH = { charged: true, maxYen: '330', availableYen: '5000', enough: true, shortYen: '0', minPurchase: '1000' }
+  const SHORT = { charged: true, maxYen: '330', availableYen: '100', enough: false, shortYen: '230', minPurchase: '1000' }
+
+  it('says the most the request may cost and what is available, asking with the request\'s own input', async () => {
+    const calls = server({ quote: ENOUGH })
+    const user = userEvent.setup()
+    wrap(<AiQuestionsPanel quiz={QUIZ} materials={MATERIALS} />)
+    await user.click(await screen.findByTestId('ai-generate'))
+    const dialog = await screen.findByTestId('ai-dialog')
+    const quote = await within(dialog).findByTestId('ai-quote')
+    expect(quote).toHaveTextContent('This request may cost up to 330 Kudos; 5,000 Kudos available.')
+    expect(within(dialog).queryByTestId('ai-quote-short')).toBeNull()
+    expect(within(dialog).getByTestId('ai-submit')).toBeEnabled()
+    expect(calls.of('/api/processes/QB_AI_QUESTIONS_QUOTE/latest')[0]).toMatchObject({ quizId: 'q1', count: 5,
+      difficulty: 'MEDIUM', avoidExisting: true, materialIds: ['m1', 'm2'] })
+    await expectAccessible()
+  })
+
+  it('says nothing about cost when the request is free', async () => {
+    const calls = server({ quote: FREE })
+    const user = userEvent.setup()
+    wrap(<AiQuestionsPanel quiz={QUIZ} materials={MATERIALS} />)
+    await user.click(await screen.findByTestId('ai-generate'))
+    const dialog = await screen.findByTestId('ai-dialog')
+    await waitFor(() => expect(calls.of('/api/processes/QB_AI_QUESTIONS_QUOTE/latest').length).toBeGreaterThan(0))
+    expect(within(dialog).queryByTestId('ai-quote')).toBeNull()
+    expect(within(dialog).queryByTestId('ai-quote-short')).toBeNull()
+    expect(within(dialog).getByTestId('ai-submit')).toBeEnabled()
+  })
+
+  it('says what is short with a way to buy, and does not let the request be sent', async () => {
+    const calls = server({ quote: SHORT })
+    const user = userEvent.setup()
+    wrap(<AiQuestionsPanel quiz={QUIZ} materials={MATERIALS} />)
+    await user.click(await screen.findByTestId('ai-generate'))
+    const dialog = await screen.findByTestId('ai-dialog')
+    expect(await within(dialog).findByTestId('ai-quote-short')).toHaveTextContent('230 Kudos short')
+    expect(within(dialog).getByTestId('ai-quote')).toHaveTextContent('100 Kudos available')
+    expect(within(dialog).getByTestId('ai-quote-buy')).toHaveAttribute('href', expect.stringContaining('/money/ai'))
+    expect(within(dialog).getByTestId('ai-submit')).toBeDisabled()
+    expect(calls.of('/api/processes/QB_AI_QUESTIONS_REQUEST/latest')).toEqual([])
+    await expectAccessible()
+  })
+
+  it('asks again when the count changes, once the input has rested', async () => {
+    const calls = server({ quote: ENOUGH })
+    const user = userEvent.setup()
+    wrap(<AiQuestionsPanel quiz={QUIZ} materials={MATERIALS} />)
+    await user.click(await screen.findByTestId('ai-generate'))
+    const dialog = await screen.findByTestId('ai-dialog')
+    await within(dialog).findByTestId('ai-quote')
+    await user.clear(within(dialog).getByTestId('ai-count'))
+    await user.type(within(dialog).getByTestId('ai-count'), '12')
+    await waitFor(() => expect(calls.of('/api/processes/QB_AI_QUESTIONS_QUOTE/latest').map((b) => b?.count)).toContain(12))
+    // Typing "1" then "2" asks for 12 only: the keystrokes between were not asked.
+    expect(calls.of('/api/processes/QB_AI_QUESTIONS_QUOTE/latest').map((b) => b?.count)).not.toContain(1)
+  })
+
+  it('gives the way to buy when the request itself is refused for the credit', async () => {
+    server({ creditShort: true })
+    const user = userEvent.setup()
+    wrap(<AiQuestionsPanel quiz={QUIZ} materials={MATERIALS} />)
+    await user.click(await screen.findByTestId('ai-generate'))
+    const dialog = await screen.findByTestId('ai-dialog')
+    await user.click(await within(dialog).findByTestId('ai-notice-agree'))
+    await user.click(within(dialog).getByTestId('ai-submit'))
+    const refused = await within(dialog).findByTestId('ai-credit-refused')
+    expect(refused).toHaveTextContent('Your AI credit does not cover this request.')
+    expect(within(refused).getByTestId('ai-quote-buy')).toHaveAttribute('href', expect.stringContaining('/money/ai'))
+  })
+
+  it('quotes a translation of the quiz\'s texts, and of a publication\'s with the publication\'s own input', async () => {
+    const calls = server({ quote: SHORT })
+    const user = userEvent.setup()
+    const first = wrap(<TranslateDialog language="ja" onOpenChange={() => {}} />)
+    const dialog = await screen.findByTestId('ai-translate-dialog')
+    expect(await within(dialog).findByTestId('ai-quote-short')).toHaveTextContent('230 Kudos short')
+    expect(within(dialog).getByTestId('ai-translate-submit')).toBeDisabled()
+    expect(calls.of('/api/processes/QB_AI_TRANSLATE_QUOTE/latest')[0]).toEqual({ quizId: 'q1', language: 'ja', all: false })
+    await user.click(within(dialog).getByTestId('ai-translate-scope-all'))
+    await waitFor(() => expect(calls.of('/api/processes/QB_AI_TRANSLATE_QUOTE/latest').at(-1)).toMatchObject({ all: true }))
+    first.unmount()
+    wrap(<TranslateDialog language="ja" onOpenChange={() => {}} quote={(all) => ({
+      process: 'QB_AI_PUBLICATION_TRANSLATE_QUOTE', input: { quizId: 'q1', publicationId: 'p1', language: 'ja', all } })} />)
+    await waitFor(() => expect(calls.of('/api/processes/QB_AI_PUBLICATION_TRANSLATE_QUOTE/latest')[0])
+      .toEqual({ quizId: 'q1', publicationId: 'p1', language: 'ja', all: false }))
   })
 })

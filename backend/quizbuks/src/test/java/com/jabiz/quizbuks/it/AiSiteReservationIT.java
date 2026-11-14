@@ -102,7 +102,7 @@ class AiSiteReservationIT extends AiCreditItSupport {
         String poorToken = sponsorFull(poor);
         Map<String, Object> problem = refused(SiteProfileProcesses.REQUEST, poorToken, siteInput(), 422);
         assertThat(codes(problem)).containsExactly(AiCodes.CREDIT_SHORT);
-        assertThat(String.valueOf(problem)).contains("may cost up to " + worst.toPlainString() + " yen");
+        assertThat(String.valueOf(problem)).contains("may cost up to " + worst.toPlainString() + " Kudos");
         assertThat(query("SELECT 1 FROM qb_ai_job WHERE sponsor_id = ?", poor)).isEmpty();
 
         // Set: the limits below the job's, to the yen.
