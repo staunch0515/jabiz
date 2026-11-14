@@ -33,6 +33,9 @@ class AiCreditReturnIT extends AiCreditItSupport {
     @Autowired
     JobDefinition<FeeCredits.GrantRef> qbFeeCreditExpireJob;
 
+    @Autowired
+    JobDefinition<FeeCredits.SponsorRef> qbFeeCreditRemindJob;
+
     private Map<String, Object> giveBack(String sponsor, Long amount) {
         return run(AiCreditReturns.RETURN, sponsorToken(sponsor), amount == null
             ? body("requestKey", UUID.randomUUID().toString())
@@ -171,6 +174,120 @@ class AiCreditReturnIT extends AiCreditItSupport {
             "AI_CREDIT_RETURNED", "AI_CREDIT_VOIDED"), query(MonthlyKinds.SOURCES_SQL),
             ((Number) query(MonthlyKinds.NO_SOURCE_SQL).getFirst().get("n")).longValue(),
             query(MonthlyKinds.TOTALS_SQL).getFirst());
+    }
+
+    /** The payloads of the reminders told to a sponsor: amount, count and how much is in the AI credit. */
+    private static List<String> reminders(String sponsor) {
+        return query("SELECT payload->>'amount' AS a, payload->>'count' AS c, payload->>'inAiCredit' AS i FROM "
+            + "sys_outbox_event WHERE event_type = 'qb.fee-credit.expiring' AND payload->>'sponsorId' = ? ORDER BY "
+            + "created_time", sponsor).stream().map(r -> r.get("a") + "/" + r.get("c") + "/" + r.get("i")).toList();
+    }
+
+    /** Whether the reminder's daily job selects the sponsor now (its due list). */
+    private boolean selectedForReminder(String sponsor) {
+        String system = com.jabiz.runtime.test.TestTokens.bearer(tokens, "remind-test",
+            com.jabiz.quizbuks.QbPermissions.FEE_SYSTEM);
+        return items(FeeCredits.REMIND_DUE_TEMPLATE, system, Map.of("params", Map.of("at", clock.instant().toString()),
+            "limit", 1000)).stream().anyMatch(row -> sponsor.equals(row.get("sponsorId")));
+    }
+
+    /** Ten days before the grant expires: within the notice (14 days by the setup). */
+    private void expiresInTenDays(String grantId) {
+        execute("UPDATE qb_fee_credit_grant SET expires_at = ? WHERE grant_id = ?",
+            Timestamp.from(clock.instant().plus(Duration.ofDays(10))), grantId);
+    }
+
+    /** Runs the reminder's daily job and delivers its mail. */
+    private void remind() {
+        assertThat(runJob(qbFeeCreditRemindJob)).isEqualTo(JobRunner.Outcome.SUCCEEDED);
+        deliverEvents();
+    }
+
+    /**
+     * F-M9c (A3): granted credit bought into the AI credit expires there as it would have in the account (the AI credit's
+     * daily job voids it), so its sponsor is told before, once, as of a grant still in the account (F-M2's reminder).
+     */
+    @Test
+    void grantedCreditInTheAiCreditIsRemindedBeforeItExpires() {
+        feeOn();
+        String sponsor = newSponsor("ai-remind-" + UUID.randomUUID());
+        String grantId = grant(sponsor, 1_000);
+        buy(sponsor, 1_000);
+        assertThat(money(grantRow(grantId).get("remaining"))).isZero();
+        expiresInTenDays(grantId);
+
+        assertThat(selectedForReminder(sponsor)).isTrue();
+        remind();
+        assertThat(templatesTo(sponsor)).filteredOn("qb.fee-credit.expiring"::equals).hasSize(1);
+        // All of it is in the AI credit, and the mail says so (#718 review M1, M2).
+        assertThat(reminders(sponsor)).containsExactly("1000/1/1000");
+        assertThat(grantRow(grantId).get("reminded_at")).isNotNull();
+
+        // Told once: the next day's run sends nothing more.
+        advance(Duration.ofDays(1));
+        assertThat(selectedForReminder(sponsor)).isFalse();
+        remind();
+        assertThat(templatesTo(sponsor)).filteredOn("qb.fee-credit.expiring"::equals).hasSize(1);
+    }
+
+    /** #718 review M2: a grant with some left in the account and some in the AI credit is told of all of it, once. */
+    @Test
+    void aGrantPartlyInTheAccountAndPartlyInTheAiCreditIsRemindedOfBoth() {
+        feeOn();
+        String sponsor = newSponsor("ai-remind-split-" + UUID.randomUUID());
+        String grantId = grant(sponsor, 1_000);
+        buy(sponsor, 600);
+        assertThat(money(grantRow(grantId).get("remaining"))).isEqualByComparingTo("400");
+        expiresInTenDays(grantId);
+        remind();
+        assertThat(reminders(sponsor)).containsExactly("1000/1/600");
+    }
+
+    /**
+     * #718 review M2, the counter-cases, none selected: a grant spent on an ordinary platform fee (nothing left anywhere),
+     * a grant voided before it expired (as good as expired), and a grant given back from the AI credit to the account
+     * (told of as an account's lot, nothing in the AI credit).
+     */
+    @Test
+    void grantsWithNothingLeftOrVoidedAreNotRemindedAndOneGivenBackIsAnAccountsLot() {
+        feeOn();
+        // Spent on a fee by hand (1,000 and its tax, paid from the fee credit first): nothing left.
+        String spent = newSponsor("ai-remind-spent-" + UUID.randomUUID());
+        String spentGrant = grant(spent, 1_000);
+        Map<String, Object> request = run(com.jabiz.quizbuks.fee.FeeRequests.RECORD,
+            tokenOf(user("fm9c-remind-finance"), com.jabiz.quizbuks.setup.QbRoles.ADMIN_FINANCE),
+            body("kind", com.jabiz.quizbuks.fee.QbFees.REQUEST_MANUAL, "sponsorId", spent, "amount", 1_000,
+                "reason", "Custom report"));
+        run("APPROVAL_DECIDE", tokenOf(user("fm9c-remind-content"), com.jabiz.quizbuks.setup.QbRoles.ADMIN_CONTENT),
+            body("requestId", request.get("approvalRequestId"), "decision", "APPROVE"));
+        deliverEvents();
+        assertThat(money(grantRow(spentGrant).get("remaining"))).isZero();
+        expiresInTenDays(spentGrant);
+
+        // Voided before it expired, while the AI credit still holds part of it.
+        String voided = newSponsor("ai-remind-voided-" + UUID.randomUUID());
+        String voidedGrant = grant(voided, 1_000);
+        buy(voided, 600);
+        voidGrant(voidedGrant);
+        expiresInTenDays(voidedGrant);
+
+        // Bought into the AI credit and given back: back in the account, nothing left in the credit.
+        String back = newSponsor("ai-remind-back-" + UUID.randomUUID());
+        String backGrant = grant(back, 1_000);
+        buy(back, 1_000);
+        giveBack(back, null);
+        assertThat(money(grantRow(backGrant).get("remaining"))).isEqualByComparingTo("1000");
+        expiresInTenDays(backGrant);
+
+        assertThat(selectedForReminder(spent)).isFalse();
+        assertThat(selectedForReminder(voided)).isFalse();
+        assertThat(selectedForReminder(back)).isTrue();
+        remind();
+        assertThat(reminders(spent)).isEmpty();
+        assertThat(reminders(voided)).isEmpty();
+        assertThat(grantRow(spentGrant).get("reminded_at")).isNull();
+        assertThat(grantRow(voidedGrant).get("reminded_at")).isNull();
+        assertThat(reminders(back)).containsExactly("1000/1/0");
     }
 
     @Test

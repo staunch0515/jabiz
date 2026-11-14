@@ -369,8 +369,22 @@ export async function verifiedUser(request: APIRequestContext, entry: 'app' | 's
   return email
 }
 
-/** Signs in on an entry's own sign-in page. */
+/**
+ * Signs in on an entry's own sign-in page and waits until the sign-in has landed (the page has left the sign-in page),
+ * so that what the test opens next is opened signed in. A page opened while the sign-in was still on its way was
+ * opened signed out: each test used to wait for it on its own, and one that did not failed now and then.
+ */
 export async function signIn(page: Page, base: string, email: string) {
+  await submitSignIn(page, base, email)
+  // The entries' prefixes (`/taker/`, `/sponsor/`) are plain paths: nothing in them to escape.
+  await expect(page).not.toHaveURL(new RegExp(`${base}login(?:[?#]|$)`))
+}
+
+/**
+ * Fills in and sends the sign-in form without waiting for its outcome: for a test of a sign-in that is refused (or
+ * held at another step), which stays on the sign-in page.
+ */
+export async function submitSignIn(page: Page, base: string, email: string) {
   await page.goto(`${base}login`)
   // The app and the console ask for the address (Q50); in Chinese a mailed link comes first, so the fields are found
   // by the password form they belong to, in any interface language.

@@ -153,7 +153,7 @@ public final class MailProcesses {
      * @param expiresAt when the first of them expires
      */
     public record FeeCreditMailInput(@NotBlank String sponsorId, @NotBlank String amount, @NotNull Integer count,
-        @NotBlank String expiresAt, @NotNull Instant occurredAt) {}
+        @NotBlank String expiresAt, String inAiCredit, @NotNull Instant occurredAt) {}
 
     /**
      * The payload of {@link PublicationNotices#EVENT}, and when it was published. The publisher is not validated: an
@@ -583,14 +583,18 @@ public final class MailProcesses {
                 decide(ctx, NotificationMails.FEE_CREDIT_EXPIRING, Map.of(
                     "amount", MailValues.amount(new java.math.BigDecimal(input.amount())),
                     "count", MailValues.count(input.count()),
-                    "expiresAt", values.time(Instant.parse(input.expiresAt()))));
+                    "expiresAt", values.time(Instant.parse(input.expiresAt())),
+                    // F-M9c: how much of it is in the AI credit (none in an event from before: 0).
+                    "inAiCredit", MailValues.amount(new java.math.BigDecimal(
+                        input.inAiCredit() == null ? "0" : input.inAiCredit()))));
             }, messages, NotificationMails.FEE_CREDIT_EXPIRING);
     }
 
     static FeeCreditMailInput feeCreditInput(DomainEvent event) {
         Object count = event.payload().get("count");
         return new FeeCreditMailInput(text(event, "sponsorId"), text(event, "amount"),
-            count == null ? null : Integer.valueOf(String.valueOf(count)), text(event, "expiresAt"), event.createdTime());
+            count == null ? null : Integer.valueOf(String.valueOf(count)), text(event, "expiresAt"),
+            text(event, "inAiCredit"), event.createdTime());
     }
 
     // ---- publications ----------------------------------------------------------------------------------------------
