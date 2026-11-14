@@ -76,6 +76,8 @@ jobs:
           node-version: 22
       - name: The store listing texts (docs/quizbuks/store, Q49d)
         run: node --test tools/quizbuks/store/listing.test.mjs
+      - name: No conflict markers left by a merge
+        run: node --test tools/quizbuks/ci/conflict-markers.test.mjs && node tools/quizbuks/ci/conflict-markers.mjs
       - name: The product's terms (F-F5)
         run: node --test tools/quizbuks/terms/terms.test.mjs
       - name: The numbered sections of operations.md (each number once, references to sections that exist)
