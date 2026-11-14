@@ -29,6 +29,7 @@ export const TODO_PATH: Record<TodoKey, string> = {
   invoicesOverdue: BILLS_PATH,
   feeInvoicesUncovered: BILLS_PATH,
   creditsExpiring: FEE_ACCOUNT_PATH,
+  exposureLow: PUBLICATIONS_PATH,
   onboardingInReview: PROFILE_PATH,
   publicationsInReview: `${PUBLICATIONS_PATH}?status=PENDING_REVIEW`,
   pageInReview: profilePath('page'),
@@ -39,7 +40,7 @@ export const TODO_PATH: Record<TodoKey, string> = {
 
 /** The order of the list: what waits for a person first, then money, then what is in review, then the profile. */
 export const TODO_ORDER: readonly TodoKey[] = ['claimsToConfirm', 'digitalToSend', 'unreadConversations', 'fundsShort',
-  'rewardsWaiting', 'invoicesOverdue', 'feeInvoicesUncovered', 'creditsExpiring', 'onboardingInReview', 'publicationsInReview', 'pageInReview',
+  'rewardsWaiting', 'invoicesOverdue', 'feeInvoicesUncovered', 'creditsExpiring', 'exposureLow', 'onboardingInReview', 'publicationsInReview', 'pageInReview',
   'sharedVideosInReview', 'videoUsesToConfirm', 'profileMissing']
 
 export interface TodoInput {

@@ -31,7 +31,7 @@ class SponsorTodoIT extends VideoUseItSupport {
 
     private static final List<String> COLUMNS = List.of("claimsToConfirm", "digitalToSend", "fundsShort",
         "rewardsWaiting", "invoicesOverdue", "feeInvoicesUncovered", "publicationsInReview", "pageInReview", "sharedVideosInReview",
-        "videoUsesToConfirm", "creditsExpiring");
+        "videoUsesToConfirm", "creditsExpiring", "exposureLow");
 
     private Map<String, Object> todo(String sponsor) {
         List<Map<String, Object>> rows = items("qb.sponsor.todo", sponsorToken(sponsor), body("params",

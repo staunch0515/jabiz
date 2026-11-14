@@ -3,6 +3,7 @@ package com.jabiz.quizbuks.it;
 import com.jabiz.quizbuks.fee.FeeCodes;
 import com.jabiz.quizbuks.fee.Prepayments;
 import com.jabiz.quizbuks.publishing.PublicationExposureTopUp;
+import com.jabiz.quizbuks.publishing.PublicationPrepayments;
 import com.jabiz.quizbuks.setup.QbParams;
 import org.junit.jupiter.api.Test;
 
@@ -145,6 +146,50 @@ class ExposureFeeIT extends ExposureFeeItSupport {
         // Only the sponsor's own publication.
         refused(PublicationExposureTopUp.TOP_UP, sponsorToken(reviewedSponsor("fm8-other")), body("publicationId",
             publicationId, "expectedPurchased", 110, "additional", 5), 404);
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void aQuoteIsTheTopUpsOwnFigureWritesNothingAndAShortAccountIsAnAnswerNotARefusal() {
+        // 105 froze 115; 110 would freeze 121: the quote says 6, not 5 times the price, and the top-up freezes the same.
+        String[] a = bought("fm8-quote", 105, 5_000).split("\\|");
+        submit(sponsorToken(a[0]), a[1]);
+        Map<String, Object> quote = run(PublicationExposureTopUp.QUOTE, sponsorToken(a[0]), topUp(a[0], a[1], 105, 5));
+        assertThat(dec(quote.get("deposit"))).isEqualByComparingTo("6");
+        assertThat(((Number) quote.get("purchased")).longValue()).isEqualTo(110);
+        assertThat(dec(quote.get("shortfall"))).isEqualByComparingTo("0");
+        assertThat(dec(quote.get("available"))).isGreaterThan(BigDecimal.ZERO);
+        // Read only: nothing bought, nothing set aside.
+        assertThat(dec(exposurePrepayment(a[1]).get("amount"))).isEqualByComparingTo("115");
+        assertThat(dec(row(a[1]).get("exposure_purchased"))).isEqualByComparingTo("105");
+        assertThat(ledger("2180", a[0])).isEqualByComparingTo("115");
+        Map<String, Object> done = run(PublicationExposureTopUp.TOP_UP, sponsorToken(a[0]), topUp(a[0], a[1], 105, 5));
+        assertThat(dec(done.get("frozen"))).isEqualByComparingTo(dec(quote.get("deposit")));
+        // The same refusals as the top-up for what is wrong with the publication (a stale total).
+        assertThat(codes(refused(PublicationExposureTopUp.QUOTE, sponsorToken(a[0]), topUp(a[0], a[1], 105, 5), 422)))
+            .contains(FeeCodes.EXPOSURE_PURCHASED_CHANGED);
+
+        // Short: exactly the 115 of the purchase in the account, 6 more come to 6 short: an answer, not a 422.
+        String[] b = bought("fm8-quote-short", 105, 115).split("\\|");
+        submit(sponsorToken(b[0]), b[1]);
+        Map<String, Object> shortQuote = run(PublicationExposureTopUp.QUOTE, sponsorToken(b[0]), topUp(b[0], b[1], 105, 5));
+        assertThat(dec(shortQuote.get("deposit"))).isEqualByComparingTo("6");
+        assertThat(dec(shortQuote.get("shortfall"))).isEqualByComparingTo("6");
+        assertThat(dec(shortQuote.get("available"))).isEqualByComparingTo("0");
+        assertThat(dec(exposurePrepayment(b[1]).get("amount"))).isEqualByComparingTo("115");
+        // Only the sponsor's own publication.
+        refused(PublicationExposureTopUp.QUOTE, sponsorToken(reviewedSponsor("fm8-quote-other")), topUp(a[0], a[1], 110, 5), 404);
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void theFundsCheckNamesTheExposuresAndTheLeastTheSponsorMustBuy() {
+        String[] a = bought("fm8-check-least", 105, 5_000).split("\\|");
+        Map<String, Object> check = run(PublicationPrepayments.CHECK, sponsorToken(a[0]), body("publicationId", a[1]));
+        Map<String, Object> item = ((List<Map<String, Object>>) check.get("items")).stream()
+            .filter(i -> "EXPOSURE".equals(i.get("purpose"))).findFirst().orElseThrow();
+        assertThat(((Number) item.get("purchased")).longValue()).isEqualTo(105);
+        assertThat(((Number) item.get("least")).longValue()).isEqualTo(100);
     }
 
     // ---- the top-up as the prepayment was set aside, not as the sponsor's billing is now (Fable M1) --------------------

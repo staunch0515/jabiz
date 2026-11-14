@@ -796,6 +796,10 @@ export const PATH = {
   distributionPrices: '/qb/distribution/prices',
   operatorDistributionPrice: '/qb/operator/distribution-price',
   distributionSettlements: '/qb/finance/distribution-settlements',
+  /** F-M8: every operator's exposure price (headquarters), the operator's own, and the settlements (finance). */
+  exposurePrices: '/qb/exposure-fee/prices',
+  operatorExposurePrice: '/qb/operator/exposure-price',
+  exposureSettlements: '/qb/finance/exposure-settlements',
   /** The platform's own pages. */
   tasks: '/tasks',
   /** F-C10c: the AI help's conversations handed to a person (headquarters every one, an operator its own). */
@@ -835,6 +839,16 @@ export const DISTRIBUTION = {
   settlementsTemplate: 'qb.admin.distribution-settlements',
   /** Review L5: the caller operator's own settlements (its frozen fees), through its membership. */
   operatorSettlementsTemplate: 'qb.operator.distribution-settlements',
+} as const
+
+/** F-M8 (backend `fee.ExposurePrices`, `qb.admin.exposure-*`): the exposure fee's prices and settlements. */
+export const EXPOSURE_FEE = {
+  priceSet: 'QB_EXPOSURE_PRICE_SET',
+  operatorPriceSet: 'QB_OPERATOR_EXPOSURE_PRICE_SET',
+  pricesTemplate: 'qb.admin.exposure-prices',
+  operatorPriceTemplate: 'qb.operator.exposure-price',
+  settlementsTemplate: 'qb.admin.exposure-settlements',
+  operatorSettlementsTemplate: 'qb.operator.exposure-settlements',
 } as const
 
 /**
