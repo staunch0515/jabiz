@@ -127,11 +127,17 @@ class AiFeeReportsIT extends AiCreditItSupport {
                 assertThat(money(row.get("monthJobs"))).isEqualByComparingTo("0");
             });
 
-        // Reassigned: the first operator no longer sees it, the second does.
+        // Reassigned in the month: the first operator no longer sees it; the second sees it, its credit, and of the
+        // month's fees only those frozen on itself (after the move), as its settlement counts them.
         assign(sponsor, west.operatorId());
+        job(sponsor, west.operatorId(), m, "0.05", 120, 0, "0", false);
         assertThat(items("qb.operator.sponsor-ai", northSession, request(params))).isEmpty();
         assertThat(items("qb.operator.sponsor-ai", westSession, request(params))).singleElement()
-            .satisfies(row -> assertThat(money(row.get("monthFee"))).isEqualByComparingTo("750"));
+            .satisfies(row -> {
+                assertThat(money(row.get("monthFee"))).isEqualByComparingTo("120");
+                assertThat(money(row.get("monthJobs"))).isEqualByComparingTo("1");
+                assertThat(money(row.get("aiCredit"))).isEqualByComparingTo(credit);
+            });
     }
 
     @Test

@@ -1,6 +1,6 @@
 /*---
 id: qb.operator.sponsor-ai
-description: "F-M9: one sponsor of the caller's operator and its AI fee - the AI credit it holds, the AI fee of a month and how many jobs it was charged for"
+description: "F-M9: one sponsor of the caller's operator and its AI fee - the AI credit it holds, the AI fee of a month charged under the caller's operator (frozen on each job) and how many jobs it was charged for"
 entities: [QbSponsor, QbSponsorOperator, QbOperatorMember, QbPrepayment, QbAiJob]
 datasets:
   QbSponsor: urn:jabiz:dataset:default:QbSponsor
@@ -26,7 +26,7 @@ permissions: [qb.operator.use]
 -- Only a sponsor the caller's operator looks after, as qb.operator.sponsor-billing: the membership dataset is the
 -- caller's own, so a sponsor assigned to another operator (or to none any more) has no row. The credit is what its open
 -- AI prepayments still hold (before tax, as the sponsor sees it); the month's fee is what the jobs whose result was
--- recorded in the month charged (feeYen, before tax), counting the jobs that carry a fee.
+-- recorded in the month charged (feeYen, before tax) under the caller's operator, counting the jobs that carry a fee.
 SELECT
     s.{{QbSponsor.userId}}  AS userId,
     s.{{QbSponsor.company}} AS company,
@@ -47,5 +47,8 @@ LEFT JOIN LATERAL (
            count(*) FILTER (WHERE x.{{QbAiJob.feeYen}} > 0) AS j_jobs
     FROM {{QbAiJob}} x
     WHERE x.{{QbAiJob.sponsorId}} = s.{{QbSponsor.userId}}
-      AND x.{{QbAiJob.feePeriod}} = :month) j ON true
+      AND x.{{QbAiJob.feePeriod}} = :month
+      -- Only the jobs whose fee is the caller's operator's (frozen on the job, as the settlement counts them): after
+      -- the sponsor moves, the new operator does not see the fees of before (the coordinator, 2026-11-14).
+      AND x.{{QbAiJob.feeOperatorId}} = CAST(me.{{QbOperatorMember.operatorId}} AS text)) j ON true
 WHERE s.{{QbSponsor.userId}} = :sponsorId
