@@ -115,6 +115,31 @@ function renderAt(path: string, route: string, element: ReactNode) {
 
 const renderAccount = () => renderAt('/qb/operator/account', '/qb/operator/account', <OperatorAccountPage />)
 
+describe('the carried take-back', () => {
+  it('says that a carried take-back of granted credit goes on next month, only when the latest settlement carries one', async () => {
+    server.rows[TEMPLATE.ownSettlements] = [{ settlementId: 's2', month: '2026-10', giftCarriedOut: '300' }]
+    const { container } = renderAccount()
+    const note = await screen.findByTestId('account-carried-take-back')
+    expect(note).toHaveTextContent('Granted credit not yet taken back is carried to next month and taken back then.')
+    expect(note).toHaveTextContent('300 Kudos')
+    expect(server.runQuery).toHaveBeenCalledWith(TEMPLATE.ownSettlements, { limit: 1 })
+    await expectAccessible(container)
+  })
+
+  it('shows nothing when the latest settlement carries nothing, or there is none', async () => {
+    server.rows[TEMPLATE.ownSettlements] = [{ settlementId: 's2', month: '2026-10', giftCarriedOut: '0' }]
+    const first = renderAccount()
+    await screen.findByTestId('account-balance')
+    await waitFor(() => expect(server.runQuery).toHaveBeenCalledWith(TEMPLATE.ownSettlements, { limit: 1 }))
+    expect(screen.queryByTestId('account-carried-take-back')).not.toBeInTheDocument()
+    first.unmount()
+    server.rows[TEMPLATE.ownSettlements] = []
+    renderAccount()
+    await screen.findByTestId('account-balance')
+    expect(screen.queryByTestId('account-carried-take-back')).not.toBeInTheDocument()
+  })
+})
+
 describe('the plans', () => {
   it('takes the latest approved change not after the month, else plan 1', () => {
     const changes = [

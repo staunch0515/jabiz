@@ -318,6 +318,11 @@ class TopUpConfig {
                 "zh", "抵用到已作废账单的贷项", "ja", "取消済みの請求書への充当")
             .item(ReconChecks.CREDIT_UNUSED_WITH_DUE, "en", "Credit left while an invoice is unpaid",
                 "zh", "有未用贷项却有未付账单", "ja", "返還インボイスの残高があるのに未払いの請求書")
+            .item(ReconChecks.INVOICE_PAID_SUM, "en", "Invoices whose paid amount or credit does not add up",
+                "zh", "已付金额或抵用与明细之和不符的账单", "ja", "支払額または充当額が明細の合計と一致しない請求書")
+            .item(ReconChecks.AUTO_PAY_MISSED, "en", "Unpaid invoices of sponsors whose account has money, with the "
+                + "automatic payment on", "zh", "开启自动付款后，账户有钱却仍未付的账单", "ja",
+                "自動支払いが有効なのに、口座に残高がある主催者の未払い請求書")
             .item(ReconChecks.OPERATOR_SETTLEMENT_WAITING, "en", "Operators without their settlement of a month "
                 + "(and the step they wait for)", "zh", "尚无某月结算的运营商（及其等待的步骤）",
                 "ja", "月の精算がまだない運営パートナー（待っている手順つき）")
@@ -331,6 +336,15 @@ class TopUpConfig {
             .item(ReconChecks.OPERATOR_GIFT_CARRY_OPEN, "en", "Suspended operators that still carry credit to take "
                 + "back (a note)", "zh", "已停用的运营商仍有待扣回的赠送额度（仅提示）",
                 "ja", "停止中の運営パートナーに回収待ちのクレジットが残っている（お知らせのみ）")
+            // F-M15 b: the wind-ups of erased sponsors' platform fee accounts.
+            .item(ReconChecks.ERASED_GIFT_LEFT, "en", "Granted credit left after an erased Sponsor's wind-up",
+                "zh", "已注销发起方收尾后仍有剩余的赠送额度", "ja", "削除された主催者の精算後に残る付与クレジット")
+            .item(ReconChecks.ERASED_CLOSE_OPEN, "en", "Erased Sponsors' wind-ups taking long",
+                "zh", "迟迟未完成的已注销发起方收尾", "ja", "完了しない削除済み主催者の精算")
+            .item(ReconChecks.ERASED_FEE_OWED, "en", "Fees an erased Sponsor still owes (a note)",
+                "zh", "已注销发起方仍欠的平台费（仅提示）", "ja", "削除された主催者の未払い料金（お知らせのみ）")
+            .item(ReconChecks.ERASED_NO_CLOSURE, "en", "Erased Sponsors with money and no wind-up",
+                "zh", "有资金却没有收尾记录的已注销发起方", "ja", "資金があるのに精算記録のない削除済み主催者")
 
             // Retired: named in the summaries of runs written before its rename (ReconChecks.RETIRED).
             .disabledItem(ReconChecks.DISTRIBUTION_PRICE_OUT_OF_RANGE, "en", "Distribution prices outside the "

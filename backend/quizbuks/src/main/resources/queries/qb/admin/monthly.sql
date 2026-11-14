@@ -182,6 +182,10 @@ kinds AS (
                WHEN p.src = 'QbFeeCharge' AND NOT p.reversal AND p.accts IN ('1130,4120', '1130,2150,4120')
                     AND p.a1130 > 0 AND p.a4120 < 0 AND p.a2150 <= 0 AND left(p.ref, 7) = 'fee_ai_'
                     THEN 'AI_CHARGED'
+               -- F-M7 / F-M14 question 5: the audience fee charged (the reference fee_audience_<period>).
+               WHEN p.src = 'QbFeeCharge' AND NOT p.reversal AND p.accts IN ('1130,4120', '1130,2150,4120')
+                    AND p.a1130 > 0 AND p.a4120 < 0 AND p.a2150 <= 0 AND left(p.ref, 13) = 'fee_audience_'
+                    THEN 'AUDIENCE_CHARGED'
                -- Q87b: a platform fee charged (1130 against 4120 and the tax), paid from the cash account, voided.
                WHEN p.src = 'QbFeeCharge' AND NOT p.reversal AND p.accts IN ('1130,4120', '1130,2150,4120')
                     AND p.a1130 > 0 AND p.a4120 < 0 AND p.a2150 <= 0 THEN 'FEE_CHARGED'
@@ -297,7 +301,7 @@ FROM (VALUES (1, 'TOPUP'), (2, 'BANK_TOPUP'), (3, 'MANUAL_TOPUP'), (4, 'GRANT'),
              (38, 'DISTRIBUTION_RELEASED'), (39, 'FEE_CREDIT_NOTE'), (40, 'FEE_CREDIT_RECOVERED'),
              (41, 'EXPOSURE_CHARGED'), (42, 'EXPOSURE_DEPOSIT'), (43, 'EXPOSURE_RELEASED'), (44, 'AI_CHARGED'),
              (45, 'AI_CREDIT_BOUGHT'), (46, 'AI_CREDIT_USED'), (47, 'AI_CREDIT_RETURNED'), (48, 'AI_CREDIT_VOIDED'),
-             (49, 'OTHER'))
+             (49, 'AUDIENCE_CHARGED'), (50, 'OTHER'))
          AS c (seq, kind)
 LEFT JOIN kinds k ON k.kind = c.kind
 GROUP BY c.seq, c.kind

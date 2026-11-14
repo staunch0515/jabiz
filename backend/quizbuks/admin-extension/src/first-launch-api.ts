@@ -33,7 +33,6 @@ export const WAITING_ROWS: readonly WaitingRow[] = [
  * against the registry by `FirstLaunchSwitchesTemplateTest`.
  */
 export const KEY_BEFORE_MEANING_ROWS: readonly WaitingRow[] = [
-  { key: 'qb.fee.auto-pay.enabled', group: 'autopay', waitingFor: 'F-M13c' },
 ]
 
 /**

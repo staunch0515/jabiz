@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query'
-import type { ReactNode } from 'react'
+import { Fragment, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Link } from 'react-router'
 import {
@@ -19,12 +19,19 @@ import {
 import { readAccountBalances, readFinanceSummary, readReconSummary } from './finance-api'
 import { readFeeAccountTotals } from './fee-api'
 import { LoadFailed, Section } from './components'
-import { levelCounts } from './finance'
+import { levelCounts, type LevelCounts } from './finance'
 import { FundSwitches } from './FundSwitches'
 import { money, useLabels, when } from './hooks'
-import { ACCOUNTS, DICTIONARY, PATH, PERMISSION } from './ids'
+import { ACCOUNTS, DICTIONARY, PATH, PERMISSION, RECON_LEVELS, type ReconLevel } from './ids'
 
 const linkClass = 'text-primary font-medium underline-offset-4 hover:underline'
+
+/** Which of a run's counts belongs to each level. */
+const LEVEL_COUNT: Record<ReconLevel, (counts: LevelCounts) => number> = {
+  DIFFERENCE: (counts) => counts.differences,
+  ATTENTION: (counts) => counts.attention,
+  NOTE: (counts) => counts.notes,
+}
 
 /** A count that leads to the page listing what it counts. */
 function CountLink({ to, count, label, testId }: { to: string; count: number; label: string; testId: string }) {
@@ -148,6 +155,7 @@ export default function FinanceOverviewPage() {
   } else if (reconciles && recon.data) {
     const r = recon.data
     const levels = levelCounts(r.lastRunSummary)
+    const runId = r.lastRunId
     reconItems = [
       { key: 'recon', label: t('finance.overview.lastRun'), value: r.lastRunId
         ? (
@@ -159,11 +167,19 @@ export default function FinanceOverviewPage() {
           </Link>
         )
         : t('finance.overview.noRun') },
-      ...(r.lastRunId ? [{ key: 'levels', label: t('finance.overview.lastRunLevelsLabel'), value: (
-        <Link to={PATH.reconRun(r.lastRunId)} className={linkClass} data-testid="finance-last-run-levels"
-          data-differences={levels.differences} data-attention={levels.attention} data-notes={levels.notes}>
-          {t('finance.overview.lastRunLevels', { d: levels.differences, a: levels.attention, k: levels.notes })}
-        </Link>) }] : []),
+      ...(runId ? [{ key: 'levels', label: t('finance.overview.lastRunLevelsLabel'), value: (
+        <span data-testid="finance-last-run-levels" data-differences={levels.differences}
+          data-attention={levels.attention} data-notes={levels.notes}>
+          {RECON_LEVELS.map((level, i) => (
+            <Fragment key={level}>
+              {i > 0 && ' / '}
+              <Link to={PATH.reconRun(runId, level)} className={linkClass} data-testid="finance-last-run-level"
+                data-level={level}>
+                {t(`finance.recon.levelCount.${level}`, { n: LEVEL_COUNT[level](levels) })}
+              </Link>
+            </Fragment>
+          ))}
+        </span>) }] : []),
       { key: 'tasks', label: t('finance.overview.openTasks'), value: (
         <CountLink to={PATH.tasks} count={r.openTasks}
           label={t('finance.overview.openTasksLink', { n: r.openTasks })} testId="finance-tasks" />) },

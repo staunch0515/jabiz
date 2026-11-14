@@ -8,6 +8,7 @@ import com.jabiz.document.DocumentLayout;
 import com.jabiz.event.EventSubscription;
 import com.jabiz.job.JobDefinition;
 import com.jabiz.job.JobItems;
+import com.jabiz.quizbuks.wallet.Reconciliation;
 import com.jabiz.quizbuks.wallet.TransferProcesses;
 import com.jabiz.runtime.approval.ApprovalProcesses;
 import com.jabiz.entity.EntityDefinition;
@@ -320,6 +321,20 @@ public class OperatorConfig {
             .storage(s -> s.driver("r2dbc-postgresql").connectionPoolRef(poolRef)));
     }
 
+    /**
+     * F-M14b: the reconciliation's items of the operator's own sponsors (D64, through the sponsor's assignment), read
+     * only and only by {@code qb.operator.recon-notes}; see {@link Reconciliation#OPERATOR_ITEM_DATASET}.
+     */
+    @Bean
+    DatasetDefinition qbOperatorReconItemDataset() {
+        return DatasetDefinition.define(Reconciliation.OPERATOR_ITEM_DATASET, d -> d
+            .targetEntityType(Reconciliation.ITEM_ENTITY_NAME)
+            .permissions(QbPermissions.RECONCILE, QbPermissions.SPONSOR_VIEW_WRITE)
+            .policy(p -> p.readOnly(true).allowTimeTravel(false))
+            .scope(OperatorScopes.of(Reconciliation.ITEM_ENTITY_NAME))
+            .storage(s -> s.driver("r2dbc-postgresql").connectionPoolRef(poolRef)));
+    }
+
     @Bean
     StaticDictionary qbOperatorSettlementLineKindDictionary() {
         return StaticDictionary.define(QbSettlementLines.KIND_DICTIONARY, d -> d
@@ -346,6 +361,12 @@ public class OperatorConfig {
         qbOperatorSettlementRun(@Value("${quizbuks.operator-settlement.max-lines:"
             + OperatorSettlements.MAX_LINES + "}") int maxLines) {
         return OperatorSettlements.run(zone, maxLines);
+    }
+
+    @Bean
+    ProcessDefinition<OperatorSettlements.WaitingInput, OperatorSettlements.WaitingOutput, ProcessContext>
+        qbOperatorSettlementsWaiting() {
+        return OperatorSettlements.waiting(zone);
     }
 
     @Bean

@@ -45,7 +45,7 @@ The Platform fee account has two parts: **Granted credit** (platform fee credit 
 
 在"资金 → 平台费账户"顶部看合计、赠送额度和现金；下面按使用顺序列出每一笔剩余（含到期日）和每一笔费用是怎样付的。
 
-自动付款开启期间，现金到账（刷卡、银行转账、运营商转入）或获得赠送额度后，您未付的账单会按开具先后自动支付，无需操作，每次付款都会邮件告知。账户有多少付多少，不够的部分仍然未付。
+自动付款开启期间，现金到账（刷卡、银行转账、运营商转入）或获得赠送额度后，您未付的账单会按开具先后自动支付，无需操作，付款后约 10–20 分钟内，这段时间付掉的账单会合并成一封邮件告知（含您自己手工付的）。账户有多少付多少，不够的部分仍然未付。
 
 ### 日本語 · アカウントの残高が足りないときは？ どこで確認できる？
 
@@ -59,7 +59,7 @@ The account pays as far as it goes; the rest stays on the invoice as unpaid. Whi
 
 The top of "Money → Platform fee account" shows the total, the Granted credit and the cash; below it, every amount that is left in the order it is used (with its expiry), and how each fee was paid.
 
-自動支払いが有効になっている間は、現金の入金（カード・銀行振込・運営パートナーからの移動）や付与クレジットの付与があると、未払いの請求書が古いものから自動で支払われます。操作は不要で、支払いのたびにメールでお知らせします。アカウントにある分だけが支払われ、足りない分は未払いのまま残ります。
+自動支払いが有効になっている間は、現金の入金（カード・銀行振込・運営パートナーからの移動）や付与クレジットの付与があると、未払いの請求書が古いものから自動で支払われます。操作は不要で、支払い後10〜20分ほどで、その間に支払われた請求書（ご自身の手動払いを含む）をまとめて1通のメールでお知らせします。アカウントにある分だけが支払われ、足りない分は未払いのまま残ります。
 
 ### 中文 · 贷项凭证是什么？发布提前结束会退钱吗？
 
@@ -69,7 +69,7 @@ The top of "Money → Platform fee account" shows the total, the Granted credit 
 
 返還インボイスは、お支払いいただくプラットフォーム利用料を減らすものです。元の料金と請求書はそのままです。発行されるのは、公開が早く終了したときの対象条件の料金のうち未使用日数分（返金するかどうかはプラットフォームの設定によります。プラットフォームによる取り下げは対象外です）と、プラットフォームの経理担当が料金を訂正するとき（別の管理者が承認します）です。まずその料金の請求書の未払い分に充当し、前払いの料金は残りを支払元（現金または付与クレジット。期限切れの付与クレジットには戻りません）に返金します。それでも残る分は次回以降の請求書に先に充当します。「資金 → 請求書」の「返還インボイス」で一覧と PDF を確認でき、請求書には充当額が記されます。
 
-While automatic payment is on, when cash arrives (by card, by bank transfer, or moved from your Operator) or Granted credit is given, your unpaid invoices are paid by themselves, the oldest first. You do nothing, and each payment is told to you by mail. The account pays as far as it goes; what it cannot cover stays unpaid.
+While automatic payment is on, when cash arrives (by card, by bank transfer, or moved from your Operator) or Granted credit is given, your unpaid invoices are paid by themselves, the oldest first. You do nothing, and the invoices paid within about 10 to 20 minutes (including any you pay by hand) are told to you in one mail. The account pays as far as it goes; what it cannot cover stays unpaid.
 
 ### English · What is a credit note? Do I get money back when a publication ends early?
 
@@ -86,6 +86,18 @@ A credit note lowers what you owe in platform fees; the fee and its invoice stay
 ### English · Is the "payment status" on an invoice current?
 
 No. An invoice's PDF is made the **day you first download it**, and states the payment status as of that day: how much was paid with Granted credit, the prepayment, cash and credit notes, and what is still owed. Later payments do not change the PDF (it is a fixed document); the latest status is under "Money → Invoices", on the row you open. The amounts, tax and lines never change; tax is subtotalled by rate. A voided invoice's original can still be downloaded, and the page says the day it was voided.
+
+### 中文 · 账户被暂停时，我的钱怎么办？
+
+账户被暂停期间不能登录，进行中的发布也随之暂停；**钱不会被没收**。平台费账户里的现金冻结：不能充值、不能提现，解除暂停后照常使用。赠送额度不能自己使用，也不再发放新的，但仍**按原来的有效期到期**，暂停期间到期的照常失效。暂停的发布到结束时间（或由管理员结束）后照常结算，预付款里没用完的退回原处：现金回到平台费账户，赠送额度回到原来那一笔（已过期的随即失效）。未付的平台费照常计入，账单照常到期。欠学者的现金奖励仍须结清。解除暂停后，可以在发起方页面"资金 → 平台费账户"查看余额与明细。有疑问请联系客服。
+
+### 日本語 · アカウントが停止されたとき、お金はどうなりますか？
+
+アカウントの停止中はログインできず、実施中の公開も一時停止になります。**お金が没収されることはありません**。プラットフォーム利用料アカウントの現金は凍結され、チャージや出金はできません。停止が解除されると通常どおり使えます。付与クレジットは自分では使えず、新しい付与もありませんが、**もとの有効期限どおりに失効**し、停止中に期限が来たものは通常どおり失効します。一時停止した公開は、終了時刻（または管理者による終了）の後に通常どおり精算され、前払金の使われなかった分はもとの場所に戻ります。現金はプラットフォーム利用料アカウントへ、付与クレジットはもとの付与分へ戻ります（期限切れのものはその場で失効します）。未払いのプラットフォーム利用料は通常どおり計上され、請求書は通常どおり期限を迎えます。テイカーへの現金特典の支払いは引き続き必要です。停止が解除された後、主催者ページの「資金 → プラットフォーム利用料アカウント」で残高と明細を確認できます。ご不明な点はサポートにお問い合わせください。
+
+### English · What happens to my money while my account is suspended?
+
+While your account is suspended you cannot sign in, and your running publications are paused; **your money is not taken away**. The cash in your Platform fee account is frozen: you cannot top up or withdraw it, and you can use it as usual once the suspension is lifted. You cannot spend Granted credit yourself and no new credit is granted, but it still **expires on its original date**, also during the suspension. A paused publication is settled as usual when it ends (at its end time, or when an administrator ends it), and what its prepayment did not use goes back where it came from: cash to your Platform fee account, Granted credit to the grant it came from (voided at once if that grant has expired). Platform fees still count and invoices still fall due. Cash rewards owed to Takers still have to be paid. Once the suspension is lifted, see the balance and its details under "Money → Platform fee account" in the Sponsor app. If anything is unclear, please contact support.
 
 ### 中文 · 删除账户时，账户里的钱怎么办？
 

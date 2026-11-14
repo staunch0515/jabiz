@@ -604,7 +604,7 @@ FROM pg_stat_statements ORDER BY total_exec_time DESC LIMIT 20;
 - **现金奖励的争议**（F-S1）：平台不处理。学者提出争议只通知发起方；双方解决后由发起方再次"标记已支付"（确认期限重新起算），或学者直接确认。平台的现金奖励列表只读、可按运营商筛选，没有裁决。
 - **已有安装的授权**（F-S1）：`QB_SETUP` 只补、不收回。F-S1 之前已执行过 `QB_SETUP` 的安装，在「用户与角色」中从角色 `QB_ADMIN_CONTENT` 去掉 `qb.review.sponsor`、`qb.review.publication`、`qb.admin.reward-methods`、`qb.redemption.void`、`qb.digital.resolve`、`qb.prospect.use`、`qb.certification.manage`（`approval.decide` 保留，财务四眼要它），并去掉已删除的 `qb.cash.resolve`（任何角色上都去掉）；超级管理员角色补上 `approval.scope.move`（不是受保护的权限：再执行一次 `QB_SETUP` 即补）。原来由内容管理员做审核的人，改为某个运营商（通常是默认运营商）的成员并取得 `QB_OPERATOR`。测试系统直接重置数据库。
 - **方案**（Q48e-2）：五种方案（每月固定费、平台分成；受控参数 `qb.operator.plan.<1..5>.fee|share`，`QB_SETUP` 提出 0/50%、20,000/40%、40,000/30%、60,000/20%、100,000/10%）。新运营商为方案 1；总部在运营商页面提出从以后某月起的方案，另一位管理员（`qb.topup.bank.approve`）在待办中批准后生效。
-- **月结算**（Q48b、Q48e-2）：每月 2 日 01:13（日本时间）任务 `qb.operator-settlement` 为每个运营商结算上个月：其发起方发布的抽成 ×（1 − 当月方案的平台分成），减去当月方案的固定费（停用的运营商不收）与获客费用，记入运营商的账户（不够扣的结转到下月），并可签发结算单。前提：`qb.creator-fee-rate` 大于 0、分录导出的 `qb.journal.account.2140` / `5130` 已设。
+- **月结算**（Q48b、Q48e-2、F-M12）：每天 02:13（日本时间，1 日除外）任务 `qb.operator-settlement` 为每个运营商结算它最早的、已结束而还没有结算的月份：它的发起方的平台费（税前，种类在 `qb.operator.share.kinds` 中的，去掉成本部分）减去用平台承担的赠送额度付的部分，×（1 − 当月方案的平台分成），再减去当月方案的固定费（停用的运营商不收）、获客费用与扣除，余下的分成扣回运营商承担的赠送额度，记入运营商的账户（不够扣的结转到下月），并可签发结算单。发起方发布的奖励抽成不再进运营商的结算（需求方 2026-11-13 同意）。规则、就绪条件与核对见 §7.60。前提：分录导出的 `qb.journal.account.2140` / `5130` / `5140` / `4110` 已设。
 - **提现**（Q48e-2）：钱都在平台。运营商负责人在运营商管理系统「账户」设银行账户（改后 `qb.operator.withdrawal.cooldown-hours` 小时内不能提现）、申请提现（至少 `qb.operator.withdrawal.min`，至多余额，同时一笔）；财务在「运营商提现」银行付款后点"登记付款"，另一位管理员在待办中批准后才过账（2140 / 1120），驳回即回到"已申请"；财务也可驳回申请并写理由。手续费由平台承担。Q48e-2 之前签发的结算单照旧逐张付款。
 - **平台运营商不开放提现**（F-M12 a0，需求方 2026-11-13）：平台运营商（`defaultForNew` 为真的那一个，即自助注册的发起方所归的默认运营商）的账户不能提现：负责人申请即 422 `QB_OPERATOR_WITHDRAWAL_PLATFORM`，什么也不写；「账户」页不显示提现表单，改为一行说明。结算照常记入它的账户，转给直营发起方照常可用。默认运营商改为另一家后，以申请时的标志为准：新的默认运营商被拒，原来的可以申请。**部署本项前**查一次有没有平台运营商未结的提现申请：`SELECT w.withdrawal_id, w.amount, w.status FROM qb_operator_withdrawal w JOIN qb_operator o ON o.operator_id = w.operator_id WHERE o.default_for_new AND w.status IN ('REQUESTED', 'PAYING')`；有的照现有流程由财务处理（驳回或登记付款），本项不自动改它们。
 
@@ -1381,6 +1381,7 @@ Quiz 与发布有主题词（平台词表中的词与自定义词），学者可
 - **差异**：已结束月份的账会因此错或不全。运行为 `DIFF`，告警 `qb-reconcile-diff`，月末分录导出被拒（`QB_JOURNAL_RECON_NOT_OK`）；财务（`qb.reconcile`）每天至多一个待办"核对发现差异"，标题写明差异条数与涉及几项核对。
 - **需关注**：账是平的、已结束月份不受影响，只需要有人看或做一个决定。运行仍为 `OK`，不告警、不拦导出；每个（核对项, 对象）给负责的人一个待办"核对需关注"，标题写明核对项、对象、应为与实际。现在的五项：`DISTRIBUTION_PRICE_RANGE`（运营商的配送费价目超出总部范围：改价目或改范围）、`EXPOSURE_PRICE_RANGE`（运营商的曝光费价目超出总部范围，同上，§7.54）、`AUDIENCE_REFUND_NO_PERIOD`（财务决定开凭证或用 `QB_AUDIENCE_REFUND_CLOSE` 记下不开，§7.50）、`CREDIT_UNUSED_WITH_DUE`（下一次开账单或抵用时自行了结）、`HELP_USAGE_TOTAL`（AI 帮助的月用量，由内容管理员负责，见 §7.53）。
 - **提示**：只是信息（`TAKER_WALLET_LAG`、`DISTRIBUTION_AT_FLOOR`、`EXPOSURE_UNPURCHASED`、`AI_RESERVATION_SHORT`），不建待办。
+  其中 `DISTRIBUTION_AT_FLOOR` 与 `EXPOSURE_UNPURCHASED` 也给运营商看（F-M14b）：运营商管理系统「发起方的计费方式」页下方的「每日核对的提示」块，列出最近一次核对中关于**现在分配给本运营商的**发起方的这两种提示（发起方、发布个数），每种一句说明。块只读，不建待办，运营商不需要处理。它读模板 `qb.operator.recon-notes`，按会话的运营商限定（D64）；其他核对项的条目与金额运营商都看不到。**改派之后**：提示按读取时发起方的分配显示，与核对何时运行无关。发起方改派到另一个运营商，连同它在原运营商时提交的发布，立即出现在新运营商的块里，原运营商不再看到；"按运营商的配送费下限计费"指的是发布提交时的运营商的下限（发布的卡片冻结了当时的运营商），不一定是新运营商的。没有提示时块里写「最近一次核对没有关于这些发起方的提示」并给出核对时刻，从未运行过时写「每日核对还没有运行过」。
 - **待办的建立与关闭**：任务 `qb.recon-attention` 与 `qb.recon-tasks-close`，每天 UTC 18:52（日本时间 03:52，核对之后 15 分钟），每次至多 200 项，剩下的次日继续；补跑用 `JOB_RUN_REQUEST`。
   - **关注待办**：同一对象只要有一个未办的就不再建；不再出现即以完成关闭。人手工关了而条件还在，次日会重建：要处理的是条件，不是待办。
   - **差异待办**：后一天的取代前一天的（前一天的以取消关闭）；一次没有差异的运行把它以完成关闭。
@@ -1455,7 +1456,7 @@ Quiz 与发布有主题词（平台词表中的词与自定义词），学者可
 
 ### 7.55 每日核对与月报分类一览（F-M14a）
 
-**核对总表**（`ReconChecks.ALL`，共 63 项：差异 53、需关注 5、提示 5）。级别的含义与待办见 §7.52；"差异"拦月末分录导出，"需关注"与"提示"不拦。"报开发"＝代码或数据有缺陷，不要手工改表；"补跑"一律经 `JOB_RUN_REQUEST`（任务名、计划时刻与原因）。核对页每组标题下的一句"怎么办"与本表一致。
+**核对总表**（`ReconChecks.ALL`，按它的顺序，共 69 项：差异 55、需关注 8、提示 6）。级别的含义与待办见 §7.52；"差异"拦月末分录导出，"需关注"与"提示"不拦。"报开发"＝代码或数据有缺陷，不要手工改表；"补跑"一律经 `JOB_RUN_REQUEST`（任务名、计划时刻与原因）。核对页每组标题下的一句"怎么办"与本表一致。
 
 | 码 | 查什么 | 级别 | 常见原因 | 怎么办 | 谁处理 | 相关项 |
 |---|---|---|---|---|---|---|
@@ -1494,15 +1495,6 @@ Quiz 与发布有主题词（平台词表中的词与自定义词），学者可
 | `DISTRIBUTION_FINAL_MISSING` | 结束后的最后一次结算漏做 | 差异 | 最后结算任务失败 | 补跑配送费最后结算 | 财务 | DISTRIBUTION_UNSETTLED |
 | `DISTRIBUTION_PRICE_RANGE` | 运营商价目超出总部现在的范围 | 需关注 | 总部收窄了范围 | 请运营商改价目，或总部调整范围（受控） | 财务 | DISTRIBUTION_AT_FLOOR |
 | `DISTRIBUTION_AT_FLOOR` | 按下限计费的进行中的发布 | 提示 | 发起方自报的档位金额过低 | 不用处理（给运营商与总部看） | — | DISTRIBUTION_PRICE_RANGE |
-| `EXPOSURE_DEPOSITS` | 2180 用途曝光费（按发布）= 未关闭的预付款剩余 | 差异 | 预付款被手工改过，或某次冻结 / 追加没有写全 | §7.54；报开发 | 财务 | EXPOSURE_UNIT_MISMATCH |
-| `EXPOSURE_SETTLED_OVER` | 某发布各结算行的次数之和超过已购 | 差异 | 有人改了已购，或重复结算 | §7.54；报开发 | 财务 | EXPOSURE_AMOUNT_MISMATCH |
-| `EXPOSURE_UNSETTLED` | 月末之后过了 `qb.exposure.unsettled-after-hours` 仍没有该月或 `final` 的结算行 | 差异 | 月度任务没有运行或该项失败 | 看任务的运行与失败的项，修好后补跑 `qb.exposure-fee`（最早的月份起逐月，§7.54） | 财务 | EXPOSURE_FINAL_MISSING |
-| `EXPOSURE_FINAL_MISSING` | 发布结束超过 `qb.exposure.final-missing-after-hours` 仍没有 `final` 行 | 差异 | 结束任务没有运行或该项失败 | 看任务的运行与失败的项，修好后补跑 `qb.exposure-final` | 财务 | EXPOSURE_UNSETTLED |
-| `EXPOSURE_SETTLED_SHORT` | `final` 行的次数少于它那一刻已计入的次数（不超过已购） | 差异 | 结算行写错 | 补结算前先看该发布的各行（§7.54）；报开发 | 财务 | EXPOSURE_SETTLED_OVER |
-| `EXPOSURE_AMOUNT_MISMATCH` | 各结算行的金额之和 ≠ ⌈最大次数 × 单价⌉ | 差异 | 有行被手工动过或重复 | 报开发 | 财务 | EXPOSURE_SETTLED_OVER |
-| `EXPOSURE_UNIT_MISMATCH` | 只有已购没有单价，或只有单价没有已购 | 差异 | 两者本应一起写 | 查最近的提交或回到草稿的记录；报开发 | 财务 | EXPOSURE_DEPOSITS |
-| `EXPOSURE_PRICE_RANGE` | 运营商的曝光价目超出总部现在的范围 | 需关注 | 总部改了范围 | 请运营商重设价目，或总部放宽范围（受控） | 财务 | EXPOSURE_UNPURCHASED |
-| `EXPOSURE_UNPURCHASED` | 进行中、用他人视频却没有已购的发布 | 提示 | 开关打开之前提交的，或运营商没有价目 | 不用处理（给运营商与总部看，不建待办） | — | EXPOSURE_PRICE_RANGE |
 | `AUDIENCE_REFUND_MISSING` | 结束后超过小时数仍未判定退回 | 差异 | 退回任务失败或没跑 | 补跑 qb.audience-refund（§7.50） | 财务 | AUDIENCE_REFUND_NO_PERIOD |
 | `AUDIENCE_REFUND_NO_PERIOD` | 没有期间可算天数的受众规则费 | 需关注 | 旧数据没有计费期间 | 开凭证，或用 QB_AUDIENCE_REFUND_CLOSE 记下不开（§7.50） | 财务 | AUDIENCE_REFUND_MISSING |
 | `AUDIENCE_FEE_NOT_LIVE` | 记了受众规则费而发布从未上架 | 差异 | 上架失败后费用未退 | 报开发 | 报开发 | PREPAYMENT_UNCHARGED |
@@ -1510,13 +1502,33 @@ Quiz 与发布有主题词（平台词表中的词与自定义词），学者可
 | `CREDIT_NOTE_LIMITS` | 一笔费用的凭证超过原额或原税 | 差异 | 上限检查漏过 | 报开发 | 报开发 | CREDIT_NOTE_USES |
 | `CREDIT_NOTE_USE_VOID` | 贷项用在已作废的账单上 | 差异 | 作废与抵用并发 | 报开发 | 报开发 | — |
 | `CREDIT_UNUSED_WITH_DUE` | 有未用贷项的同时有未付账单 | 需关注 | 抵用尚未发生 | 通常下一次开账单或抵用时自行了结；持续则报开发 | 财务 | FEES_RECEIVABLE |
+| `INVOICE_PAID_SUM` | 每张未作废账单：已付金额 = 付款明细之和（`:paid`），抵用额 = 贷项凭证使用之和（`:credit`） | 差异 | 账单的数字被流程以外改动；漏写付款行或使用行 | 打开该账单，对照它的付款与凭证，报开发；不要手工改账单。**已知局限：记了已付金额却没写付款行的账单查不出（只查有付款行的）** | 报开发 | AUTO_PAY_MISSED |
+| `AUTO_PAY_MISSED` | 开关为 true，账户有（在账上超过 `qb.fee.auto-pay.missed-after-hours` 小时、未被冻结的）钱，账单开出已超过这些小时仍未付 | 需关注 | 夜间任务 `qb.fee-auto-pay` 没有运行或失败；发起方账单特别多（每次最多 `max-invoices` 张）；预付款释放、争议解除的钱可能多报一晚 | 看任务 `qb.fee-auto-pay` 与该账单；必要时手工付 | `qb.reconcile` | INVOICE_PAID_SUM |
 | `HELP_USAGE_TOTAL` | 每个月 AI 帮助的全平台用量（提问数、Token、估算美元）不小于各人之和（F-M10，§7.53） | 需关注 | 全平台行少记（缺陷）；删除账号或保留期只会让全平台行更大 | 内容管理员在总部 AI 页（`/qb/ai`）看该月用量；持续则报开发 | 内容管理员（`qb.admin.help.gaps`） | — |
+| `OPERATOR_SETTLEMENT_WAITING` | 运营商最早未结算的月份过了起算点之后 `qb.operator.settlement.waiting-after-hours` 小时（缺省 48）仍没有结算（引用 `<月>:<在等的步骤>`） | 差异 | 在等配送费或曝光费的结算、后付费用的月账单；只有月份时是结算任务失败 | 按引用中的步骤查前一步；只有月份时看任务记录与待办，修好后补跑 `qb.operator-settlement`（§7.60） | 财务 | OPERATOR_SETTLEMENT_COVERAGE |
+| `OPERATOR_SETTLEMENT_COVERAGE` | 新做法结算的各列 = 其明细；应已被两次结算算入的费用（`fee:`）与赠送付款（`gift:`）都有明细 | 差异 | 结算写错；连续被行数上限截断 | 不要改结算；被行数上限截断时（有待办）后面的结算会算入其余，否则报开发（§7.60） | 财务 / 报开发 | OPERATOR_SETTLEMENT_WAITING、GIFT_RECOVERY |
+| `GIFT_RECOVERY` | 结算的赠送扣回合计 = 来源为结算的 5140 净贷方；每月应扣 = 实扣 + 结转出 − 结转入；结转入 = 上月结转出 | 差异 | 结算或它的过账有误 | 报开发；不手工改分录（§7.60） | 报开发 | FEE_CREDIT_PROMOTION、OPERATOR_GIFT_CARRY_OPEN |
+| `OPERATOR_CHARGE_NO_OPERATOR` | 切换点之后记下、没有运营商的费用（没有结算会算入它） | 差异 | 记费时发起方没有运营商 | 财务以四眼的"作废账单"（`QB_FEE_REQUEST`，种类 `VOID`）作废它的账单，作废后不再被问；已开过贷项凭证、不能作废的才报开发；不手工补（§7.60） | 财务 / 报开发 | — |
+| `OPERATOR_GIFT_CARRY_OPEN` | 已停用、最新结算仍结转着赠送扣回的运营商 | 提示 | 合同结束时分成不够扣回 | 不自动追缴；由财务与运营商商定（§7.60"合同结束"） | 财务 | GIFT_RECOVERY |
+| `EXPOSURE_DEPOSITS` | 2180 用途曝光费（按发布）= 未关闭的预付款剩余 | 差异 | 预付款被手工改过，或某次冻结 / 追加没有写全 | §7.54；报开发 | 财务 | EXPOSURE_UNIT_MISMATCH |
+| `EXPOSURE_SETTLED_OVER` | 某发布各结算行的次数之和超过已购 | 差异 | 有人改了已购，或重复结算 | §7.54；报开发 | 财务 | EXPOSURE_AMOUNT_MISMATCH |
+| `EXPOSURE_UNSETTLED` | 月末之后过了 `qb.exposure.unsettled-after-hours` 仍没有该月或 `final` 的结算行 | 差异 | 月度任务没有运行或该项失败 | 看任务的运行与失败的项，修好后补跑 `qb.exposure-fee`（最早的月份起逐月，§7.54） | 财务 | EXPOSURE_FINAL_MISSING |
+| `EXPOSURE_FINAL_MISSING` | 发布结束超过 `qb.exposure.final-missing-after-hours` 仍没有 `final` 行 | 差异 | 结束任务没有运行或该项失败 | 看任务的运行与失败的项，修好后补跑 `qb.exposure-final` | 财务 | EXPOSURE_UNSETTLED |
+| `EXPOSURE_PRICE_RANGE` | 运营商的曝光价目超出总部现在的范围 | 需关注 | 总部改了范围 | 请运营商重设价目，或总部放宽范围（受控） | 财务 | EXPOSURE_UNPURCHASED |
+| `EXPOSURE_UNIT_MISMATCH` | 只有已购没有单价，或只有单价没有已购 | 差异 | 两者本应一起写 | 查最近的提交或回到草稿的记录；报开发 | 财务 | EXPOSURE_DEPOSITS |
+| `EXPOSURE_UNPURCHASED` | 进行中、用他人视频却没有已购的发布 | 提示 | 开关打开之前提交的，或运营商没有价目 | 不用处理（给运营商与总部看，不建待办） | — | EXPOSURE_PRICE_RANGE |
+| `EXPOSURE_SETTLED_SHORT` | `final` 行的次数少于它那一刻已计入的次数（不超过已购） | 差异 | 结算行写错 | 补结算前先看该发布的各行（§7.54）；报开发 | 财务 | EXPOSURE_SETTLED_OVER |
+| `EXPOSURE_AMOUNT_MISMATCH` | 各结算行的金额之和 ≠ ⌈最大次数 × 单价⌉ | 差异 | 有行被手工动过或重复 | 报开发 | 财务 | EXPOSURE_SETTLED_OVER |
 | `AI_RESERVATION_SHORT` | 收费的 AI 作业结束时，费用超出它的预留（或当时的 AI 额度），超出部分由平台承担（F-M9；引用为作业编号，实际为平台承担的税前日元；在作业结束的当月与下一月、月度记费收进之前列出） | 提示 | 预留的上限（每次尝试的调用次数、页数、输出上限）低于该作业的实际用量，或期间额度被退回 | 发起方无需处理；同类作业经常出现时，按实际用量调高预留的受控参数（§7.56） | 总部（AI 设置） | — |
 | `AI_CREDIT` | 发起方的 AI 额度剩余 = 2180 用途 `AI` 的余额（引用 `ledger`，没有未关闭的额度而 2180 有余额也列出）= 额度变动之和（`movements`）；累计购入 = 变动 `BUY` 之和（`bought`）（F-M9a-2b） | 差异 | 过账或变动漏写、额度被流程以外改动 | 对照该发起方的 `qb_ai_credit_movement_version` 与 2180 明细；报开发 | 报开发 | PREPAYMENTS、PREPAYMENT_PARTS |
 | `AI_FEE_MONTH` | 每笔 AI 费的金额 = 收进它的作业此刻的 `fee_yen` 之和（引用为费用编号；看最近 40 天记的费用，以及上一次运行报出差异的费用（#702 审查 M4：差异不会因过窗而消失）；#699 审查 L3：按记费后的实际值比，被缩减的作业以缩减后的为准） | 差异 | 作业在记费后被改动，或被两笔费用收进 | 报开发 | 报开发 | AI_FEE_UNBILLED |
 | `AI_FEE_UNBILLED` | 收费且有费用的 AI 作业，在它的月份（`fee_period`，财年时区）结束 `qb.ai.fee.unbilled-after-hours`（缺省 48，按 48–720 取）小时后仍未记费（引用为月份，实际为这些作业的费用合计）；已结束、有费用而没有月份的作业立即列出（引用 `none`，#702 审查 L2：没有记费会收进它） | 差异 | 月度任务 `qb.ai-fee-monthly` 没跑或某项失败（缺税率等） | 看该任务的运行与失败的项，修好原因后对那个计划时刻补跑（`JOB_RUN_REQUEST`，§7.56） | 财务 | AI_FEE_MONTH |
 | `AI_FEE_RESERVED` | 已结束的收费 AI 作业仍有预留（结局流程会把预留清零） | 差异 | 结局流程以外改了作业 | 报开发 | 报开发 | — |
 | `AI_CREDIT_EXPIRED_HELD` | AI 额度中已到期（或在到期前已作废）的赠送额度，在到期 `qb.ai.credit.expired-held-after-hours`（缺省 48，按 48–720 取）小时后仍超出仍占着额度的作业（进行中的预留与已结束未记费的含税费用，#702 审查 L1）所占的部分（占用按税率向上取整，税率未设按 100%，不会误报） | 差异 | 每日任务 `qb.ai-credit-expire` 没跑或某项失败 | 看该任务的运行与失败的项，补跑 | 财务 | FEE_CREDIT_PROMOTION |
+| `ERASED_GIFT_LEFT` | 已完成收尾（`CLOSED`）的已注销发起方没有剩余的赠送额度（收尾时未到期的各笔） | 差异 | 收尾的作废漏了某笔 | 报开发（§7.59） | 报开发 | FEE_CREDIT、FEE_CREDIT_PROMOTION |
+| `ERASED_CLOSE_OPEN` | 收尾在注销后 `qb.erasure.close.alert-days` 天内完成 | 需关注 | 开关 `qb.erasure.close.enabled` 关着、预付款未释放，或任务失败 | §7.59 | 财务 | ERASED_NO_CLOSURE |
+| `ERASED_FEE_OWED` | 已完成收尾的已注销发起方仍欠的平台费（按发起方合计） | 提示 | 账户里的钱不够付 | 财务决定是否免除（§7.59）；不再有逾期提醒 | 财务 | FEES_RECEIVABLE |
+| `ERASED_NO_CLOSURE` | 注销超过 `qb.erasure.close.alert-days` 天、有平台费账户的用户都有收尾记录 | 需关注 | 注销的事件与每日登记任务都没有登记 | 补跑 `qb.sponsor-closure-register`；次日仍在则报开发（§7.59） | 财务 | ERASED_CLOSE_OPEN |
 
 **已知局限**
 - 关注待办手工关闭而条件仍在，次日会重建；"已持续 n 天"从连续找到同一（核对项, 对象）的那几次运行中的第一次算起（UTC 日数）：某次运行不再找到它即重新数，没有运行的日子不打断；核对页一次至多显示 100 个关注条目的天数。
@@ -1526,7 +1538,7 @@ Quiz 与发布有主题词（平台词表中的词与自定义词），学者可
 - 核对按 UTC 18:37 运行；按 `jabiz.fiscal-year-zone` 排的任务随该设置移动，表中的先后以 `Asia/Tokyo` 为前提。
 - `AI_FEE_MONTH` 靠"上一次运行报出的差异"把超过 40 天的费用带进来：核对任务停跑超过 40 天、或上一次运行的条目超过 1,000 条而没保存这一条时，40 天以前的费用在这期间出现的差异看不到；差异一经解决（某次运行不再报出），之后对 40 天以前的费用的改动也看不到。
 
-**月报分类**（`qb.admin.monthly`，按来源单据、是否冲正、所动科目与方向归类，每笔只归一类）：`TOPUP`、`BANK_TOPUP`、`MANUAL_TOPUP`、`GRANT`、`REFUND`、`DISPUTE`、`STRIPE_FEE`、`REWARD`、`TRANSFER_SENT`、`TRANSFER_SETTLED`、`WITHDRAWAL_PAID`、`TRANSFER_FAILED`、`TRANSFER_REVERSED`、`PAYOUT`、`PAYOUT_FAILED`、`OPERATOR_SHARE`、`OPERATOR_PAID`、`REFERRAL_REWARD`、`CASH_TOPUP`、`CASH_BANK_TOPUP`、`CASH_REFUND`、`CASH_DISPUTE`、`KUDOS_BOUGHT`、`KUDOS_SOLD`、`FEE_CHARGED`、`FEE_PAID`、`FEE_VOIDED`、`ENTRY_FEE`、`ENTRY_FEE_SETTLED`、`FEE_CREDIT_GRANTED`、`FEE_CREDIT_VOIDED`、`OPERATOR_TRANSFER_TO_DIRECT`、`PREPAYMENT_FROZEN`、`PREPAYMENT_USED`、`PREPAYMENT_RELEASED`、`DISTRIBUTION_CHARGED`、`DISTRIBUTION_DEPOSIT`、`DISTRIBUTION_RELEASED`、`FEE_CREDIT_NOTE`、`FEE_CREDIT_RECOVERED`、`EXPOSURE_CHARGED`、`EXPOSURE_DEPOSIT`（冻结与追加）、`EXPOSURE_RELEASED`、`AI_CHARGED`、`AI_CREDIT_BOUGHT`、`AI_CREDIT_USED`、`AI_CREDIT_RETURNED`、`AI_CREDIT_VOIDED`、`OTHER`。规则一句话：**退回与扣回不另立类，按它在账上的方向落进已有的类**——退回到预付款的是 `FEE_PAID` 的负数，预付款退回账户是 `PREPAYMENT_RELEASED`，到期赠送的作废是 `FEE_CREDIT_VOIDED`；运营商结算中对赠送额度的扣回（及其退还）是 `FEE_CREDIT_RECOVERED`（F-M12，按结算记账，不另是退回）；凭证本身是 `FEE_CREDIT_NOTE`；抵用不过账。`PREPAYMENT_USED` 不分用途（各费用的记账已按种类分行），只有 AI 费从 AI 额度付的是 `AI_CREDIT_USED`（F-M9，按引用 `fee_ai_` 分开）。AI 额度的到期分两笔：`AI_CREDIT_VOIDED` 是到期的赠送从额度回到 2190，同一时刻的作废（2190 → 5140，来源为原赠送）照常是 `FEE_CREDIT_VOIDED`；退回时原赠送已到期的部分同样落 `FEE_CREDIT_VOIDED`。归不进去的才是 `OTHER`（只应有开发期没有来源的入账）；新增一种过账时，同一个 PR 里加它的类（`backend/quizbuks/CLAUDE.md`）。
+**月报分类**（`qb.admin.monthly`，按来源单据、是否冲正、所动科目与方向归类，每笔只归一类）：`TOPUP`、`BANK_TOPUP`、`MANUAL_TOPUP`、`GRANT`、`REFUND`、`DISPUTE`、`STRIPE_FEE`、`REWARD`、`TRANSFER_SENT`、`TRANSFER_SETTLED`、`WITHDRAWAL_PAID`、`TRANSFER_FAILED`、`TRANSFER_REVERSED`、`PAYOUT`、`PAYOUT_FAILED`、`OPERATOR_SHARE`、`OPERATOR_PAID`、`REFERRAL_REWARD`、`CASH_TOPUP`、`CASH_BANK_TOPUP`、`CASH_REFUND`、`CASH_DISPUTE`、`KUDOS_BOUGHT`、`KUDOS_SOLD`、`FEE_CHARGED`、`FEE_PAID`、`FEE_VOIDED`、`ENTRY_FEE`、`ENTRY_FEE_SETTLED`、`FEE_CREDIT_GRANTED`、`FEE_CREDIT_VOIDED`、`OPERATOR_TRANSFER_TO_DIRECT`、`PREPAYMENT_FROZEN`、`PREPAYMENT_USED`、`PREPAYMENT_RELEASED`、`DISTRIBUTION_CHARGED`、`DISTRIBUTION_DEPOSIT`、`DISTRIBUTION_RELEASED`、`FEE_CREDIT_NOTE`、`FEE_CREDIT_RECOVERED`、`EXPOSURE_CHARGED`、`EXPOSURE_DEPOSIT`（冻结与追加）、`EXPOSURE_RELEASED`、`AI_CHARGED`、`AI_CREDIT_BOUGHT`、`AI_CREDIT_USED`、`AI_CREDIT_RETURNED`、`AI_CREDIT_VOIDED`、`AUDIENCE_CHARGED`（受众规则费，引用 `fee_audience_`；F-M14b 起从 `FEE_CHARGED` 分出。**财务请注意**：比较 F-M14b 上线前后的月报时，受众规则费从 `FEE_CHARGED` 移到了这一行，两行合计不变；导出的 CSV 多一行）、`OTHER`。规则一句话：**退回与扣回不另立类，按它在账上的方向落进已有的类**——退回到预付款的是 `FEE_PAID` 的负数，预付款退回账户是 `PREPAYMENT_RELEASED`，到期赠送的作废是 `FEE_CREDIT_VOIDED`；运营商结算中对赠送额度的扣回（及其退还）是 `FEE_CREDIT_RECOVERED`（F-M12，按结算记账，不另是退回）；凭证本身是 `FEE_CREDIT_NOTE`；抵用不过账。`PREPAYMENT_USED` 不分用途（各费用的记账已按种类分行），只有 AI 费从 AI 额度付的是 `AI_CREDIT_USED`（F-M9，按引用 `fee_ai_` 分开）。AI 额度的到期分两笔：`AI_CREDIT_VOIDED` 是到期的赠送从额度回到 2190，同一时刻的作废（2190 → 5140，来源为原赠送）照常是 `FEE_CREDIT_VOIDED`；退回时原赠送已到期的部分同样落 `FEE_CREDIT_VOIDED`。归不进去的才是 `OTHER`（只应有开发期没有来源的入账）；新增一种过账时，同一个 PR 里加它的类（`backend/quizbuks/CLAUDE.md`）。
 
 ### 7.56 AI 费的预留与实测（F-M9）
 
@@ -1604,11 +1616,55 @@ FROM per_attempt WHERE calls > 0;
 
 - **开关**：受控参数 `qb.fee.auto-pay.enabled`，**首次上线登记为等待行（F-M13c 起生效）**：F-M13c（作废通知与监控）合并前不发布它。每次运行时读，没有值即关；发布为 `true` **就是打开**，所以打开前先通知有未付账单的发起方（`launch-checklist.md`）：打开后的第一个夜里（每日任务），有钱又有未付账单的发起方会被付清，并收到邮件。
 - **一次付几张**：`qb.fee.auto-pay.max-invoices`（缺省 20，1–50，不是受控参数；事件链最多付这么多张，每日任务每个发起方每次最多这么多张；取值在读取时夹在 1–50 内，平台没有参数范围规则）。
-- **流程**：`QB_FEE_AUTO_PAY`（`internal()`，输入发起方、可带账单号）**一次一张账单、一个事务**：先取发起方的钱包锁（与手工付同一把），读未付账单（含已被贷项凭证部分抵减的，欠额 = `QbFees.owed`）与账户，按开具时刻、账单号选最早的欠款账单（事件路径）或指定的那一张（每日任务路径），调与手工付同一个子流程 `QB_FEE_SETTLE`（赠送额度先，现金后），与手工付共用"记付款"辅助方法；一分钱也付不了的什么都不写；付不完的账单变 `PARTIAL`；不碰贷项凭证，不查封禁。付清一张且还有欠款账单、链内张数未到上限时再发一次事件，下一张在自己的事务里付（只付了一部分说明账户已用完，不再续发，等账户变多后由事件或每日任务再来），**一张失败不会拖住别的账单**。
-- **触发**：事件 `qb.fee-account.funded`（现金充值入账含银行转账、平台费 Kudos 的赠送、运营商转入）——只为快，学分充值不发；其他让账户变多的途径（预付款退回、账单作废、贷项凭证的现金）与事件丢失，由每日任务 `qb.fee-auto-pay` 补（取项模板 `qb.system.fee-auto-pay-due`：开关为 `true`、有可用额的发起方的欠款账单，**每项一张账单、一个事务**；cron 缺省 `0 27 2 * * *`，在 02:37 的逾期任务之前，部署时用 `QUIZBUKS_FEE_AUTO_PAY_CRON` 改）。
-- **邮件**：每付一张发一封 `qb.fee.auto-paid`（交易类，文字属受保护的，须另一位管理员发布）；消费者 `QB_MAIL_FEE_AUTO_PAID` 按付款（交易号）与账单重新读出本次所付与仍欠的金额，不信事件里的数字；收件人被封禁或没有邮箱时不发；部分付款时文案写"本次已付 / 仍欠"，不写"已支付"。
+- **流程**：`QB_FEE_AUTO_PAY`（`internal()`，输入发起方；链上带已付的账单号与付款号）**一次运行付一张账单、一个事务**：先取发起方的钱包锁（与手工付同一把），读未付账单（含已被贷项凭证部分抵减的，欠额 = `QbFees.owed`）与账户，按开具时刻、账单号选最早的欠款账单，调与手工付同一个子流程 `QB_FEE_SETTLE`（赠送额度先，现金后），与手工付共用"记付款"辅助方法；一分钱也付不了的什么都不写；付不完的账单变 `PARTIAL`；不碰贷项凭证，不查封禁。付清一张且还有欠款账单、链内张数未到上限时再发一次事件，下一张在自己的事务里付（只付了一部分说明账户已用完，不再续发，等账户变多后由事件或每日任务再来）。**每日任务也每个发起方一项、走同一条链**：一个发起方最早的那张账单若一直失败，会拖住他后面的账单（失败的运行被看到、被补跑；这是已接受的取舍，换来每次触发只发一封邮件）。
+- **触发**：事件 `qb.fee-account.funded`（现金充值入账含银行转账、平台费 Kudos 的赠送、运营商转入）——只为快，学分充值不发；其他让账户变多的途径（预付款退回、账单作废、贷项凭证的现金）与事件丢失，由每日任务 `qb.fee-auto-pay` 补（取项模板 `qb.system.fee-auto-pay-due`：开关为 `true`、有欠款账单且有可用额的发起方，**每项一个发起方，启动一条链**；cron 缺省 `0 27 2 * * *`，在 02:37 的逾期任务之前，部署时用 `QUIZBUKS_FEE_AUTO_PAY_CRON` 改）。
+- **邮件**：每付一张账单，付款的同一个事务里发一个事件 `qb.fee.auto-paid`（只带发起方、账单号与付款号，不带金额），所以链走到哪、已付的账单都有事件，链中途失败也不会漏。消费者 `QB_MAIL_FEE_AUTO_PAID` 不发信，只在 `QbMailNotice`（种类 `FEE_AUTO_PAID`）上把该发起方标为"待发"；逐项任务 `qb.mail-fee-paid-due`（流程 `QB_MAIL_FEE_PAID_DUE`，内部）每 10 分钟（`quizbuks.mail.fee-paid-due-cron`，缺省 `0 */10 * * * *`）对待发的发起方各发**一封**，列出上次邮件时刻（不含）到 `现在 − 宽限`（含）之间所有的付款（`quizbuks.mail.fee-paid-window` 缺省 `PT10M`：上封邮件过了这么久才发下一封；`quizbuks.mail.fee-paid-grace` 缺省 `PT2M`：留给还没提交的付款）。区间首尾相接，每笔付款恰好在一封邮件里；链、每日任务与事件链同时跑也不漏不重，同一事件重复投递也只一封。**代价**：邮件最晚晚约 12 分钟（任务每 10 分钟一次，再加窗口与宽限，帮助里写 10–20 分钟）。宽限须长于一笔付款从记账时刻到提交的最长时间（锁等待加语句超时）；超过的付款由下一封邮件补上，不会丢。新的付款事件到来时若上一封之后没有待发的，窗口从这笔付款（减宽限）起算，所以上一封之后发起方手工付的账单不会列进来；邮件按账单重新读出本期所付与仍欠的金额，不信事件；付款行不记"自动还是手工"，所以同一区间里发起方自己手工付的也会列入，文字只写"已支付"（模板名"平台费付款通知"）；收件人被封禁或没有邮箱时不发，窗口照样往前走；部分付款时写"本期已付 / 仍欠"，不写"已全部付清"；超过 10 张账单只列前 10 行。交易类，文字属受保护的，须另一位管理员发布。
 - **作废**：正在申请作废的账单照付，作废批准后按原分摊退回；发起方会先后收到"付款"与"已作废"两封邮件。
-- 核对项 `INVOICE_PAID_SUM`、`AUTO_PAY_MISSED` 与作废通知邮件见 F-M13c。
+- **作废通知**（F-M13c）：作废批准后发事件 `qb.fee.invoice-voided`（载荷只带账单号），消费者 `QB_MAIL_FEE_INVOICE_VOIDED` 发 `qb.fee.invoice-voided`（交易类、受保护的文字）：写账单号与退回账户的金额（读该账单已退回的负数付款行，不信事件），**不写作废的内部理由**；过时的事件（账单不是作废状态）、被封禁与没有邮箱的收件人不发。
+- **核对项**（F-M13c，`ReconChecks`）：`INVOICE_PAID_SUM`（差异：未作废账单的已付金额 + 抵用额，与它的付款明细和贷项凭证使用之和不符；F-M1 以前只有已付金额没有明细的账单不查）；`AUTO_PAY_MISSED`（需关注：开关为 `true`，账单开出已超过 `qb.fee.auto-pay.missed-after-hours`（受控，缺省 48，1–720，读取时夹在此范围内；第一次核对读的是现值，所以刚打开开关后的第一个夜里之前可能报出，付清后自行消失），而发起方账户里的钱（赠送额度的 `grantedAt`、现金批次的 `arrivedAt`）也已在账上超过这些小时——无事件到账的钱（预付款释放等）要等夜里的任务，不算漏付；每次运行至多付 `qb.fee.auto-pay.max-invoices` 张，账单特别多的发起方会在第二天继续，报出时先看这个数；现金被争议或冻结占住的部分不算可用；最近 `missed-after-hours` 小时内有付款被退回（作废退回原批次、凭证退现金）的发起方暂不报出；预付款释放、争议解除这类没有事件到账的钱可能被多报一个夜晚（付清后自行消失）；由 `qb.reconcile` 的持有人处理：先看夜间任务 `qb.fee-auto-pay` 是否运行，必要时手工付）。计划里曾定"不加阈值参数、读任务运行记录"，改为参数：应用不读平台的内部运行表（总控 2026-11-14）。
+
+### 7.59 已注销发起方的平台费账户收尾（F-M15 b）
+
+注销的发起方有平台费账户（现金或赠送钱包、赠送额度、账单、预付款、后付的费用、审核中的手工加币或平台费申请任一）时，由平台自动收尾，计划见 `docs/quizbuks/plans/impl/F-M15.md` §2、§5。
+
+- **登记**：注销（`jabiz.account.erased`）的消费者 `qb.account-erased-money` 运行 `QB_SPONSOR_CLOSURE_REGISTER`，写一行 `QbSponsorClosure`（`WAITING`）并发 `qb.sponsor.money-close-due`。事件丢失时由每日任务 `qb.sponsor-closure-register`（03:47，`quizbuks.erasure-close.register-cron`，模板 `qb.system.money-close-unregistered`）补登，只看最近 `qb.erasure.close.register-days`（普通参数，缺省 30）天内的注销；更早的仍由核对 `ERASED_NO_CLOSURE` 报出，可调大参数后由任务补登。第 0 步只撤回在注销的个人信息清除（`ERASURE_PURGE`，随注销事件运行一次）完成之前提出的申请：清除会覆盖当时所有指向该发起方的行的理由，审批就落不了；清除完成之后财务提出的照常审批；清除尚未运行时审核中的全部撤回。清除未完成期间，对该发起方提出平台费申请会被拒（422 `QB_FEE_ERASURE_PENDING`；手工加币本来就因入驻已抹除而被拒）：先查明并修好清除（任务与事件 `jabiz.account.erased` 的投递），完成后再提。收尾提前开出的未来月份账单按其账期的年度取号（与普通月账单相同），开具日可能在前一年。
+- **收尾** `QB_SPONSOR_MONEY_CLOSE`（事件 `qb.sponsor-money-close` 与每日任务 `qb.sponsor-money-close`，03:53，`quizbuks.erasure-close.cron`，每次至多 `quizbuks.erasure-close.max-items` 项）：撤回审核中的手工加币与平台费申请（`ended_code = ERASED`；手工加币另给财务待办 `qb.erasure-close.withdrawn`，钱怎么处理由财务与发起方另行联系）→ 钱包锁内：开关 `qb.erasure.close.enabled` 关着即停（`SWITCH_OFF`）→ 有未关闭的预付款即等（`DEPOSIT_OPEN`，预付款由结束与释放的任务退回）→ 后付的未开账单按月开出（含当月）→ 付款：F-M13 的单项 `QB_FEE_AUTO_PAY_ITEM`（经 `QB_FEE_SETTLE`，先赠送后现金），按开具先后、每次至多 `qb.fee.auto-pay.max-invoices` 张；由收尾自己的开关决定，不看 `qb.fee.auto-pay.enabled` → 仍有欠费且还有钱可付（张数超过上限）即等下次（`TO_PAY`，每日任务再取）；否则完成（`CLOSED`，仍欠即原因 `FEE_OWED`；要作废的笔数多于一次能读的即作废读到的、留在 `WAITING` 等次日），作废未到期的赠送额度（借 2190 / 贷 5140，`QB_FEE_CREDIT_VOID_LOT`）。现金余额不退回，留在账户（法务说明见上线检查清单）。
+- **完成后又进账**（迟到的充值、作废账单退回现金）：每日任务把 `CLOSED` + `FEE_OWED` 且现金钱包可用（余额 − 争议冻结）大于 0 的再跑一次，付到欠费上。
+- **完成后又记了后付费用**：记到一个还没开账单的月份（自己的月份已开即从当月起、跳过所有已开账单的月份），每日任务把有未开账单的后付费用的 `CLOSED` 收尾再跑一次，开出并付；在此之前 `ERASED_FEE_OWED` 已把它算进欠额。这一支不看开关与未关闭的预付款：开关关着或只剩 AI 额度的预付款时，该发起方每天被取出、空跑一次（`SWITCH_OFF` / `DEPOSIT_OPEN`），不出错，也不改收尾的状态，属预期。
+- **慢了**：注销后 `qb.erasure.close.alert-days`（普通参数，缺省 3；须是 1～60 的整数，否则当即提醒）天仍未完成，给财务一次待办 `qb.erasure-close.slow`（标题写明原因，完成时关闭）；同时每日核对报 `ERASED_CLOSE_OPEN`。按原因处理：`SWITCH_OFF` 由财务与另一位管理员经受控变更打开开关；`DEPOSIT_OPEN` 看该发起方的预付款为何未释放（§7.47、§7.48、§7.54）；只剩 AI 额度的预付款（待办标题单独写明）在 F-M15c 合并之前会一直停在 `DEPOSIT_OPEN`，属预期：AI 额度的关闭随 F-M15c，F-M15c 合并之前不打开 `qb.ai.fee.enabled`（首次上线本来就关着）；没有原因的看任务 `qb.sponsor-money-close` 的失败，修好后用 `JOB_RUN_REQUEST` 补跑。
+- **欠费**：已注销发起方的过期账单不再变为 `OVERDUE`、不发提醒、不建逾期待办；财务看核对的提示 `ERASED_FEE_OWED`，决定是否以平台费申请（`QB_FEE_REQUEST`，种类 `CREDIT_NOTE`，四眼）免除。
+- **页面**：平台管理系统"QuizBuks 财务 → 注销收尾"（`/qb/finance/money-closures`，模板 `qb.admin.money-closures`，`qb.admin.finance.read`，只读，可导出 CSV / Excel；筛选未完成、已完成但仍欠费、超期、全部）；发起方详情页另有"注销后的收尾"一块（状态、原因与各项金额，模板 `qb.admin.money-closure-amounts`：删除后用赠送与现金付了多少、作废了多少、仍欠多少、留下多少现金，按付款分摊、额度明细与账本汇总）。
+- **管理员安排注销前先看钱**：管理员安排的注销不显示注销前的提示；安排之前先在发起方详情看平台费账户、账单、预付款与在途的充值，必要时先联系本人。运营商成员（含负责人）持受保护的权限，平台拒绝其注销：总部先撤掉其角色、换人，之后才能注销；运营商的钱属于运营商，不受影响。
+- **封禁时的钱**（不经收尾）：平台费账户的现金冻结（不能充值、提现），不没收；赠送额度不再发放、本人不能使用、照原有效期到期；暂停的发布到结束后照常结算，预付款按原分摊退回；未付的平台费照常计入、账单照常到期，到期提醒不寄给被封禁者；学者的学分保留。帮助"账户被暂停时，我的钱怎么办？"（`help/fee-account.md`）是客服口径。
+- **账单 PDF**：注销前开出的账单 PDF 在保留期内保留公司名；注销后才开出的账单没有收件方名称（个人信息已抹除），编号、日期、金额照常存档（上线检查清单有财务与法务的确认项）。
+- **与运营商分成（F-M12）的关系**：收尾中用来付欠费的赠送额度照 F-M12 从运营商分成里扣回，作废的部分由平台承担、不扣运营商；赠送额度最后才作废，所以冻结在预付款里的部分退回后也先付欠费，扣回因此多于"先作废"的做法。
+- **核对**：`ERASED_GIFT_LEFT`、`ERASED_CLOSE_OPEN`、`ERASED_FEE_OWED`、`ERASED_NO_CLOSURE`（模板 `qb.system.recon-erased`，见 §7.55 的总表）；收尾中的每一笔仍经 `FEE_CREDIT`、`FEE_CREDIT_PROMOTION`、`FEE_PAYMENTS`、`FEES_RECEIVABLE` 核对。
+
+### 7.60 运营商结算：不分成与扣回（F-M12）
+
+§7.13 "月结算"的细节。设计见 `plans/impl/F-M12.md`；结算单上每一行的意思见帮助 `help/operator-settlement.md`。
+
+- **切换点**：每个运营商从它最后一张旧做法的结算（部署本项之前签发的）所覆盖的期间之后起按新做法结算，写在新结算的"覆盖起点"（`coveredFrom`）上；之前的月份、旧结算单与旧分录都不动，旧费用上用过的赠送额度不追溯扣回。部署后才建的运营商从第一笔费用算起。
+- **每笔费用恰好算一次**：每次结算算入"期间不晚于结算月、还没有被算过"的费用，每笔写一行明细（`CHARGE`）；期间早于结算月的（如次月才记的配送费 `final` 行）照常算入并标"迟到"，按结算月的比例分成。之后才作废的账单在作废后的第一次结算写一行 `VOID`，按原来那次结算的比例扣回。费用上没有运营商的不算入，由核对报出（`OPERATOR_CHARGE_NO_OPERATOR`）。
+- **哪些种类分成**：受控参数 `qb.operator.share.kinds`（缺省 `MONTHLY,MANUAL,AUDIENCE,DISTRIBUTION,EXPOSURE`，不含 `AI`）。不在清单里的种类也写明细，但不进分成基数；把一个种类加进清单只影响以后的费用。
+- **赠送额度**：用赠送额度付的部分按来源由受控参数 `qb.operator.gift.treatment.<来源>` 决定：`PLATFORM`（平台承担：那部分不分成、不扣回；缺省为手工追加与点亮）或 `OPERATOR`（运营商承担：照常分成，再从分成中扣回含税的赠送额；缺省为入驻赠送与认证补发）。扣回的比例 `qb.operator.credit-recovery.rate`（缺省 1）；不在基数里的费用（如 AI）上用掉的赠送缺省不扣回（`qb.operator.gift.recover-outside-base`）。同一次结算中算入的费用与它的赠送成对相抵；费用先结算、赠送后付（后付账单晚付、贷项凭证退回）的，在付的那个月按原结算的比例带符号扣除或还给运营商。
+- **扣回与结转**：先扣固定费、获客费用、贷项凭证、赠送与作废的扣除和上月结转，余下的分成再扣回赠送；不够扣的赠送单独结转到下月（与获客费用的结转分开两列）。赠送退回多于本月用掉的，差额还给运营商。结算从不使应付为负，也不向运营商追现金。
+- **合同结束**：停用的运营商仍照常结算（不收固定费）；到最后一次结算仍结转着要扣回的赠送，不追缴：核对给出提示 `OPERATOR_GIFT_CARRY_OPEN`，由财务与运营商商定，系统不再自动扣。
+- **就绪与期限**：一个月要等它的前一步都完成才结算：配送费与曝光费已结算该月（或 `final`），后付费用已有月账单。最多等到月末之后 `qb.operator.settlement.readiness-max-days` 天（缺省 5），过了期限照结，没到的费用下次作为"迟到"算入，不丢。上个月没结算的不会越过它先结下一个月。要立即放行，把天数改小（受控变更，另一位管理员发布；0 即当天照结）。
+- **补跑**：漏跑或失败的时刻用 `JOB_RUN_REQUEST`（`job.run`，带原因），补跑 `qb.operator-settlement` 当天的计划时刻即可（取的是最早未结算的月份，不论哪天跑）；补跑不绕过就绪条件。不改 cron、不重启。
+- **行数上限**：一次结算至多 20 000 行明细（部署设置 `quizbuks.operator-settlement.max-lines`）；放不下的费用留给下一次，按被留下那个月的比例与设置算入，钱只是推迟。连续两个月被截或最旧的未算入费用超过一个月，财务（`qb.reconcile`）收到待办；通常是某个运营商一个月的费用异常多，先查清来源。
+- **分录**（每次结算至多两笔，来源都是这张结算）：分成：借 5130 分成 / 贷 2140 扣回赠送之前的应付 / 贷 4110 回收的成本（固定费、获客费用、贷项凭证、赠送与作废的扣除；为负时借 4110，即还给运营商）；扣回：借 2140 / 贷 5140 扣回额（还给运营商时反向，先抵掉的成本结转记贷 4110）。两笔合起来 2140 的净贷方 = 结算单的应付。
+- **5130 与 4110 的往返（已知取舍）**：赠送与作废的扣除、贷项凭证的扣减从运营商的分成中扣回，现在记贷 4110（还给运营商时借 4110），所以损益表上 5130 与 4110 各自多出（或少了）同一数额，净额正确。月报在"运营商分成"处注明；要不要拆开由财务以后决定（`launch-checklist.md` 的财务确认）。
+- **核对差异的处理**（每日核对，模板 `qb.system.recon-operator-settlement`，只核切换点之后）：
+  - `OPERATOR_SETTLEMENT_WAITING`：某运营商最早未结算的月份过了起算点之后 `qb.operator.settlement.waiting-after-hours` 小时（缺省 48）仍没有结算。起算点：在等某一步时为期限（月末 + 等待天数），什么都不等时为月末与就绪时刻中较晚的一个（不晚于期限）。引用 `<月>:<步骤>` 说明它在等什么：`DISTRIBUTION` / `EXPOSURE` 去查该运营商发布的配送费或曝光费结算，`INVOICE` 去查后付费用的月账单任务；没有步骤只有月份时是结算任务本身失败，看任务记录与待办，修好后补跑。这一项会拦住分录导出，到结算完成为止。
+  - `OPERATOR_SETTLEMENT_COVERAGE`：`<月>:<列>` 是结算单上的一列与它的明细不符（结算写错，交开发查）；`fee:<期间>` 是应当已被两次结算算入而没有明细的费用；`gift:<月>` 是应当已被两次结算算入而没有明细的赠送付款。后两种先看该运营商的结算是否连续被截（行数上限的待办），否则交开发查。
+  - `GIFT_RECOVERY`：`recovered` 是结算上的扣回合计与来源为结算的 5140 净贷方不符（按 5140 核，不按 2140：还给运营商时先抵的成本记 4110）；`<月>` 是该月应扣 ≠ 实扣 + 结转出 − 结转入；`<月>:carried` 是本月结转入 ≠ 上月结转出。都交开发查，不手工改分录。
+  - `OPERATOR_CHARGE_NO_OPERATOR`：费用上没有运营商（按发起方、期间），从各运营商最早的切换点起都算，不看发起方现在归哪个运营商（改派不会让它消失）；处理同上"怎么消除"：先由财务作废它的账单（四眼，`QB_FEE_REQUEST` 种类 `VOID`）；已开过贷项凭证、不能作废的才交开发；不手工补。
+- **等待中的结算**（平台管理系统「运营商结算」，财务）：每个运营商最早未结算的月份与它在等的步骤，全部列出、不截断。当前月份按服务器的时钟与 `jabiz.fiscal-year-zone` 算（流程 `QB_OPERATOR_SETTLEMENTS_WAITING`，不由浏览器给出）；步骤为空写"等每日结算任务运行"。
+- **数据库的 JIT 关闭**（#701 复核 M-1，总控 2026-11-14 的决定）：应用的连接带 `jit=off`（`application.yml` 的 `spring.r2dbc.properties.options`，测试配置相同）。原因：每日核对的运营商结算一项，查询本身约 1.2 s，PostgreSQL 为它的计划做 JIT 编译另花约 10 s（估算成本超过 `jit_inline_above_cost` 与 `jit_optimize_above_cost`），超过 5 s 的查询时限；关掉后分析过的库上 1.2 s。请求路径上的查询都短，JIT 没有好处。Flyway 的 JDBC 连接不在请求路径上，照服务器的设置。
+  - **怎样确认生效**：CI 的 `AppConnectionsIT` 在应用的连接上执行 `SHOW jit`，必须为 `off`。部署上，环境变量 `SPRING_R2DBC_PROPERTIES_OPTIONS` 不得覆盖它；数据库开着 `pg_stat_statements` 时，应用的语句 `jit_functions` 为 0。用 `psql` 直接连库看到的 `SHOW jit` 是那个会话自己的设置，不代表应用的连接。
+- **升级**：迁移 V129（费用按运营商与月份、赠送额度付款按付款时间的两个索引，`CONCURRENTLY` 建、不挡写入，同 V127；建到一半失败留下的 INVALID 索引按 V129 的注释处理）；部署后不需要运行 `QB_SETUP`。
+  - `OPERATOR_GIFT_CARRY_OPEN`（提示）：见上"合同结束"。
 
 ## 8. 升级到线 1.3（S0 的迁移 V29、V30）
 

@@ -356,6 +356,8 @@ public final class QbParams {
      */
     public static final String FEE_AUTO_PAY_ENABLED = "qb.fee.auto-pay.enabled";
     public static final String FEE_AUTO_PAY_MAX_INVOICES = "qb.fee.auto-pay.max-invoices";
+    /** F-M13c: hours after which an unpaid invoice with money on the account is reported by the daily check. */
+    public static final String FEE_AUTO_PAY_MISSED_AFTER_HOURS = "qb.fee.auto-pay.missed-after-hours";
     /** The headquarters' range of the operators' exposure prices, in the order the price check reads them. */
     public static final List<String> EXPOSURE_RANGE = List.of(EXPOSURE_UNIT_MIN, EXPOSURE_UNIT_MAX);
     /** The controlled ones, in the order of {@link #CONTROLLED} (before {@link #REWARD_KUDOS}). */
@@ -695,6 +697,17 @@ public final class QbParams {
     public static final String REWARD_KUDOS_ENABLED = "qb.reward.kudos.enabled";
     /** F-F10a: the Kudos reward switch (controlled, the last of {@link #CONTROLLED}). */
     public static final List<String> REWARD_KUDOS = List.of(REWARD_KUDOS_ENABLED);
+    /**
+     * F-M15 b (docs/quizbuks/plans/impl/F-M15.md §7): whether an erased sponsor's platform fee account is wound up
+     * (invoiced, paid as far as it goes, the granted credit voided; off: the wind-up only records SWITCH_OFF and the
+     * daily job does it once turned on), controlled; after how many days a wind-up not done gives finance a task (only
+     * says when to remind: not controlled).
+     */
+    public static final String ERASURE_CLOSE_ENABLED = "qb.erasure.close.enabled";
+    public static final String ERASURE_CLOSE_ALERT_DAYS = "qb.erasure.close.alert-days";
+    /** F-M15 b (re-review L9): how many days back the daily sweep looks for erasures with no wind-up registered. */
+    public static final String ERASURE_CLOSE_REGISTER_DAYS = "qb.erasure.close.register-days";
+    public static final List<String> ERASURE_CLOSE_CONTROLLED = List.of(ERASURE_CLOSE_ENABLED);
 
     /**
      * The parameters that change only through controlled changes (proposed by one administrator, published by
@@ -707,10 +720,11 @@ public final class QbParams {
         OPERATOR_PLANS, OPERATOR_WITHDRAWAL, List.of(TOPUP_BANK_MIN, TOPUP_BANK_MAX), BANK_RECEIVING, WITHDRAWAL_BANK, AUDIENCE_BILLING_PARAMS,
         CASH_ACCOUNT_PARAMS, FEE_PARAMS,
         List.of(ENTRY_FEE_ENABLED), List.of(USAGE_FREE_BYTES), List.of(VIDEO_MAINLAND_SITES), HELP_CONTROLLED, FEE_CREDIT_PARAMS,
-        SITE_PROFILE_CONTROLLED, DISTRIBUTION_CONTROLLED, EXPOSURE_CONTROLLED, REWARD_KUDOS, RECON_THRESHOLDS,
+        SITE_PROFILE_CONTROLLED, DISTRIBUTION_CONTROLLED, EXPOSURE_CONTROLLED, ERASURE_CLOSE_CONTROLLED, REWARD_KUDOS,
+        RECON_THRESHOLDS,
         HELP_USER_LIMITS,
         OPERATOR_SHARE, OPERATOR_SETTLEMENT, OPERATOR_SETTLEMENT_CHECK, AI_FEE_CONTROLLED,
-        List.of(FEE_AUTO_PAY_ENABLED), AI_FEE_CHECK)
+        List.of(FEE_AUTO_PAY_ENABLED, FEE_AUTO_PAY_MISSED_AFTER_HOURS), AI_FEE_CHECK)
         .flatMap(List::stream).toList();
 
     /** A parameter: its key, kind (as the platform writes kinds) and first value. */
@@ -1136,6 +1150,16 @@ public final class QbParams {
         new Param(EXPOSURE_TOP_UP_MAX, Map.of("type", "numeric", "precision", 9, "scale", 0), "1000000",
             "The most exposures one top-up buys (1 to 999,999,999; a placeholder; keeps the parts of a deposit within "
                 + "what it can be shared into)"),
+        // F-M15 b: the wind-up of an erased sponsor's money (controlled, before the Kudos reward switch).
+        new Param(ERASURE_CLOSE_ENABLED, BOOL, false,
+            "Whether an erased sponsor's platform fee account is wound up: invoiced, paid as far as it goes, the granted "
+                + "credit voided (off: only recorded; the daily job winds up once it is turned on)"),
+        new Param(ERASURE_CLOSE_ALERT_DAYS, Map.of("type", "numeric", "precision", 2, "scale", 0), "3",
+            "After how many days a wind-up of an erased sponsor's money not done gives finance a task (a whole number "
+                + "from 1 to 60; any other value gives it at once)"),
+        new Param(ERASURE_CLOSE_REGISTER_DAYS, Map.of("type", "numeric", "precision", 3, "scale", 0), "30",
+            "How many days back the daily sweep registers the wind-up of an erased sponsor whose erasure event was lost "
+                + "(a whole number from 1 to 365; any other value: 30); ERASED_NO_CLOSURE still checks every erasure"),
         // F-F10a: the Kudos reward switch (controlled, after the F-C7, F-M6 and F-M8 ones; the F-M14 thresholds and the help's
         // daily limit come after it, in the order of CONTROLLED, which QB_SETUP's proposals follow).
         new Param(REWARD_KUDOS_ENABLED, BOOL, true,
@@ -1206,6 +1230,9 @@ public final class QbParams {
             "Whether money arriving in the platform fee account (a top-up in cash, platform fee Kudos granted, a transfer "
                 + "from the operator) pays the sponsor's unpaid invoices by itself, the earliest first (declared off: the "
                 + "tests rely on it; a parameter that is not true means off)"),
+        new Param(FEE_AUTO_PAY_MISSED_AFTER_HOURS, Map.of("type", "numeric", "precision", 3, "scale", 0), "48",
+            "After how many hours of its issue an unpaid invoice of a sponsor whose account has money is reported by the "
+                + "daily check while the automatic payment is on (1 to 720)"),
         // F-M9a-2b: the daily check's hours for the AI fee (controlled; after the auto-pay switch, so the proposals before
         // keep their places).
         new Param(AI_FEE_UNBILLED_AFTER_HOURS, Map.of("type", "numeric", "precision", 3, "scale", 0), "48",

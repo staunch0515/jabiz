@@ -91,6 +91,8 @@ export interface DistributionSettlementRow {
   publicationId: string
   sponsorId: string
   operatorId: string | null
+  /** The operator's name (headquarters' list only; the operator's own list has none). */
+  operatorName: string | null
   period: string
   starts: number
   unit: number
@@ -123,6 +125,7 @@ export async function readDistributionSettlements(filter: SettlementFilter, offs
       publicationId: String(row.publicationId),
       sponsorId: String(row.sponsorId),
       operatorId: str(row.operatorId),
+      operatorName: str(row.operatorName),
       period: String(row.period),
       starts: num(row.starts),
       unit: num(row.unit),

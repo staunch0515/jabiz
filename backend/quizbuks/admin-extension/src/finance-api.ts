@@ -1,5 +1,6 @@
 import { api, ApiError, runProcess, runQuery, sessionFetch, unwrap, type Filter } from '@jabiz/admin'
-import { ATTENTION_CHECKS, PAGE_LIMIT, PROCESS, STALE_AFTER_MS, TEMPLATE, type ReportId } from './ids'
+import { ATTENTION_CHECKS, NOTE_CHECKS, PAGE_LIMIT, PROCESS, STALE_AFTER_MS, TEMPLATE, type ReconLevel,
+  type ReportId } from './ids'
 import type { SortSpec } from './api'
 
 /*
@@ -308,6 +309,8 @@ export interface ReconItem {
   itemId: string
   checkCode: string
   partyId: string | null
+  /** The name of the operator the item is about, when its party is an operator (none for a user). */
+  operatorName: string | null
   reference: string | null
   expected: string
   actual: string
@@ -315,15 +318,28 @@ export interface ReconItem {
 }
 
 /** A page of a run's differences, by check (then by how much they differ), counted. */
-export async function readReconItems(runId: string, offset: number, limit: number): Promise<Page<ReconItem>> {
-  const page = await runQuery<Row>(TEMPLATE.reconItems, { params: { runId },
+export async function readReconItems(runId: string, offset: number, limit: number, level?: ReconLevel | null):
+  Promise<Page<ReconItem>> {
+  const page = await runQuery<Row>(TEMPLATE.reconItems, { params: { runId }, filters: levelFilters(level),
     sorts: [{ field: 'checkCode', asc: true }, { field: 'difference', asc: false }], offset, limit, count: true })
   return {
     total: page.total,
     items: page.items.map((row) => ({ itemId: String(row.itemId), checkCode: String(row.checkCode ?? ''),
-      partyId: str(row.partyId), reference: str(row.reference), expected: amount(row.expected),
+      partyId: str(row.partyId), operatorName: str(row.operatorName), reference: str(row.reference), expected: amount(row.expected),
       actual: amount(row.actual), difference: amount(row.difference) })),
   }
+}
+
+/**
+ * F-M14b: the items of one level, asked of the server (a page holds at most {@link PAGE_LIMIT} items, so a level is
+ * not picked out of the first page): attention and notes by their checks, differences as every other check (one `ne`
+ * a check, the filters joined by AND: the list has no `notIn`).
+ */
+export function levelFilters(level?: ReconLevel | null): Filter[] {
+  if (!level) return []
+  return level === 'DIFFERENCE'
+    ? [...ATTENTION_CHECKS, ...NOTE_CHECKS].map((check) => ({ field: 'checkCode', op: 'ne', value: check }))
+    : [{ field: 'checkCode', op: 'in', values: [...(level === 'ATTENTION' ? ATTENTION_CHECKS : NOTE_CHECKS)] }]
 }
 
 /**

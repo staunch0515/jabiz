@@ -93,6 +93,9 @@ public final class OperatorScopes {
         fields.put(com.jabiz.quizbuks.benefit.QbBenefits.MESSAGE, "sponsorId");
         fields.put(com.jabiz.quizbuks.benefit.QbBenefits.PURCHASE, "sponsorId");
         fields.put(com.jabiz.quizbuks.benefit.QbBenefits.ALLOCATION, "sponsorId");
+        // F-M14b: the daily reconciliation's items, by their party (a sponsor's), read only through the operator's
+        // own dataset (Reconciliation.OPERATOR_ITEM_DATASET); the default dataset stays qb.reconcile's.
+        fields.put(com.jabiz.quizbuks.wallet.Reconciliation.ITEM_ENTITY_NAME, "partyId");
         // Q60c-2: the public counters' counts of sponsors' pages and products, by their owner (the sponsor).
         fields.put(PublicCounterEntities.ENTITY, "ownerKey");
         for (String entity : new String[] {QbPublications.COUNTER, QbPublications.START_COUNTER,

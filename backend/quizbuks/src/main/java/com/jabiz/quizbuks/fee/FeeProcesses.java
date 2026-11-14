@@ -261,6 +261,11 @@ public final class FeeProcesses {
     static final String FOUND = "found";
     static final String BILLING_MODE = "billingMode";
     static final String MONTH_INVOICE = "monthInvoice";
+    /**
+     * How many months past the later of a postpaid fee's own and the current one its month's search reads (a wind-up
+     * opens a month ahead only as late fees come; far more than it ever does).
+     */
+    static final int MONTHS_AHEAD = 24;
     static final String TOTAL = "total";
     /** The month the charge is written for (review L3: a late postpaid one is the current month, not the input's). */
     static final String CHARGE_PERIOD = "chargePeriod";
@@ -270,6 +275,8 @@ public final class FeeProcesses {
     static final String ISSUER = "issuer";
     static final String ISSUED = "issued";
     static final String REMINDER = "reminder";
+    /** F-M15 b: the wind-up of the invoice's sponsor, when they were erased. */
+    static final String ERASED_CLOSURE = "erasedClosure";
     static final String CREDIT_NOTES = "creditNotes";
     static final String CREDIT_TAKES = "creditTakes";
     static final String CREDIT_LEFT = "creditLeft";
@@ -306,8 +313,12 @@ public final class FeeProcesses {
                 QueryEntities.query(QbFees.defaultDataset(QbFees.INVOICE), ctx -> EntityQuery.builder()
                     .where(new QueryPredicate.And(List.of(
                         new QueryPredicate.Eq("sponsorId", chargeInput(ctx).sponsorId()),
-                        new QueryPredicate.Eq("period", chargeInput(ctx).period()),
-                        new QueryPredicate.IsNull("chargeId")))).limit(1).build(), MONTH_INVOICE)))
+                        // F-M15 b: and every later month's (a wind-up invoices the current month and, as late
+                        // fees come, the next ones), in the same statement.
+                        new QueryPredicate.In("period", new ArrayList<Object>(FeeRules.monthsFrom(
+                            chargeInput(ctx).period(), FeeRules.period(ctx.opTime(), zone), MONTHS_AHEAD))),
+                        new QueryPredicate.IsNull("chargeId")))).limit(FeeGate.MAX_UNPAID).build(),
+                    MONTH_INVOICE)))
             // F-M7 (§10.3-4): a prepaid fee's invoice takes the credit notes' credit left first. Read (H1 of the
             // review: summed in SQL) before anything is written, and only when the prepayment cannot pay it all.
             .step("Read the credit left", RunTemplate.<ProcessContext>when(FeeProcesses::creditMayPay,
@@ -366,6 +377,11 @@ public final class FeeProcesses {
         if (!FeeRules.period(input.period())) {
             problems.add(new Violation("period", FeeCodes.FEE_PERIOD, "Not a month", Map.of("period", input.period())));
         }
+        // Third re-review L3: a fee of a month long gone is refused.
+        if (!FeeRules.recentEnough(input.period(), FeeRules.period(ctx.opTime(), zone))) {
+            problems.add(new Violation("period", FeeCodes.FEE_PARAMS, "A month more than "
+                + FeeRules.MAX_MONTHS_BACK + " months ago", Map.of("period", input.period())));
+        }
         BigDecimal rate = params.get(QbParams.FEE_TAX_RATE, BigDecimal.class);
         BigDecimal tax = input.tax() != null && rate != null ? input.tax() : FeeRules.tax(input.amount(), rate);
         if (tax == null) {
@@ -384,8 +400,19 @@ public final class FeeProcesses {
                 String.class));
         // F-M6 (§9.6): a postpaid fee of a month whose invoice is out already (a settlement run late) goes on the
         // invoice of the month it is charged in; the invoice is issued under the same wallet lock, so they never cross.
-        String period = FeeRules.POSTPAID.equals(billingMode) && first(ctx, MONTH_INVOICE) != null
-            ? FeeRules.period(ctx.opTime(), zone) : input.period();
+        // F-M15 b: if that month's is out too (a wind-up invoices the current month), the month after it.
+        java.util.Set<String> invoiced = FeeGate.list(ctx, MONTH_INVOICE).stream()
+            .map(invoice -> String.valueOf((Object) invoice.get("period")))
+            .collect(java.util.stream.Collectors.toSet());
+        String now = FeeRules.period(ctx.opTime(), zone);
+        String period = FeeRules.POSTPAID.equals(billingMode)
+            ? FeeRules.chargePeriod(input.period(), now, invoiced) : input.period();
+        // Third re-review L2: a month past what was read is not guessed (every month read had its invoice out).
+        if (FeeRules.POSTPAID.equals(billingMode)
+            && !FeeRules.monthsFrom(input.period(), now, MONTHS_AHEAD).contains(period)) {
+            throw new BusinessRuleViolationException(List.of(new Violation("period", FeeCodes.FEE_PARAMS,
+                "No month without its invoice out within the months read", Map.of("period", input.period()))));
+        }
         Map<String, Object> values = new LinkedHashMap<>();
         values.put("sponsorId", input.sponsorId());
         values.put("operatorId", operatorOf(ctx));
@@ -1064,9 +1091,15 @@ public final class FeeProcesses {
                     ctx -> byId("invoiceId", ctx.get(INPUT, InvoiceRef.class).invoiceId()), FOUND))
                 .step("Lock the sponsor's wallet", HoldLock.<ProcessContext>exclusive(ctx -> first(ctx, FOUND) == null
                     ? null : QbWallets.lockName(QbWallets.SPONSOR, first(ctx, FOUND).get("sponsorId"))))
-                .step("Read the invoice again", QueryEntities.<ProcessContext>of(QbFees.defaultDataset(QbFees.INVOICE),
-                    ctx -> byId("invoiceId", first(ctx, FOUND) == null ? null : String.valueOf(first(ctx, FOUND).id())),
-                    INVOICE))
+                // F-M15 b (§9 M4): with the sponsor's wind-up, in one statement. An erased sponsor's invoices are not
+                // reminded of (no mail reaches them, and finance has the reconciliation's ERASED_FEE_OWED instead);
+                // the items' template leaves them out, this covers one registered between the two.
+                .step("Read the invoice again", QueryEntities.<ProcessContext>all(
+                    QueryEntities.query(QbFees.defaultDataset(QbFees.INVOICE), ctx -> byId("invoiceId",
+                        first(ctx, FOUND) == null ? null : String.valueOf(first(ctx, FOUND).id())), INVOICE),
+                    QueryEntities.query(QbFees.defaultDataset(QbSponsorClosures.CLOSURE), ctx -> byId("sponsorId",
+                        first(ctx, FOUND) == null ? null : String.valueOf((Object) first(ctx, FOUND).get("sponsorId"))),
+                        ERASED_CLOSURE)))
                 .compute("Remind", (metadata, ctx) -> remind(ctx, zone))
                 .step("Ask the mail to remind the sponsor", PublishEvent.<ProcessContext>when(
                     ctx -> "REMINDED".equals(ctx.get(OUTCOME)), QbFees.INVOICE_OVERDUE_EVENT, ctx -> {
@@ -1087,7 +1120,8 @@ public final class FeeProcesses {
     static void remind(ProcessContext ctx, ZoneId zone) {
         EntityInstance invoice = invoice(ctx);
         ctx.put(OUTCOME, "NONE");
-        if (invoice == null || !QbFees.UNPAID.contains(String.valueOf((Object) invoice.get("status")))) {
+        if (invoice == null || !QbFees.UNPAID.contains(String.valueOf((Object) invoice.get("status")))
+            || first(ctx, ERASED_CLOSURE) != null) {
             return;
         }
         LocalDate today = ctx.opTime().atZone(zone).toLocalDate();

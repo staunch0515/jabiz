@@ -367,6 +367,46 @@ export async function readOperatorBilling(q: string, offset: number, limit: numb
   })) }
 }
 
+/** F-M14b: the two checks whose notes an operator reads (`qb.operator.recon-notes`); nothing else reaches it. */
+export const OPERATOR_NOTE_CHECKS = ['DISTRIBUTION_AT_FLOOR', 'EXPOSURE_UNPURCHASED'] as const
+export type OperatorNoteCheck = (typeof OPERATOR_NOTE_CHECKS)[number]
+
+/** A note of the latest daily reconciliation about one of the operator's sponsors: how many publications it counted. */
+export interface OperatorReconNote {
+  checkCode: OperatorNoteCheck
+  sponsorId: string
+  company: string
+  contactName: string
+  publications: number
+  scheduledTime: string | null
+}
+
+/** The latest run's time (null: no run yet) and its notes about the operator's sponsors. */
+export interface OperatorReconNotes {
+  asOf: string | null
+  notes: OperatorReconNote[]
+}
+
+/**
+ * The latest run's notes about the sponsors assigned to the operator now (the server keeps them to its own, D64); a
+ * run that noted nothing about them still gives its time.
+ */
+export async function readOperatorReconNotes(): Promise<OperatorReconNotes> {
+  const page = await runQuery<Row>(TEMPLATE.operatorReconNotes, { offset: 0, limit: 500 })
+  const asOf = page.items.map((row) => str(row.scheduledTime)).find((time) => time !== null) ?? null
+  return { asOf, notes: page.items.flatMap((row): OperatorReconNote[] => {
+    const checkCode = OPERATOR_NOTE_CHECKS.find((check) => check === row.checkCode)
+    return checkCode ? [{
+      checkCode,
+      sponsorId: String(row.sponsorId),
+      company: String(row.company ?? ''),
+      contactName: String(row.contactName ?? ''),
+      publications: num(row.publications),
+      scheduledTime: str(row.scheduledTime),
+    }] : []
+  }) }
+}
+
 /** The sponsors, newest application first: only the operator's own when `mine`, searched by `q`. */
 export async function readOperatorSponsors(q: string, mine: boolean, offset: number, limit: number, sorts?: SortSpec[]):
   Promise<Page<OperatorSponsor>> {

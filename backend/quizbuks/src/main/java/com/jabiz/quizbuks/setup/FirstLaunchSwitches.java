@@ -107,13 +107,16 @@ public final class FirstLaunchSwitches {
         active(QbParams.SITE_PROFILE_ENABLED, "aifee", false,
             "off at the launch; turned on after qb.ai.fee.enabled, once the website draft's three reservation limits "
                 + "are published and the markup and the rate are confirmed"),
-        // F-M13b: the key exists (declared off, controlled) and the automatic payment works, but it is switched on only
-        // when F-M13c (the void notice and the daily checks that watch it) is in: it stays off at the launch and its row
-        // turns ACTIVE with F-M13c's pull request. Then: the parameter is read at each run and is on only once it is
-        // published as true, so publishing IS turning it on (the sponsors with unpaid invoices and money are paid that
-        // night: tell them first, launch-checklist).
-        waiting(QbParams.FEE_AUTO_PAY_ENABLED, "autopay", true, "F-M13c"),
+        // F-M13: the automatic payment is off at the launch and turned on by hand: the parameter is read at each run and
+        // is on only once it is published as true, so publishing IS turning it on (the sponsors with unpaid invoices and
+        // money are paid that night: tell them first, launch-checklist).
+        active(QbParams.FEE_AUTO_PAY_ENABLED, "autopay", false, null),
         keep(QbParams.FEE_AUTO_PAY_MAX_INVOICES, "autopay"),
+        // F-M15 b: an erased sponsor's platform fee account is wound up at the launch (declared off: the tests rely on
+        // it); published after the automatic payment's switch (launch checklist).
+        active(QbParams.ERASURE_CLOSE_ENABLED, "erasure", true,
+            "an erased sponsor's platform fee account is invoiced, paid as far as it goes and its granted credit voided "
+                + "at the launch (declared off: the tests rely on it)"),
         manual(QbParams.FEE_CREDIT_MANUAL_MAX, "grant"),
         manual(QbParams.TREE_GRANT_MAX_PER_NODE, "grant"));
 
@@ -121,7 +124,7 @@ public final class FirstLaunchSwitches {
      * The keys that are already in {@link QbParams#ALL} while their row still {@link Status#WAITING}: the key exists,
      * what it means does not do yet. Any other waiting key found in {@code ALL} is a feature that forgot its row.
      */
-    public static final Set<String> KEY_BEFORE_MEANING = Set.of(QbParams.FEE_AUTO_PAY_ENABLED);
+    public static final Set<String> KEY_BEFORE_MEANING = Set.of();
 
     /** Whether a system of this {@code jabiz.web.environment} proposes the first launch's values. */
     public static boolean appliesTo(String environment) {

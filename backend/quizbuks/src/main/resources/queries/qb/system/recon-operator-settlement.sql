@@ -37,10 +37,11 @@ permissions: [qb.wallet.system]
 -- checked, and only fees charged since their switch point: what is before it is the old rule's (§3.0).
 --
 -- Work is bounded by :since (the caller gives the last clean run's time less three months, none: all of the history): the
---   settlements issued from then on are checked against their lines, the payments made from then on are looked for, and an
---   operator's credit taken back is compared over all of its history when it has a settlement or a posting inside it. What
---   is counted over is not narrowed: the settlements two of which should have written a line (the later is inside the
---   window), the fees nobody counted (a fee can stay uncounted for longer than the window), the settlement that counted a fee.
+--   settlements issued from then on are checked against their lines, a fee or a part of a payment nobody counted is reported
+--   when the later of the two settlements that should have counted it is issued from then on, and an operator's credit taken
+--   back is compared over all of its history when it has a settlement or a posting inside it. What is counted over is not
+--   narrowed: the settlements, the fees and the payments nobody counted (either can stay uncounted for longer than the
+--   window), the settlement that counted a fee.
 --   A difference stays in the run until it is put right, so the window does not let one age out. The waiting check does not
 --   read it.
 -- OPERATOR_SETTLEMENT_WAITING (a difference on purpose: a month still unsettled this long after its deadline must hold the
@@ -66,7 +67,8 @@ permissions: [qb.wallet.system]
 -- GIFT_RECOVERY, reference "recovered": what the settlements say they took back against the net credit to 5140 of the
 --   postings made for them (5140, not 2140: a refund that paid the cost carried posts that part to 4110, §4); reference
 --   "<month>": what was due of the month against what was taken back and carried out less what was carried in.
--- OPERATOR_CHARGE_NO_OPERATOR: by sponsor and period, fees with no operator (no settlement counts them).
+-- OPERATOR_CHARGE_NO_OPERATOR: by sponsor and period, fees with no operator (no settlement counts them), from the
+--   earliest switch point of the operators.
 -- OPERATOR_GIFT_CARRY_OPEN (a note): a suspended operator whose latest settlement carries credit to take back.
 WITH all_new_settlements AS (
     -- Every settlement of the new kind, whatever its age: what is counted over (the two settlements that could have written a
@@ -207,14 +209,42 @@ missed_fees AS (
     GROUP BY u.r_operator, u.r_period
 ),
 credit_parts AS (
-    -- The parts of payments made with granted credit from the earliest switch point on.
+    -- The parts of payments made with granted credit from the earliest switch point on. Not narrowed by when they were paid
+    -- (as the fees are not): a part can wait for its second settlement longer than the window (one issued more than three
+    -- months after the payment); the window is of the later of the two settlements (missed_parts).
     SELECT p.{{QbFeePayment.paymentId}} AS payment_id, p.{{QbFeePayment.targetEntity}} AS target_entity,
            p.{{QbFeePayment.targetId}} AS target_id, p.{{QbFeePayment.amount}} AS amount,
            p.{{QbFeePayment.paidAt}} AS paid_at
     FROM {{QbFeePayment}} p
     WHERE p.{{QbFeePayment.subAccount}} = 'FEE_CREDIT'
-      AND p.{{QbFeePayment.paidAt}} >= greatest((SELECT min(n.r_at) FROM switch_points n),
-                                                coalesce(CAST(:since AS timestamptz), '-infinity'))
+      AND p.{{QbFeePayment.paidAt}} >= (SELECT min(n.r_at) FROM switch_points n)
+      -- A part paid on one fee is done once its GIFT line is written, as nearly all are: left out here (an anti-join on the
+      -- unique index: a hash with statistics, a probe a part without), before it is resolved and its fee's CHARGE line looked up (#701 review M3: 100,000 such parts took
+      -- the check past its budget). A part of an invoice or a credit note may pay several fees, counted by different
+      -- settlements: such a part on an invoice is left out when it has as many GIFT lines as the invoice has fees (one
+      -- line a fee: the unique index), its fees counted as resolved below (#701 re-review M-1: 24,000 of them on invoices
+      -- of five fees took the check past its timeout). The rest go on and are checked fee by fee in unmatched_parts.
+      -- What is left unbounded (re-review L-5): the parts on credit notes, and those on invoices not yet fully written,
+      -- are resolved on every run.
+      AND NOT EXISTS (SELECT 1 FROM {{QbOperatorSettlementLine}} g
+                      WHERE p.{{QbFeePayment.targetEntity}} = 'QbFeeCharge'
+                        AND g.{{QbOperatorSettlementLine.lineKind}} = 'GIFT'
+                        AND g.{{QbOperatorSettlementLine.sourceId}} = CAST(p.{{QbFeePayment.paymentId}} AS text)
+                        AND g.{{QbOperatorSettlementLine.chargeId}} = p.{{QbFeePayment.targetId}})
+      AND NOT (p.{{QbFeePayment.targetEntity}} = 'QbFeeInvoice'
+               AND (SELECT count(*) FROM {{QbOperatorSettlementLine}} g
+                    WHERE g.{{QbOperatorSettlementLine.lineKind}} = 'GIFT'
+                      AND g.{{QbOperatorSettlementLine.sourceId}} = CAST(p.{{QbFeePayment.paymentId}} AS text))
+                   >= (SELECT CASE WHEN i.{{QbFeeInvoice.chargeId}} IS NOT NULL THEN 1 ELSE
+                              (SELECT count(*) FROM {{QbFeeCharge}} c
+                               WHERE c.{{QbFeeCharge.sponsorId}} = i.{{QbFeeInvoice.sponsorId}}
+                                 AND c.{{QbFeeCharge.period}} = i.{{QbFeeInvoice.period}}
+                                 AND c.{{QbFeeCharge.billingMode}} = 'POSTPAID'
+                                 AND c.{{QbFeeCharge.chargedAt}} <= i.{{QbFeeInvoice.issuedAt}}
+                                 AND NOT EXISTS (SELECT 1 FROM {{QbFeeInvoice}} o
+                                                 WHERE o.{{QbFeeInvoice.chargeId}} = CAST(c.{{QbFeeCharge.chargeId}} AS text)))
+                              END
+                       FROM {{QbFeeInvoice}} i WHERE i.{{QbFeeInvoice.invoiceId}} = p.{{QbFeePayment.targetId}}))
 ),
 resolved AS MATERIALIZED (
     -- Each part resolved to the fee(s) it paid, as qb.system.operator-settlement-gifts does: a fee directly, an invoice's
@@ -275,19 +305,25 @@ unmatched_parts AS MATERIALIZED (
            LIMIT 1) IS NULL
 ),
 missed_parts AS (
-    -- ... that two settlements of the operator that could have written it did not: those since the one that counted the fee,
-    -- issued after the payment; a capped one did not have to for the fees counted before it (the credit used on the fees
-    -- counted is never cut). The payments are those inside the window (credit_parts), the settlements any (a fee counted
-    -- long ago may be paid with credit only now); the later of the two is inside the window.
+    -- ... that at least two settlements of the operator that could have written it did not. They are the settlements
+    -- issued after the payment, from the one that counted the fee on (that one included); a capped one other than that
+    -- one does not count (it did not have to write the parts of fees counted before it, though the credit used on the
+    -- fees it counted is never cut). The payments and the settlements are any (a fee counted long ago may be paid with
+    -- credit only now, a part may wait long for its second settlement); reported while the latest of those settlements
+    -- is inside the window (:since): a run whose window holds none of them was preceded by one whose window held the
+    -- latest, which reported it then.
     SELECT x.r_operator, x.r_month, sum(abs(x.r_amount)) AS r_amount
     FROM (
         SELECT DISTINCT u.r_operator, u.payment_id, u.r_amount,
                to_char(u.r_paid_at AT TIME ZONE coalesce(CAST(:zone AS text), 'UTC'), 'YYYY-MM') AS r_month
         FROM unmatched_parts u
-        WHERE (SELECT count(*) FROM all_new_settlements s
-               WHERE s.r_operator = u.r_operator
-                 AND s.r_issued_at >= u.r_s0_issued_at AND s.r_issued_at > u.r_paid_at
-                 AND (NOT s.r_capped OR s.r_id = u.r_s0_id)) >= 2) x
+        CROSS JOIN LATERAL (
+            SELECT count(*) AS r_n, max(s.r_issued_at) AS r_last
+            FROM all_new_settlements s
+            WHERE s.r_operator = u.r_operator
+              AND s.r_issued_at >= u.r_s0_issued_at AND s.r_issued_at > u.r_paid_at
+              AND (NOT s.r_capped OR s.r_id = u.r_s0_id)) q
+        WHERE q.r_n >= 2 AND q.r_last >= coalesce(CAST(:since AS timestamptz), '-infinity')) x
     GROUP BY x.r_operator, x.r_month
 ),
 recent_operators AS (
@@ -503,19 +539,21 @@ JOIN {{QbOperatorSettlement}} p ON p.{{QbOperatorSettlement.operatorId}} = s.r_o
     AND p.{{QbOperatorSettlement.month}} = to_char(CAST(s.r_month || '-01' AS date) - interval '1 month', 'YYYY-MM')
 WHERE p.{{QbOperatorSettlement.giftCarriedOut}} <> s.r_gift_carried_in
 UNION ALL
--- Fees with no operator, charged from the earliest switch point of the operators on (before it, the fees of the old rule
--- have none to be counted by). An operator that never had a settlement of the old kind has the epoch for its switch point (it
--- is counted from the first fee): the earliest real one is taken, the epoch only when there is none; with no settlement of
--- the new kind yet there is no point and nothing is asked.
+-- Fees with no operator, charged from the earliest switch point of the operators on (the earliest real one; the epoch
+-- only when there is none). By time alone, not by the operator that looks after the sponsor now (#701 review L3): that
+-- changes when the sponsor moves, and a difference would go away with it, though nothing was put right; and a sponsor
+-- with no operator, or one whose operator has no settlement of the new kind yet, would never be asked about. Before the
+-- earliest switch point every fee was the old rule's, which needed no operator on the fee. The edges that remain
+-- (#701 re-review L-5): a fee with no operator charged before that point is never asked about; and a sponsor whose
+-- operator switched later than the earliest one is asked about its operator-less fees from the earliest point on,
+-- though its own operator's old settlements were still the rule then (such a fee has no operator, so no settlement of
+-- either rule counted it).
 SELECT CAST('OPERATOR_CHARGE_NO_OPERATOR' AS varchar(30)), CAST(c.{{QbFeeCharge.sponsorId}} AS varchar(128)),
        CAST(c.{{QbFeeCharge.period}} AS varchar(128)), CAST(0 AS numeric), sum(c.{{QbFeeCharge.amount}})
 FROM {{QbFeeCharge}} c
 WHERE c.{{QbFeeCharge.operatorId}} IS NULL
-  -- (a comparison with no point at all is not true: with no settlement of the new kind nothing is asked)
-  AND c.{{QbFeeCharge.chargedAt}} >= (SELECT coalesce(min(o.{{QbOperatorSettlement.coveredFrom}})
-                                                      FILTER (WHERE o.{{QbOperatorSettlement.coveredFrom}} > '1970-01-02'),
-                                                      min(o.{{QbOperatorSettlement.coveredFrom}}))
-                                      FROM {{QbOperatorSettlement}} o WHERE o.{{QbOperatorSettlement.coveredFrom}} IS NOT NULL)
+  AND c.{{QbFeeCharge.chargedAt}} >=
+      (SELECT coalesce(min(n.r_at) FILTER (WHERE n.r_at > '1970-01-02'), min(n.r_at)) FROM switch_points n)
   AND c.{{QbFeeCharge.chargedAt}} >= coalesce(CAST(:since AS timestamptz), '-infinity')
   -- A fee whose invoice is voided is turned back and nothing is owed on it: it is not asked about (how a difference is put right).
   AND NOT EXISTS (SELECT 1 FROM {{QbFeeInvoice}} i

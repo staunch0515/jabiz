@@ -96,6 +96,10 @@ public final class ReconChecks {
     public static final String CREDIT_NOTE_USE_VOID = "CREDIT_NOTE_USE_VOID";
     /** F-M7 (N4): credit left while an invoice is unpaid. */
     public static final String CREDIT_UNUSED_WITH_DUE = "CREDIT_UNUSED_WITH_DUE";
+    /** F-M13c: an invoice's paid amount and credit applied against the parts and uses that add up to them. */
+    public static final String INVOICE_PAID_SUM = "INVOICE_PAID_SUM";
+    /** F-M13c (for attention): unpaid invoices of a sponsor whose account has money, with the automatic payment on. */
+    public static final String AUTO_PAY_MISSED = "AUTO_PAY_MISSED";
     /**
      * F-M10: a month of the AI help's usage in which everybody's row is below the sum of the people's (questions, input
      * or output tokens, estimated dollars); {@code reference} names the month and the measure. Not "unequal": a deleted
@@ -200,6 +204,15 @@ public final class ReconChecks {
     /** What a transfer holds in transit (2130) against its state (Q6b). */
     public static final String TRANSFER_IN_TRANSIT = "TRANSFER_IN_TRANSIT";
 
+    /** F-M15 b (§9): a wind-up done whose granted credit still has something left (it should have been voided). */
+    public static final String ERASED_GIFT_LEFT = "ERASED_GIFT_LEFT";
+    /** F-M15 b: a wind-up waiting {@code qb.erasure.close.alert-days} or more after the erasure (attention). */
+    public static final String ERASED_CLOSE_OPEN = "ERASED_CLOSE_OPEN";
+    /** F-M15 b: what a wound-up sponsor still owes (a note: the record of an erased sponsor's fees owed). */
+    public static final String ERASED_FEE_OWED = "ERASED_FEE_OWED";
+    /** F-M15 b (review M1): an erased sponsor who had the platform fee account with no wind-up registered. */
+    public static final String ERASED_NO_CLOSURE = "ERASED_NO_CLOSURE";
+
     /** Every check, in the order of the summary. */
     public static final List<String> ALL = List.of(SPONSOR_WALLET, SPONSOR_PENDING_COUNT, SPONSOR_PENDING_AMOUNT,
         TOTAL_2110, LEDGER_ZERO, TOPUP_LEDGER, TOPUP_ARRIVALS, TOPUP_REFUNDS, TOPUP_FEE, TAKER_WALLET,
@@ -209,18 +222,19 @@ public final class ReconChecks {
         PREPAYMENT_PARTS, PREPAYMENT_UNCHARGED, DISTRIBUTION_DEPOSITS, DISTRIBUTION_UNSETTLED,
         DISTRIBUTION_FINAL_MISSING, DISTRIBUTION_PRICE_RANGE, DISTRIBUTION_AT_FLOOR, AUDIENCE_REFUND_MISSING,
         AUDIENCE_REFUND_NO_PERIOD, AUDIENCE_FEE_NOT_LIVE, CREDIT_NOTE_USES, CREDIT_NOTE_LIMITS, CREDIT_NOTE_USE_VOID,
-        CREDIT_UNUSED_WITH_DUE, HELP_USAGE_TOTAL, OPERATOR_SETTLEMENT_WAITING, OPERATOR_SETTLEMENT_COVERAGE,
+        CREDIT_UNUSED_WITH_DUE, INVOICE_PAID_SUM, AUTO_PAY_MISSED, HELP_USAGE_TOTAL, OPERATOR_SETTLEMENT_WAITING, OPERATOR_SETTLEMENT_COVERAGE,
         GIFT_RECOVERY, OPERATOR_CHARGE_NO_OPERATOR, OPERATOR_GIFT_CARRY_OPEN, EXPOSURE_DEPOSITS,
         EXPOSURE_SETTLED_OVER, EXPOSURE_UNSETTLED, EXPOSURE_FINAL_MISSING, EXPOSURE_PRICE_RANGE,
         EXPOSURE_UNIT_MISMATCH, EXPOSURE_UNPURCHASED, EXPOSURE_SETTLED_SHORT, EXPOSURE_AMOUNT_MISMATCH,
-        AI_RESERVATION_SHORT, AI_CREDIT, AI_FEE_MONTH, AI_FEE_UNBILLED, AI_FEE_RESERVED, AI_CREDIT_EXPIRED_HELD);
+        AI_RESERVATION_SHORT, AI_CREDIT, AI_FEE_MONTH, AI_FEE_UNBILLED, AI_FEE_RESERVED, AI_CREDIT_EXPIRED_HELD,
+        ERASED_GIFT_LEFT, ERASED_CLOSE_OPEN, ERASED_FEE_OWED, ERASED_NO_CLOSURE);
 
     /** Codes no longer reported that runs written before may still name: readable, never written. */
     public static final List<String> RETIRED = List.of(DISTRIBUTION_PRICE_OUT_OF_RANGE);
 
     /** The checks that only note something: a run with notes alone is {@code OK}, and nobody is asked. */
     public static final Set<String> NOTES = Set.of(TAKER_WALLET_LAG, DISTRIBUTION_AT_FLOOR, EXPOSURE_UNPURCHASED,
-        OPERATOR_GIFT_CARRY_OPEN, AI_RESERVATION_SHORT);
+        OPERATOR_GIFT_CARRY_OPEN, AI_RESERVATION_SHORT, ERASED_FEE_OWED);
 
     /**
      * F-M14 (docs/quizbuks/plans/impl/F-M14.md §1.2): the checks that need someone to look or decide while the books
@@ -229,7 +243,8 @@ public final class ReconChecks {
      * ({@link ReconTasks}).
      */
     public static final Set<String> ATTENTION = Set.of(DISTRIBUTION_PRICE_RANGE, AUDIENCE_REFUND_NO_PERIOD,
-        CREDIT_UNUSED_WITH_DUE, HELP_USAGE_TOTAL, EXPOSURE_PRICE_RANGE);
+        CREDIT_UNUSED_WITH_DUE, AUTO_PAY_MISSED, HELP_USAGE_TOTAL, EXPOSURE_PRICE_RANGE, ERASED_CLOSE_OPEN,
+        ERASED_NO_CLOSURE);
 
     /** F-M14: the dictionary of each check's level (made from these sets). */
     public static final String LEVEL_DICTIONARY = "urn:jabiz:dict:quizbuks:recon-level";

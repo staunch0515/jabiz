@@ -8,6 +8,7 @@ import { boundPublicationOf, CAPITALS, operatorTree, platformMap, pass } from '.
 import { answerQuiz, GRANT, loopCast, phone, rememberParams, STEP_TIMEOUT_MS, type Loop } from './launch-loop'
 import { sharedVideos } from './exposure-videos'
 import { contentAdmin } from './legal'
+import { signInAdmin } from './admin'
 import { approvedSponsor, fund } from './wallet'
 import {
   accessibleInBoth, adminToken, expect, mailTo, openArea, PASSWORD, prepareQuizbuks, run, runJobNow, setControlledParam, signIn,
@@ -39,13 +40,19 @@ import {
  *      publication's page lists the note
  *   7c F-M8: the exposure fee: bought when submitted, counted by two takers, settled by the final job once it ends
  *      and the rest given back
+ *   9  F-M14: after the loop's money, the daily check finds no difference: the reconciliation page, shown at that
+ *      level only, has nothing
  *
  * Not repeated here: the editor's keyboard (tree-graph.spec), certificates turned off and the deleted account
  * (certificates.spec), and mainland China's view of a publication with a foreign video (foreign-video.spec: the
  * end-to-end run has no address database, so that spec sets the region by parameter).
  *
- * To come with the money (the plan's table says where; no placeholder is written before the feature exists):
- *   8   F-M12: the monthly bill and the operator's settlement, each after the one before it
+ * Not written here, on purpose (F-M12 d, General Controller 2026-11-14): 8, the operator's monthly settlement. A
+ * settlement needs a month that has ended with the operator's fees in it, and this run starts from an empty database
+ * with an operator created today; re-running a job does not move the data's months, and the platform's clock is not
+ * moved for a test. It is covered by the ITs OperatorSettlementIT, OperatorSettlementGiftIT and OperatorSettlementRecon*IT,
+ * by the scenario replay scenarios/qb/operator-settlement-gift.yml (a fixed clock), and by a look by hand on staging in
+ * the first days of a month (docs/quizbuks/rehearsal-staging.md section 11).
  *
  * The verify page is cached by the browser for up to a minute, so every look at it is in a context of its own.
  */
@@ -763,6 +770,30 @@ test.describe.serial('the first launch\'s loop', () => {
         await restore()
       }
     })
+
+  test('9. F-M14: after the loop\'s money, the daily check finds no difference', async ({ page, request }) => {
+    test.setTimeout(STEP_TIMEOUT_MS)
+    // A run checked after everything above, told by the server's own times: later than the latest run checked before
+    // this step. The server reconciles every minute here (QB_RECONCILE_RUN_CRON), so the step waits for the next run;
+    // asking for a run again would only replay a scheduled time already run. A difference blocks the month's journal
+    // export: the loop must leave none.
+    const admin = await adminToken(request)
+    const checked = (rows: Record<string, unknown>[]) => rows.map((row) => Date.parse(String(row.checkedAt)))
+    const before = Math.max(0, ...checked(await query(request, admin, 'qb.admin.recon-runs', {})))
+    let latest: Record<string, unknown> | undefined
+    await expect.poll(async () => {
+      latest = (await query(request, admin, 'qb.admin.recon-runs', {}))
+        .find((row) => Date.parse(String(row.checkedAt)) > before)
+      return latest !== undefined
+    }, { message: 'a reconciliation checked after the loop', timeout: 120_000, intervals: [5_000] }).toBe(true)
+    expect(latest!.status, `the run's summary: ${String(latest!.summary)}`).toBe('OK')
+
+    await signInAdmin(page)
+    await page.goto(`/admin/qb/finance/reconciliation?run=${String(latest!.runId)}&level=DIFFERENCE`)
+    await expect(page.getByTestId('recon-level-filter')).toHaveAttribute('data-level', 'DIFFERENCE')
+    await expect(page.getByTestId('recon-items')).toBeVisible()
+    await expect(page.getByTestId('recon-group')).toHaveCount(0)
+  })
 })
 
 /** An approved Sponsor moved to the operator (a Sponsor signs up with the default operator). */

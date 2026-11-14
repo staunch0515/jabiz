@@ -1,9 +1,10 @@
 /*---
 id: qb.admin.settlement-lines
 description: "An operator settlement's lines (F-M12 §6): each fee counted, each voided fee, each part of a payment made with granted credit, by Sponsor and kind"
-entities: [QbOperatorSettlementLine]
+entities: [QbOperatorSettlementLine, QbSponsor]
 datasets:
   QbOperatorSettlementLine: urn:jabiz:dataset:default:QbOperatorSettlementLine
+  QbSponsor: urn:jabiz:dataset:default:QbSponsor
 params:
   settlementId: { like: QbOperatorSettlementLine.settlementId, description: Only this settlement's lines }
   operatorId:   { like: QbOperatorSettlementLine.operatorId, description: Only this operator's }
@@ -15,6 +16,7 @@ results:
   month:        { from: QbOperatorSettlementLine.month }
   lineKind:     { from: QbOperatorSettlementLine.lineKind }
   sponsorId:    { from: QbOperatorSettlementLine.sponsorId }
+  sponsorName:  { from: QbSponsor.company }
   chargeId:     { from: QbOperatorSettlementLine.chargeId }
   feeKind:      { from: QbOperatorSettlementLine.feeKind }
   period:       { from: QbOperatorSettlementLine.period }
@@ -43,6 +45,7 @@ SELECT
     l.{{QbOperatorSettlementLine.month}} AS month,
     l.{{QbOperatorSettlementLine.lineKind}} AS lineKind,
     l.{{QbOperatorSettlementLine.sponsorId}} AS sponsorId,
+    sp.{{QbSponsor.company}} AS sponsorName,
     l.{{QbOperatorSettlementLine.chargeId}} AS chargeId,
     l.{{QbOperatorSettlementLine.feeKind}} AS feeKind,
     l.{{QbOperatorSettlementLine.period}} AS period,
@@ -58,6 +61,7 @@ SELECT
     l.{{QbOperatorSettlementLine.recoveryRate}} AS recoveryRate,
     l.{{QbOperatorSettlementLine.occurredAt}} AS occurredAt
 FROM {{QbOperatorSettlementLine}} l
+LEFT JOIN {{QbSponsor}} sp ON sp.{{QbSponsor.userId}} = l.{{QbOperatorSettlementLine.sponsorId}}
 WHERE (CAST(:settlementId AS text) IS NULL OR l.{{QbOperatorSettlementLine.settlementId}} = :settlementId)
   AND (CAST(:operatorId AS text) IS NULL OR l.{{QbOperatorSettlementLine.operatorId}} = :operatorId)
   AND (CAST(:month AS text) IS NULL OR l.{{QbOperatorSettlementLine.month}} = :month)
