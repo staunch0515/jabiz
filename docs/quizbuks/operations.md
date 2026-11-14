@@ -325,9 +325,9 @@ FROM pg_stat_statements ORDER BY total_exec_time DESC LIMIT 20;
      - 法务相关的不打开：`qb.transfer.enabled`、`qb.withdrawal.bank.enabled` 保持 `false`（§1.3b、§1.3c）；`qb.kudos.buy.enabled`、`qb.kudos.sell.enabled`、`qb.reward.kudos.enabled`、`qb.play.entry-fee.enabled` 的首次上线的值也是 `false`（学分只显示、不使用，学分的帮助见 `help/fee-account.md`）；
      - `qb.fee.monthly`、`qb.creator-fee-rate`（与 `qb.transfer.fee-rate`）的提案值是 0，**必须先发布**（与其他提案一起，不等价目表）：首次上线不收这些费用，发布后参数才存在、卡片才显示"一致"，以后改声明值也不会改到已上线的系统；价目表设好、收费开始前再由受控变更改为实际金额；赠送额度的开关 `qb.fee-credit.grant.enabled` 在价目表与赠送额度（`qb.fee-credit.grant.*`）设好之后发布；
      - AI 使用说明发布、**且 AI 使用手册（`manual-sponsor.*.md`、`manual-app.*.md`）已按首次上线的状态（学分只显示、不使用，无报名费）改好并由内容管理员重新载入、发布**之后，才发布 `qb.ai.enabled` 与 `qb.help.enabled`（两条提案的值都是 `true`）；
-     - 收费组尚未上线的行：已经存在的两个键 `qb.audience.billing.enabled`（F-M7）、`qb.ai.site-profile.enabled`（F-M9）由 `QB_SETUP` 提出 `false`，**照常发布**，卡片比较它们的现值（为开即"不同"，启动检查警告）；其余的键（AI 费 `qb.ai.fee.enabled`、自动付账单 `qb.fee.auto-pay.enabled`；配送费 `qb.distribution.billing.enabled` 与曝光费 `qb.exposure.billing.enabled`（F-M8c）已是普通的生效行）尚不存在，卡片显示"等 F-Mx 上线"，不提案、不用管；它们的上线顺序见 `plans/impl/F-M.md` §4；
+     - 收费组尚未上线的行：已经存在的两个键 `qb.ai.fee.enabled`、`qb.ai.site-profile.enabled`（F-M9）由 `QB_SETUP` 提出 `false`，**照常发布**，卡片比较它们的现值（为开即"不同"，启动检查警告）；受众规则费 `qb.audience.billing.enabled`（F-M7）已是生效行、提案值为 `true`，价目表设好后发布；其余的键（自动付账单 `qb.fee.auto-pay.enabled`；配送费 `qb.distribution.billing.enabled` 与曝光费 `qb.exposure.billing.enabled`（F-M8c）已是普通的生效行）尚不存在，卡片显示"等 F-Mx 上线"，不提案、不用管；它们的上线顺序见 `plans/impl/F-M.md` §4；
   3. 财务页卡片中可比较的行全部显示"一致"（金额类的行显示"金额，不比较"）。新建的测试系统（`staging`）同样应全部一致；只有此前已经建过参数的测试系统，以及本地环境（不是 `production` / `staging`，提出声明值），才会显示"不同"；
-  4. 启动日志没有 `FirstLaunchSwitchesCheck` 的警告（`production` 上：学分买卖、转账、提现、学分奖励、报名费的开关为开，受众规则费 `qb.audience.billing.enabled` 或网站资料的 AI `qb.ai.site-profile.enabled` 为开，或学分奖励的开关从未发布；Stripe 正式模式而环境不是 `production`）。
+  4. 启动日志没有 `FirstLaunchSwitchesCheck` 的警告（`production` 上：学分买卖、转账、提现、学分奖励、报名费的开关为开，AI 收费 `qb.ai.fee.enabled`、网站资料的 AI `qb.ai.site-profile.enabled` 或自动付款 `qb.fee.auto-pay.enabled` 为开，或学分奖励的开关从未发布；Stripe 正式模式而环境不是 `production`）。
   运营商自己的提现（`qb.operator.withdrawal.*`）没有开关：那是运营商的收入，不是学分，不由本项挡住。
 - [ ] 小额实测：一位内部发起方用真实卡充值最小额（`qb.topup.min`），确认到账、手续费分录、收据；在 Stripe Dashboard 全额退款，确认扣回；次日核对为 `OK`
 - [ ] 资金调度：充值在 Stripe 上几天后才变为可用余额，转账从可用余额转出；定好打开转账前的余额与打款计划
@@ -629,7 +629,7 @@ AI 为运营商找发起方（F-S1：所有者一律是运营商；平台不自�
 - **规则目录**：内容管理员（`qb.audience.rules.write`）在平台管理系统「受众规则」决定每种规则是否开放给发起方、是否计费、排序；没改过的规则即开放、计费。关闭的规则发起方不能再选，已提交的发布照旧。新增一种规则要开发。
 - **价目表**：每个所有者（直营 `direct` 与每个运营商）一张：每种规则的日价与每次最低使用费，理由必填，历史在审计中。直营与任何运营商的由财务（`qb.audience.prices.write`）在平台管理系统改，运营商的负责人在 `/operator/` 改自己的。没有价目表的直营即免费；运营商没有价目表时按受控参数 `qb.audience.price.fallback`（`DIRECT` 用直营的价，`FREE` 免费）。
 - **费用** = max（最低使用费，Σ 所用计费规则的日价 × 天数），天数为发布期间按 24 小时向上取整；没用计费规则的不收。
-- **开关**（受控参数，四眼）：`qb.audience.billing.enabled`（缺省关：报价为 0）、`qb.audience.price.fallback`、`qb.audience.fee.refund-unused-days`（Q47c-2 才起作用）。打开之前先设好价目表；**Q47c-2 上线之前不要打开**（打开后发起方看到费用，但提交时还不扣款）。部署后执行一次 `QB_SETUP` 提出这三个参数，由另一位管理员发布。
+- **开关**（受控参数，四眼）：`qb.audience.billing.enabled`（缺省关：报价为 0）、`qb.audience.price.fallback`、`qb.audience.fee.refund-unused-days`（Q47c-2 才起作用）。打开之前先设好各运营商的价目表（没有价目表的运营商下，规则按 0 计费）。提交发布时的预留与上架时的记费已在 F-M5、F-M7 上线，所以**首次上线即开**：首次上线的登记行是"生效行、值为开"，部署后执行一次 `QB_SETUP` 提出这三个参数（`qb.audience.billing.enabled` 的提案值为 `true`），由另一位管理员在价目表设好之后发布。
 
 ### 7.16 ~~协议答题（Q86）~~
 
