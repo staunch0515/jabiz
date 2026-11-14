@@ -98,13 +98,15 @@ public final class NotificationMails {
 
     /**
      * F-M2: a sponsor's platform fee Kudos expire soon (each lot once, at most once per sponsor in 24 hours): what is
-     * left of the lots, how many, and when the first expires. The sponsor console's, opted out of in its preferences.
+     * left of the lots, how many, and when the first expires; F-M9c: how much of it is in the AI credit (it expires there
+     * too). The sponsor console's, opted out of in its preferences.
      */
     public static final MailTemplate FEE_CREDIT_EXPIRING = MailTemplate.define("qb.fee-credit.expiring", t -> t
-        .category(MailCategory.NOTIFICATION).entries("sponsor").param("amount", "count", "expiresAt")
+        .category(MailCategory.NOTIFICATION).entries("sponsor").param("amount", "count", "expiresAt", "inAiCredit")
             .sample("amount", "1,000")
             .sample("count", "2")
-            .sample("expiresAt", "2026-01-31"));
+            .sample("expiresAt", "2026-01-31")
+            .sample("inAiCredit", "400"));
 
     /** A sponsor's publication passed its review. */
     public static final MailTemplate PUBLICATION_APPROVED = MailTemplate.define("qb.publication.approved", t -> t
