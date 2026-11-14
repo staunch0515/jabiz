@@ -38,9 +38,10 @@ class OperatorSettlementReconBudgetIT extends CreditNoteItSupport {
      * table with statistics pass jit_above_cost); 50 operators, 60 months, 3,000 settlements, 18,000 lines, 15,000
      * fees, 100,000 cash payments. Before the lookups of the lines were written as probes of the unique index the
      * case without statistics took 2.2 s here and 4.3 s on CI (the planner took the lines for a handful and compared
-     * every fee with all of them): the limit of 2 s is what catches that coming back, with the room CI needs.
+     * every fee with all of them): the limit of 1 s is what catches that coming back, with the room CI needs (about
+     * twice the time here).
      */
-    static final Duration NO_STATISTICS = Duration.ofMillis(2_000);
+    static final Duration NO_STATISTICS = Duration.ofMillis(1_000);
     static final Duration ANALYZED = Duration.ofMillis(2_000);
 
     private static final List<String> OPERATOR_IDS = new ArrayList<>();
@@ -108,8 +109,10 @@ class OperatorSettlementReconBudgetIT extends CreditNoteItSupport {
             .getFirst().get("account_id"));
         // The settlements are of the operators' months from 2030; the real one is left alone.
         execute("UPDATE qb_operator SET created_at = '2030-01-01T00:00:00Z'");
+        // Every table the check reads that the history fills or the setup wrote to: no statistics until ANALYZE below.
         for (String table : List.of("qb_fee_charge_version", "qb_fee_payment_version",
-            "qb_operator_settlement_line_version", "ledger_transaction_version", "ledger_entry_version",
+            "qb_operator_settlement_line_version", "qb_operator_settlement", "qb_operator", "qb_sponsor_operator",
+            "qb_fee_invoice", "qb_fee_credit_note_version", "ledger_transaction_version", "ledger_entry_version",
             "entity_registry")) {
             execute("ALTER TABLE " + table + " SET (autovacuum_enabled = false)");
         }

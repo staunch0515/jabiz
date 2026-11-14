@@ -146,6 +146,22 @@ class OperatorSettlementReconIT extends CapItSupport {
             .filter(row -> operatorId.equals(row.get("sponsorId")))).isEmpty();
     }
 
+    /**
+     * The check finds a fee's CHARGE line by its source (the whole unique index (line_kind, source_id, charge_id), so
+     * the plan does not depend on the table's statistics): that holds only while every line but a GIFT has its fee for
+     * its source, which the table's check of V122 makes sure of. Should the check go, the lookups would miss lines.
+     */
+    @Test
+    @Order(0)
+    void theLinesTableKeepsTheCheckThatAChargeLinesSourceIsItsFee() {
+        assertThat(query("SELECT pg_get_constraintdef(c.oid) AS def FROM pg_constraint c "
+            + "JOIN pg_class t ON t.oid = c.conrelid JOIN pg_namespace n ON n.oid = t.relnamespace "
+            + "WHERE n.nspname = current_schema() AND t.relname = 'qb_operator_settlement_line_version' "
+            + "AND c.conname = 'qb_operator_settlement_line_source' AND c.contype = 'c' AND c.convalidated"))
+            .singleElement().satisfies(row -> assertThat(String.valueOf(row.get("def")).replaceAll("[\\s()]", ""))
+                .isEqualTo("CHECK" + "line_kind::text='GIFT'::textORsource_id::text=charge_id::text"));
+    }
+
     // ---- OPERATOR_SETTLEMENT_WAITING --------------------------------------------------------------------------------
 
     @Test
