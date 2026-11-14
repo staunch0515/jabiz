@@ -124,7 +124,7 @@ public final class FeeProcesses {
      *                  (an AI fee's cost to the platform); none: 0, and never more than the amount
      */
     public record ChargeInput(@NotBlank @Size(max = 128) String sponsorId,
-        @NotBlank @Pattern(regexp = "MONTHLY|MANUAL|AUDIENCE|DISTRIBUTION|EXPOSURE") String kind,
+        @NotBlank @Pattern(regexp = "MONTHLY|MANUAL|AUDIENCE|DISTRIBUTION|EXPOSURE|AI") String kind,
         @NotBlank @Pattern(regexp = "\\d{4}-\\d{2}") String period,
         @NotNull @DecimalMin("1") @DecimalMax(MAX_AMOUNT) @Digits(integer = 13, fraction = 0) BigDecimal amount,
         @Size(max = QbFees.REASON_LENGTH) String reason, @Size(max = QbFees.SOURCE_LENGTH) String sourceKey,
@@ -302,7 +302,9 @@ public final class FeeProcesses {
             .step("Pay the fee from its prepayment", CallProcess.<ProcessContext>when(
                 ctx -> chargeInput(ctx).prepaymentId() != null, Prepayments.USE, 1,
                 ctx -> new Prepayments.UseInput(chargeInput(ctx).prepaymentId(), (String) ctx.get(CHARGE_ID),
-                    ctx.get(TOTAL, BigDecimal.class), chargeReference(ctx)), SETTLEMENT))
+                    ctx.get(TOTAL, BigDecimal.class), chargeReference(ctx),
+                    // F-M9 (plan H4): the AI credit is read by lot.
+                    FeeRules.AI.equals(chargeInput(ctx).kind())), SETTLEMENT))
             .compute("Take the credit left", (metadata, ctx) -> takeCredit(ctx))
             // D-Q87-5, F-M1: a prepaid sponsor pays as fees arise, from the fee credit and then the cash, as far as
             // they go (the rest stays owed on the charge's invoice). M1 of the F-M5 review: what the prepayment does

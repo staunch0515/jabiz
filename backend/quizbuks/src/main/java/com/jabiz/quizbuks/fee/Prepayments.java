@@ -13,6 +13,7 @@ import com.jabiz.runtime.ledger.LedgerProcesses;
 import com.jabiz.runtime.process.steps.CallProcess;
 import com.jabiz.runtime.process.steps.HoldLock;
 import com.jabiz.runtime.process.steps.QueryEntities;
+import com.jabiz.runtime.process.steps.RunTemplate;
 import com.jabiz.runtime.process.steps.SaveChanges;
 import jakarta.validation.constraints.DecimalMax;
 import jakarta.validation.constraints.DecimalMin;
@@ -109,11 +110,29 @@ public final class Prepayments {
     /** @param credit of it, from the fee credit; {@code cash} from the cash (both 0 for a postpaid one) */
     public record FreezeOutput(String prepaymentId, BigDecimal credit, BigDecimal cash) {}
 
-    /** @param amount what the charge owes (the fee and its tax) */
+    /**
+     * @param amount what the charge owes (the fee and its tax)
+     * @param byLot  F-M9 (plan H4): read what it holds lot by lot, summed in SQL ({@value #HELD_TEMPLATE}), not part by
+     *               part: the AI credit is never closed, so its parts grow without end; null or false for the others
+     *               (one publication's prepayment has a few parts)
+     */
     public record UseInput(@NotBlank @Size(max = 36) String prepaymentId, @NotBlank @Size(max = 36) String chargeId,
         @NotNull @DecimalMin("0") @DecimalMax(FeeProcesses.MAX_AMOUNT) @Digits(integer = 13, fraction = 0)
         BigDecimal amount,
-        @Size(max = 100) String reference) {}
+        @Size(max = 100) String reference, Boolean byLot) {
+
+        /** A prepayment read part by part. */
+        public UseInput(String prepaymentId, String chargeId, BigDecimal amount, String reference) {
+            this(prepaymentId, chargeId, amount, reference, null);
+        }
+
+        boolean lots() {
+            return Boolean.TRUE.equals(byLot);
+        }
+    }
+
+    /** F-M9 (plan H4): what an AI credit holds, lot by lot (its expiry with each lot of fee credit). */
+    public static final String HELD_TEMPLATE = "qb.system.ai-credit-held";
 
     public record ChargeInput(@NotBlank @Size(max = 128) String sponsorId,
         @NotBlank @Size(max = 36) String publicationId,
@@ -163,6 +182,8 @@ public final class Prepayments {
     static final String PARTS = "parts";
     static final String USED_PARTS = "usedParts";
     static final String GRANTS = "grants";
+    /** F-M9: the lots an AI credit holds ({@value #HELD_TEMPLATE}). */
+    static final String HELD_LOTS = "heldLots";
     static final String TAKEN = "taken";
     static final String SETTLED = "settled";
     static final String CHARGE_INPUT = "chargeInput";
@@ -372,12 +393,16 @@ public final class Prepayments {
                     QueryEntities.query(QbFeeAccount.defaultDataset(QbPrepayments.PREPAYMENT), ctx -> EntityQuery
                         .builder().where(new QueryPredicate.In("prepaymentId", List.of(useInput(ctx).prepaymentId())))
                         .limit(1).build(), PREPAYMENT),
+                    // By part unless read by lot (an IN of nothing is not sent).
                     QueryEntities.query(QbFeeAccount.defaultDataset(QbFeeAccount.PAYMENT), ctx -> EntityQuery.builder()
-                        .where(new QueryPredicate.In("targetId", List.of(useInput(ctx).prepaymentId())))
+                        .where(new QueryPredicate.In("targetId", partsOf(ctx)))
                         .limit(MAX_PARTS + 1).build(), PARTS),
                     QueryEntities.query(QbFeeAccount.defaultDataset(QbFeeAccount.PAYMENT), ctx -> EntityQuery.builder()
-                        .where(new QueryPredicate.In("prepaymentId", List.of(useInput(ctx).prepaymentId())))
+                        .where(new QueryPredicate.In("prepaymentId", partsOf(ctx)))
                         .limit(MAX_PARTS + 1).build(), USED_PARTS)))
+                // F-M9 (plan H4): an AI credit's, by lot with each lot's expiry.
+                .step("Read what it holds by lot", RunTemplate.<ProcessContext>when(ctx -> useInput(ctx).lots(),
+                    HELD_TEMPLATE, ctx -> Map.of("prepaymentId", useInput(ctx).prepaymentId()), HELD_LOTS))
                 // L2 of the F-M5 review: the fee credit it holds is spent in the account's order (the earliest to
                 // expire first), which needs the lots' expiry.
                 .step("Read the fee credit it was taken from", QueryEntities.<ProcessContext>of(
@@ -413,7 +438,8 @@ public final class Prepayments {
         }
         List<Held> taken = new ArrayList<>();
         BigDecimal left = paid;
-        for (Held held : held(FeeGate.list(ctx, PARTS), FeeGate.list(ctx, USED_PARTS), expiries(ctx))) {
+        for (Held held : useInput(ctx).lots() ? heldLots(ctx) : held(FeeGate.list(ctx, PARTS),
+            FeeGate.list(ctx, USED_PARTS), expiries(ctx))) {
             if (left.signum() == 0) {
                 break;
             }
@@ -479,11 +505,49 @@ public final class Prepayments {
                 add(byLot, part, amount.negate());
             }
         }
-        return byLot.values().stream().filter(h -> h.amount().signum() > 0)
+        return order(byLot.values().stream().filter(h -> h.amount().signum() > 0).toList(), expiries);
+    }
+
+    /** The account's order: the fee credit first, the earliest to expire first, then the cash by lot. */
+    private static List<Held> order(List<Held> lots, Map<String, Instant> expiries) {
+        return lots.stream()
             .sorted(Comparator.comparing((Held h) -> QbFeeAccount.FEE_CREDIT.equals(h.subAccount()) ? 0 : 1)
                 .thenComparing(h -> expiries.getOrDefault(h.lotId(), Instant.MAX))
                 .thenComparing(Held::lotId))
             .toList();
+    }
+
+    /** The prepayment whose parts are read one by one: none when it is read by lot. */
+    private static List<Object> partsOf(ProcessContext ctx) {
+        return useInput(ctx).lots() ? List.of() : List.of(useInput(ctx).prepaymentId());
+    }
+
+    /**
+     * F-M9 (plan H4): what an AI credit holds by lot ({@value #HELD_TEMPLATE}), in the order {@link #held} spends it.
+     * The rows are the lots with something left; more than {@link #MAX_PARTS} of them is refused, as for parts.
+     */
+    @SuppressWarnings("unchecked")
+    static List<Held> heldLots(ProcessContext ctx) {
+        List<Map<String, Object>> rows = ctx.contains(HELD_LOTS) ? (List<Map<String, Object>>) ctx.get(HELD_LOTS)
+            : List.of();
+        if (rows.size() > MAX_PARTS) {
+            throw new IllegalStateException("An AI credit holding more lots than " + MAX_PARTS);
+        }
+        Map<String, Instant> expiries = new LinkedHashMap<>();
+        List<Held> lots = new ArrayList<>();
+        for (Map<String, Object> row : rows) {
+            String lotId = String.valueOf(row.get("lotId"));
+            lots.add(new Held(String.valueOf(row.get("subAccount")), lotId, FeeGate.money(row.get("amount"))));
+            if (row.get("expiresAt") != null) {
+                expiries.put(lotId, toInstant(row.get("expiresAt")));
+            }
+        }
+        return order(lots, expiries);
+    }
+
+    private static Instant toInstant(Object value) {
+        return value instanceof Instant instant ? instant : value instanceof java.time.OffsetDateTime odt
+            ? odt.toInstant() : Instant.parse(String.valueOf(value));
     }
 
     /** When each lot of fee credit read ({@value #GRANTS}) expires. */
