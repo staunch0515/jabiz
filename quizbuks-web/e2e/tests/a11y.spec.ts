@@ -9,8 +9,10 @@ import { fundedSponsor, takerInJapan } from './wallet'
 import { contentAdmin, legalAdmin, publishVersion } from './legal'
 import {
   accessibleInBoth,
+  adminToken,
   expect,
   expectAccessible,
+  insert,
   openArea,
   PASSWORD,
   prepareQuizbuks,
@@ -823,3 +825,35 @@ test('the exposure fee\'s prices, the operator\'s own price and the settlements 
       await context.close()
     }
   })
+
+/**
+ * The operators' help (the help centre's questions of their audience): an operator's member reads a published one on
+ * the operator desk, in both appearances; the public help centre never gives it out, whatever audience is asked for.
+ */
+test('the operators\' help is read on the operator desk (light and dark) and is never public', async ({ browser, request }) => {
+  test.setTimeout(240_000)
+  const operator = await operatorWithLead(request, 'Hlp')
+  const admin = await adminToken(request)
+  const shown = unique('How is a month settled ')
+  await insert(request, admin, 'urn:jabiz:dataset:default:QbFaqEntry', { audience: 'OPERATOR', category: 'OTHER',
+    question: { en: shown }, answer: { en: 'Every day, **once**.' }, seq: 1, published: true })
+  // Never public: not for the operators' audience, not for the others'.
+  for (const audience of ['OPERATOR', 'APP', 'SPONSOR']) {
+    const answer = await request.get(`/api/public/queries/qb.public.faq?p.audience=${audience}`)
+    expect(answer.ok()).toBe(true)
+    expect(JSON.stringify(await answer.json())).not.toContain(shown)
+  }
+  const context = await browser.newContext()
+  try {
+    const desk = await context.newPage()
+    await signInOperatorDesk(desk, operator)
+    await desk.goto('/operator/qb/operator/help')
+    const entry = desk.getByTestId('operator-faq-entry').filter({ hasText: shown })
+    await expect(entry).toBeVisible()
+    await entry.locator('summary').click()
+    await expect(entry.getByTestId('operator-faq-answer').locator('strong')).toHaveText('once')
+    await accessibleInBoth(desk, 'operator help')
+  } finally {
+    await context.close()
+  }
+})
