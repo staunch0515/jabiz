@@ -104,10 +104,15 @@ abstract class AiCreditItSupport extends AiItSupport {
 
     /** Sets the least purchase (not created by the setup: the first change gives its kind). */
     void minPurchase(String value) {
+        yenParam(QbParams.AI_CREDIT_MIN_PURCHASE, value);
+    }
+
+    /** Sets an optional yen parameter of the AI credit (min-purchase, low-amount: the first change gives its kind). */
+    void yenParam(String key, String value) {
         Map<String, Object> values = new java.util.LinkedHashMap<>();
-        values.put("paramKey", QbParams.AI_CREDIT_MIN_PURCHASE);
+        values.put("paramKey", key);
         values.put("value", value);
-        if (query("SELECT 1 FROM sys_param_version WHERE param_key = ?", QbParams.AI_CREDIT_MIN_PURCHASE).isEmpty()) {
+        if (query("SELECT 1 FROM sys_param_version WHERE param_key = ?", key).isEmpty()) {
             values.put("valueKind", QbParams.AI_CREDIT_MIN_PURCHASE_KIND);
         }
         Map<String, Object> change = run("CONTROL_CHANGE_PROPOSE", proposer(), body("targetEntity", "SysParam",

@@ -22,6 +22,8 @@ import { Languages } from 'lucide-react'
 import { useId, useState, type FormEvent } from 'react'
 import { useTranslation } from 'react-i18next'
 import { formProblem, ProblemList, useEditing } from '../content/editing'
+import { AiCreditRefusal, AiQuoteNote, useAiQuote } from '../aicredit/AiQuote'
+import { AI_CREDIT_PROCESS } from '../aicredit/api'
 import { SPONSOR } from '../messages'
 import type { ContentLanguage } from '../qb/api'
 import { QB } from '../qb/messages'
@@ -66,10 +68,15 @@ export function useAiPublicationTextsJob(quizId: string | null, publicationId: s
  * "Translate with AI": which texts, what is sent and, on first use, the AI notice. `send` asks (a quiz's texts by
  * default; Q73d-2: a publication's).
  */
-export function TranslateDialog({ language, onOpenChange, send, sent }: {
+export function TranslateDialog({ language, onOpenChange, send, sent, quote: quoteOf }: {
   language: ContentLanguage
   onOpenChange: (open: boolean) => void
   send?: (all: boolean, aiNoticeVersionNo: number | null) => Promise<unknown>
+  /**
+   * The cost's quote for a request of `send`'s (F-M9 b1): the process and the same input as the request, without the
+   * notice's version. A quiz's texts by default.
+   */
+  quote?: (all: boolean) => { process: string; input: Record<string, unknown> }
   /** What is sent, when it is not the quiz's texts. */
   sent?: string
 }) {
@@ -83,6 +90,10 @@ export function TranslateDialog({ language, onOpenChange, send, sent }: {
   const [local, setLocal] = useState<string | null>(null)
   const notice = useAiNotice(true)
   const name = tQb(`languages.${language}`)
+
+  const asked = quoteOf ? quoteOf(scope === 'all') : { process: AI_CREDIT_PROCESS.translateQuote,
+    input: { quizId: editing.quizId, language, all: scope === 'all' } }
+  const quote = useAiQuote(asked.process, asked.input)
 
   const request = useMutation({
     mutationFn: () => {
@@ -136,12 +147,14 @@ export function TranslateDialog({ language, onOpenChange, send, sent }: {
           <p className="text-muted-foreground text-sm" data-testid="ai-translate-sent">{sent ?? t('ai.translate.sent')}</p>
           <AiNoticeSection notice={notice} agreed={agreed} onAgreed={setAgreed} />
           {local && <p role="alert" className="text-destructive text-sm">{local}</p>}
+          <AiQuoteNote quote={quote} />
           <ProblemList problems={formProblem(request.error, [])} testId="ai-translate-request-error" />
+          <AiCreditRefusal error={request.error} />
           <DialogFooter>
             <Button type="button" variant="outline" disabled={request.isPending} onClick={() => onOpenChange(false)}>
               {t('common.cancel')}
             </Button>
-            <Button type="submit" disabled={request.isPending || notice.isPending}
+            <Button type="submit" disabled={request.isPending || notice.isPending || quote.blocked}
               aria-busy={request.isPending || undefined} data-testid="ai-translate-submit">
               <Languages aria-hidden />
               {t('ai.translate.submit')}
