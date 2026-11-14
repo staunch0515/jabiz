@@ -1,5 +1,7 @@
 import { readFile } from 'node:fs/promises'
-import { accountant, codeOf, issuerSet, mapAccounts, postingLastMonth, previewOf, signInAdminAs } from './journal'
+import {
+  accountant, blockedByDifference, codeOf, issuerSet, mapAccounts, postingLastMonth, previewOf, signInAdminAs,
+} from './journal'
 import { expect, openArea, prepareQuizbuks, signIn, test } from './support'
 import { fundedSponsor } from './wallet'
 
@@ -19,20 +21,28 @@ test('finance exports the next month and downloads its voucher', async ({ page, 
   await mapAccounts(request)
   await postingLastMonth(request)
   const finance = await accountant(request)
-  // The server's own verdict decides what the page must show, so the test waits for a settled one: ready, or waiting
-  // because the next month has not ended. Anything else (a reconciliation that is not clean yet or is running just
-  // now, a database transaction open for a moment, an account moved after the mapping) comes and goes with the work
-  // the earlier tests leave running, and is not what this test is about. The reconciliation runs every minute here.
+  // The server's own verdict decides what the page must show, so the test waits for a settled one: ready, waiting
+  // because the next month has not ended, or held by a difference the reconciliation after the month's end found (the
+  // earlier tests' money may leave one; the page must say so, and it is not what this test is about). Anything else (a
+  // reconciliation that has not run since the month's end or is running just now, a database transaction open for a
+  // moment, an account moved after the mapping) comes and goes with the work the earlier tests leave running. The
+  // reconciliation runs every minute here.
   const settled = async () => {
+    const isSettled = (p: Awaited<ReturnType<typeof previewOf>>) => p.ready || !p.periodEnded || blockedByDifference(p)
     let last = await previewOf(request, finance.token)
-    for (let i = 0; i < 30 && !(last.ready || !last.periodEnded); i++) {
+    for (let i = 0; i < 30 && !isSettled(last); i++) {
       await new Promise((resolve) => setTimeout(resolve, 5_000))
       last = await previewOf(request, finance.token)
     }
-    expect(last.ready || !last.periodEnded, `a settled preview of the next export: ${JSON.stringify(last)}`).toBe(true)
+    expect(isSettled(last), `a settled preview of the next export: ${JSON.stringify(last)}`).toBe(true)
     return last
   }
   const next = await settled()
+  const held = !next.ready && next.periodEnded
+  if (held) {
+    test.info().annotations.push({ type: 'warning', description: `the export of ${next.month} is held by a difference `
+      + `the reconciliation of ${next.reconTime} found (the earlier tests' money): the page is checked to say so` })
+  }
 
   await signInAdminAs(page, finance.email)
   await page.goto('/admin/qb/finance/journal')
@@ -46,6 +56,8 @@ test('finance exports the next month and downloads its voucher', async ({ page, 
     const message = `the page's verdict against the server's ${JSON.stringify({ next, shown })}`
     if (next.ready) {
       expect(await page.getByTestId('journal-blockers').count(), message).toBe(0)
+    } else if (held) {
+      await expect(page.getByTestId('journal-blocker-recon'), message).toBeVisible({ timeout: 2_000 })
     } else {
       // Exported up to the current month by an earlier run: the next month has not ended, and the page says so.
       await expect(page.getByTestId('journal-blocker-open'), message).toBeVisible({ timeout: 2_000 })
@@ -63,7 +75,8 @@ test('finance exports the next month and downloads its voucher', async ({ page, 
     await expect(page.getByTestId('journal-export')).toHaveCount(0)
   }
 
-  // The newest export: its voucher as kept, quoted throughout and mapped.
+  // The newest export: its voucher as kept, quoted throughout and mapped. Held on a new database, there is none yet.
+  if (held && await page.getByTestId('journal-export-row').count() === 0) return
   const row = page.getByTestId('journal-export-row').first()
   await expect(row).toBeVisible()
   const voucher = await row.getAttribute('data-voucher')

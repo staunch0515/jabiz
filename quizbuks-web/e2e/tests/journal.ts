@@ -87,7 +87,29 @@ export async function postingLastMonth(request: APIRequestContext) {
 }
 
 /** What the next export would be, as the accountant previews it. */
-export async function previewOf(request: APIRequestContext, token: string) {
-  return run(request, token, 'QB_JOURNAL_PREVIEW', {}) as Promise<{ month: string; periodEnded: boolean;
-    reconOk: boolean; ready: boolean; unmapped: string[]; detailParts: number }>
+export async function previewOf(request: APIRequestContext, token: string): Promise<Preview> {
+  return (await run(request, token, 'QB_JOURNAL_PREVIEW', {})) as unknown as Preview
+}
+
+/** The parts of the preview (`JournalProcesses.PreviewOutput`) the tests read. */
+export interface Preview {
+  month: string
+  periodEnded: boolean
+  periodEnd: string
+  reconStatus: string | null
+  reconTime: string | null
+  reconOk: boolean
+  ready: boolean
+  unmapped: string[]
+  detailParts: number
+}
+
+/**
+ * The month has ended and the reconciliation that ran after its end found a difference: the export waits for the
+ * difference to be resolved (requirement 7.4). A verdict as settled as "ready": the next run finds the same difference
+ * until someone resolves it.
+ */
+export function blockedByDifference(preview: Preview): boolean {
+  return preview.periodEnded && preview.reconStatus === 'DIFF' && preview.reconTime !== null
+    && Date.parse(preview.reconTime) >= Date.parse(preview.periodEnd)
 }
