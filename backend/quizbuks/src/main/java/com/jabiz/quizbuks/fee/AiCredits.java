@@ -45,6 +45,8 @@ import java.util.Map;
 public final class AiCredits {
 
     public static final String MOVEMENT = "QbAiCreditMovement";
+    /** F-M9b: the sponsor's own movements (read only, scoped to the caller), for the AI credit page. */
+    public static final String SPONSOR_MOVEMENTS = "urn:jabiz:dataset:sponsor:" + MOVEMENT;
     public static final String MOVEMENT_KIND_DICTIONARY = "urn:jabiz:dict:quizbuks:ai-credit-movement-kind";
     public static final String BUY_KIND = "BUY";
     public static final String RETURN_KIND = "RETURN";

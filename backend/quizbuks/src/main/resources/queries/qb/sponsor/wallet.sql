@@ -35,6 +35,7 @@ results:
   feeCreditBalance: { kind: { type: monetary, currency: JPY, scale: 0 } }
   cashFromOperator: { kind: { type: monetary, currency: JPY, scale: 0 } }
   prepaymentHeld: { kind: { type: monetary, currency: JPY, scale: 0 } }
+  aiCreditHeld: { kind: { type: monetary, currency: JPY, scale: 0 } }
   creditNoteCredit: { kind: { type: monetary, currency: JPY, scale: 0 } }
 permissions: [qb.sponsor.finance.read]
 ---*/
@@ -62,6 +63,7 @@ SELECT
     coalesce(fc.fc_balance, 0)      AS feeCreditBalance,
     coalesce(ol.ol_remaining, 0)    AS cashFromOperator,
     coalesce(pp.pp_remaining, 0)    AS prepaymentHeld,
+    coalesce(pp.pp_ai, 0)           AS aiCreditHeld,
     coalesce(cn.cn_left, 0)         AS creditNoteCredit
 FROM (SELECT 1 AS one) base
 -- F-M7: the credit notes' credit not used yet, which the next invoices take first (their total less what they gave
@@ -73,7 +75,9 @@ CROSS JOIN (
 -- F-M5: what the Sponsor's publications set aside of the account and still hold (given back when they go back to
 -- their drafts or a day after they end): not a fee, not in the balances above.
 CROSS JOIN (
-    SELECT sum(x.{{QbPrepayment.remaining}}) AS pp_remaining
+    -- F-M9b: the AI credit (purpose AI) apart: what was bought for AI requests, not set aside by a publication.
+    SELECT sum(CASE WHEN x.{{QbPrepayment.purpose}} <> 'AI' THEN x.{{QbPrepayment.remaining}} END) AS pp_remaining,
+           sum(CASE WHEN x.{{QbPrepayment.purpose}} = 'AI' THEN x.{{QbPrepayment.remaining}} END) AS pp_ai
     FROM {{QbPrepayment}} x
     WHERE x.{{QbPrepayment.status}} = 'OPEN' AND x.{{QbPrepayment.mode}} = 'PREPAID') pp
 -- F-M4: what is left of the cash the Sponsor's operator moved to it: it pays the platform's fees only (buying Kudos

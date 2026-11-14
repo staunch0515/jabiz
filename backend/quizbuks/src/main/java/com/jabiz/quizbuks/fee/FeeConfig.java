@@ -261,6 +261,12 @@ public class FeeConfig {
         return AiCredits.MOVEMENT_ENTITY;
     }
 
+    /** F-M9b: a sponsor's own AI credit movements (the AI credit page). */
+    @Bean
+    DatasetDefinition qbSponsorAiCreditMovementDataset() {
+        return own(AiCredits.SPONSOR_MOVEMENTS, AiCredits.MOVEMENT);
+    }
+
     @Bean
     DatasetDefinition qbAiCreditMovementDataset() {
         return processOnly(AiCredits.MOVEMENT);

@@ -73,6 +73,10 @@ class AiCreditIT extends AiCreditItSupport {
         assertThat(money(credit.get("remaining"))).isEqualByComparingTo("800");
         // 2190 and 2160 to 2180 for the sponsor: no revenue, no tax.
         assertThat(net("2180", sponsor)).isEqualByComparingTo("-800");
+        // F-M9b: the wallet shows the AI credit apart, never among the publications' prepayments.
+        Map<String, Object> wallet = items("qb.sponsor.wallet", sponsorToken(sponsor), Map.of()).getFirst();
+        assertThat(money(wallet.get("aiCreditHeld"))).isEqualByComparingTo("800");
+        assertThat(money(wallet.get("prepaymentHeld"))).isZero();
         assertThat(net("4120", sponsor)).isZero();
 
         // A second purchase raises the same credit (what was bought, what is left).
