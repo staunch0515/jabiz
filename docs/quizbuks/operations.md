@@ -603,7 +603,7 @@ FROM pg_stat_statements ORDER BY total_exec_time DESC LIMIT 20;
 - **现金奖励的争议**（F-S1）：平台不处理。学者提出争议只通知发起方；双方解决后由发起方再次"标记已支付"（确认期限重新起算），或学者直接确认。平台的现金奖励列表只读、可按运营商筛选，没有裁决。
 - **已有安装的授权**（F-S1）：`QB_SETUP` 只补、不收回。F-S1 之前已执行过 `QB_SETUP` 的安装，在「用户与角色」中从角色 `QB_ADMIN_CONTENT` 去掉 `qb.review.sponsor`、`qb.review.publication`、`qb.admin.reward-methods`、`qb.redemption.void`、`qb.digital.resolve`、`qb.prospect.use`、`qb.certification.manage`（`approval.decide` 保留，财务四眼要它），并去掉已删除的 `qb.cash.resolve`（任何角色上都去掉）；超级管理员角色补上 `approval.scope.move`（不是受保护的权限：再执行一次 `QB_SETUP` 即补）。原来由内容管理员做审核的人，改为某个运营商（通常是默认运营商）的成员并取得 `QB_OPERATOR`。测试系统直接重置数据库。
 - **方案**（Q48e-2）：五种方案（每月固定费、平台分成；受控参数 `qb.operator.plan.<1..5>.fee|share`，`QB_SETUP` 提出 0/50%、20,000/40%、40,000/30%、60,000/20%、100,000/10%）。新运营商为方案 1；总部在运营商页面提出从以后某月起的方案，另一位管理员（`qb.topup.bank.approve`）在待办中批准后生效。
-- **月结算**（Q48b、Q48e-2、F-M12）：每天 02:13（日本时间，1 日除外）任务 `qb.operator-settlement` 为每个运营商结算它最早的、已结束而还没有结算的月份：它的发起方的平台费（税前，种类在 `qb.operator.share.kinds` 中的，去掉成本部分）减去用平台承担的赠送额度付的部分，×（1 − 当月方案的平台分成），再减去当月方案的固定费（停用的运营商不收）、获客费用与扣除，余下的分成扣回运营商承担的赠送额度，记入运营商的账户（不够扣的结转到下月），并可签发结算单。发起方发布的奖励抽成不再进运营商的结算（需求方 2026-11-13 同意）。规则、就绪条件与核对见 §7.56。前提：分录导出的 `qb.journal.account.2140` / `5130` / `5140` / `4110` 已设。
+- **月结算**（Q48b、Q48e-2、F-M12）：每天 02:13（日本时间，1 日除外）任务 `qb.operator-settlement` 为每个运营商结算它最早的、已结束而还没有结算的月份：它的发起方的平台费（税前，种类在 `qb.operator.share.kinds` 中的，去掉成本部分）减去用平台承担的赠送额度付的部分，×（1 − 当月方案的平台分成），再减去当月方案的固定费（停用的运营商不收）、获客费用与扣除，余下的分成扣回运营商承担的赠送额度，记入运营商的账户（不够扣的结转到下月），并可签发结算单。发起方发布的奖励抽成不再进运营商的结算（需求方 2026-11-13 同意）。规则、就绪条件与核对见 §7.57。前提：分录导出的 `qb.journal.account.2140` / `5130` / `5140` / `4110` 已设。
 - **提现**（Q48e-2）：钱都在平台。运营商负责人在运营商管理系统「账户」设银行账户（改后 `qb.operator.withdrawal.cooldown-hours` 小时内不能提现）、申请提现（至少 `qb.operator.withdrawal.min`，至多余额，同时一笔）；财务在「运营商提现」银行付款后点"登记付款"，另一位管理员在待办中批准后才过账（2140 / 1120），驳回即回到"已申请"；财务也可驳回申请并写理由。手续费由平台承担。Q48e-2 之前签发的结算单照旧逐张付款。
 - **平台运营商不开放提现**（F-M12 a0，需求方 2026-11-13）：平台运营商（`defaultForNew` 为真的那一个，即自助注册的发起方所归的默认运营商）的账户不能提现：负责人申请即 422 `QB_OPERATOR_WITHDRAWAL_PLATFORM`，什么也不写；「账户」页不显示提现表单，改为一行说明。结算照常记入它的账户，转给直营发起方照常可用。默认运营商改为另一家后，以申请时的标志为准：新的默认运营商被拒，原来的可以申请。**部署本项前**查一次有没有平台运营商未结的提现申请：`SELECT w.withdrawal_id, w.amount, w.status FROM qb_operator_withdrawal w JOIN qb_operator o ON o.operator_id = w.operator_id WHERE o.default_for_new AND w.status IN ('REQUESTED', 'PAYING')`；有的照现有流程由财务处理（驳回或登记付款），本项不自动改它们。
 
@@ -1379,7 +1379,7 @@ Quiz 与发布有主题词（平台词表中的词与自定义词），学者可
 
 - **差异**：已结束月份的账会因此错或不全。运行为 `DIFF`，告警 `qb-reconcile-diff`，月末分录导出被拒（`QB_JOURNAL_RECON_NOT_OK`）；财务（`qb.reconcile`）每天至多一个待办"核对发现差异"，标题写明差异条数与涉及几项核对。
 - **需关注**：账是平的、已结束月份不受影响，只需要有人看或做一个决定。运行仍为 `OK`，不告警、不拦导出；每个（核对项, 对象）给负责的人一个待办"核对需关注"，标题写明核对项、对象、应为与实际。现在的四项：`DISTRIBUTION_PRICE_RANGE`（运营商的配送费价目超出总部范围：改价目或改范围）、`AUDIENCE_REFUND_NO_PERIOD`（财务决定开凭证或用 `QB_AUDIENCE_REFUND_CLOSE` 记下不开，§7.50）、`CREDIT_UNUSED_WITH_DUE`（下一次开账单或抵用时自行了结）、`HELP_USAGE_TOTAL`（AI 帮助的月用量，由内容管理员负责，见 §7.53）。
-- **提示**：只是信息（`TAKER_WALLET_LAG`、`DISTRIBUTION_AT_FLOOR`），不建待办。
+- **提示**：只是信息（`TAKER_WALLET_LAG`、`DISTRIBUTION_AT_FLOOR`、`EXPOSURE_UNPURCHASED`、`AI_RESERVATION_SHORT`），不建待办。
 - **待办的建立与关闭**：任务 `qb.recon-attention` 与 `qb.recon-tasks-close`，每天 UTC 18:52（日本时间 03:52，核对之后 15 分钟），每次至多 200 项，剩下的次日继续；补跑用 `JOB_RUN_REQUEST`。
   - **关注待办**：同一对象只要有一个未办的就不再建；不再出现即以完成关闭。人手工关了而条件还在，次日会重建：要处理的是条件，不是待办。
   - **差异待办**：后一天的取代前一天的（前一天的以取消关闭）；一次没有差异的运行把它以完成关闭。
@@ -1452,7 +1452,7 @@ Quiz 与发布有主题词（平台词表中的词与自定义词），学者可
 
 ### 7.55 每日核对与月报分类一览（F-M14a）
 
-**核对总表**（`ReconChecks.ALL`，共 52 项：差异 44、需关注 5、提示 3）。级别的含义与待办见 §7.52；"差异"拦月末分录导出，"需关注"与"提示"不拦。"报开发"＝代码或数据有缺陷，不要手工改表；"补跑"一律经 `JOB_RUN_REQUEST`（任务名、计划时刻与原因）。核对页每组标题下的一句"怎么办"与本表一致。
+**核对总表**（`ReconChecks.ALL`，共 58 项：差异 48、需关注 5、提示 5）。级别的含义与待办见 §7.52；"差异"拦月末分录导出，"需关注"与"提示"不拦。"报开发"＝代码或数据有缺陷，不要手工改表；"补跑"一律经 `JOB_RUN_REQUEST`（任务名、计划时刻与原因）。核对页每组标题下的一句"怎么办"与本表一致。
 
 | 码 | 查什么 | 级别 | 常见原因 | 怎么办 | 谁处理 | 相关项 |
 |---|---|---|---|---|---|---|
@@ -1508,6 +1508,7 @@ Quiz 与发布有主题词（平台词表中的词与自定义词），学者可
 | `CREDIT_NOTE_USE_VOID` | 贷项用在已作废的账单上 | 差异 | 作废与抵用并发 | 报开发 | 报开发 | — |
 | `CREDIT_UNUSED_WITH_DUE` | 有未用贷项的同时有未付账单 | 需关注 | 抵用尚未发生 | 通常下一次开账单或抵用时自行了结；持续则报开发 | 财务 | FEES_RECEIVABLE |
 | `HELP_USAGE_TOTAL` | 每个月 AI 帮助的全平台用量（提问数、Token、估算美元）不小于各人之和（F-M10，§7.53） | 需关注 | 全平台行少记（缺陷）；删除账号或保留期只会让全平台行更大 | 内容管理员在总部 AI 页（`/qb/ai`）看该月用量；持续则报开发 | 内容管理员（`qb.admin.help.gaps`） | — |
+| `AI_RESERVATION_SHORT` | 收费的 AI 作业结束时，费用超出它的预留（或当时的 AI 额度），超出部分由平台承担（F-M9；引用为作业编号，实际为平台承担的税前日元；月度记费收进后不再出现） | 提示 | 预留的上限（每次尝试的调用次数、页数、输出上限）低于该作业的实际用量，或期间额度被退回 | 发起方无需处理；同类作业经常出现时，按实际用量调高预留的受控参数（§7.56） | 总部（AI 设置） | — |
 
 **已知局限**
 - 关注待办手工关闭而条件仍在，次日会重建；"已持续 n 天"从连续找到同一（核对项, 对象）的那几次运行中的第一次算起（UTC 日数）：某次运行不再找到它即重新数，没有运行的日子不打断；核对页一次至多显示 100 个关注条目的天数。
@@ -1518,7 +1519,37 @@ Quiz 与发布有主题词（平台词表中的词与自定义词），学者可
 
 **月报分类**（`qb.admin.monthly`，按来源单据、是否冲正、所动科目与方向归类，每笔只归一类）：`TOPUP`、`BANK_TOPUP`、`MANUAL_TOPUP`、`GRANT`、`REFUND`、`DISPUTE`、`STRIPE_FEE`、`REWARD`、`TRANSFER_SENT`、`TRANSFER_SETTLED`、`WITHDRAWAL_PAID`、`TRANSFER_FAILED`、`TRANSFER_REVERSED`、`PAYOUT`、`PAYOUT_FAILED`、`OPERATOR_SHARE`、`OPERATOR_PAID`、`REFERRAL_REWARD`、`CASH_TOPUP`、`CASH_BANK_TOPUP`、`CASH_REFUND`、`CASH_DISPUTE`、`KUDOS_BOUGHT`、`KUDOS_SOLD`、`FEE_CHARGED`、`FEE_PAID`、`FEE_VOIDED`、`ENTRY_FEE`、`ENTRY_FEE_SETTLED`、`FEE_CREDIT_GRANTED`、`FEE_CREDIT_VOIDED`、`OPERATOR_TRANSFER_TO_DIRECT`、`PREPAYMENT_FROZEN`、`PREPAYMENT_USED`、`PREPAYMENT_RELEASED`、`DISTRIBUTION_CHARGED`、`DISTRIBUTION_DEPOSIT`、`DISTRIBUTION_RELEASED`、`FEE_CREDIT_NOTE`、`FEE_CREDIT_RECOVERED`、`EXPOSURE_CHARGED`、`EXPOSURE_DEPOSIT`（冻结与追加）、`EXPOSURE_RELEASED`、`OTHER`。规则一句话：**退回与扣回不另立类，按它在账上的方向落进已有的类**——退回到预付款的是 `FEE_PAID` 的负数，预付款退回账户是 `PREPAYMENT_RELEASED`，到期赠送的作废是 `FEE_CREDIT_VOIDED`；运营商结算中对赠送额度的扣回（及其退还）是 `FEE_CREDIT_RECOVERED`（F-M12，按结算记账，不另是退回）；凭证本身是 `FEE_CREDIT_NOTE`；抵用不过账。`PREPAYMENT_USED` 不分用途（各费用的记账已按种类分行）。归不进去的才是 `OTHER`（只应有开发期没有来源的入账）；新增一种过账时，同一个 PR 里加它的类（`backend/quizbuks/CLAUDE.md`）。
 
-### 7.56 运营商结算：不分成与扣回（F-M12）
+### 7.56 AI 费的预留与实测（F-M9）
+
+收费的 AI 请求在发起时按"可能的最大费用"（含税，税向上取整）从 AI 额度中预留；作业结束时按有回答的用量收费，**至多收到预留为止**。超出部分由平台承担（`qb_ai_job.absorbed_yen`），每日核对以提示级 `AI_RESERVATION_SHORT` 列出（引用为作业编号，月度记费收进后不再出现）。
+
+- **出题与翻译**：按预留的输入与输出上限、尝试次数计；可回退的模型再加回退模型全部跑一遍（提供方 `fallbacks: "default"` 只回退到一个推荐模型）；带 PDF 的请求不回退，不加这一遍。
+- **官网生成**：网页读取器一次尝试至多 4 次调用（`pause_turn` 续接 3 次），第 k 次的输入为预留输入加此前的输出。三个可选的受控参数把预留压到多数情况够用：
+  - `qb.ai.fee.site-profile.calls`：每次尝试计几次调用，1–4；
+  - `qb.ai.fee.site-profile.pages`：按几页计输入；
+  - `qb.ai.fee.site-profile.output-tokens`：每次调用的输出上限。
+
+  未设置或超出范围时取作业自身的上限（最坏情况）。
+- **定数**（打开 `qb.ai.fee.enabled` 之前，由能连库的人执行；`launch-checklist.md` 有对应的一行）：取最近的已结束官网生成作业，按尝试看每次调用的输入与输出，取 P95 作为上面三个参数，经受控变更发布。
+
+```sql
+-- 已结束的官网生成作业：总用量与作业参数
+SELECT ai_job_id, attempts, input_tokens, output_tokens, fallback_input_tokens, cost_usd,
+       params::jsonb ->> 'reservedInputTokens' AS reserved_in, params::jsonb ->> 'maxPages' AS max_pages
+FROM qb_ai_job WHERE kind = 'SITE_PROFILE' AND finished_at IS NOT NULL
+ORDER BY requested_at DESC LIMIT 200;
+
+-- 按尝试的用量（平台记录，每次调用的用量累加在其尝试上）
+SELECT u.job_id, u.attempt_no, u.metric, u.quantity
+FROM sys_external_job_usage u
+JOIN qb_ai_job j ON j.external_job_id = u.job_id
+WHERE j.kind = 'SITE_PROFILE' AND j.finished_at IS NOT NULL
+ORDER BY u.job_id, u.attempt_no, u.metric;
+```
+
+- **待实测**：服务方文档没有说明一次请求的 `input_tokens` 是否累加服务端内部的多轮采样（动态过滤下的抓取不计入 `max_uses`）。若单次调用的输入超过 `qb.site-profile.max-pages` 对应的预留输入（约 20.5 万），在 `.pages` 的取值中体现。
+
+### 7.57 运营商结算：不分成与扣回（F-M12）
 
 §7.13 "月结算"的细节。设计见 `plans/impl/F-M12.md`；结算单上每一行的意思见帮助 `help/operator-settlement.md`。
 
