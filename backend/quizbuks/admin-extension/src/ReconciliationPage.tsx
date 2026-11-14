@@ -53,7 +53,14 @@ function Subject({ item }: { item: ReconItem }) {
   } else if (item.reference) {
     parts.push(<code key="ref" className="text-xs">{item.reference}</code>)
   }
-  if (item.partyId && isUserId(item.partyId)) {
+  if (item.partyId && item.operatorName) {
+    // An operator (its id is a UUID as a user's is): by its name, never as an unknown user.
+    parts.push(can(PERMISSION.operatorsRead)
+      ? <Link key="party" to={PATH.operator(item.partyId)} className={linkClass} data-testid="recon-party">
+          {item.operatorName}
+        </Link>
+      : <span key="party" data-testid="recon-party">{item.operatorName}</span>)
+  } else if (item.partyId && isUserId(item.partyId)) {
     parts.push(can(PERMISSION.usersRead)
       ? <Link key="party" to={PATH.user(item.partyId)} className={linkClass} data-testid="recon-party">
           <UserName id={item.partyId} />
