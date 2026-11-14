@@ -26,6 +26,7 @@ import com.jabiz.runtime.process.steps.HoldLock;
 import com.jabiz.runtime.process.steps.LoadParams;
 import com.jabiz.runtime.process.steps.PublishEvent;
 import com.jabiz.runtime.process.steps.QueryEntities;
+import com.jabiz.runtime.process.steps.RunTemplate;
 import com.jabiz.runtime.process.steps.SaveChanges;
 import jakarta.validation.constraints.DecimalMax;
 import jakarta.validation.constraints.DecimalMin;
@@ -146,6 +147,9 @@ public final class FeeCredits {
     static final String LOT = "lot";
     static final String LOTS = "lots";
     static final String LAST_REMINDED = "lastReminded";
+    static final String SPENT_LOTS = "spentLots";
+    static final String AI_CREDIT = "aiCredit";
+    static final String AI_HELD = "aiHeld";
     static final String OUTCOME = "outcome";
     static final String PAYLOAD = "payload";
 
@@ -416,6 +420,22 @@ public final class FeeCredits {
                             new QueryPredicate.Gt("remaining", BigDecimal.ZERO),
                             new QueryPredicate.Gt("expiresAt", ctx.opTime()))))
                         .orderBy("expiresAt", true).limit(MAX_LOTS).build(), LOTS),
+                    // F-M9c: granted credit bought into the AI credit expires there too (the AI credit's daily job voids
+                    // it): the grants spent from the account, not voided and not told of, are read with what the AI
+                    // credit still holds of each.
+                    QueryEntities.query(QbFeeAccount.defaultDataset(QbFeeAccount.GRANT), ctx -> EntityQuery.builder()
+                        .where(new QueryPredicate.And(List.of(
+                            new QueryPredicate.In("sponsorId", FeeGate.ids(sponsorRef(ctx).sponsorId())),
+                            new QueryPredicate.Eq("remaining", BigDecimal.ZERO),
+                            new QueryPredicate.IsNull("voidedAt"),
+                            new QueryPredicate.IsNull("remindedAt"),
+                            new QueryPredicate.Gt("expiresAt", ctx.opTime()))))
+                        .orderBy("expiresAt", true).limit(MAX_LOTS).build(), SPENT_LOTS),
+                    QueryEntities.query(QbFees.defaultDataset(QbPrepayments.PREPAYMENT), ctx -> EntityQuery.builder()
+                        .where(new QueryPredicate.And(List.of(
+                            new QueryPredicate.Eq("sponsorId", sponsorRef(ctx).sponsorId()),
+                            new QueryPredicate.Eq("purpose", QbPrepayments.AI),
+                            new QueryPredicate.Eq("status", QbPrepayments.OPEN)))).limit(1).build(), AI_CREDIT),
                     QueryEntities.query(QbFeeAccount.defaultDataset(QbFeeAccount.GRANT), ctx -> EntityQuery.builder()
                         .where(new QueryPredicate.And(List.of(
                             new QueryPredicate.In("sponsorId", FeeGate.ids(sponsorRef(ctx).sponsorId())),
@@ -424,9 +444,34 @@ public final class FeeCredits {
                     QueryEntities.query(QbAccounts.defaultDataset(QbAccounts.BAN), ctx -> EntityQuery.builder()
                         .where(new QueryPredicate.In("userId", AccountEditing.uuids(sponsorRef(ctx).sponsorId())))
                         .limit(1).build(), BAN)))
+                .step("Read what the AI credit holds by lot", RunTemplate.<ProcessContext>when(FeeCredits::aiCreditHolds,
+                    Prepayments.HELD_TEMPLATE, ctx -> Map.of("prepaymentId",
+                        String.valueOf(FeeGate.first(ctx, AI_CREDIT).id())), AI_HELD))
                 .compute("Decide", (metadata, ctx) -> remind(ctx))
                 .step("Ask the mail to tell the sponsor", PublishEvent.<ProcessContext>when(
                     ctx -> "REMINDED".equals(ctx.get(OUTCOME)), EXPIRING_EVENT, ctx -> ctx.get(PAYLOAD))));
+    }
+
+    /** Whether the sponsor's open AI credit holds something (then its lots are read). */
+    static boolean aiCreditHolds(ProcessContext ctx) {
+        EntityInstance credit = FeeGate.first(ctx, AI_CREDIT);
+        return credit != null && FeeGate.money(credit.get("remaining")).signum() > 0;
+    }
+
+    /** F-M9c: what the AI credit holds of each grant ({@value Prepayments#HELD_TEMPLATE}); none read: nothing. */
+    static Map<String, BigDecimal> aiCreditHeldByGrant(ProcessContext ctx) {
+        Map<String, BigDecimal> held = new LinkedHashMap<>();
+        Object rows = ctx.contains(AI_HELD) ? ctx.get(AI_HELD) : null;
+        if (rows instanceof List<?> list) {
+            for (Object row : list) {
+                @SuppressWarnings("unchecked")
+                Map<String, Object> lot = (Map<String, Object>) row;
+                if (QbFeeAccount.FEE_CREDIT.equals(lot.get("subAccount")) && lot.get("lotId") != null) {
+                    held.merge(String.valueOf(lot.get("lotId")), FeeGate.money(lot.get("amount")), BigDecimal::add);
+                }
+            }
+        }
+        return held;
     }
 
     static void remind(ProcessContext ctx) {
@@ -443,19 +488,26 @@ public final class FeeCredits {
         }
         BigDecimal noticeDays = ctx.get(PARAMS, ParamValues.class).get(QbParams.FEE_CREDIT_EXPIRY_NOTICE_DAYS,
             BigDecimal.class);
+        Map<String, BigDecimal> inAiCredit = aiCreditHeldByGrant(ctx);
+        List<EntityInstance> lots = new ArrayList<>(FeeGate.list(ctx, LOTS));
+        lots.addAll(FeeGate.list(ctx, SPENT_LOTS));
+        lots.sort(java.util.Comparator.comparing(lot -> (Instant) lot.get("expiresAt")));
         List<EntityInstance> due = new ArrayList<>();
-        for (EntityInstance lot : FeeGate.list(ctx, LOTS)) {
-            if (FeeCreditRules.remindable(FeeGate.money(lot.get("remaining")), (Instant) lot.get("expiresAt"),
-                (Instant) lot.get("remindedAt"), ctx.opTime(), noticeDays)) {
+        BigDecimal amount = BigDecimal.ZERO;
+        for (EntityInstance lot : lots) {
+            // What is left of the grant: in the account, and (F-M9c) in the AI credit.
+            BigDecimal left = FeeGate.money(lot.get("remaining"))
+                .add(inAiCredit.getOrDefault(String.valueOf(lot.id()), BigDecimal.ZERO));
+            if (FeeCreditRules.remindable(left, (Instant) lot.get("expiresAt"), (Instant) lot.get("remindedAt"),
+                ctx.opTime(), noticeDays)) {
                 due.add(lot);
+                amount = amount.add(left);
             }
         }
         if (due.isEmpty()) {
             return;
         }
-        BigDecimal amount = BigDecimal.ZERO;
         for (EntityInstance lot : due) {
-            amount = amount.add(FeeGate.money(lot.get("remaining")));
             ctx.changes().update(QbFeeAccount.GRANT, lot.id(), lot.version(), Map.of("remindedAt", ctx.opTime()));
         }
         Map<String, Object> payload = new LinkedHashMap<>();

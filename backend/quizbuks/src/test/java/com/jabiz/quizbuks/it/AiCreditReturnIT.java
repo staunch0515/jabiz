@@ -33,6 +33,9 @@ class AiCreditReturnIT extends AiCreditItSupport {
     @Autowired
     JobDefinition<FeeCredits.GrantRef> qbFeeCreditExpireJob;
 
+    @Autowired
+    JobDefinition<FeeCredits.SponsorRef> qbFeeCreditRemindJob;
+
     private Map<String, Object> giveBack(String sponsor, Long amount) {
         return run(AiCreditReturns.RETURN, sponsorToken(sponsor), amount == null
             ? body("requestKey", UUID.randomUUID().toString())
@@ -171,6 +174,33 @@ class AiCreditReturnIT extends AiCreditItSupport {
             "AI_CREDIT_RETURNED", "AI_CREDIT_VOIDED"), query(MonthlyKinds.SOURCES_SQL),
             ((Number) query(MonthlyKinds.NO_SOURCE_SQL).getFirst().get("n")).longValue(),
             query(MonthlyKinds.TOTALS_SQL).getFirst());
+    }
+
+    /**
+     * F-M9c (A3): granted credit bought into the AI credit expires there as it would have in the account (the AI credit's
+     * daily job voids it), so its sponsor is told before, once, as of a grant still in the account (F-M2's reminder).
+     */
+    @Test
+    void grantedCreditInTheAiCreditIsRemindedBeforeItExpires() {
+        feeOn();
+        String sponsor = newSponsor("ai-remind-" + UUID.randomUUID());
+        String grantId = grant(sponsor, 1_000);
+        buy(sponsor, 1_000);
+        assertThat(money(grantRow(grantId).get("remaining"))).isZero();
+        // Ten days before it expires: within the notice (14 days by the setup).
+        execute("UPDATE qb_fee_credit_grant SET expires_at = ? WHERE grant_id = ?",
+            Timestamp.from(clock.instant().plus(Duration.ofDays(10))), grantId);
+
+        assertThat(runJob(qbFeeCreditRemindJob)).isEqualTo(JobRunner.Outcome.SUCCEEDED);
+        deliverEvents();
+        assertThat(templatesTo(sponsor)).filteredOn("qb.fee-credit.expiring"::equals).hasSize(1);
+        assertThat(grantRow(grantId).get("reminded_at")).isNotNull();
+
+        // Told once: the next day's run sends nothing more.
+        advance(Duration.ofDays(1));
+        assertThat(runJob(qbFeeCreditRemindJob)).isEqualTo(JobRunner.Outcome.SUCCEEDED);
+        deliverEvents();
+        assertThat(templatesTo(sponsor)).filteredOn("qb.fee-credit.expiring"::equals).hasSize(1);
     }
 
     @Test

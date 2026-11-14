@@ -1143,7 +1143,7 @@ Quiz 与发布有主题词（平台词表中的词与自定义词），学者可
   2. **另一位管理员发布**这些提案；`qb.journal.account.5140` 是会计系统中"推广费（平台费 Kudos）"的科目代码，未发布之前分录导出会被拒。
   3. 活动开始时，以受控变更把 `qb.fee-credit.grant.enabled` 改为 `true`（另一位管理员发布）；关掉即不再能确认入驻赠送（已发的照旧可用、照旧到期）。追加赠送不受这个开关影响。
 - **到期作废**：任务 `qb.fee-credit-expire`（每天 02:47，`jabiz.fiscal-year-zone`），逐笔（`QB_FEE_CREDIT_EXPIRE`，`internal()`）在发起方钱包锁内重读，把**到期时剩余的部分**作废：借 2190 / 贷 5140，`remaining` 归零、记 `voided_amount` 与 `voided_at`，钱包 `FEE_CREDIT` 减少。已用掉的部分不受影响。错过的运行以 `JOB_RUN_REQUEST` 补跑（同一时刻幂等）。冻结在预付中的赠送部分随 M4。
-- **到期前提醒**：任务 `qb.fee-credit-remind`（每天 10:13，同一时区）选出有一笔将在 `qb.fee-credit.expiry-notice-days` 天内到期、还有剩余、尚未提醒过的发起方；逐个（`QB_FEE_CREDIT_REMIND`）在钱包锁内把这些笔记上 `reminded_at`（每笔只提醒一次），距上一封不足 24 小时的不发（下一天再发），发出事件 `qb.fee-credit.expiring`，由 `QB_MAIL_FEE_CREDIT` 寄邮件 `qb.fee-credit.expiring`（通知类，可退订，只在发起方入口的偏好中）。
+- **到期前提醒**：任务 `qb.fee-credit-remind`（每天 10:13，同一时区）选出有一笔将在 `qb.fee-credit.expiry-notice-days` 天内到期、还有剩余、尚未提醒过的发起方（"剩余"含已转进 AI 额度、仍在额度中的部分：它在 AI 额度中同样到期作废，F-M9c；作废过的一笔不算）；逐个（`QB_FEE_CREDIT_REMIND`）在钱包锁内把这些笔记上 `reminded_at`（每笔只提醒一次），距上一封不足 24 小时的不发（下一天再发），发出事件 `qb.fee-credit.expiring`，由 `QB_MAIL_FEE_CREDIT` 寄邮件 `qb.fee-credit.expiring`（通知类，可退订，只在发起方入口的偏好中）。
 - **页面**：发起方钱包页的"平台费账户"各笔显示来源、金额、已用、剩余与到期；运营商的发起方页显示入驻赠送是否已发与"确认"按钮（只有持权限者看得到，负责人之外的成员由服务器拒绝）；平台管理系统"平台费"页的"平台费 Kudos"标签（财务只读）按运营商（发放时）、发起方或来源汇总，并列出每一笔的赠送、已用、剩余与到期作废。
 - **每日核对**（`qb.system.recon-fee-credit`）：新项 `FEE_CREDIT_PROMOTION`——按运营商（发放时记在笔上的；`-` 为无），以赠送为来源的分录在 5140 上的借减贷 = 各笔金额 − 到期作废之和（`sponsorId` 一列此处是运营商）。`FEE_CREDIT`（2190 = 钱包 = 各笔剩余）照旧覆盖赠送与作废。
 - **月报**（`qb.admin.monthly`）：两个新种类 `FEE_CREDIT_GRANTED`（借 5140 / 贷 2190）与 `FEE_CREDIT_VOIDED`（借 2190 / 贷 5140），新列 `feeCreditPromotion`（5140）；用赠送支付的平台费照旧在 `FEE_PAID` 的 `feeCredit` 一列。余额表多 5140 一行。

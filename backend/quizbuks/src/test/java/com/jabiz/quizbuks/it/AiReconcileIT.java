@@ -72,6 +72,51 @@ class AiReconcileIT extends AiCreditItSupport {
         return done;
     }
 
+    /**
+     * F-M9c (plan §8, F-M7 point 4): a credit note by hand on an AI fee gives back to the platform fee account, never to
+     * the AI credit (what the credit holds is unchanged), and leaves the reconciliation clean (the fee and its jobs still
+     * agree: a note does not change what was charged).
+     */
+    @Test
+    void aCreditNoteOnAnAiFeeGivesBackToTheAccountAndLeavesNoDifference() {
+        feeOn();
+        String sponsor = newSponsor("ai-note-" + UUID.randomUUID());
+        cash(sponsor, 5_000);
+        buy(sponsor, 4_000);
+        String token = sponsorFull(sponsor);
+        Map<String, Object> charged = finishedJob(token);
+        YearMonth next = YearMonth.from(clock.instant().atZone(ZONE)).plusMonths(1);
+        Instant monthly = next.atDay(1).atTime(0, 27).atZone(ZONE).toInstant();
+        clock.set(monthly.plusSeconds(60));
+        assertThat(run(qbAiFeeMonthlyJob, monthly)).isEqualTo(JobRunner.Outcome.SUCCEEDED);
+        Object chargeId = job(charged.get("ai_job_id")).get("fee_charge_id");
+        assertThat(chargeId).isNotNull();
+        Map<String, Object> charge = query("SELECT kind, amount FROM qb_fee_charge_version WHERE charge_id = ?::uuid",
+            String.valueOf(chargeId)).getFirst();
+        assertThat(charge).containsEntry("kind", "AI");
+        BigDecimal creditBefore = money(aiCredit(sponsor).get("remaining"));
+        BigDecimal accountBefore = net("2160", sponsor).add(net("2190", sponsor));
+
+        // Finance proposes a note of 1 yen on it, another administrator approves.
+        Map<String, Object> request = run(com.jabiz.quizbuks.fee.FeeRequests.RECORD,
+            tokenOf(user("fm9c-finance"), com.jabiz.quizbuks.setup.QbRoles.ADMIN_FINANCE),
+            body("kind", com.jabiz.quizbuks.fee.QbFees.REQUEST_CREDIT_NOTE, "chargeId", String.valueOf(chargeId),
+                "amount", 1, "reason", "A request answered late"));
+        run("APPROVAL_DECIDE", tokenOf(user("fm9c-content"), com.jabiz.quizbuks.setup.QbRoles.ADMIN_CONTENT),
+            body("requestId", request.get("approvalRequestId"), "decision", "APPROVE"));
+        deliverEvents();
+        List<Map<String, Object>> notes = query("SELECT * FROM qb_fee_credit_note_version WHERE sponsor_id = ?",
+            sponsor);
+        assertThat(notes).singleElement().satisfies(note -> assertThat(money(note.get("refunded_credit"))
+            .add(money(note.get("refunded_cash")))).isPositive());
+
+        // Back to the account (2160 or 2190), not to the AI credit (2180, its remaining).
+        assertThat(money(aiCredit(sponsor).get("remaining"))).isEqualByComparingTo(creditBefore);
+        assertThat(net("2160", sponsor).add(net("2190", sponsor))).isLessThan(accountBefore);
+        advance(Duration.ofDays(3));
+        assertThat(reconcile(sponsor)).isEmpty();
+    }
+
     @Test
     void aWholeRoundLeavesNoDifferenceAndEachCheckFindsWhatItIsFor() {
         feeOn();
