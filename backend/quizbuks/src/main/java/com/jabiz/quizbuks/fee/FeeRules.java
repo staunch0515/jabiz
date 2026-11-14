@@ -99,12 +99,28 @@ public final class FeeRules {
     }
 
     /**
+     * How many months before the current one a postpaid fee's own month may be (F-M15 b, third re-review L3): a fee
+     * older than that is refused, not searched for a month.
+     */
+    public static final int MAX_MONTHS_BACK = 60;
+
+    /** Whether a fee's own month is within {@link #MAX_MONTHS_BACK} of the current month. */
+    public static boolean recentEnough(String own, String now) {
+        return !period(own) || !period(now)
+            || !YearMonth.parse(own, MONTH).isBefore(YearMonth.parse(now, MONTH).minusMonths(MAX_MONTHS_BACK));
+    }
+
+    /**
      * The months from the earlier of the two to {@code ahead} months past the later, in order; a text that is not a
-     * month only itself (the charge reports it as such).
+     * month, or a fee's month more than {@link #MAX_MONTHS_BACK} before the current one, only itself (the charge
+     * refuses it).
      */
     public static java.util.List<String> monthsFrom(String a, String b, int ahead) {
         if (!period(a) || !period(b)) {
             return java.util.List.of(String.valueOf(a));
+        }
+        if (YearMonth.parse(a, MONTH).isBefore(YearMonth.parse(b, MONTH).minusMonths(MAX_MONTHS_BACK))) {
+            return java.util.List.of(a);
         }
         YearMonth from = YearMonth.parse(a.compareTo(b) <= 0 ? a : b, MONTH);
         YearMonth to = YearMonth.parse(a.compareTo(b) <= 0 ? b : a, MONTH).plusMonths(ahead);

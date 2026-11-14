@@ -1,5 +1,6 @@
 package com.jabiz.quizbuks.it;
 
+import com.jabiz.quizbuks.fee.FeeCodes;
 import com.jabiz.quizbuks.fee.FeeRequests;
 import com.jabiz.quizbuks.fee.MoneyClose;
 import com.jabiz.quizbuks.fee.QbFees;
@@ -685,9 +686,10 @@ class MoneyCloseIT extends MoneyCloseItSupport {
     }
 
     @Test
-    void aRequestMadeAfterTheErasureButBeforeItsPurgeIsWithdrawnForThePurgeOverwritesIt() {
-        // Re-review L2: ERASURE_PURGE overwrites the reason of every row naming the sponsor when it runs, a request
-        // asked for after the erasure too. So until the purge is done, what is under review is withdrawn.
+    void aRequestAboutAnErasedSponsorIsRefusedUntilThePurgeIsDoneThenTakenAsUsual() {
+        // Third re-review M1 (re-review L2): ERASURE_PURGE overwrites the reason of every row naming the sponsor when it
+        // runs, a request asked for after the erasure too, and a wind-up already done would not withdraw it. So until
+        // the purge is done, finance cannot ask; once it is, the request is taken and decided as usual.
         String sponsor = newSponsor(unique("s-fm15b-l2"));
         billing(sponsor, "POSTPAID", 50_000);
         manualFee(sponsor, 300);
@@ -697,17 +699,17 @@ class MoneyCloseIT extends MoneyCloseItSupport {
         param(QbParams.ERASURE_CLOSE_ENABLED, "false");
         erase(sponsor);
         clock.set(clock.instant().plus(Duration.ofMinutes(5)));
+        assertThat(codes(refused(FeeRequests.RECORD, finance(), body("kind", QbFees.REQUEST_VOID, "invoiceId",
+            invoiceId, "reason", "Charged by mistake"), 422))).containsExactly(FeeCodes.FEE_ERASURE_PENDING);
+
+        // The purge runs on the erasure's event; then the request is taken, and the wind-up leaves it under review.
+        deliverEvents();
         String requestId = String.valueOf(run(FeeRequests.RECORD, finance(), body("kind", QbFees.REQUEST_VOID,
             "invoiceId", invoiceId, "reason", "Charged by mistake")).get("requestId"));
-        // The purge is still to run: withdrawn.
-        assertThat(close(sponsor).withdrawn()).isEqualTo(1);
-        assertThat(query("SELECT status, ended_code FROM qb_fee_request WHERE request_id = ?", requestId))
-            .singleElement().satisfies(row -> assertThat(row).containsEntry("status", QbFees.REJECTED)
-                .containsEntry("ended_code", "ERASED"));
-        // And the purge does overwrite a request asked for after the erasure: the reason the approval was bound to.
-        deliverEvents();
-        assertThat(query("SELECT reason FROM qb_fee_request WHERE request_id = ?", requestId)).singleElement()
-            .satisfies(row -> assertThat(row).containsEntry("reason", "***"));
+        assertThat(close(sponsor).withdrawn()).isZero();
+        assertThat(query("SELECT status, reason FROM qb_fee_request WHERE request_id = ?", requestId)).singleElement()
+            .satisfies(row -> assertThat(row).containsEntry("status", QbFees.REVIEW)
+                .containsEntry("reason", "Charged by mistake"));
     }
 
     @Test

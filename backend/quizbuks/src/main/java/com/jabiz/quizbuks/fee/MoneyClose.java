@@ -382,8 +382,12 @@ public final class MoneyClose {
         return null;
     }
 
+    /**
+     * Asked for before the purge (strictly: one asked for at its very time was after the erasure, which QB_FEE_REQUEST
+     * refuses until the purge is done, third re-review M1), or the purge still to run.
+     */
     private static boolean before(Object at, Instant until) {
-        return until == null || at instanceof Instant instant && !instant.isAfter(until);
+        return until == null || at instanceof Instant instant && instant.isBefore(until);
     }
 
     /** Whether the run winds up now: a closure that is not done (or done with fees owed), the switch on, nothing held. */

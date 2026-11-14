@@ -377,6 +377,11 @@ public final class FeeProcesses {
         if (!FeeRules.period(input.period())) {
             problems.add(new Violation("period", FeeCodes.FEE_PERIOD, "Not a month", Map.of("period", input.period())));
         }
+        // Third re-review L3: a fee of a month long gone is refused.
+        if (!FeeRules.recentEnough(input.period(), FeeRules.period(ctx.opTime(), zone))) {
+            problems.add(new Violation("period", FeeCodes.FEE_PARAMS, "A month more than "
+                + FeeRules.MAX_MONTHS_BACK + " months ago", Map.of("period", input.period())));
+        }
         BigDecimal rate = params.get(QbParams.FEE_TAX_RATE, BigDecimal.class);
         BigDecimal tax = input.tax() != null && rate != null ? input.tax() : FeeRules.tax(input.amount(), rate);
         if (tax == null) {
@@ -399,8 +404,15 @@ public final class FeeProcesses {
         java.util.Set<String> invoiced = FeeGate.list(ctx, MONTH_INVOICE).stream()
             .map(invoice -> String.valueOf((Object) invoice.get("period")))
             .collect(java.util.stream.Collectors.toSet());
+        String now = FeeRules.period(ctx.opTime(), zone);
         String period = FeeRules.POSTPAID.equals(billingMode)
-            ? FeeRules.chargePeriod(input.period(), FeeRules.period(ctx.opTime(), zone), invoiced) : input.period();
+            ? FeeRules.chargePeriod(input.period(), now, invoiced) : input.period();
+        // Third re-review L2: a month past what was read is not guessed (every month read had its invoice out).
+        if (FeeRules.POSTPAID.equals(billingMode)
+            && !FeeRules.monthsFrom(input.period(), now, MONTHS_AHEAD).contains(period)) {
+            throw new BusinessRuleViolationException(List.of(new Violation("period", FeeCodes.FEE_PARAMS,
+                "No month without its invoice out within the months read", Map.of("period", input.period()))));
+        }
         Map<String, Object> values = new LinkedHashMap<>();
         values.put("sponsorId", input.sponsorId());
         values.put("operatorId", operatorOf(ctx));

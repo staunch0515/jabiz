@@ -95,4 +95,17 @@ class FeeRulesTest {
         assertThat(FeeRules.monthsFrom("2026-12", "2026-11", 0)).containsExactly("2026-11", "2026-12");
         assertThat(FeeRules.monthsFrom("2026-13", "2026-11", 2)).containsExactly("2026-13");
     }
+
+    @Test
+    void aMonthPastTheMonthsReadIsNotGuessedAndAMonthLongGoneIsNotSearched() {
+        // Third re-review L2: every month read has its invoice out: the month found lies past them (the charge refuses).
+        java.util.List<String> read = FeeRules.monthsFrom("2026-11", "2026-11", 2);
+        String found = FeeRules.chargePeriod("2026-11", "2026-11", java.util.Set.copyOf(read));
+        assertThat(found).isEqualTo("2027-02");
+        assertThat(read).doesNotContain(found);
+        // Third re-review L3: more than 60 months before the current one.
+        assertThat(FeeRules.recentEnough("2021-11", "2026-11")).isTrue();
+        assertThat(FeeRules.recentEnough("2021-10", "2026-11")).isFalse();
+        assertThat(FeeRules.monthsFrom("2021-10", "2026-11", 24)).containsExactly("2021-10");
+    }
 }
