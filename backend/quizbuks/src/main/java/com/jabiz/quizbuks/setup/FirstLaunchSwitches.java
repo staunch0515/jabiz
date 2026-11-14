@@ -106,6 +106,11 @@ public final class FirstLaunchSwitches {
         // money are paid that night: tell them first, launch-checklist).
         active(QbParams.FEE_AUTO_PAY_ENABLED, "autopay", false, null),
         keep(QbParams.FEE_AUTO_PAY_MAX_INVOICES, "autopay"),
+        // F-M15 b: an erased sponsor's platform fee account is wound up at the launch (declared off: the tests rely on
+        // it); published after the automatic payment's switch (launch checklist).
+        active(QbParams.ERASURE_CLOSE_ENABLED, "erasure", true,
+            "an erased sponsor's platform fee account is invoiced, paid as far as it goes and its granted credit voided "
+                + "at the launch (declared off: the tests rely on it)"),
         manual(QbParams.FEE_CREDIT_MANUAL_MAX, "grant"),
         manual(QbParams.TREE_GRANT_MAX_PER_NODE, "grant"));
 

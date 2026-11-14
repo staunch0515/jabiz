@@ -68,6 +68,20 @@ public final class FeeCreditRules {
         return cap == null || amount.compareTo(cap) <= 0;
     }
 
+    /**
+     * F-M15 b (§5.3): whether an erased sponsor's wind-up marks a lot voided: one not voided before and not expired yet
+     * (an expired lot is the expiry's). A lot with nothing left is marked too: what a prepayment gives back to it
+     * later is voided on arrival.
+     */
+    public static boolean voidableOnErase(Instant expiresAt, Instant voidedAt, Instant now) {
+        return voidedAt == null && expiresAt != null && expiresAt.isAfter(now);
+    }
+
+    /** What the wind-up voids of a lot it marks: what is left of it, never below 0. */
+    public static BigDecimal voidedOnErase(BigDecimal remaining) {
+        return remaining == null || remaining.signum() <= 0 ? BigDecimal.ZERO : remaining;
+    }
+
     /** What a lot voids when it expires: what is left of it, once it expired (nothing before, or when spent). */
     public static BigDecimal voidable(BigDecimal remaining, Instant expiresAt, Instant now) {
         return remaining == null || remaining.signum() <= 0 || expiresAt.isAfter(now) ? BigDecimal.ZERO : remaining;

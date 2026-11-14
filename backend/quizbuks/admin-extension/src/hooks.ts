@@ -161,5 +161,6 @@ export const QUEUE = {
   videoUses: ['qb-ext', 'video-uses'],
   sharedVideos: ['qb-ext', 'shared-videos'],
   sponsorVerifications: ['qb-ext', 'sponsor-verifications'],
+  moneyClosures: ['qb-ext', 'money-closures'],
 
 } as const

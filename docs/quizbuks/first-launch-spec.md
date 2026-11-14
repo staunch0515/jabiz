@@ -1381,17 +1381,19 @@
 
 ### F-M14 月报分类、每日核对与告警
 - **做什么**：每一种新过账都有月报分类、每日核对与异常告警。
-- **规则**：
-  - 月报 `qb.admin.monthly` 新类：`FEE_CREDIT_GRANTED`、`FEE_CREDIT_USED`、`FEE_CREDIT_VOIDED`、`FEE_CREDIT_RECOVERED`、`PREPAYMENT_RESERVED`、`PREPAYMENT_APPLIED`、`PREPAYMENT_RELEASED`、`AI_CREDIT_BOUGHT`、`AI_CREDIT_RETURNED`、`FEE_CREDIT_NOTE`；费用种类 `DISTRIBUTION` / `AUDIENCE` / `EXPOSURE` / `AI` 在 `FEE_CHARGED` 下分列；新列 2180、2190、5140。`AdminFinanceIT` 逐行。
-  - 新科目开立与映射参数 `qb.journal.account.2180|2190|5140`（受控，`JournalMappingCheck`）；分录导出按发起方、运营商列出。
-  - 每日核对新项：`FEE_CREDIT`（2190）、`PREPAYMENTS`（2180 按发起方与用途）、`FEE_PAYMENTS`（分摊 = 付款分录）、`AI_CREDIT`、发布状态与费用的一致（草稿有费用、无结束时间的发布未续扣、已结束发布仍有预付）。差异即给总部财务待办。
-- **参数**：无。
-- **运营闭合**：总部财务页显示核对结果与差异；`operations.md` 写各差异的处理。
+- **规则**（F-M14b 按实际实现改写，计划 `plans/impl/F-M14.md` G2；类与码的一览只在 `operations.md` §7.55，这里不重列数目）：
+  - 月报 `qb.admin.monthly`：每笔只归一类，按来源单据、是否冲正、所动科目与方向判断，其余为 `OTHER`。新过账的实际的类：赠送 `FEE_CREDIT_GRANTED` / `FEE_CREDIT_VOIDED`，运营商结算中的扣回 `FEE_CREDIT_RECOVERED`，贷项凭证 `FEE_CREDIT_NOTE`，预付款 `PREPAYMENT_FROZEN` / `PREPAYMENT_USED` / `PREPAYMENT_RELEASED`（不分用途），配送费 `DISTRIBUTION_*`，曝光费 `EXPOSURE_*`，受众规则费 `AUDIENCE_CHARGED`，AI 费与 AI 额度 `AI_CHARGED`、`AI_CREDIT_*`。原稿的 `FEE_CREDIT_USED`、`PREPAYMENT_RESERVED` / `PREPAYMENT_APPLIED` 与"在 `FEE_CHARGED` 下按费用种类分列"不采用：**退回与扣回不另立类，按方向落进已有的类**，抵用不过账。`AdminFinanceIT` 逐行；每类由一次真实的过账驱动并经全账本守卫检查（`MonthlyKinds`），每个来源单据能得到的类由解析 CASE 的测试与清单逐一对上。
+  - 科目 2180、2190、5140 与映射参数 `qb.journal.account.2180|2190|5140`（受控）已随 F-M2、F-M5 开立。
+  - 每日核对：核对码不超过 30 个字符；三个级别——**差异**（已结束月份的账会因此错或不全；只有它拦月末分录导出）、**需关注**、**提示**；每个码一个负责权限（缺省 `qb.reconcile`）。差异按负责权限各一个待办，需关注按（核对项, 对象）各一个，提示不建待办（§7.52）。每个码在核对项字典里三语、在 §7.55 的总表与核对页的说明里各一行，`ReconChecksTest` 逐码检查；每个码有一个使它报告的测试。
+  - 运营商：提示中的"按下限计费"（`DISTRIBUTION_AT_FLOOR`）与"用他人视频却没有购买曝光"（`EXPOSURE_UNPURCHASED`）在运营商的计费页显示（`qb.operator.recon-notes`，只读，按本运营商的发起方限定，不建待办）。
+  - **决定核对报不报的阈值受控（四眼），只决定何时提醒的不受控。**
+- **参数**：不新增。两个"多久算漏"的阈值（`qb.prepayment.release.overdue-days`、`qb.audience.refund.missing-after-hours`）改为受控（F-M14a）。
+- **运营闭合**：核对页按级别分组，每组一句"怎么办"；引用（充值、转账、发布、结算的月份、账单、贷项凭证）是链接，看的人没有目标页的权限时只显示文字；需关注的条目显示已持续的天数；财务总览按级别的三个数各链到该级别的条目。`operations.md` §7.52（级别与待办）、§7.55（总表与月报分类）。
 - **依赖**：F-M1～F-M13。
-- **验收**：每种新过账在月报中有确定的类（没有落入 `OTHER`）；人为造一处差异即报告。
-- **不做**：自动修正差异。
+- **验收**：每种新过账在月报中有确定的类（没有落入 `OTHER`）；每个核对码人为造一处差异即报告；首次上线闭环的端到端测试末尾，核对没有差异级的条目。
+- **不做**：自动修正差异；没有结束时间的发布的续扣与"未续扣"核对（计划 G3：随续扣以后立项）。
 - **来源**：Q105 §3.3；Q101 §3.2；Q94-review B（月报与核对）；app CLAUDE.md 月报一条。
-- **粗估**：2–3 天。
+- **粗估**：2–3 天（实际 a 约 9 天、b 约 3 天，计划 M4）。
 
 ### F-M15 封禁、注销与抹除
 - **做什么**：账户状态改变时钱的收尾。

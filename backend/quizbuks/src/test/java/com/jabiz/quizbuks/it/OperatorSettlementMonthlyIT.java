@@ -103,6 +103,12 @@ class OperatorSettlementMonthlyIT extends CreditNoteItSupport {
         assertThat(((Number) category(may, "OPERATOR_SHARE").get("transactionCount")).intValue()).isZero();
         assertThat(((Number) refund.get("transactionCount")).longValue())
             .isEqualTo(settlementTransactions("2028-05-01T00:00:00Z", "2028-06-01T00:00:00Z"));
+        // F-M14b (the fourth case of F-M14 §3.2 point 4): the guard over the whole ledger, the take-back and its
+        // negative after a credit note among it.
+        MonthlyKinds.assertGuard(monthly("2000-01-01T00:00:00Z", "2100-01-01T00:00:00Z"),
+            List.of("OPERATOR_SHARE", "FEE_CREDIT_RECOVERED", "FEE_CREDIT_NOTE"), query(MonthlyKinds.SOURCES_SQL),
+            ((Number) query(MonthlyKinds.NO_SOURCE_SQL).getFirst().get("n")).longValue(),
+            query(MonthlyKinds.TOTALS_SQL).getFirst());
         assertBooksBalance();
     }
 }

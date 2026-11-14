@@ -19,6 +19,7 @@ import { abuseReportMenu, abuseReportMessages } from './report-messages'
 import { audiencePricingMenu, audiencePricingMessages } from './audience-pricing-messages'
 import { distributionMenu, distributionMessages } from './distribution-messages'
 import { exposureFeeMenu, exposureFeeMessages } from './exposure-fee-messages'
+import { closureMenu, closureMessages } from './closure-messages'
 import { certificationMessages } from './certification-messages'
 import { referralMenu, referralMessages } from './referral-messages'
 import { feeMenu, feeMessages } from './fee-messages'
@@ -46,7 +47,7 @@ export const messages = {
     menu: { group: BRAND_NAMES.en, reviews: 'Reviews', users: 'Users', ...legalMenu.en, ...aiMenu.en,
       ...financeMenu.en, ...broadcastsMenu.en, ...attemptsMenu.en, ...bankMenu.en, ...manualMenu.en, ...rewardMenu.en, ...settingsMenu.en, ...withdrawalMenu.en,
       ...overviewMenu.en, ...operatorMenu.en, ...prospectMenu.en, ...settlementMenu.en, ...accountMenu.en, ...pageMenu.en, ...productMenu.en, ...abuseReportMenu.en,
-      ...referralMenu.en, ...audiencePricingMenu.en, ...distributionMenu.en, ...exposureFeeMenu.en, ...feeMenu.en, ...usageMenu.en, ...regionMenu.en, ...homeMenu.en, ...treesMenu.en, ...certificateLookupMenu.en, ...topicMenu.en, ...blockMenu.en, ...sharedVideoMenu.en, ...verificationMenu.en, ...exposureMenu.en, ...videoUseMenu.en, ...helpMenu.en },
+      ...referralMenu.en, ...audiencePricingMenu.en, ...distributionMenu.en, ...exposureFeeMenu.en, ...feeMenu.en, ...usageMenu.en, ...regionMenu.en, ...homeMenu.en, ...treesMenu.en, ...certificateLookupMenu.en, ...topicMenu.en, ...blockMenu.en, ...sharedVideoMenu.en, ...verificationMenu.en, ...exposureMenu.en, ...videoUseMenu.en, ...helpMenu.en, ...closureMenu.en },
     help: helpMessages.en,
     region: regionMessages.en,
     home: homeMessages.en,
@@ -68,6 +69,7 @@ export const messages = {
     audiencePricing: audiencePricingMessages.en,
     distribution: distributionMessages.en,
     exposureFee: exposureFeeMessages.en,
+    closures: closureMessages.en,
     referral: referralMessages.en,
     operator: operatorMessages.en,
     prospect: prospectMessages.en,
@@ -371,7 +373,7 @@ export const messages = {
     menu: { group: BRAND_NAMES.zh, reviews: '审核', users: '用户', ...legalMenu.zh, ...aiMenu.zh,
       ...financeMenu.zh, ...broadcastsMenu.zh, ...attemptsMenu.zh, ...bankMenu.zh, ...manualMenu.zh, ...rewardMenu.zh, ...settingsMenu.zh, ...withdrawalMenu.zh,
       ...overviewMenu.zh, ...operatorMenu.zh, ...prospectMenu.zh, ...settlementMenu.zh, ...accountMenu.zh, ...pageMenu.zh, ...productMenu.zh, ...abuseReportMenu.zh,
-      ...referralMenu.zh, ...audiencePricingMenu.zh, ...distributionMenu.zh, ...exposureFeeMenu.zh, ...feeMenu.zh, ...usageMenu.zh, ...regionMenu.zh, ...homeMenu.zh, ...treesMenu.zh, ...certificateLookupMenu.zh, ...topicMenu.zh, ...blockMenu.zh, ...sharedVideoMenu.zh, ...verificationMenu.zh, ...exposureMenu.zh, ...videoUseMenu.zh, ...helpMenu.zh },
+      ...referralMenu.zh, ...audiencePricingMenu.zh, ...distributionMenu.zh, ...exposureFeeMenu.zh, ...feeMenu.zh, ...usageMenu.zh, ...regionMenu.zh, ...homeMenu.zh, ...treesMenu.zh, ...certificateLookupMenu.zh, ...topicMenu.zh, ...blockMenu.zh, ...sharedVideoMenu.zh, ...verificationMenu.zh, ...exposureMenu.zh, ...videoUseMenu.zh, ...helpMenu.zh, ...closureMenu.zh },
     help: helpMessages.zh,
     region: regionMessages.zh,
     home: homeMessages.zh,
@@ -393,6 +395,7 @@ export const messages = {
     audiencePricing: audiencePricingMessages.zh,
     distribution: distributionMessages.zh,
     exposureFee: exposureFeeMessages.zh,
+    closures: closureMessages.zh,
     referral: referralMessages.zh,
     operator: operatorMessages.zh,
     prospect: prospectMessages.zh,
@@ -696,7 +699,7 @@ export const messages = {
     menu: { group: BRAND_NAMES.ja, reviews: '審査', users: 'ユーザー', ...legalMenu.ja, ...aiMenu.ja,
       ...financeMenu.ja, ...broadcastsMenu.ja, ...attemptsMenu.ja, ...bankMenu.ja, ...manualMenu.ja, ...rewardMenu.ja, ...settingsMenu.ja, ...withdrawalMenu.ja,
       ...overviewMenu.ja, ...operatorMenu.ja, ...prospectMenu.ja, ...settlementMenu.ja, ...accountMenu.ja, ...pageMenu.ja, ...productMenu.ja, ...abuseReportMenu.ja,
-      ...referralMenu.ja, ...audiencePricingMenu.ja, ...distributionMenu.ja, ...exposureFeeMenu.ja, ...feeMenu.ja, ...usageMenu.ja, ...regionMenu.ja, ...homeMenu.ja, ...treesMenu.ja, ...certificateLookupMenu.ja, ...topicMenu.ja, ...blockMenu.ja, ...sharedVideoMenu.ja, ...verificationMenu.ja, ...exposureMenu.ja, ...videoUseMenu.ja, ...helpMenu.ja },
+      ...referralMenu.ja, ...audiencePricingMenu.ja, ...distributionMenu.ja, ...exposureFeeMenu.ja, ...feeMenu.ja, ...usageMenu.ja, ...regionMenu.ja, ...homeMenu.ja, ...treesMenu.ja, ...certificateLookupMenu.ja, ...topicMenu.ja, ...blockMenu.ja, ...sharedVideoMenu.ja, ...verificationMenu.ja, ...exposureMenu.ja, ...videoUseMenu.ja, ...helpMenu.ja, ...closureMenu.ja },
     help: helpMessages.ja,
     region: regionMessages.ja,
     home: homeMessages.ja,
@@ -718,6 +721,7 @@ export const messages = {
     audiencePricing: audiencePricingMessages.ja,
     distribution: distributionMessages.ja,
     exposureFee: exposureFeeMessages.ja,
+    closures: closureMessages.ja,
     referral: referralMessages.ja,
     operator: operatorMessages.ja,
     prospect: prospectMessages.ja,

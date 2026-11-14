@@ -293,6 +293,7 @@ class AdminFinanceIT extends PayoutItSupport {
             row("AI_CREDIT_USED", 0, 0),
             row("AI_CREDIT_RETURNED", 0, 0),
             row("AI_CREDIT_VOIDED", 0, 0),
+            row("AUDIENCE_CHARGED", 0, 0),
             row("OTHER", 4, 3_870, "1110", 3_730, "1120", 70, "2110", -300, "2120", -3_500));
         // As recorded at the month's end: the late posting is not in it.
         List<Map<String, Object>> monthly = report(MONTHLY, from, to, to);
@@ -364,7 +365,7 @@ class AdminFinanceIT extends PayoutItSupport {
         // the archive reproduces it.
         Map<String, Object> issued = run("REPORT_ISSUE", finance(), body("templateId", MONTHLY, "params",
             period(from, to)));
-        assertThat(issued).containsEntry("rowCount", 49).containsEntry("recomputable", true);
+        assertThat(issued).containsEntry("rowCount", 50).containsEntry("recomputable", true);
         advance(Duration.ofMinutes(5));
         credit(sponsor, 25);
         Map<String, Object> again = run("REPORT_ISSUE", finance(), body("templateId", MONTHLY, "params",
@@ -386,7 +387,7 @@ class AdminFinanceIT extends PayoutItSupport {
         // The export is the platform's, of the same rows; as known at the month's end, without the late posting,
         // and so is the run issued as known then (its archived rows, not run again).
         String csv = exportCsv(MONTHLY, period(from, to));
-        assertThat(csv.lines().count()).isEqualTo(50);
+        assertThat(csv.lines().count()).isEqualTo(51);
         assertThat(csv).contains("TRANSFER_REVERSED");
         String known = exportCsv(MONTHLY, period(from, to, to));
         assertThat(line(known, "OTHER")).isNotEqualTo(line(csv, "OTHER")).contains(",4,");
@@ -483,6 +484,71 @@ class AdminFinanceIT extends PayoutItSupport {
                     .isEqualByComparingTo(BigDecimal.valueOf(want.moves().getOrDefault(column.getKey(), 0L)));
             }
         }
+        assertBooksBalance();
+    }
+
+    /**
+     * F-M15 b (plan §6): a wind-up's postings are of the kinds that exist: the invoice it issues posts nothing, its
+     * payment is FEE_PAID (from the granted credit: 2190 / 1130) and its void of what is left FEE_CREDIT_VOIDED
+     * (2190 / 5140). No new kind.
+     */
+    @Test
+    void aWindUpsPostingsAreTheKindsThatExistRowByRow() {
+        param(QbParams.ERASURE_CLOSE_ENABLED, "true");
+        String sponsor = newSponsor(unique("s-f08-wind-up"));
+        ZonedDateTime month = now().atZone(ZoneOffset.UTC).plusMonths(5).withDayOfMonth(1).truncatedTo(ChronoUnit.DAYS);
+        Instant from = month.toInstant();
+        Instant to = month.plusMonths(1).toInstant();
+        clock.set(from.plus(Duration.ofHours(1)));
+        run(com.jabiz.quizbuks.fee.FeeProcesses.BILLING_SET, TestTokens.bearer(tokens, "f08-billing",
+            com.jabiz.quizbuks.QbPermissions.FEE_BILLING), body("userId", sponsor, "billingMode", "POSTPAID",
+            "creditLimit", 50_000, "reason", "F-M15 b"));
+        Map<String, Object> request = run(com.jabiz.quizbuks.fee.FeeRequests.RECORD, finance(), body("kind",
+            com.jabiz.quizbuks.fee.QbFees.REQUEST_MANUAL, "sponsorId", sponsor, "amount", 300, "reason",
+            "Custom report"));
+        run("APPROVAL_DECIDE", tokenOf(user("f08-wind-up-content"), com.jabiz.quizbuks.setup.QbRoles.ADMIN_CONTENT),
+            body("requestId", request.get("approvalRequestId"), "decision", "APPROVE"));
+        deliverEvents();
+        String grantId = java.util.UUID.randomUUID().toString();
+        execute("INSERT INTO qb_fee_credit_grant (grant_id, sponsor_id, source, source_key, amount, remaining, "
+            + "voided_amount, granted_at, expires_at, version) VALUES (?, ?, 'MANUAL', ?, 1000, 1000, 0, ?, ?, 1)",
+            grantId, sponsor, "test:" + grantId, java.sql.Timestamp.from(clock.instant()),
+            java.sql.Timestamp.from(to.plus(Duration.ofDays(400))));
+        run("LEDGER_POST", TestTokens.bearer(tokens, "ledger-test", "ledger.post"), body("bookingTime",
+            clock.instant().toString(), "description", "Granted credit (test)", "sourceEntity", "QbFeeCreditGrant",
+            "sourceId", grantId, "entries", List.of(
+                body("accountCode", "5140", "direction", "DEBIT", "amount", 1000, "dimensions", Map.of("party", sponsor)),
+                body("accountCode", "2190", "direction", "CREDIT", "amount", 1000, "dimensions",
+                    Map.of("party", sponsor)))));
+        execute("INSERT INTO qb_wallet (wallet_id, owner_id, kind, balance, pending_count, pending_amount, pending_out, "
+            + "version) VALUES (?, ?, 'FEE_CREDIT', 1000, 0, 0, 0, 1)", java.util.UUID.randomUUID().toString(), sponsor);
+        clock.set(from.plus(Duration.ofHours(2)));
+        systemRun(com.jabiz.quizbuks.fee.MoneyClose.REGISTER, body("userId", sponsor, "erasedAt",
+            clock.instant().toString()));
+        com.jabiz.quizbuks.fee.MoneyClose.CloseOutput done = (com.jabiz.quizbuks.fee.MoneyClose.CloseOutput) systemRun(
+            com.jabiz.quizbuks.fee.MoneyClose.CLOSE, body("sponsorId", sponsor));
+        assertThat(done.outcome()).isEqualTo(com.jabiz.quizbuks.fee.MoneyClose.CLOSED);
+        assertThat(done.invoicesPaid()).isEqualTo(1);
+
+        List<Expected> expected = List.of(
+            row("FEE_CHARGED", 1, 330, "1130", 330, "4120", -300, "2150", -30),
+            row("FEE_PAID", 1, 330, "2190", 330, "1130", -330),
+            row("FEE_CREDIT_VOIDED", 1, 670, "2190", 670, "5140", -670));
+        Map<String, Map<String, Object>> monthly = report(MONTHLY, from, to).stream()
+            .collect(Collectors.toMap(r -> (String) r.get("category"), Function.identity()));
+        for (Expected want : expected) {
+            Map<String, Object> got = monthly.get(want.category());
+            assertThat(((Number) got.get("transactionCount")).longValue()).as(want.category() + " count " + got)
+                .isEqualTo(want.count());
+            assertThat(money(got.get("amount"))).as(want.category() + " amount " + got)
+                .isEqualByComparingTo(BigDecimal.valueOf(want.amount()));
+            for (Map.Entry<String, String> column : COLUMNS.entrySet()) {
+                assertThat(money(got.get(column.getValue()))).as(want.category() + " " + column.getKey() + " " + got)
+                    .isEqualByComparingTo(BigDecimal.valueOf(want.moves().getOrDefault(column.getKey(), 0L)));
+            }
+        }
+        // Nothing of the wind-up is OTHER.
+        assertThat(((Number) monthly.get("OTHER").get("transactionCount")).longValue()).isZero();
         assertBooksBalance();
     }
 
