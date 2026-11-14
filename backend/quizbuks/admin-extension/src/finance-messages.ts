@@ -237,6 +237,10 @@ export const financeMessages = {
         CREDIT_NOTE_USE_VOID: 'A credit note\'s credit was used on a voided invoice. Finance opens the note and gives the credit back; report it to development as a code defect.',
         CREDIT_UNUSED_WITH_DUE: 'A Sponsor has credit left while an invoice is unpaid. The books agree: finance asks the Sponsor whether to use the credit on the invoice, or applies it as agreed.',
         HELP_USAGE_TOTAL: 'The AI help\'s usage of everybody for a month is below the sum of the people\'s. The books agree: the content administrators check the month\'s usage on the headquarters\' AI page (their task leads there); erased accounts only make it larger, never smaller.',
+        ERASED_GIFT_LEFT: 'An erased Sponsor\'s wind-up is done but some platform fee Kudos granted to them were not voided. The wind-up should have voided them: report it to development.',
+        ERASED_CLOSE_OPEN: 'The wind-up of an erased Sponsor\'s platform fee account has waited longer than qb.erasure.close.alert-days. Finance looks at why (the switch qb.erasure.close.enabled is off, a deposit is still held, or the job failed) as the operations guide says.',
+        ERASED_FEE_OWED: 'An erased Sponsor\'s wind-up is done and their invoices still owe this much. A note: their overdue reminders stop, and finance decides whether to waive it.',
+        ERASED_NO_CLOSURE: 'An account erased some days ago had a platform fee account but no wind-up was registered (the event was lost). The daily job qb.sponsor-closure-register registers it: finance requests a run of that job (JOB_RUN_REQUEST); if it is still listed the next day, report it to development.',
       },
     },
     investor: {
@@ -624,6 +628,10 @@ export const financeMessages = {
         CREDIT_NOTE_USE_VOID: '某张贷项凭证的额度被用在已作废的发票上。财务打开该凭证并退回额度；作为代码缺陷报告给开发。',
         CREDIT_UNUSED_WITH_DUE: '发起方还有未用的额度，同时有发票未付。账是平的：财务询问该发起方是否用额度抵付发票，或按约定抵付。',
         HELP_USAGE_TOTAL: 'AI 帮助某月的全平台用量低于各人用量之和。账是平的：由内容管理员在总部 AI 页查看该月用量（待办链接到那里）；删除账号只会让全平台用量更大，不会更小。',
+        ERASED_GIFT_LEFT: '已注销发起方的收尾已完成，但赠送给他的平台费 Kudos 仍有未作废的。收尾本应作废它们：报告给开发。',
+        ERASED_CLOSE_OPEN: '已注销发起方的平台费账户收尾等待超过了 qb.erasure.close.alert-days。财务按运维手册查看原因（开关 qb.erasure.close.enabled 关着、预付款尚未释放，或任务失败）。',
+        ERASED_FEE_OWED: '已注销发起方的收尾已完成，其账单仍欠这么多。仅提示：不再发逾期提醒，由财务决定是否免除。',
+        ERASED_NO_CLOSURE: '数天前注销的账号有平台费账户，却没有登记收尾（事件丢失）。每日任务 qb.sponsor-closure-register 会登记它：财务请求补跑该任务（JOB_RUN_REQUEST）；次日仍然列出时，报告给开发。',
       },
     },
     investor: {
@@ -1011,6 +1019,10 @@ export const financeMessages = {
         CREDIT_NOTE_USE_VOID: '返還インボイスの残額が、無効化された請求書に充当されています。財務はノートを開いて残額を戻し、コードの不具合として開発に報告します。',
         CREDIT_UNUSED_WITH_DUE: '主催者にクレジットが残っているのに、未払いの請求書があります。帳簿は合っています。財務は主催者にクレジットを請求書へ充当するか確認し、合意どおりに充当します。',
         HELP_USAGE_TOTAL: 'AI ヘルプのある月の全体の利用量が個人別の合計を下回っています。帳簿は合っています：コンテンツ管理者が本部の AI ページでその月の利用量を確認します（タスクのリンク先）。アカウント削除で全体の利用量が小さくなることはありません。',
+        ERASED_GIFT_LEFT: '削除された主催者の精算は完了していますが、付与した手数料 Kudos の一部が無効化されていません。本来は精算で無効化されます：開発に報告してください。',
+        ERASED_CLOSE_OPEN: '削除された主催者の手数料口座の精算が qb.erasure.close.alert-days を超えて待っています。財務は運用ガイドに沿って原因（スイッチ qb.erasure.close.enabled がオフ、預り金が未解放、またはジョブの失敗）を確認します。',
+        ERASED_FEE_OWED: '削除された主催者の精算は完了し、請求書にまだこの金額の未払いがあります。お知らせのみ：延滞の通知は止まり、免除するかは財務が決めます。',
+        ERASED_NO_CLOSURE: '数日前に削除されたアカウントに手数料口座がありましたが、精算が登録されていません（イベントの欠落）。日次ジョブ qb.sponsor-closure-register が登録します：財務はそのジョブの再実行（JOB_RUN_REQUEST）を依頼し、翌日もなお表示される場合は開発に報告します。',
       },
     },
     investor: {

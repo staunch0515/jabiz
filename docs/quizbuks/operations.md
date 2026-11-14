@@ -1502,6 +1502,10 @@ Quiz 与发布有主题词（平台词表中的词与自定义词），学者可
 | `CREDIT_NOTE_USE_VOID` | 贷项用在已作废的账单上 | 差异 | 作废与抵用并发 | 报开发 | 报开发 | — |
 | `CREDIT_UNUSED_WITH_DUE` | 有未用贷项的同时有未付账单 | 需关注 | 抵用尚未发生 | 通常下一次开账单或抵用时自行了结；持续则报开发 | 财务 | FEES_RECEIVABLE |
 | `HELP_USAGE_TOTAL` | 每个月 AI 帮助的全平台用量（提问数、Token、估算美元）不小于各人之和（F-M10，§7.53） | 需关注 | 全平台行少记（缺陷）；删除账号或保留期只会让全平台行更大 | 内容管理员在总部 AI 页（`/qb/ai`）看该月用量；持续则报开发 | 内容管理员（`qb.admin.help.gaps`） | — |
+| `ERASED_GIFT_LEFT` | 已完成收尾（`CLOSED`）的已注销发起方没有剩余的赠送额度（收尾时未到期的各笔） | 差异 | 收尾的作废漏了某笔 | 报开发（§7.56） | 报开发 | FEE_CREDIT、FEE_CREDIT_PROMOTION |
+| `ERASED_CLOSE_OPEN` | 收尾在注销后 `qb.erasure.close.alert-days` 天内完成 | 需关注 | 开关 `qb.erasure.close.enabled` 关着、预付款未释放，或任务失败 | §7.56 | 财务 | ERASED_NO_CLOSURE |
+| `ERASED_FEE_OWED` | 已完成收尾的已注销发起方仍欠的平台费（按发起方合计） | 提示 | 账户里的钱不够付 | 财务决定是否免除（§7.56）；不再有逾期提醒 | 财务 | FEES_RECEIVABLE |
+| `ERASED_NO_CLOSURE` | 注销超过 `qb.erasure.close.alert-days` 天、有平台费账户的用户都有收尾记录 | 需关注 | 注销的事件与每日登记任务都没有登记 | 补跑 `qb.sponsor-closure-register`；次日仍在则报开发（§7.56） | 财务 | ERASED_CLOSE_OPEN |
 
 **已知局限**
 - 关注待办手工关闭而条件仍在，次日会重建；"已持续 n 天"从连续找到同一（核对项, 对象）的那几次运行中的第一次算起（UTC 日数）：某次运行不再找到它即重新数，没有运行的日子不打断；核对页一次至多显示 100 个关注条目的天数。
@@ -1511,6 +1515,17 @@ Quiz 与发布有主题词（平台词表中的词与自定义词），学者可
 - 核对按 UTC 18:37 运行；按 `jabiz.fiscal-year-zone` 排的任务随该设置移动，表中的先后以 `Asia/Tokyo` 为前提。
 
 **月报分类**（`qb.admin.monthly`，按来源单据、是否冲正、所动科目与方向归类，每笔只归一类）：`TOPUP`、`BANK_TOPUP`、`MANUAL_TOPUP`、`GRANT`、`REFUND`、`DISPUTE`、`STRIPE_FEE`、`REWARD`、`TRANSFER_SENT`、`TRANSFER_SETTLED`、`WITHDRAWAL_PAID`、`TRANSFER_FAILED`、`TRANSFER_REVERSED`、`PAYOUT`、`PAYOUT_FAILED`、`OPERATOR_SHARE`、`OPERATOR_PAID`、`REFERRAL_REWARD`、`CASH_TOPUP`、`CASH_BANK_TOPUP`、`CASH_REFUND`、`CASH_DISPUTE`、`KUDOS_BOUGHT`、`KUDOS_SOLD`、`FEE_CHARGED`、`FEE_PAID`、`FEE_VOIDED`、`ENTRY_FEE`、`ENTRY_FEE_SETTLED`、`FEE_CREDIT_GRANTED`、`FEE_CREDIT_VOIDED`、`OPERATOR_TRANSFER_TO_DIRECT`、`PREPAYMENT_FROZEN`、`PREPAYMENT_USED`、`PREPAYMENT_RELEASED`、`DISTRIBUTION_CHARGED`、`DISTRIBUTION_DEPOSIT`、`DISTRIBUTION_RELEASED`、`FEE_CREDIT_NOTE`、`FEE_CREDIT_RECOVERED`、`EXPOSURE_CHARGED`、`EXPOSURE_DEPOSIT`（冻结与追加）、`EXPOSURE_RELEASED`、`OTHER`。规则一句话：**退回与扣回不另立类，按它在账上的方向落进已有的类**——退回到预付款的是 `FEE_PAID` 的负数，预付款退回账户是 `PREPAYMENT_RELEASED`，到期赠送的作废是 `FEE_CREDIT_VOIDED`；运营商结算中对赠送额度的扣回（及其退还）是 `FEE_CREDIT_RECOVERED`（F-M12，按结算记账，不另是退回）；凭证本身是 `FEE_CREDIT_NOTE`；抵用不过账。`PREPAYMENT_USED` 不分用途（各费用的记账已按种类分行）。归不进去的才是 `OTHER`（只应有开发期没有来源的入账）；新增一种过账时，同一个 PR 里加它的类（`backend/quizbuks/CLAUDE.md`）。
+
+### 7.56 已注销发起方的平台费账户收尾（F-M15 b）
+
+注销的发起方在平台费账户里还有钱（现金、赠送额度、账单、预付款任一）时，由平台自动收尾，计划见 `docs/quizbuks/plans/impl/F-M15.md` §2、§5。
+
+- **登记**：账户删除（`jabiz.account.erased`）的消费者 `qb.account-erased-money` 运行 `QB_SPONSOR_CLOSURE_REGISTER`，写一行 `QbSponsorClosure`（`WAITING`）并发 `qb.sponsor.money-close-due`。事件丢失时由每日任务 `qb.sponsor-closure-register`（03:47，`quizbuks.erasure-close.register-cron`，模板 `qb.system.money-close-unregistered`）补登。
+- **收尾** `QB_SPONSOR_MONEY_CLOSE`（事件 `qb.sponsor-money-close` 与每日任务 `qb.sponsor-money-close`，03:53，`quizbuks.erasure-close.cron`，每次至多 `quizbuks.erasure-close.max-items` 项）：撤回审核中的手工加币与平台费申请（`ended_code = ERASED`；手工加币另给财务待办 `qb.erasure-close.withdrawn`，钱怎么处理由财务与发起方另行联系）→ 钱包锁内：开关 `qb.erasure.close.enabled` 关着即停（`SWITCH_OFF`）→ 有未关闭的预付款即等（`DEPOSIT_OPEN`，预付款由结束与释放的任务退回）→ 后付的未开账单按月开出（含当月）→ 自动付款（F-M13）→ 有欠费且还有钱可付即等下次（`TO_PAY`）；否则完成（`CLOSED`，仍欠即原因 `FEE_OWED`），作废未到期的赠送额度（借 2190 / 贷 5140，`QB_FEE_CREDIT_VOID_LOT`）。现金余额不退回，留在账户（法务说明见上线检查清单）。
+- **完成后又进账**（迟到的充值、作废账单退回现金）：每日任务把 `CLOSED` + `FEE_OWED` 且有现金剩余的再跑一次，付到欠费上。
+- **慢了**：注销后 `qb.erasure.close.alert-days`（普通参数，缺省 3，1～60）天仍未完成，给财务一次待办 `qb.erasure-close.slow`（完成时关闭）；同时每日核对报 `ERASED_CLOSE_OPEN`。按原因处理：`SWITCH_OFF` 由财务与另一位管理员经受控变更打开开关；`DEPOSIT_OPEN` 看该发起方的预付款为何未释放（§7.47、§7.48、§7.54）；没有原因的看任务 `qb.sponsor-money-close` 的失败，修好后用 `JOB_RUN_REQUEST` 补跑。
+- **欠费**：已注销发起方的过期账单不再变为 `OVERDUE`、不发提醒、不建逾期待办；财务看核对的提示 `ERASED_FEE_OWED`，决定是否以平台费申请（`QB_FEE_REQUEST`，种类 `CREDIT_NOTE`，四眼）免除。
+- **核对**：`ERASED_GIFT_LEFT`、`ERASED_CLOSE_OPEN`、`ERASED_FEE_OWED`、`ERASED_NO_CLOSURE`（模板 `qb.system.recon-erased`，见 §7.55 的总表）；收尾中的每一笔仍经 `FEE_CREDIT`、`FEE_CREDIT_PROMOTION`、`FEE_PAYMENTS`、`FEES_RECEIVABLE` 核对。
 
 ## 8. 升级到线 1.3（S0 的迁移 V29、V30）
 

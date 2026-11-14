@@ -254,6 +254,8 @@ public final class FeeProcesses {
     static final String ISSUER = "issuer";
     static final String ISSUED = "issued";
     static final String REMINDER = "reminder";
+    /** F-M15 b: the wind-up of the invoice's sponsor, when they were erased. */
+    static final String ERASED_CLOSURE = "erasedClosure";
     static final String CREDIT_NOTES = "creditNotes";
     static final String CREDIT_TAKES = "creditTakes";
     static final String CREDIT_LEFT = "creditLeft";
@@ -1008,9 +1010,15 @@ public final class FeeProcesses {
                     ctx -> byId("invoiceId", ctx.get(INPUT, InvoiceRef.class).invoiceId()), FOUND))
                 .step("Lock the sponsor's wallet", HoldLock.<ProcessContext>exclusive(ctx -> first(ctx, FOUND) == null
                     ? null : QbWallets.lockName(QbWallets.SPONSOR, first(ctx, FOUND).get("sponsorId"))))
-                .step("Read the invoice again", QueryEntities.<ProcessContext>of(QbFees.defaultDataset(QbFees.INVOICE),
-                    ctx -> byId("invoiceId", first(ctx, FOUND) == null ? null : String.valueOf(first(ctx, FOUND).id())),
-                    INVOICE))
+                // F-M15 b (§9 M4): with the sponsor's wind-up, in one statement. An erased sponsor's invoices are not
+                // reminded of (no mail reaches them, and finance has the reconciliation's ERASED_FEE_OWED instead);
+                // the items' template leaves them out, this covers one registered between the two.
+                .step("Read the invoice again", QueryEntities.<ProcessContext>all(
+                    QueryEntities.query(QbFees.defaultDataset(QbFees.INVOICE), ctx -> byId("invoiceId",
+                        first(ctx, FOUND) == null ? null : String.valueOf(first(ctx, FOUND).id())), INVOICE),
+                    QueryEntities.query(QbFees.defaultDataset(QbSponsorClosures.CLOSURE), ctx -> byId("sponsorId",
+                        first(ctx, FOUND) == null ? null : String.valueOf((Object) first(ctx, FOUND).get("sponsorId"))),
+                        ERASED_CLOSURE)))
                 .compute("Remind", (metadata, ctx) -> remind(ctx, zone))
                 .step("Ask the mail to remind the sponsor", PublishEvent.<ProcessContext>when(
                     ctx -> "REMINDED".equals(ctx.get(OUTCOME)), QbFees.INVOICE_OVERDUE_EVENT, ctx -> {
@@ -1031,7 +1039,8 @@ public final class FeeProcesses {
     static void remind(ProcessContext ctx, ZoneId zone) {
         EntityInstance invoice = invoice(ctx);
         ctx.put(OUTCOME, "NONE");
-        if (invoice == null || !QbFees.UNPAID.contains(String.valueOf((Object) invoice.get("status")))) {
+        if (invoice == null || !QbFees.UNPAID.contains(String.valueOf((Object) invoice.get("status")))
+            || first(ctx, ERASED_CLOSURE) != null) {
             return;
         }
         LocalDate today = ctx.opTime().atZone(zone).toLocalDate();

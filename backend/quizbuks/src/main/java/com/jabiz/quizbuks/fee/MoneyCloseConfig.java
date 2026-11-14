@@ -108,6 +108,25 @@ public class MoneyCloseConfig {
      * after the distribution fee's final settlements and the prepayments' release): every closure not done, and those
      * done with fees owed and cash that arrived since (§5.6), at most {@code quizbuks.erasure-close.max-items} a run.
      */
+    /**
+     * Every day ({@code quizbuks.erasure-close.register-cron}, {@code QB_ERASURE_CLOSE_REGISTER_CRON}; 03:47 in the fiscal
+     * year's zone, before the wind-up's own job): registers the wind-up of every erased user who had the platform fee
+     * account and has none (the erasure's event lost, review M1); a registration asks for its wind-up by its event.
+     * The reconciliation's {@code ERASED_NO_CLOSURE} finds those this job did not.
+     */
+    @Bean
+    JobDefinition<MoneyClose.RegisterInput> qbSponsorClosureRegisterJob(
+        ProcessDefinition<MoneyClose.RegisterInput, MoneyClose.RegisterOutput, ProcessContext> qbSponsorClosureRegister,
+        @Value("${quizbuks.erasure-close.register-cron:0 47 3 * * *}") String cron,
+        @Value("${quizbuks.erasure-close.max-items:10000}") int maxItems) {
+        return JobDefinition.forEach(MoneyClose.REGISTER_JOB, cron, zone,
+                JobItems.template(MoneyClose.UNREGISTERED_TEMPLATE, scheduledTime -> java.util.Map.of(), "userId"),
+                qbSponsorClosureRegister,
+                (scheduledTime, row) -> new MoneyClose.RegisterInput(String.valueOf(row.get("userId")),
+                    row.get("erasedTime") == null ? null : java.time.Instant.parse(String.valueOf(row.get("erasedTime")))))
+            .maxItems(maxItems);
+    }
+
     @Bean
     JobDefinition<MoneyClose.CloseInput> qbSponsorMoneyCloseJob(
         ProcessDefinition<MoneyClose.CloseInput, MoneyClose.CloseOutput, ProcessContext> qbSponsorMoneyClose,

@@ -67,6 +67,9 @@ public final class MoneyClose {
     /** The platform's event that an account was erased (its consumers run after the erasure committed). */
     public static final String ACCOUNT_ERASED_EVENT = "jabiz.account.erased";
     public static final String REGISTER_SUBSCRIPTION = "qb.account-erased-money";
+    /** The daily sweep that registers the wind-ups whose erasure's event was lost (review M1). */
+    public static final String REGISTER_JOB = "qb.sponsor-closure-register";
+    public static final String UNREGISTERED_TEMPLATE = "qb.system.money-close-unregistered";
     /** A closure was registered: the wind-up runs ({@code sponsorId}). */
     public static final String DUE_EVENT = "qb.sponsor.money-close-due";
 
@@ -114,7 +117,11 @@ public final class MoneyClose {
     static final List<String> ACCOUNT_WALLETS = List.of(QbWallets.CASH, QbWallets.FEE_CREDIT);
 
     /** @param userId the erased user */
-    public record RegisterInput(@NotBlank @Size(max = 128) String userId) {}
+    /**
+     * @param erasedAt when it was erased (the daily sweep gives it, from the erasure's record); none: now (the erasure's
+     *                 event, run at once)
+     */
+    public record RegisterInput(@NotBlank @Size(max = 128) String userId, java.time.Instant erasedAt) {}
 
     /** @param registered whether a closure was written now (false: nothing of the account, or registered before) */
     public record RegisterOutput(String userId, boolean registered) {}
@@ -193,7 +200,9 @@ public final class MoneyClose {
         Map<String, Object> values = new LinkedHashMap<>();
         values.put("sponsorId", userId(ctx));
         values.put("status", QbSponsorClosures.WAITING);
-        values.put("erasedAt", ctx.opTime());
+        // The daily sweep registers late: the alert days still count from the erasure.
+        java.time.Instant erasedAt = ctx.get(INPUT, RegisterInput.class).erasedAt();
+        values.put("erasedAt", erasedAt != null && !erasedAt.isAfter(ctx.opTime()) ? erasedAt : ctx.opTime());
         ctx.changes().insert(QbSponsorClosures.CLOSURE, values);
         ctx.put(REGISTERED, true);
     }
@@ -575,6 +584,6 @@ public final class MoneyClose {
 
     /** The input of the registration: the user the platform's event names. */
     static RegisterInput registerInput(DomainEvent event) {
-        return new RegisterInput(String.valueOf(event.payload().get("userId")));
+        return new RegisterInput(String.valueOf(event.payload().get("userId")), null);
     }
 }

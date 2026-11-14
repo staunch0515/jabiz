@@ -225,6 +225,104 @@ class MoneyCloseIT extends CreditNoteItSupport {
         assertThat(due).extracting(row -> row.get("sponsorId")).contains(waiting).doesNotContain(sponsor);
     }
 
+    @Test
+    void theReconciliationFindsWhatAWindUpLeftWaitingOwedOrNotRegistered() {
+        // Owed after a wind-up done: a note with what is owed.
+        String owes = newSponsor(unique("s-fm15b-rc-owed"));
+        billing(owes, "POSTPAID", 50_000);
+        manualFee(owes, 300);
+        spentLot(owes);
+        register(owes);
+        assertThat(close(owes).outcome()).isEqualTo(MoneyClose.CLOSED);
+        // Granted credit left after it (a lot that the wind-up should have voided): a difference.
+        String left = newSponsor(unique("s-fm15b-rc-left"));
+        String lot = grant(left, 400, clock.instant().plus(Duration.ofDays(60)));
+        register(left);
+        assertThat(close(left).outcome()).isEqualTo(MoneyClose.CLOSED);
+        execute("UPDATE qb_fee_credit_grant SET remaining = 150, voided_amount = 0, voided_at = NULL WHERE grant_id = ?", lot);
+        // Waiting: the switch off.
+        param(QbParams.ERASURE_CLOSE_ENABLED, "false");
+        String waits = newSponsor(unique("s-fm15b-rc-wait"));
+        grant(waits, 100, clock.instant().plus(Duration.ofDays(60)));
+        register(waits);
+        close(waits);
+        // Erased with the account, the registration's event never delivered.
+        String lost = newSponsor(unique("s-fm15b-rc-lost"));
+        grant(lost, 100, clock.instant().plus(Duration.ofDays(60)));
+        runAsSystem("ACCOUNT_ERASE", Map.of("userId", lost, "requestedBy", "it-support"));
+
+        // Before the alert days: only what does not wait for them.
+        Map<String, List<String>> early = erasedItems();
+        assertThat(early.get(owes)).containsExactly(com.jabiz.quizbuks.wallet.ReconChecks.ERASED_FEE_OWED);
+        assertThat(early.get(left)).contains(com.jabiz.quizbuks.wallet.ReconChecks.ERASED_GIFT_LEFT);
+        assertThat(early).doesNotContainKeys(waits, lost);
+
+        clock.set(clock.instant().plus(Duration.ofDays(3)));
+        Map<String, List<String>> late = erasedItems();
+        assertThat(late.get(waits)).containsExactly(com.jabiz.quizbuks.wallet.ReconChecks.ERASED_CLOSE_OPEN);
+        assertThat(late.get(lost)).containsExactly(com.jabiz.quizbuks.wallet.ReconChecks.ERASED_NO_CLOSURE);
+
+        // The daily sweep registers the one whose event was lost; the reconciliation no longer finds it.
+        List<Map<String, Object>> unregistered = items(MoneyClose.UNREGISTERED_TEMPLATE,
+            com.jabiz.runtime.test.TestTokens.bearer(tokens, "fm15b-job", "qb.fee.system"), Map.of("limit", 100));
+        assertThat(unregistered).extracting(row -> row.get("userId")).contains(lost)
+            .doesNotContain(owes, left, waits);
+        // As the job's item: with the erasure's time, from which the alert days still count.
+        Object erasedTime = unregistered.stream().filter(row -> lost.equals(row.get("userId"))).findFirst().orElseThrow()
+            .get("erasedTime");
+        assertThat(((MoneyClose.RegisterOutput) systemRun(MoneyClose.REGISTER, Map.of("userId", lost,
+            "erasedAt", String.valueOf(erasedTime)))).registered()).isTrue();
+        assertThat(closure(lost).get("erased_at")).isNotNull();
+        clock.set(clock.instant().plus(Duration.ofMinutes(1)));
+        assertThat(erasedItems().get(lost)).containsExactly(com.jabiz.quizbuks.wallet.ReconChecks.ERASED_CLOSE_OPEN);
+    }
+
+    @Test
+    void anErasedSponsorsInvoicesAreNotRemindedOf() {
+        String sponsor = newSponsor(unique("s-fm15b-overdue"));
+        billing(sponsor, "POSTPAID", 50_000);
+        manualFee(sponsor, 300);
+        spentLot(sponsor);
+        register(sponsor);
+        assertThat(close(sponsor).outcome()).isEqualTo(MoneyClose.CLOSED);
+        String invoiceId = String.valueOf(query("SELECT invoice_id FROM qb_fee_invoice WHERE sponsor_id = ?", sponsor)
+            .getFirst().get("invoice_id"));
+        clock.set(clock.instant().plus(Duration.ofDays(62)));
+
+        // Not an item of the daily job, and the item itself (registered between the two) does nothing.
+        LocalDate today = clock.instant().atZone(ZoneId.of("Asia/Tokyo")).toLocalDate();
+        assertThat(items("qb.system.fee-overdue-due", com.jabiz.runtime.test.TestTokens.bearer(tokens, "fm15b-job",
+            "qb.fee.system"), Map.of("limit", 1000, "params", Map.of("today", today.toString(),
+            "remindedBefore", clock.instant().toString())))).extracting(row -> row.get("invoiceId"))
+            .doesNotContain(invoiceId);
+        assertThat(((com.jabiz.quizbuks.fee.FeeProcesses.ItemOutput) systemRun(
+            com.jabiz.quizbuks.fee.FeeProcesses.OVERDUE_ITEM, Map.of("invoiceId", invoiceId))).outcome())
+            .isEqualTo("NONE");
+        assertThat(query("SELECT status, reminders_sent FROM qb_fee_invoice WHERE invoice_id = ?", invoiceId)
+            .getFirst()).containsEntry("status", QbFees.OPEN);
+        assertThat(openTasks(QbFees.overdueTaskSource(invoiceId))).isEmpty();
+    }
+
+    /** A granted lot used up: the sponsor had the account (fees not invoiced yet are not part of that, §4.1). */
+    private static void spentLot(String sponsor) {
+        SyntheticRows.rows("qb_fee_credit_grant", null, 1, null, n -> Map.of("sponsor_id", text(sponsor),
+            "source", "'MANUAL'", "amount", "800", "remaining", "0", "voided_amount", "0",
+            "granted_at", "TIMESTAMPTZ '2026-01-01T00:00:00Z'", "expires_at", "TIMESTAMPTZ '2099-01-01T00:00:00Z'"));
+    }
+
+    /** One reconciliation now: the ERASED_* items found, by party. */
+    private Map<String, List<String>> erasedItems() {
+        var output = (com.jabiz.quizbuks.wallet.Reconciliation.ReconcileOutput) systemRun("QB_RECONCILE_RUN",
+            Map.of("scheduledTime", clock.instant().toString()));
+        Map<String, List<String>> found = new java.util.HashMap<>();
+        for (Map<String, Object> row : query("SELECT party_id, check_code FROM qb_recon_item_version WHERE run_id = ?"
+            + " AND check_code LIKE 'ERASED%' ORDER BY check_code", UUID.fromString(output.runId()))) {
+            found.computeIfAbsent(String.valueOf(row.get("party_id")), k -> new java.util.ArrayList<>())
+                .add(String.valueOf(row.get("check_code")));
+        }
+        return found;
+    }
+
     private void register(String sponsor) {
         assertThat(((MoneyClose.RegisterOutput) systemRun(MoneyClose.REGISTER, Map.of("userId", sponsor)))
             .registered()).isTrue();

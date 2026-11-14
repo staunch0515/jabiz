@@ -68,6 +68,8 @@ public final class Reconciliation {
     static final String EXPOSURE_TEMPLATE = "qb.system.recon-exposure";
     /** F-M10: everybody's row of the AI help's usage against the people's rows. */
     static final String HELP_USAGE_TEMPLATE = "qb.system.recon-help-usage";
+    /** F-M15 b: the wind-ups of erased sponsors' platform fee accounts. */
+    static final String ERASED_TEMPLATE = "qb.system.recon-erased";
 
     public record ReconcileInput(@NotNull Instant scheduledTime) {}
 
@@ -135,6 +137,7 @@ public final class Reconciliation {
     static final String CREDIT_NOTES = "creditNotes";
     static final String EXPOSURE = "exposure";
     static final String HELP_USAGE = "helpUsage";
+    static final String ERASED = "erased";
     static final String DISTRIBUTION_PARAMS = "distributionParams";
     static final String PREVIOUS = "previous";
     static final String PREVIOUS_TAKERS = "previousTakers";
@@ -185,7 +188,8 @@ public final class Reconciliation {
                 .step("Load the distribution checks' hours", LoadParams.<ProcessContext>optional(ProcessContext::opTime,
                     DISTRIBUTION_PARAMS, QbParams.DISTRIBUTION_UNSETTLED_AFTER_HOURS,
                     QbParams.DISTRIBUTION_FINAL_MISSING_AFTER_HOURS, QbParams.AUDIENCE_REFUND_MISSING_AFTER_HOURS,
-                    QbParams.EXPOSURE_UNSETTLED_AFTER_HOURS, QbParams.EXPOSURE_FINAL_MISSING_AFTER_HOURS))
+                    QbParams.EXPOSURE_UNSETTLED_AFTER_HOURS, QbParams.EXPOSURE_FINAL_MISSING_AFTER_HOURS,
+                    QbParams.ERASURE_CLOSE_ALERT_DAYS))
                 // The fee account's checks are four statements by domain (F-M14 G10), each with the parameters it declares.
                 .step("Compare the fee credit", RunTemplate.<ProcessContext>of(FEE_CREDIT_TEMPLATE,
                     ctx -> Map.of(), FEE_CREDIT))
@@ -198,6 +202,9 @@ public final class Reconciliation {
                     ctx -> exposureParams(ctx, zone), EXPOSURE))
                 .step("Compare the credit notes", RunTemplate.<ProcessContext>of(CREDIT_NOTES_TEMPLATE,
                     ctx -> feeAccountParams(ctx, zone, "at", "refundHours"), CREDIT_NOTES))
+                // F-M15 b: the erased sponsors' wind-ups, after the same days as the wind-up's own alert.
+                .step("Compare the erased sponsors' wind-ups", RunTemplate.<ProcessContext>of(ERASED_TEMPLATE,
+                    Reconciliation::erasedParams, ERASED))
                 .step("Compare the AI help's usage", RunTemplate.<ProcessContext>of(HELP_USAGE_TEMPLATE,
                     ctx -> Map.of(), HELP_USAGE))
                 // The takers' cache follows by events: one found behind counts only when the previous run found them.
@@ -253,6 +260,7 @@ public final class Reconciliation {
         found.addAll(ReconChecks.coded(rows(ctx, CREDIT_NOTES)));
         found.addAll(ReconChecks.coded(rows(ctx, EXPOSURE)));
         found.addAll(ReconChecks.coded(rows(ctx, HELP_USAGE)));
+        found.addAll(ReconChecks.coded(rows(ctx, ERASED)));
         java.util.Set<String> foundBefore = new java.util.HashSet<>();
         TopUpCrediting.list(ctx, PREVIOUS_TAKERS).forEach(item -> foundBefore.add(item.get("partyId")));
         ReconChecks.TakerItems takers = ReconChecks.takers(rows(ctx, TAKERS), foundBefore);
@@ -342,6 +350,15 @@ public final class Reconciliation {
         values.put("refundHours", params.find(QbParams.AUDIENCE_REFUND_MISSING_AFTER_HOURS,
             java.math.BigDecimal.class).orElse(null));
         values.keySet().retainAll(java.util.Set.of(names));
+        return values;
+    }
+
+    /** F-M15 b: the wind-up checks' parameters: when it runs and the alert days (none handed in: not checked by days). */
+    static Map<String, Object> erasedParams(ProcessContext ctx) {
+        com.jabiz.param.ParamValues params = ctx.get(DISTRIBUTION_PARAMS, com.jabiz.param.ParamValues.class);
+        Map<String, Object> values = new java.util.HashMap<>();
+        values.put("at", ctx.get(INPUT, ReconcileInput.class).scheduledTime());
+        values.put("alertDays", params.find(QbParams.ERASURE_CLOSE_ALERT_DAYS, java.math.BigDecimal.class).orElse(null));
         return values;
     }
 

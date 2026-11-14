@@ -139,6 +139,7 @@ class ReconChecksTest {
             + "\"CREDIT_NOTE_LIMITS\":0,\"CREDIT_NOTE_USES\":0,\"CREDIT_NOTE_USE_VOID\":0,\"CREDIT_UNUSED_WITH_DUE\":0,"
             + "\"DISTRIBUTION_AT_FLOOR\":0,\"DISTRIBUTION_DEPOSITS\":0,\"DISTRIBUTION_FINAL_MISSING\":0,"
             + "\"DISTRIBUTION_PRICE_RANGE\":0,\"DISTRIBUTION_UNSETTLED\":0,\"ENTRY_FEES_UNSETTLED\":0,"
+            + "\"ERASED_CLOSE_OPEN\":0,\"ERASED_FEE_OWED\":0,\"ERASED_GIFT_LEFT\":0,\"ERASED_NO_CLOSURE\":0,"
             + "\"EXPOSURE_AMOUNT_MISMATCH\":0,\"EXPOSURE_DEPOSITS\":0,\"EXPOSURE_FINAL_MISSING\":0,"
             + "\"EXPOSURE_PRICE_RANGE\":0,\"EXPOSURE_SETTLED_OVER\":0,\"EXPOSURE_SETTLED_SHORT\":0,"
             + "\"EXPOSURE_UNIT_MISMATCH\":0,\"EXPOSURE_UNPURCHASED\":0,"
@@ -226,15 +227,21 @@ class ReconChecksTest {
         // Five need attention (the two price ranges, the audience fee without its period, a credit with a due fee, and
         // F-M10's AI help usage total, owned by the content administrators and leading to the AI page they can open),
         // three are notes (the taker wallet's lag, the distribution fee at its floor, F-M8's unpurchased exposures),
-        // the rest are differences.
+        // F-M15 b adds two for attention (a wind-up waiting long, an erased Sponsor with none) and a note (fees an
+        // erased Sponsor still owes, finance's to waive; ERASED_GIFT_LEFT is a difference); the rest are differences.
         assertThat(ReconChecks.ATTENTION).containsExactlyInAnyOrder(ReconChecks.DISTRIBUTION_PRICE_RANGE,
             ReconChecks.AUDIENCE_REFUND_NO_PERIOD, ReconChecks.CREDIT_UNUSED_WITH_DUE, ReconChecks.HELP_USAGE_TOTAL,
-            ReconChecks.EXPOSURE_PRICE_RANGE);
+            ReconChecks.EXPOSURE_PRICE_RANGE, ReconChecks.ERASED_CLOSE_OPEN, ReconChecks.ERASED_NO_CLOSURE);
+        assertThat(ReconChecks.NOTES).contains(ReconChecks.ERASED_FEE_OWED);
+        assertThat(ReconChecks.level(ReconChecks.ERASED_GIFT_LEFT)).isEqualTo(ReconChecks.Level.DIFFERENCE);
+        // Finance is asked about both (qb.reconcile).
+        assertThat(ReconChecks.owner(ReconChecks.ERASED_CLOSE_OPEN)).isEqualTo(QbPermissions.RECONCILE);
+        assertThat(ReconChecks.owner(ReconChecks.ERASED_NO_CLOSURE)).isEqualTo(QbPermissions.RECONCILE);
         assertThat(ReconChecks.owner(ReconChecks.HELP_USAGE_TOTAL)).isEqualTo(QbPermissions.ADMIN_HELP_GAPS);
         assertThat(ReconChecks.link(ReconChecks.HELP_USAGE_TOTAL)).isEqualTo("/qb/ai");
         assertThat(ReconChecks.link(ReconChecks.DISTRIBUTION_PRICE_RANGE)).isEqualTo(ReconTasks.RECONCILIATION_PAGE);
         assertThat(ReconChecks.ALL.stream().filter(c -> ReconChecks.level(c) == ReconChecks.Level.DIFFERENCE))
-            .hasSize(ReconChecks.ALL.size() - 8);
+            .hasSize(ReconChecks.ALL.size() - 11);
     }
 
     @Test
