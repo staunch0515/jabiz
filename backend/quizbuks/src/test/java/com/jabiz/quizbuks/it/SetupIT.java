@@ -497,6 +497,8 @@ class SetupIT extends QbItSupport {
         expected.put(QbParams.HELP_CACHE_READ_WEIGHT, "0.10");
         // F-M10: the dollar alert of the AI costs (ordinary); the help's daily questions are controlled now.
         expected.put(QbParams.HELP_GLOBAL_MONTHLY_USD_ALERT, "8.00");
+        // F-M9 b2-1: the alert on what the platform took on of a month's AI fees (ordinary, whole yen).
+        expected.put(QbParams.AI_FEE_ABSORBED_ALERT_YEN, "1000");
         expected.put(QbParams.HELP_HISTORY_TURNS, "6");
         expected.put(QbParams.HELP_RETENTION_DAYS, "180");
         expected.put(QbParams.HELP_MANUAL_MAX_BYTES, "204800");

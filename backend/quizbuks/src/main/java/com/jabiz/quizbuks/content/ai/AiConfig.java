@@ -128,6 +128,23 @@ public class AiConfig {
             .maxItems(10_000);
     }
 
+    /** F-M9: the check of what the platform took on of a month's AI fees (the alert and its task). */
+    @Bean
+    ProcessDefinition<AiAbsorbed.CheckInput, AiAbsorbed.CheckOutput, ProcessContext> qbAiAbsorbedCheck() {
+        return AiAbsorbed.check(zone);
+    }
+
+    /**
+     * F-M9: the check every day at 04:17 in the fiscal year's zone ({@code quizbuks.ai-absorbed-check.cron});
+     * missed runs are run again with {@code JOB_RUN_REQUEST}.
+     */
+    @Bean
+    JobDefinition<AiAbsorbed.CheckInput> qbAiAbsorbedCheckJob(
+        ProcessDefinition<AiAbsorbed.CheckInput, AiAbsorbed.CheckOutput, ProcessContext> qbAiAbsorbedCheck,
+        @Value("${quizbuks.ai-absorbed-check.cron:" + AiAbsorbed.CRON + "}") String cron) {
+        return JobDefinition.cron(AiAbsorbed.JOB, cron, zone, qbAiAbsorbedCheck, AiAbsorbed.CheckInput::new);
+    }
+
     /** F-M9a-2: the sponsor gives back AI credit. */
     @Bean
     ProcessDefinition<AiCreditReturns.ReturnInput, com.jabiz.quizbuks.fee.AiCreditGiveBack.GiveBackOutput,
