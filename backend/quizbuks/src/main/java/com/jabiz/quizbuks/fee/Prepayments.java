@@ -95,11 +95,14 @@ public final class Prepayments {
 
     /**
      * F-M8: raises the open prepayment of a purpose by {@code amount} (an exposure top-up); the mode is the prepayment's.
+     * F-M9: also a sponsor's AI credit (purpose {@code AI}, no publication: the sponsor's one open credit), a purchase.
      *
-     * @param amount what is added (the deposit with its tax, worked out by the caller from the cumulative rule)
+     * @param publicationId the publication (an exposure top-up); none for the AI credit
+     * @param amount        what is added (the deposit with its tax, worked out by the caller from the cumulative rule; a
+     *                      purchase of AI credit)
      */
-    public record TopUpInput(@NotBlank @Size(max = 128) String sponsorId, @NotBlank @Size(max = 36) String publicationId,
-        @NotBlank @Pattern(regexp = "EXPOSURE") String purpose,
+    public record TopUpInput(@NotBlank @Size(max = 128) String sponsorId, @Size(max = 36) String publicationId,
+        @NotBlank @Pattern(regexp = "EXPOSURE|AI") String purpose,
         @NotNull @DecimalMin("1") @DecimalMax(FeeProcesses.MAX_AMOUNT) @Digits(integer = 13, fraction = 0)
         BigDecimal amount) {}
 
@@ -288,7 +291,10 @@ public final class Prepayments {
                     ctx -> QbWallets.query(QbWallets.FEE_CREDIT, topUpInput(ctx).sponsorId()), CREDIT_WALLET),
                 QueryEntities.query(QbFees.defaultDataset(QbPrepayments.PREPAYMENT), ctx -> EntityQuery.builder()
                     .where(new QueryPredicate.And(List.of(
-                        new QueryPredicate.Eq("publicationId", topUpInput(ctx).publicationId()),
+                        // F-M9: the AI credit is the sponsor's one open prepayment of its purpose (no publication).
+                        QbPrepayments.AI.equals(topUpInput(ctx).purpose())
+                            ? new QueryPredicate.Eq("sponsorId", topUpInput(ctx).sponsorId())
+                            : new QueryPredicate.Eq("publicationId", topUpInput(ctx).publicationId()),
                         new QueryPredicate.Eq("purpose", topUpInput(ctx).purpose()),
                         new QueryPredicate.Eq("status", QbPrepayments.OPEN)))).limit(1).build(), OPEN_PREPAYMENT)))
             .compute("Raise it", (metadata, ctx) -> raise(ctx))
@@ -299,10 +305,15 @@ public final class Prepayments {
 
     static void raise(ProcessContext ctx) {
         TopUpInput input = topUpInput(ctx);
+        if (!QbPrepayments.AI.equals(input.purpose()) && input.publicationId() == null) {
+            // #692 review L4: only the AI credit has no publication; a top-up of another purpose without one would
+            // have read a prepayment of no publication.
+            throw new IllegalStateException("A " + input.purpose() + " top-up names no publication");
+        }
         EntityInstance prepayment = FeeGate.first(ctx, OPEN_PREPAYMENT);
         if (prepayment == null) {
-            throw new IllegalStateException("Publication " + input.publicationId() + " has no open " + input.purpose()
-                + " prepayment to raise");
+            throw new IllegalStateException((input.publicationId() == null ? "Sponsor " + input.sponsorId()
+                : "Publication " + input.publicationId()) + " has no open " + input.purpose() + " prepayment to raise");
         }
         String id = String.valueOf(prepayment.id());
         ctx.put(PREPAYMENT_ID, id);

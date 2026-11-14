@@ -78,6 +78,19 @@ abstract class ContentItSupport extends QbItSupport {
             body("changeId", change.get("changeId")));
     }
 
+    /**
+     * F-M12 c: the operators' months are settled by a job, which the tests switch off, so an operator of a test would be
+     * reported as waiting for its settlement in every daily run of an otherwise clean ledger. A test about the other
+     * checks puts the wait at its longest (the waiting check is tried in OperatorSettlementReconIT); once for the
+     * schema.
+     */
+    void settlementsAreNotWaitedFor() {
+        String key = com.jabiz.quizbuks.setup.QbParams.OPERATOR_SETTLEMENT_WAITING_AFTER_HOURS;
+        if (query("SELECT 1 FROM sys_param_version WHERE param_key = ? AND param_value = '9999'", key).isEmpty()) {
+            setControlledParam(key, "9999");
+        }
+    }
+
     Map<String, Object> run(String process, String token, Map<String, ?> body) {
         var result = call(process, token, body).expectBody(MAP).returnResult();
         assertThat(result.getStatus().value()).as(process + " answered " + result.getResponseBody()).isEqualTo(200);

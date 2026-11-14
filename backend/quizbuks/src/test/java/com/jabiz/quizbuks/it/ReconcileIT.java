@@ -34,6 +34,11 @@ class ReconcileIT extends TopUpItSupport {
     @Qualifier("qbReconcileJob")
     JobDefinition<?> reconcileJob;
 
+    @org.junit.jupiter.api.BeforeEach
+    void operatorsAreNotWaitedFor() {
+        settlementsAreNotWaitedFor();
+    }
+
     @Autowired
     io.micrometer.core.instrument.MeterRegistry meters;
 

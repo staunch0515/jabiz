@@ -11,6 +11,11 @@ public final class AiCodes {
 
     /** AI generation is switched off ({@code qb.ai.enabled}), or its parameters cannot be used. */
     public static final String UNAVAILABLE = "QB_AI_UNAVAILABLE";
+    /**
+     * F-M9: the sponsor's AI credit cannot hold what the request may cost (details {@code needed}, {@code available} and
+     * {@code minPurchase}: the page offers a purchase).
+     */
+    public static final String CREDIT_SHORT = "QB_AI_CREDIT_SHORT";
     /** No version of the AI notice is in effect: nobody can have accepted it, so nothing is sent (A-11). */
     public static final String NOTICE_MISSING = "QB_AI_NOTICE_MISSING";
     /** The AI notice in effect is not accepted yet: the request must name its version ({@code aiNoticeVersionNo}). */

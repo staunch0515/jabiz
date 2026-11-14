@@ -81,8 +81,9 @@ public final class ClaudeCalls {
             answer = ClaudeApi.of(ctx, json).send(request, timeout);
         } catch (ExternalCallException e) {
             if (ClaudeApi.mayHaveBeenBilled(e)) {
-                record(ctx, request.model(), ClaudeApi.unanswered(request,
-                    reserved == null ? null : reserved.inputTokens()), reserved);
+                // F-M9 (H1): an estimate, kept apart from what answers reported (the platform's, not the sponsor's).
+                recordEstimate(ctx, request.model(), ClaudeApi.unanswered(request,
+                    reserved == null ? null : reserved.inputTokens()));
             }
             throw e;
         }
@@ -130,6 +131,21 @@ public final class ClaudeCalls {
         if (reserved != null && usage.inputTokens() + usage.outputTokens() > reserved.totalTokens()) {
             // The limits counted on the reservation (a provider's fallback runs the input again): worth a look.
             log.warn("AI usage of one attempt above its reservation (job type {})", reserved.jobType());
+        }
+    }
+
+    /**
+     * F-M9 (plan §2, H1): records the estimate of a call that may have been billed but got no answer, priced as a call
+     * is, under {@link AiUsageMetrics}' names of its own: the job is charged it all the same, but it is not the
+     * sponsor's ({@code AiProcesses.charged} adds it to the answered usage).
+     */
+    static void recordEstimate(ExternalJobContext ctx, String model, ClaudeApi.Usage usage) {
+        ClaudeApi.Usage priced = priced(model, usage);
+        ctx.recordUsage(AiUsageMetrics.ESTIMATED_INPUT_TOKENS, priced.inputTokens());
+        ctx.recordUsage(AiUsageMetrics.ESTIMATED_OUTPUT_TOKENS, priced.outputTokens());
+        if (priced.longPromptInputTokens() > 0 || priced.longPromptOutputTokens() > 0) {
+            ctx.recordUsage(AiUsageMetrics.ESTIMATED_LONG_INPUT_TOKENS, priced.longPromptInputTokens());
+            ctx.recordUsage(AiUsageMetrics.ESTIMATED_LONG_OUTPUT_TOKENS, priced.longPromptOutputTokens());
         }
     }
 

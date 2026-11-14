@@ -27,12 +27,14 @@ class DistributionDueConditionTest {
      */
     static final java.util.Map<String, Integer> TEMPLATES = java.util.Map.of("distribution-due.sql", 1,
         "exposure-due.sql", 1, "fee-invoices-due.sql", 2, "recon-prepayments.sql", 1,
-        "recon-exposure.sql", 1, "operator-settlement-readiness.sql", 2);
+        "recon-exposure.sql", 1, "operator-settlement-readiness.sql", 2,
+        // F-M12 c: the daily check of the waiting settlements: the readiness branches (2) and the times they were ready (2).
+        "recon-operator-settlement.sql", 4);
     static final Pattern WENT_ON = Pattern.compile(
         "greatest\\((\\w+)\\.\\{\\{QbPublicationCard\\.startAt}}, (\\w+)\\.\\{\\{QbPublication\\.approvedAt}}\\)");
 
     @Test
-    void theThreeStartFromTheGreaterOfTheStartAndTheApproval() throws IOException {
+    void theTemplatesStartFromTheGreaterOfTheStartAndTheApproval() throws IOException {
         for (var entry : TEMPLATES.entrySet()) {
             String template = entry.getKey();
             String sql = Files.readString(SYSTEM.resolve(template));

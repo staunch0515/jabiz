@@ -4,10 +4,13 @@ description: >-
   F-M10: the months in which everybody's row of the AI help's usage (user "*") is below the sum of the people's rows in
   questions, input tokens, output tokens or estimated dollars (the daily reconciliation; differences only). Not "equal":
   deleting an account erases the person's row and keeps everybody's, and a conversation already deleted adds only to
-  everybody's, so the total may be more than the people's sum, never less
-entities: [QbHelpUsage]
+  everybody's, so the total may be more than the people's sum, never less. F-M9 (#692 re-review, a note): the charged AI
+  jobs whose fee went beyond what they could take (their reservation, or the credit), the rest taken on by the platform,
+  until the month's charge takes them in; the reference is the job, the actual what the platform took on before tax
+entities: [QbHelpUsage, QbAiJob]
 datasets:
   QbHelpUsage: urn:jabiz:dataset:default:QbHelpUsage
+  QbAiJob: urn:jabiz:dataset:default:QbAiJob
 results:
   checkCode: { kind: { type: text, maxLength: 30 } }
   reference: { kind: { type: text, maxLength: 100 } }
@@ -46,3 +49,8 @@ FROM months m WHERE m.tOutput < coalesce(m.pOutput, 0)
 UNION ALL
 SELECT 'HELP_USAGE_TOTAL', m.month || ':costMicros', CAST(round(m.pCost * 1000000) AS numeric(20, 0)), CAST(round(m.tCost * 1000000) AS numeric(20, 0))
 FROM months m WHERE m.tCost < coalesce(m.pCost, 0)
+UNION ALL
+SELECT 'AI_RESERVATION_SHORT', CAST(j.{{QbAiJob.aiJobId}} AS varchar(100)), CAST(0 AS numeric(20, 0)),
+       CAST(j.{{QbAiJob.absorbedYen}} AS numeric(20, 0))
+FROM {{QbAiJob}} j
+WHERE j.{{QbAiJob.feeMode}} = 'CREDIT' AND j.{{QbAiJob.feeChargeId}} IS NULL AND j.{{QbAiJob.absorbedYen}} > 0

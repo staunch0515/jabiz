@@ -162,6 +162,41 @@ public final class QbParams {
      * grant's source, who bears the credit used ({@code PLATFORM} or {@code OPERATOR}); whether the credit used on a
      * fee outside the base is taken back too. All controlled: they are money.
      */
+    /**
+     * F-M9 (docs/quizbuks/plans/impl/F-M9.md §6): the AI fee. Whether sponsors' AI requests are charged to their AI
+     * credit (off: they are free, as before); the markup on the provider's list price and the exchange rate, frozen on
+     * each job at its request; the least amount of a purchase of credit (not created by {@code QB_SETUP}: absent, no
+     * least). All money, so controlled (four eyes).
+     */
+    public static final String AI_FEE_ENABLED = "qb.ai.fee.enabled";
+    public static final String AI_FEE_MARKUP = "qb.ai.fee.markup";
+    public static final String AI_FEE_USD_JPY = "qb.ai.fee.usd-jpy";
+    public static final String AI_CREDIT_MIN_PURCHASE = "qb.ai.credit.min-purchase";
+    /**
+     * F-M9: the AI fee's controlled parameters that {@code QB_SETUP} creates (the last of {@link #CONTROLLED});
+     * {@link #AI_CREDIT_MIN_PURCHASE} is controlled too but optional ({@code SetupConfig}).
+     */
+    public static final List<String> AI_FEE_CONTROLLED = List.of(AI_FEE_ENABLED, AI_FEE_MARKUP, AI_FEE_USD_JPY);
+    /**
+     * F-M9 (#692 re-review, the coordinator's decision): what a website draft's request reserves, as limits below the
+     * job's own (each optional and controlled, not created by {@code QB_SETUP}): the calls an attempt is counted at (1 to
+     * 4, the web reader's most), the pages (1 to the job's {@code qb.site-profile.max-pages}) and the output tokens (1 to
+     * the job's). Absent or out of range, the job's own limit (the most it may cost). A job's end takes no more than its
+     * reservation; the rest is the platform's and noted by the daily reconciliation (AI_RESERVATION_SHORT). Their values
+     * are set from the real jobs' usage (P95) before the fee is turned on.
+     */
+    public static final String AI_FEE_SITE_CALLS = "qb.ai.fee.site-profile.calls";
+    public static final String AI_FEE_SITE_PAGES = "qb.ai.fee.site-profile.pages";
+    public static final String AI_FEE_SITE_OUTPUT = "qb.ai.fee.site-profile.output-tokens";
+    /** The optional controlled limits of a website draft's reservation. */
+    public static final List<String> AI_FEE_SITE_LIMITS = List.of(AI_FEE_SITE_CALLS, AI_FEE_SITE_PAGES,
+        AI_FEE_SITE_OUTPUT);
+    /** The kind the controlled change that first sets one of {@link #AI_FEE_SITE_LIMITS} gives (a whole number). */
+    public static final Map<String, Object> AI_FEE_SITE_LIMIT_KIND = Map.of("type", "numeric", "precision", 6,
+        "scale", 0);
+    /** The kind the controlled change that first sets {@link #AI_CREDIT_MIN_PURCHASE} gives (yen, whole). */
+    public static final Map<String, Object> AI_CREDIT_MIN_PURCHASE_KIND = Map.of("type", "monetary", "currency", "JPY",
+        "scale", 0);
     public static final String OPERATOR_SHARE_KINDS = "qb.operator.share.kinds";
     public static final String OPERATOR_SHARE_AI_COST_IN_BASE = "qb.operator.share.ai-cost-in-base";
     public static final String OPERATOR_CREDIT_RECOVERY_RATE = "qb.operator.credit-recovery.rate";
@@ -181,10 +216,20 @@ public final class QbParams {
      * F-M12 b (plan §3.1, §5): how many days after a month's end the settlement waits for the step before it (the
      * distribution fees and the monthly invoices of the operator's sponsors) before it settles anyway; 0 to 31. Controlled
      * (it decides when money is counted), proposed after {@link #OPERATOR_SHARE} so earlier proposals keep their places.
-     * {@code qb.operator.settlement.waiting-after-hours} belongs to the reconciliation check (part c).
      */
     public static final String OPERATOR_SETTLEMENT_READINESS_MAX_DAYS = "qb.operator.settlement.readiness-max-days";
+    /**
+     * F-M12 c (plan §3.1, §5, §6): the hours after its start that an operator's earliest month without a settlement is
+     * reported by the daily check ({@code OPERATOR_SETTLEMENT_WAITING}, a difference on purpose: it holds the journal
+     * export back); start = min(max(the month's end, when the month became ready), the month's end +
+     * {@link #OPERATOR_SETTLEMENT_READINESS_MAX_DAYS} days). Controlled, last of {@link #CONTROLLED}. The check takes it
+     * from 30 (the job does not run on the 1st: less would differ every month) to 9999 (the platform has no range for a
+     * parameter: the check clamps it), and does not run until the proposal is published.
+     */
+    public static final String OPERATOR_SETTLEMENT_WAITING_AFTER_HOURS = "qb.operator.settlement.waiting-after-hours";
     public static final List<String> OPERATOR_SETTLEMENT = List.of(OPERATOR_SETTLEMENT_READINESS_MAX_DAYS);
+    /** The settlement's own settings are above; this one is the daily check's, which the settlement does not read. */
+    public static final List<String> OPERATOR_SETTLEMENT_CHECK = List.of(OPERATOR_SETTLEMENT_WAITING_AFTER_HOURS);
     /** The controlled AI parameters, in the order the administrators' page shows them. */
     public static final List<String> AI_CONTROLLED = List.of(AI_ENABLED, AI_MODEL, AI_EFFORT, AI_SPONSOR_DAILY_JOBS,
         AI_SPONSOR_MONTHLY_TOKENS, AI_GLOBAL_MONTHLY_TOKENS);
@@ -647,7 +692,7 @@ public final class QbParams {
         List.of(ENTRY_FEE_ENABLED), List.of(USAGE_FREE_BYTES), List.of(VIDEO_MAINLAND_SITES), HELP_CONTROLLED, FEE_CREDIT_PARAMS,
         SITE_PROFILE_CONTROLLED, DISTRIBUTION_CONTROLLED, EXPOSURE_CONTROLLED, REWARD_KUDOS, RECON_THRESHOLDS,
         HELP_USER_LIMITS,
-        OPERATOR_SHARE, OPERATOR_SETTLEMENT)
+        OPERATOR_SHARE, OPERATOR_SETTLEMENT, OPERATOR_SETTLEMENT_CHECK, AI_FEE_CONTROLLED)
         .flatMap(List::stream).toList();
 
     /** A parameter: its key, kind (as the platform writes kinds) and first value. */
@@ -1120,7 +1165,20 @@ public final class QbParams {
         // share settings so the proposals before it keep their places).
         new Param(OPERATOR_SETTLEMENT_READINESS_MAX_DAYS, Map.of("type", "numeric", "precision", 2, "scale", 0), "5",
             "How many days after a month's end an operator's settlement waits for its sponsors' distribution fees, "
-                + "exposure fees and monthly invoices before it settles anyway (0 to 31; 0: it does not wait)"));
+                + "exposure fees and monthly invoices before it settles anyway (0 to 31; 0: it does not wait)"),
+        // F-M12 c: when the daily check reports a month an operator has no settlement for (controlled; before F-M9's
+        // AI fee).
+        new Param(OPERATOR_SETTLEMENT_WAITING_AFTER_HOURS, Map.of("type", "numeric", "precision", 4, "scale", 0), "48",
+            "How many hours after its start an operator still without its settlement of a month is reported by the daily "
+                + "check, with the step it waits for; start is the month's end, or the time it became ready if later, but "
+                + "at most the readiness wait's end (30 to 9999; the check does not run until this is published)"),
+        // F-M9: the AI fee (qb.ai.credit.min-purchase is not created here: absent, a purchase has no least amount).
+        new Param(AI_FEE_ENABLED, BOOL, false,
+            "Whether sponsors' AI requests are charged to their AI credit (off: free); the first launch turns it on"),
+        new Param(AI_FEE_MARKUP, Map.of("type", "numeric", "precision", 4, "scale", 2), "1.5",
+            "The AI fee as a multiple of the provider's list price, from 1 to 10 (frozen on each job at its request)"),
+        new Param(AI_FEE_USD_JPY, Map.of("type", "numeric", "precision", 5, "scale", 2), "150",
+            "The yen of a US dollar for the AI fee, from 50 to 500 (frozen on each job at its request)"));
 
     /** The declared value of a parameter: what {@code QB_SETUP} writes. */
     public static String defaultOf(String key) {
