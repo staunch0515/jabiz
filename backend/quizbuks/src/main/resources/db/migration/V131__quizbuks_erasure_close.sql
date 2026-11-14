@@ -12,3 +12,11 @@ ALTER TABLE qb_prepayment ADD CONSTRAINT qb_prepayment_release_reason_check
 ALTER TABLE qb_ai_credit_movement_version DROP CONSTRAINT qb_ai_credit_movement_version_kind_check;
 ALTER TABLE qb_ai_credit_movement_version ADD CONSTRAINT qb_ai_credit_movement_version_kind_check
     CHECK (kind IN ('BUY', 'RETURN', 'CHARGE', 'EXPIRE', 'CLOSE'));
+
+-- The credit a sponsor's credit notes have left, given back to their cash at the wind-up: a use of the credit as one
+-- that paid an invoice (so that every reading of the credit left, "total - given back - used", counts it), naming the
+-- cash lot it made instead of an invoice. Exactly one of the two; the rows before this all name an invoice.
+ALTER TABLE qb_fee_credit_note_use_version ADD COLUMN cash_lot_id varchar(36);
+ALTER TABLE qb_fee_credit_note_use_version ALTER COLUMN invoice_id DROP NOT NULL;
+ALTER TABLE qb_fee_credit_note_use_version ADD CONSTRAINT qb_fee_credit_note_use_target
+    CHECK ((invoice_id IS NULL) <> (cash_lot_id IS NULL));

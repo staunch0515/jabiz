@@ -490,7 +490,8 @@ class AdminFinanceIT extends PayoutItSupport {
     /**
      * F-M15 b (plan §6): a wind-up's postings are of the kinds that exist: the invoice it issues posts nothing, its
      * payment is FEE_PAID (from the granted credit: 2190 / 1130) and its void of what is left FEE_CREDIT_VOIDED
-     * (2190 / 5140). No new kind.
+     * (2190 / 5140). No new kind. F-M15c: a credit note issued after it (FEE_CREDIT_NOTE) whose credit the next run
+     * gives back to the cash (1130 / 2160, the note the source) is a FEE_PAID taken back, in the same row.
      */
     @Test
     void aWindUpsPostingsAreTheKindsThatExistRowByRow() {
@@ -529,10 +530,25 @@ class AdminFinanceIT extends PayoutItSupport {
             com.jabiz.quizbuks.fee.MoneyClose.CLOSE, body("sponsorId", sponsor));
         assertThat(done.outcome()).isEqualTo(com.jabiz.quizbuks.fee.MoneyClose.CLOSED);
         assertThat(done.invoicesPaid()).isEqualTo(1);
+        clock.set(from.plus(Duration.ofHours(3)));
+        Object chargeId = query("SELECT charge_id FROM qb_fee_request WHERE request_id = ?", request.get("requestId"))
+            .getFirst().get("charge_id");
+        Map<String, Object> note = run(com.jabiz.quizbuks.fee.FeeRequests.RECORD, finance(), body("kind",
+            com.jabiz.quizbuks.fee.QbFees.REQUEST_CREDIT_NOTE, "chargeId", String.valueOf(chargeId), "amount", 100,
+            "reason", "Report late"));
+        run("APPROVAL_DECIDE", tokenOf(user("f08-wind-up-content"), com.jabiz.quizbuks.setup.QbRoles.ADMIN_CONTENT),
+            body("requestId", note.get("approvalRequestId"), "decision", "APPROVE"));
+        deliverEvents();
+        clock.set(from.plus(Duration.ofHours(4)));
+        assertThat(((com.jabiz.quizbuks.fee.MoneyClose.CloseOutput) systemRun(
+            com.jabiz.quizbuks.fee.MoneyClose.CLOSE, body("sponsorId", sponsor))).outcome())
+            .isEqualTo(com.jabiz.quizbuks.fee.MoneyClose.CLOSED);
 
         List<Expected> expected = List.of(
             row("FEE_CHARGED", 1, 330, "1130", 330, "4120", -300, "2150", -30),
-            row("FEE_PAID", 1, 330, "2190", 330, "1130", -330),
+            // The payment (2190 / 1130) and the note's credit given back to the cash (1130 / 2160).
+            row("FEE_PAID", 2, 440, "2190", 330, "1130", -220, "2160", -110),
+            row("FEE_CREDIT_NOTE", 1, 110, "1130", -110, "4120", 100, "2150", 10),
             row("FEE_CREDIT_VOIDED", 1, 670, "2190", 670, "5140", -670));
         Map<String, Map<String, Object>> monthly = report(MONTHLY, from, to).stream()
             .collect(Collectors.toMap(r -> (String) r.get("category"), Function.identity()));

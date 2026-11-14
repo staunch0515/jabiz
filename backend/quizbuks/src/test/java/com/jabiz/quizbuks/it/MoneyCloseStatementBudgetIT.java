@@ -39,26 +39,27 @@ class MoneyCloseStatementBudgetIT extends MoneyCloseItSupport {
     /**
      * One issued invoice paid from cash, nothing voided: as a deposit, and the months not invoiced (none), the invoices
      * to pay (one read), the payment item (its row, the invoice, the account in one read, the settlement's posting and
-     * parts, the invoice's update, the overdue task), the account and the invoices again in one read.
+     * parts, the invoice's update, the overdue task), the account and the invoices again in one read; F-M15c: the
+     * credit notes' credit left (one read, nothing to pay with it).
      */
-    static final int ONE_INVOICE = 20;
+    static final int ONE_INVOICE = 21;
     /** Three issued invoices paid from cash: one payment item each (about eight statements an invoice). */
-    static final int THREE_INVOICES = 37;
+    static final int THREE_INVOICES = 38;
     /**
      * One issued invoice and an empty account (re-review L1): as a deposit, and the months not invoiced, the account and
-     * the invoices in one read; no payment item, no second read (11 before L1).
+     * the invoices in one read, the credit notes' credit left (F-M15c); no payment item, no second read (11 before L1).
      */
-    static final int NOTHING_TO_PAY = 10;
+    static final int NOTHING_TO_PAY = 11;
     /** The current month not invoiced yet: invoiced by its item, then paid. */
-    static final int UNINVOICED = 28;
+    static final int UNINVOICED = 29;
     /**
      * F-M15c: an AI credit bought with cash, nothing else, closed: the process row, the parameters, the read of what
      * is under review (the AI credit with it), the AI lock and the wallet's; the give-back (its row, the credit and the
      * wallets in one read, what it holds by lot, the lots, the posting, the lots and wallets read again for their parts,
-     * the writes in one statement); the closure, the months not invoiced, the account, the task, the closure's update,
-     * the commit.
+     * the writes in one statement); the closure, the months not invoiced, the account, the credit notes' credit left,
+     * the task, the closure's update, the commit.
      */
-    static final int AI_CREDIT = 18;
+    static final int AI_CREDIT = 19;
 
     @Test
     void anAiCreditIsClosedUnderTheSponsorsAiLockThenTheWallet() {

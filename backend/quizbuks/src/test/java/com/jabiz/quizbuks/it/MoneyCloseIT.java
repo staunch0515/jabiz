@@ -755,6 +755,82 @@ class MoneyCloseIT extends MoneyCloseItSupport {
         assertThat(differences(sponsor)).isEmpty();
     }
 
+    @Test
+    void aCreditNoteIssuedAfterTheWindUpIsGivenBackToTheCashByTheNextRun() {
+        // F-M15c step 9: the wind-up paid the invoice; finance then issues a credit note on the paid fee (its credit is
+        // left, the invoice paid): the daily job takes the closure again and gives the credit back to the cash, one
+        // posting a note (debit 1130, credit 2160), a cash lot from the note and a use of its credit naming the lot.
+        String sponsor = newSponsor(unique("s-fm15c-note"));
+        billing(sponsor, "POSTPAID", 50_000);
+        cash(sponsor, 5_000);
+        Object chargeId = manualFee(sponsor, 1_000);
+        invoicePeriod(sponsor, clock.instant());
+        erase(sponsor);
+        deliverEvents();
+        assertThat(close(sponsor).outcome()).isEqualTo(MoneyClose.CLOSED);
+        BigDecimal total = money(query("SELECT total FROM qb_fee_invoice WHERE sponsor_id = ?", sponsor).getFirst()
+            .get("total"));
+        assertThat(balance(sponsor, "CASH")).isEqualByComparingTo(new BigDecimal("5000").subtract(total));
+        assertThat(due()).doesNotContain(sponsor);
+
+        clock.set(clock.instant().plus(Duration.ofMinutes(5)));
+        creditNote(chargeId, 400);
+        Map<String, Object> note = notes(sponsor).getFirst();
+        BigDecimal noteTotal = money(note.get("total"));
+        assertThat(due()).contains(sponsor);
+
+        assertThat(close(sponsor).outcome()).isEqualTo(MoneyClose.CLOSED);
+        assertThat(balance(sponsor, "CASH")).isEqualByComparingTo(new BigDecimal("5000").subtract(total)
+            .add(noteTotal));
+        Object noteId = note.get("credit_note_id");
+        assertThat(lines("QbFeeCreditNote", noteId)).contains("1130 DEBIT " + noteTotal.toPlainString(),
+            "2160 CREDIT " + noteTotal.toPlainString());
+        Map<String, Object> use = query("SELECT * FROM qb_fee_credit_note_use_version WHERE credit_note_id = ? "
+            + "AND cash_lot_id IS NOT NULL", String.valueOf(noteId)).getFirst();
+        assertThat(use).containsEntry("invoice_id", null);
+        assertThat(money(use.get("amount"))).isEqualByComparingTo(noteTotal);
+        assertThat(query("SELECT source, source_entity, amount FROM qb_cash_lot WHERE lot_id = ?",
+            String.valueOf(use.get("cash_lot_id"))).getFirst()).containsEntry("source", "OTHER")
+            .containsEntry("source_entity", "QbFeeCreditNote");
+        assertThat(due()).doesNotContain(sponsor);
+        // Given back once: the next run finds no credit left.
+        assertThat(close(sponsor).outcome()).isEqualTo(MoneyClose.CLOSED);
+        assertThat(balance(sponsor, "CASH")).isEqualByComparingTo(new BigDecimal("5000").subtract(total)
+            .add(noteTotal));
+        assertBooksBalance();
+        assertThat(differences(sponsor)).isEmpty();
+    }
+
+    @Test
+    void aCreditNotesCreditLeftPaysTheUnpaidInvoiceBeforeTheAccountDoes() {
+        // F-M15c step 6: credit left beside an unpaid invoice (what the daily check calls CREDIT_UNUSED_WITH_DUE; made
+        // here as a defect would leave it, a second note copied) pays the invoice first; the cash is not touched.
+        param(QbParams.FEE_MONTHLY, "1000");
+        String sponsor = newSponsor(unique("s-fm15c-due"));
+        billing(sponsor, "POSTPAID", 5_000);
+        cash(sponsor, 3_000);
+        assertThat(monthly(sponsor)).isEqualTo("CHARGED");
+        creditNote(monthlyCharge(sponsor).get("charge_id"), 500);
+        invoicePeriod(sponsor, clock.instant());
+        Map<String, Object> invoice = query("SELECT * FROM qb_fee_invoice WHERE sponsor_id = ? AND charge_id IS NULL",
+            sponsor).getFirst();
+        assertThat(invoice.get("status")).isEqualTo("PARTIAL");
+        CreditNoteReconIT.copy("qb_fee_credit_note_version", "credit_note_id", "QbFeeCreditNote",
+            notes(sponsor).getFirst().get("credit_note_id"), 1,
+            Map.of("credit_note_no", "o.credit_note_no || '-F#'", "source_key", "o.source_key || '-F#'"));
+        erase(sponsor);
+
+        MoneyClose.CloseOutput run = close(sponsor);
+        assertThat(run.outcome()).isEqualTo(MoneyClose.CLOSED);
+        assertThat(run.invoicesPaid()).isZero();
+        Map<String, Object> paid = query("SELECT * FROM qb_fee_invoice WHERE invoice_id = ?",
+            invoice.get("invoice_id")).getFirst();
+        assertThat(paid).containsEntry("status", QbFees.PAID);
+        assertThat(money(paid.get("credit_applied"))).isEqualByComparingTo(money(paid.get("total")));
+        assertThat(balance(sponsor, "CASH")).isEqualByComparingTo("3000");
+        assertThat(closure(sponsor)).containsEntry("reason_code", null);
+    }
+
     /** F-M9's purchase of AI credit by the sponsor, with the fee switched on for it only. */
     private void buyAiCredit(String sponsor, long amount) {
         param(QbParams.AI_FEE_ENABLED, "true");

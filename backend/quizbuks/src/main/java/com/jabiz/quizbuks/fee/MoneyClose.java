@@ -36,6 +36,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * F-M15 b (docs/quizbuks/plans/impl/F-M15.md §4.1, §5): what becomes of an erased sponsor's platform fee account.
@@ -64,6 +65,8 @@ public final class MoneyClose {
     /** The wind-up's last step for one lot of granted credit (sub-process; the caller holds the wallet lock). */
     public static final String VOID_LOT = "QB_FEE_CREDIT_VOID_LOT";
     /** The posting's description (only a description: the monthly report's kind is the expiry's). */
+    /** F-M15c: the posting of a credit note's credit left given back to the cash (debit 1130, credit 2160). */
+    static final String NOTE_CASH_BACK = "Credit note's credit left given back to the cash on the account's deletion";
     static final String VOIDED_ON_ERASE = "Platform fee Kudos voided on the account's deletion";
     /** The platform's event that an account was erased (its consumers run after the erasure committed). */
     public static final String ACCOUNT_ERASED_EVENT = "jabiz.account.erased";
@@ -112,6 +115,13 @@ public final class MoneyClose {
     static final String CASH_WALLET_AFTER = "cashWalletAfter";
     static final String PAID = "paid";
     static final String AI_CREDIT = "aiCredit";
+    static final String NOTES_LEFT = "notesLeft";
+    static final String NOTES_UNUSED = "notesUnused";
+    static final String CREDITED = "credited";
+    static final String NOTES_PAID = "notesPaid";
+    static final String NOTES_OVERDUE = "notesOverdue";
+    static final String REFUND_POSTS = "refundPosts";
+    static final String REFUNDED = "refunded";
     static final String AI_CLOSED = "aiClosed";
 
     /** What one run of the wind-up did. */
@@ -344,6 +354,16 @@ public final class MoneyClose {
                         new QueryPredicate.IsNull("voidedAt"),
                         new QueryPredicate.Gt("expiresAt", ctx.opTime()))))
                     .limit(FeeSettlement.MAX_CREDITS).build() : nothing("grantId"), TO_VOID)))
+            // Step 6 (F-M15c): the credit the sponsor's credit notes have left pays the unpaid invoices first, the
+            // earliest note and the earliest invoice first, as a new invoice takes it (CreditNotes.take).
+            .step("Read the credit notes' credit left", RunTemplate.<ProcessContext>when(MoneyClose::goingOn,
+                CreditNotes.LEFT_TEMPLATE, ctx -> CreditNotes.leftParams(sponsorId(ctx)), NOTES_LEFT))
+            .compute("Pay from the credit notes' credit", (metadata, ctx) -> payFromNotes(ctx))
+            // Written now: the invoices are read again below (a change still held would not be in that read).
+            .step("Save what the credit paid", com.jabiz.runtime.process.steps.SaveChanges.<ProcessContext>when(
+                ctx -> Boolean.TRUE.equals(ctx.get(CREDITED))))
+            .step("Close the reminders of the invoices it paid", CallProcess.<ProcessContext>forEach(
+                CreditNotes.TASK_CLOSE, 1, MoneyClose::paidOverdue, "notesTasksClosed"))
             .step("Pay them", CallProcess.forEach(FeeAutoPay.AUTO_PAY_ITEM, 1, MoneyClose::payInputs, PAID))
             // The lots to void are not read again: each item reads its lot (one used up by the payment is marked too).
             .step("Read the account and the invoices again", QueryEntities.<ProcessContext>all(
@@ -356,6 +376,12 @@ public final class MoneyClose {
             .compute("Decide the end", (metadata, ctx) -> decideEnd(ctx))
             .step("Void the granted credit left", CallProcess.forEach(VOID_LOT, 1, MoneyClose::voidInputs,
                 LOTS_VOIDED))
+            // Step 9 (F-M15c): what the credit notes still have left once the wind-up is done goes back to the cash
+            // (debit 1130, credit 2160, the note the source; a FEE_PAID taken back, as F-M7's giving back).
+            .compute("Work out the credit left to give back", (metadata, ctx) -> refundPlan(ctx))
+            .step("Give the credit left back to the cash", CallProcess.forEach(LedgerProcesses.POST, 1,
+                ctx -> ctx.contains(REFUND_POSTS) ? (List<?>) ctx.get(REFUND_POSTS) : List.of(), REFUNDED))
+            .compute("Record the credit given back", (metadata, ctx) -> recordRefunds(ctx))
             .compute("Record the run", (metadata, ctx) -> recordRun(ctx))
             .step("Tell finance it takes long", CreateTask.<ProcessContext>when(ctx -> Boolean.TRUE.equals(ctx.get(ALERT)),
                 MoneyClose::slowTask))
@@ -461,14 +487,119 @@ public final class MoneyClose {
         if (!goingOn(ctx) || spendable(ctx, CREDITS, CASH_WALLET).signum() <= 0) {
             return List.of();
         }
-        return FeeAutoPay.choose(FeeGate.list(ctx, UNPAID), FeeAutoPay.max(ctx.get(PARAMS, ParamValues.class)))
+        Set<String> paidByNotes = notesPaid(ctx);
+        List<EntityInstance> unpaid = FeeGate.list(ctx, UNPAID).stream()
+            .filter(invoice -> !paidByNotes.contains(String.valueOf(invoice.id()))).toList();
+        return FeeAutoPay.choose(unpaid, FeeAutoPay.max(ctx.get(PARAMS, ParamValues.class)))
             .invoices().stream().map(invoice -> new FeeAutoPay.ItemInput(String.valueOf(invoice.id()))).toList();
     }
 
-    /** Whether an item of this run paid something (the invoices and the account are read again then). */
+    /**
+     * Whether an item of this run paid something, or the credit notes' credit did (the invoices and the account are
+     * read again then).
+     */
     static boolean paidSomething(ProcessContext ctx) {
-        return ctx.get(PAID) instanceof List<?> items
+        return Boolean.TRUE.equals(ctx.get(CREDITED)) || ctx.get(PAID) instanceof List<?> items
             && items.stream().anyMatch(item -> ((FeeAutoPay.ItemPaid) item).paid().signum() > 0);
+    }
+
+    /**
+     * Step 6 (F-M15c): the credit left pays the unpaid invoices read under the lock, the earliest issued first, each
+     * as far as it goes (the invoice's {@code creditApplied}, a use of each note: CreditNotes' own writing); what is
+     * left after it is kept for step 9.
+     */
+    static void payFromNotes(ProcessContext ctx) {
+        if (!goingOn(ctx)) {
+            return;
+        }
+        List<CreditNotes.Unused> unused = CreditNotes.left(CreditNotes.rows(ctx, NOTES_LEFT));
+        Set<String> paid = new java.util.HashSet<>();
+        List<CreditNotes.TaskCloseInput> overdue = new ArrayList<>();
+        for (EntityInstance invoice : FeeAutoPay.owing(FeeGate.list(ctx, UNPAID))) {
+            if (unused.isEmpty()) {
+                break;
+            }
+            List<CreditNotes.Take> takes = CreditNotes.take(unused, QbFees.owed(invoice));
+            if (takes.isEmpty()) {
+                continue;
+            }
+            CreditNotes.recordUses(ctx, sponsorId(ctx), String.valueOf(invoice.id()), takes);
+            if (CreditNotes.applyCredit(ctx, invoice, CreditNotes.takenTotal(takes))) {
+                paid.add(String.valueOf(invoice.id()));
+                if (QbFees.OVERDUE.equals(invoice.get("status"))) {
+                    overdue.add(new CreditNotes.TaskCloseInput(String.valueOf(invoice.id())));
+                }
+            }
+            unused = CreditNotes.after(unused, takes);
+            ctx.put(CREDITED, true);
+        }
+        ctx.put(NOTES_PAID, Set.copyOf(paid));
+        ctx.put(NOTES_OVERDUE, List.copyOf(overdue));
+        ctx.put(NOTES_UNUSED, unused);
+    }
+
+    /** The overdue invoices the credit paid in full: their reminders are closed (F-M7's own process). */
+    static List<?> paidOverdue(ProcessContext ctx) {
+        return ctx.contains(NOTES_OVERDUE) ? (List<?>) ctx.get(NOTES_OVERDUE) : List.of();
+    }
+
+    @SuppressWarnings("unchecked")
+    private static Set<String> notesPaid(ProcessContext ctx) {
+        return ctx.contains(NOTES_PAID) ? (Set<String>) ctx.get(NOTES_PAID) : Set.of();
+    }
+
+    /**
+     * Step 9 (F-M15c): once the wind-up is done, the credit the notes still have left goes back to the cash, one
+     * posting a note (debit 1130 for the sponsor, credit 2160; the note the source).
+     */
+    @SuppressWarnings("unchecked")
+    static void refundPlan(ProcessContext ctx) {
+        if (!CLOSED.equals(ctx.get(OUTCOME)) || !ctx.contains(NOTES_UNUSED)) {
+            return;
+        }
+        List<LedgerProcesses.PostInput> posts = new ArrayList<>();
+        Map<String, String> party = Map.of(QbLedger.PARTY, sponsorId(ctx));
+        for (CreditNotes.Unused note : (List<CreditNotes.Unused>) ctx.get(NOTES_UNUSED)) {
+            posts.add(new LedgerProcesses.PostInput(ctx.opTime(), NOTE_CASH_BACK, note.creditNoteNo(), List.of(
+                    new LedgerProcesses.Line(QbLedger.FEES_RECEIVABLE, Direction.DEBIT, note.amount(), null, party),
+                    new LedgerProcesses.Line(QbLedger.SPONSOR_CASH, Direction.CREDIT, note.amount(), null, party)),
+                QbCreditNotes.CREDIT_NOTE, note.creditNoteId()));
+        }
+        if (!posts.isEmpty()) {
+            ctx.put(REFUND_POSTS, List.copyOf(posts));
+        }
+    }
+
+    /**
+     * The cash given back: the cash wallet, a lot a note (its source the note), the note's negative part and the use of
+     * its credit naming the lot.
+     */
+    @SuppressWarnings("unchecked")
+    static void recordRefunds(ProcessContext ctx) {
+        if (!ctx.contains(REFUND_POSTS)) {
+            return;
+        }
+        List<CreditNotes.Unused> notes = (List<CreditNotes.Unused>) ctx.get(NOTES_UNUSED);
+        BigDecimal total = CreditNotes.total(notes);
+        QbWallets.change(ctx, FeeGate.first(ctx, paidSomething(ctx) ? CASH_WALLET_AFTER : CASH_WALLET), QbWallets.CASH,
+            sponsorId(ctx), total, 0, BigDecimal.ZERO);
+        List<LedgerProcesses.PostOutput> posted = (List<LedgerProcesses.PostOutput>) ctx.get(REFUNDED);
+        for (int i = 0; i < notes.size(); i++) {
+            CreditNotes.Unused note = notes.get(i);
+            Object lotId = CashLots.add(ctx, sponsorId(ctx), QbFeeAccount.OTHER, note.amount(),
+                QbCreditNotes.CREDIT_NOTE, note.creditNoteId());
+            // A negative part naming the posting, as F-M7's giving back writes (the daily check FEE_PAYMENTS matches
+            // a note's postings of 2160 with its parts).
+            FeeSettlement.insertPayment(ctx, sponsorId(ctx), QbCreditNotes.CREDIT_NOTE, note.creditNoteId(),
+                QbFeeAccount.CASH, null, lotId, note.amount().negate(), posted.get(i).transactionId());
+            Map<String, Object> values = new LinkedHashMap<>();
+            values.put("creditNoteId", note.creditNoteId());
+            values.put("sponsorId", sponsorId(ctx));
+            values.put("cashLotId", String.valueOf(lotId));
+            values.put("amount", note.amount());
+            values.put("usedAt", ctx.opTime());
+            ctx.changes().insert(QbCreditNotes.USE, values);
+        }
     }
 
     private static BigDecimal spendable(ProcessContext ctx, String credits, String cash) {

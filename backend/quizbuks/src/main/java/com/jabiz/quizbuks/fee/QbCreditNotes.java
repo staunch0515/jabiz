@@ -101,14 +101,17 @@ public final class QbCreditNotes {
             .asSemanticIdentity("urn:jabiz:entity:quizbuks:fee-credit-note-use"));
         eb.field("creditNoteId", f -> f.physicalColumn("credit_note_id").immutable(true).required(true).asText(36));
         eb.field("sponsorId", f -> f.physicalColumn("sponsor_id").immutable(true).required(true).asText(128));
-        eb.field("invoiceId", f -> f.physicalColumn("invoice_id").immutable(true).required(true).asText(36));
+        // The invoice the credit paid; or (F-M15c) none, the credit left given back to the cash account at the
+        // wind-up of an erased sponsor's account, into the cash lot it made (exactly one of the two).
+        eb.field("invoiceId", f -> f.physicalColumn("invoice_id").immutable(true).asText(36));
+        eb.field("cashLotId", f -> f.physicalColumn("cash_lot_id").immutable(true).asText(36));
         eb.field("amount", f -> f.physicalColumn("amount").immutable(true).required(true).asMonetary("JPY", 0));
         eb.field("usedAt", f -> f.physicalColumn("used_at").immutable(true).required(true)
             .asTemporal(TemporalRole.EVENT_TIME));
         eb.temporal(t -> t.allowScheduled(false).writeOnce());
         eb.listView("default", lv -> lv
-            .columns("creditNoteId", "sponsorId", "invoiceId", "amount", "usedAt")
-            .filters("creditNoteId", "sponsorId", "invoiceId", "usedAt")
+            .columns("creditNoteId", "sponsorId", "invoiceId", "cashLotId", "amount", "usedAt")
+            .filters("creditNoteId", "sponsorId", "invoiceId", "cashLotId", "usedAt")
             .sorts("usedAt")
             .defaultSort("usedAt", false));
     });
