@@ -603,6 +603,17 @@ export function PublicationWizard({ detail, initialStep, onStale, stale, header 
       )}
       {/* F-S12: a video another Sponsor shares, shown by this publication. */}
       {!challenge && <SharedVideoField value={sharedVideoId} onChange={setEditedShared} disabled={locked} />}
+      {/* F-M8: with another Sponsor's video the platform may charge for exposures: how many to buy (the server checks the least). */}
+      {!challenge && sharedVideoId !== null && (
+        <Field id={`${id}-exposure`} label={t('publishing.field.exposureRequested')}
+          problem={problemOf('exposureRequested')} hint={t('publishing.field.exposureRequestedHint')}>
+          {(aria) => (
+            <Input {...aria} inputMode="numeric" value={form.exposureRequested} autoComplete="off" disabled={locked}
+              data-testid="publication-exposure-requested"
+              onChange={(event) => set('exposureRequested', event.target.value)} />
+          )}
+        </Field>
+      )}
     </div>,
 
 

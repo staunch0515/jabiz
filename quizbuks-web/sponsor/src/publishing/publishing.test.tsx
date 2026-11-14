@@ -487,7 +487,7 @@ describe('the publication wizard', () => {
     expect(window.location.search).toBe('?step=1')
     expect(processCalls('QB_PUBLICATION_SAVE')).toEqual([{ publicationId: null, versionId: null, name: 'Tea week',
       cover: null, regions: [], startAt: null, endAt: null, timeLimitSec: null, passScore: null, pickCount: null, entryFee: 0, budgetCap: null,
-      maxWinners: null, tiers: [], baseRevision: null, rewardMethod: 'PLATFORM', redeemDescription: null, audience: 'PUBLIC', referral: null,
+      maxWinners: null, exposureRequested: null, tiers: [], baseRevision: null, rewardMethod: 'PLATFORM', redeemDescription: null, audience: 'PUBLIC', referral: null,
       treeId: null, treeNodeId: null }])
   })
 
@@ -708,7 +708,7 @@ describe('the publication wizard', () => {
     expect(document.activeElement).toBe(screen.getByTestId('publication-step-title'))
     expect(processCalls('QB_PUBLICATION_SAVE').at(-1)).toEqual({ publicationId: 'p1', versionId: 'v1', name: 'Coffee week',
       cover: null, regions: ['GLOBAL', 'JP'], startAt: '2026-11-01T00:00:00Z', endAt: '2026-11-08T00:00:00Z', timeLimitSec: 300,
-      passScore: 2, pickCount: null, entryFee: 0, budgetCap: null, maxWinners: null, baseRevision: 4, rewardMethod: 'PLATFORM', redeemDescription: null, audience: 'PUBLIC', referral: null,
+      passScore: 2, pickCount: null, entryFee: 0, budgetCap: null, maxWinners: null, exposureRequested: null, baseRevision: 4, rewardMethod: 'PLATFORM', redeemDescription: null, audience: 'PUBLIC', referral: null,
       treeId: null, treeNodeId: null, tiers: [{ tierId: 't9', fromScore: 0, toScore: 2, reward: 100 }] })
     // The conditions were not touched: not sent.
     expect(processCalls('QB_PUBLICATION_AUDIENCE_SAVE')).toEqual([])

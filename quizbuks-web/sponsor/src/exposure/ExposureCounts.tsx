@@ -4,6 +4,7 @@ import { Clapperboard, Eye, MousePointerClick, ShoppingCart } from 'lucide-react
 import { useTranslation } from 'react-i18next'
 import { Metric } from '../analytics/Metric'
 import { SPONSOR } from '../messages'
+import { ExposureFeeSection } from './ExposureFee'
 import './messages'
 
 /** The template of the figures (`qb.sponsor.exposure`). */
@@ -43,7 +44,7 @@ export async function readExposureCounts(publicationId: string): Promise<Exposur
  * F-S13 (docs/quizbuks/plans/impl/F-S13.md): on a publication's page, the exposures of the other Sponsor's shared video
  * it uses: bought (or unlimited), counted, charged (never beyond what was bought; what goes beyond is said, not
  * charged), the pushes opened and the Takers who went on to answer. Nothing for a publication using its own videos.
- * Buying more comes with the platform's fees (F-M8).
+ * F-M8: what they cost and buying more are in {@link ExposureFeeSection}.
  */
 export function ExposureSection({ publicationId }: { publicationId: string }) {
   const { t, i18n } = useTranslation(SPONSOR)
@@ -71,6 +72,7 @@ export function ExposureSection({ publicationId }: { publicationId: string }) {
         <Metric testId="exposure-opens" label={t('exposure.opens')} icon={Eye} value={n(c.opens)} />
         <Metric testId="exposure-goes" label={t('exposure.goes')} icon={MousePointerClick} value={n(c.goes)} />
       </div>
+      <ExposureFeeSection publicationId={publicationId} status={c.status} />
     </section>
   )
 }

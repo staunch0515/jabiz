@@ -795,3 +795,31 @@ test('the operator\'s Sponsor list with Sponsors ticked, and the exception dialo
       await context.close()
     }
   })
+
+/**
+ * F-M8d (Fable's review of #690): the exposure fee's three administration pages, in both appearances, with a price
+ * set so that the lists have a row: the headquarters' prices, the operator's own price, and finance's settlements.
+ */
+test('the exposure fee\'s prices, the operator\'s own price and the settlements pass axe (light and dark)',
+  async ({ browser, page, request }) => {
+    test.setTimeout(240_000)
+    const operator = await operatorWithLead(request, 'Exa')
+    await run(request, operator.operatorToken, 'QB_OPERATOR_EXPOSURE_PRICE_SET', { unit: '2.0000', reason: 'Axe sample' })
+    await signInAdmin(page)
+    await page.goto('/admin/qb/exposure-fee/prices')
+    await expect(page.getByTestId('exposure-fee-price-row').first()).toBeVisible()
+    await accessibleInBoth(page, 'admin exposure fee prices')
+    await page.goto('/admin/qb/finance/exposure-settlements')
+    await expect(page.getByTestId('exposure-fee-period')).toBeVisible()
+    await accessibleInBoth(page, 'admin exposure fee settlements')
+    const context = await browser.newContext()
+    try {
+      const desk = await context.newPage()
+      await signInOperatorDesk(desk, operator)
+      await desk.goto('/operator/qb/operator/exposure-price')
+      await expect(desk.getByTestId('exposure-fee-price-form')).toBeVisible()
+      await accessibleInBoth(desk, 'operator exposure fee price')
+    } finally {
+      await context.close()
+    }
+  })

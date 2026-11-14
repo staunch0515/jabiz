@@ -20,7 +20,7 @@ const ENTRY = { name: 'sponsor', selfRegistration: true, requireVerifiedEmail: t
   sessionPersistence: 'tab' }
 
 const ALL: TodoCounts = { claimsToConfirm: 2, digitalToSend: 3, fundsShort: 1, rewardsWaiting: 4, invoicesOverdue: 1, feeInvoicesUncovered: 2,
-  publicationsInReview: 2, pageInReview: 1, sharedVideosInReview: 1, videoUsesToConfirm: 5, creditsExpiring: 1 }
+  publicationsInReview: 2, pageInReview: 1, sharedVideosInReview: 1, videoUsesToConfirm: 5, creditsExpiring: 1, exposureLow: 2 }
 
 interface Options {
   status?: string
@@ -132,6 +132,7 @@ describe('the home\'s to-do list (F-F3b)', () => {
       ['invoicesOverdue', '1', '/money/bills'],
       ['feeInvoicesUncovered', '2', '/money/bills'],
       ['creditsExpiring', '1', '/money/account'],
+      ['exposureLow', '2', '/publications'],
       ['publicationsInReview', '2', '/publications?status=PENDING_REVIEW'],
       ['pageInReview', '1', '/profile/page'],
       ['sharedVideosInReview', '1', '/assets/media'],
