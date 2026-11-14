@@ -402,6 +402,32 @@ describe('ReconciliationPage by level (F-M14)', () => {
     await expectAccessible()
   })
 
+  it('names the operator an item is about, linked for who may open the operator, never as a user', async () => {
+    const operator = '0192f0a0-0000-7000-8000-00000000ff01'
+    server.templates.set(TEMPLATE.reconItems, [
+      { itemId: 'o1', checkCode: 'DISTRIBUTION_PRICE_RANGE', partyId: operator, operatorName: 'North Ops',
+        reference: null, expected: 0, actual: 1, difference: 1 },
+      { itemId: 'o2', checkCode: 'TAKER_WALLET_LAG', partyId: TAKER, operatorName: null, reference: null, expected: 1,
+        actual: 2, difference: 1 },
+    ])
+    server.permissions = new Set([...FINANCE, 'qb.admin.operators.read'])
+    const view = renderAt(`/qb/finance/reconciliation?run=${RUN}`, '/qb/finance/reconciliation', <ReconciliationPage />)
+    let groups = await screen.findAllByTestId('recon-group')
+    const price = () => groups.find((group) => group.dataset.check === 'DISTRIBUTION_PRICE_RANGE')!
+    const party = within(price()).getByTestId('recon-party')
+    expect(party).toHaveTextContent(/^North Ops$/)
+    expect(party).toHaveAttribute('href', `/qb/operators/${operator}`)
+    // A user stays a user.
+    expect(within(groups.find((group) => group.dataset.check === 'TAKER_WALLET_LAG')!).getByTestId('recon-party'))
+      .toHaveAttribute('href', `/qb/users/${TAKER}`)
+    view.unmount()
+    server.permissions = new Set(FINANCE)
+    renderAt(`/qb/finance/reconciliation?run=${RUN}`, '/qb/finance/reconciliation', <ReconciliationPage />)
+    groups = await screen.findAllByTestId('recon-group')
+    expect(within(price()).getByTestId('recon-party').tagName).toBe('SPAN')
+    expect(within(price()).getByTestId('recon-party')).toHaveTextContent(/^North Ops$/)
+  })
+
   it('asks for the days only when the run has an item for attention', async () => {
     renderAt(`/qb/finance/reconciliation?run=${RUN}`, '/qb/finance/reconciliation', <ReconciliationPage />)
     await screen.findAllByTestId('recon-group')
@@ -572,7 +598,7 @@ describe('finance helpers', () => {
   })
 
   it('groups differences by check in their order', () => {
-    const item = (itemId: string, checkCode: string): ReconItem => ({ itemId, checkCode, partyId: null,
+    const item = (itemId: string, checkCode: string): ReconItem => ({ itemId, checkCode, partyId: null, operatorName: null,
       reference: null, expected: '0', actual: '0', difference: '0' })
     expect(byCheck([item('1', 'B'), item('2', 'A'), item('3', 'B')]).map(([check, items]) => [check, items.length]))
       .toEqual([['B', 2], ['A', 1]])

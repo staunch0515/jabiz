@@ -222,7 +222,11 @@ class DistributionIT extends PrepaymentItSupport {
             unique("fm6-other"))), Map.of("params", Map.of("publicationId", publicationId)))).isEmpty();
         assertThat(items("qb.admin.distribution-settlements", TestTokens.bearer(tokens, "fm6-finance",
             QbPermissions.ADMIN_FINANCE_READ), Map.of("params", Map.of("publicationId", publicationId))))
-            .singleElement().satisfies(row -> assertThat(row).containsEntry("atFloor", false));
+            .singleElement().satisfies(row -> assertThat(row).containsEntry("atFloor", false)
+                // The operator by its name, not its id (the finance list shows it).
+                .containsEntry("operatorId", operatorOf(sponsor)).containsEntry("operatorName", query(
+                    "SELECT name FROM qb_operator WHERE operator_id = ?", operatorOf(sponsor))
+                    .getFirst().get("name")));
         end(publicationId);
         Instant endedAt = clock.instant();
         assertThat(finalRun(endedAt.plus(Duration.ofMinutes(30))).outcome()).isEqualTo(JobRunner.Outcome.SUCCEEDED);
@@ -428,6 +432,36 @@ class DistributionIT extends PrepaymentItSupport {
             .extracting(ReconChecks.Item::check).containsExactly(ReconChecks.DISTRIBUTION_PRICE_RANGE);
         // The query run before deploying (operations.md, launch-checklist.md) finds the same operator.
         assertThat(offRangeBeforeDeploying()).contains(operator);
+    }
+
+    /**
+     * The reconciliation page names the operator an item is about (its id is a UUID like a user's, so the page showed
+     * it as an unknown user): the items' template gives the operator's name, and none for an item about a user.
+     */
+    @Test
+    void theReconciliationItemsNameTheOperatorTheyAreAbout() {
+        String operator = operatorOf(distributionSponsor("fm6-recon-name"));
+        execute("UPDATE qb_distribution_price SET rate = 2 WHERE operator_id = ?", operator);
+        try {
+            deliverEvents();
+            settlementsAreNotWaitedFor();
+            clock.set(clock.instant().plus(Duration.ofMinutes(17)));
+            var output = (com.jabiz.quizbuks.wallet.Reconciliation.ReconcileOutput) systemRun("QB_RECONCILE_RUN",
+                body("scheduledTime", clock.instant().toString()));
+            List<Map<String, Object>> found = items("qb.admin.recon-items", TestTokens.bearer(tokens,
+                "fm6-recon-reader", QbPermissions.RECONCILE), Map.of("params", Map.of("runId", output.runId()),
+                "limit", 1000));
+            Object name = query("SELECT name FROM qb_operator WHERE operator_id = ?", operator).getFirst().get("name");
+            assertThat(found).filteredOn(item -> operator.equals(item.get("partyId"))
+                    && ReconChecks.DISTRIBUTION_PRICE_RANGE.equals(item.get("checkCode")))
+                .singleElement().satisfies(item -> assertThat(item).containsEntry("operatorName", name));
+            Set<Object> operators = Set.copyOf(query("SELECT operator_id FROM qb_operator").stream()
+                .map(row -> row.get("operator_id")).toList());
+            assertThat(found).filteredOn(item -> !operators.contains(item.get("partyId")))
+                .allSatisfy(item -> assertThat(item.get("operatorName")).isNull());
+        } finally {
+            execute("UPDATE qb_distribution_price SET rate = 0.05 WHERE operator_id = ?", operator);
+        }
     }
 
     /** The operators tools/quizbuks/sql/distribution-price-range.sql lists, at the test's clock. */
