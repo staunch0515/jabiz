@@ -8,6 +8,9 @@ import com.jabiz.query.EntityQuery;
 import com.jabiz.query.QueryPredicate;
 import com.jabiz.quizbuks.QbPermissions;
 import com.jabiz.quizbuks.content.ai.QbAi;
+import com.jabiz.quizbuks.fee.FeeRules;
+import com.jabiz.quizbuks.fee.QbFees;
+import com.jabiz.quizbuks.fee.QbPrepayments;
 import com.jabiz.quizbuks.invitation.QbInvitations;
 import com.jabiz.quizbuks.mailserver.QbMailServers;
 import com.jabiz.quizbuks.messaging.BroadcastProcesses;
@@ -23,6 +26,7 @@ import com.jabiz.quizbuks.reward.QbRewards;
 import com.jabiz.quizbuks.settings.QbSettings;
 import com.jabiz.quizbuks.wallet.QbTopUps;
 import com.jabiz.quizbuks.wallet.QbWallets;
+import com.jabiz.quizbuks.wallet.TopUpStatus;
 import com.jabiz.runtime.process.steps.CallProcess;
 import com.jabiz.runtime.process.steps.QueryEntities;
 import com.jabiz.quizbuks.benefit.QbBenefits;
@@ -66,13 +70,42 @@ public class SponsorErasure {
     static final String PUBLICATIONS = "publications";
     static final String WALLETS = "wallets";
     static final String CASH = "cashRewards";
+    /** F-M15 a: the platform fee invoices still owed: how many, and their totals, credit applied and amounts paid. */
+    static final String UNPAID = "feeUnpaid";
+    static final String UNPAID_TOTAL = "feeUnpaidTotal";
+    static final String UNPAID_CREDITED = "feeUnpaidCredited";
+    static final String UNPAID_PAID = "feeUnpaidPaid";
+    /** Whether the sponsor pays afterwards (their own billing mode: one onboarding row at most). */
+    static final String POSTPAID = "feePostpaid";
+    /** The open prepayments of their publications that hold money: how many, and what is left of them. */
+    static final String DEPOSITS = "feeDeposits";
+    static final String DEPOSITS_LEFT = "feeDepositsLeft";
+    /** Every open prepayment that holds money, an AI credit's too: granted credit may be frozen in them. */
+    static final String FROZEN = "feeFrozen";
+    /** The top-ups whose money has not arrived yet. */
+    static final String TOPUPS = "topUpsPending";
 
     /** The notices' codes (messages {@code erasure.notice.<code>}). */
     static final String NOTICE_PUBLICATIONS = "qb.publications-end";
     static final String NOTICE_BALANCE = "qb.wallet-balance";
     static final String NOTICE_CASH = "qb.cash-rewards-open";
+    static final String NOTICE_FEE_UNPAID = "qb.fee-unpaid";
+    static final String NOTICE_FEE_SHORTFALL = "qb.fee-shortfall";
+    static final String NOTICE_DEPOSITS = "qb.deposits-held";
+    static final String NOTICE_GIFT_VOID = "qb.gift-void";
+    static final String NOTICE_CASH_LEFT = "qb.cash-left";
+    static final String NOTICE_TOPUPS = "qb.topup-pending";
 
-    private static final Set<String> OPEN_CASH = Set.of(CashRewardStatus.DUE, CashRewardStatus.MARKED_PAID,
+    /** The wallets whose balance is Kudos (a sponsor's, a taker's); the cash and the granted credit are told apart. */
+    static final Set<String> KUDOS_WALLETS = Set.of(QbWallets.SPONSOR, QbWallets.TAKER);
+    /** The purposes of a publication's prepayments (an AI credit's is F-M15 c's notice). */
+    static final Set<String> PUBLICATION_PURPOSES = Set.of(QbPrepayments.DISTRIBUTION, QbPrepayments.EXPOSURE,
+        QbPrepayments.AUDIENCE);
+    /** A top-up whose money may still arrive: a card's checkout under way, a bank transfer not yet booked. */
+    static final Set<String> PENDING_TOPUPS = Set.of(TopUpStatus.OPENING, TopUpStatus.OPEN, TopUpStatus.AWAITING,
+        TopUpStatus.REPORTED, TopUpStatus.REVIEW);
+
+    static final Set<String> OPEN_CASH = Set.of(CashRewardStatus.DUE, CashRewardStatus.MARKED_PAID,
         CashRewardStatus.DISPUTED, CashRewardStatus.OVERDUE);
 
     /** @param userId the erased user */
@@ -160,10 +193,28 @@ public class SponsorErasure {
             @Override
             public List<ErasureLoad> loads() {
                 return List.of(
-                    ErasureLoad.of(PUBLICATIONS, QbPublications.defaultDataset(QbPublications.PUBLICATION),
-                        "publisherId"),
+                    // F-M15 a: counts with fixed conditions, however many there are (a row load reads at most 100,
+                    // more is an error); the cards, ordinary rows kept in step with the publications' states.
+                    ErasureLoad.count(PUBLICATIONS, QbPublications.defaultDataset(QbPublications.CARD), "publisherId")
+                        .where("publisherKind", PublisherKind.SPONSOR)
+                        .where("status", PublicationAdmin.ENDABLE.stream().sorted().toArray()),
                     ErasureLoad.of(WALLETS, QbWallets.defaultDataset(QbWallets.WALLET), "ownerId"),
-                    ErasureLoad.of(CASH, QbRewards.defaultDataset(QbRewards.CASH_REWARD), "publisherId"));
+                    ErasureLoad.count(CASH, QbRewards.defaultDataset(QbRewards.CASH_REWARD), "publisherId")
+                        .where("status", OPEN_CASH.stream().sorted().toArray()),
+                    // F-M15 a: the platform fee account, counted and added up in the database.
+                    unpaid(ErasureLoad.count(UNPAID, INVOICES, "sponsorId")),
+                    unpaid(ErasureLoad.sum(UNPAID_TOTAL, INVOICES, "sponsorId", "total")),
+                    unpaid(ErasureLoad.sum(UNPAID_CREDITED, INVOICES, "sponsorId", "creditApplied")),
+                    unpaid(ErasureLoad.sum(UNPAID_PAID, INVOICES, "sponsorId", "paidAmount")),
+                    ErasureLoad.count(POSTPAID, QbAccounts.defaultDataset(QbAccounts.SPONSOR), "userId")
+                        .where("billingMode", FeeRules.POSTPAID),
+                    held(ErasureLoad.count(DEPOSITS, PREPAYMENTS, "sponsorId"))
+                        .where("purpose", PUBLICATION_PURPOSES.stream().sorted().toArray()),
+                    held(ErasureLoad.sum(DEPOSITS_LEFT, PREPAYMENTS, "sponsorId", "remaining"))
+                        .where("purpose", PUBLICATION_PURPOSES.stream().sorted().toArray()),
+                    held(ErasureLoad.count(FROZEN, PREPAYMENTS, "sponsorId")),
+                    ErasureLoad.count(TOPUPS, QbTopUps.defaultDataset(QbTopUps.TOPUP), "sponsorId")
+                        .where("status", PENDING_TOPUPS.stream().sorted().toArray()));
             }
 
             @Override
@@ -173,31 +224,81 @@ public class SponsorErasure {
         };
     }
 
+    static final String INVOICES = QbFees.defaultDataset(QbFees.INVOICE);
+    static final String PREPAYMENTS = QbFees.defaultDataset(QbPrepayments.PREPAYMENT);
+
+    private static ErasureLoad unpaid(ErasureLoad load) {
+        return load.where("status", QbFees.UNPAID.toArray());
+    }
+
+    /** Open and holding money (a postpaid sponsor's only counts against their credit limit). */
+    private static ErasureLoad held(ErasureLoad load) {
+        return load.where("status", QbPrepayments.OPEN).where("mode", QbPrepayments.PREPAID);
+    }
+
     /**
      * What a sponsor should know before asking (they inform, they do not refuse): running publications end, a balance
-     * left in the wallet is not paid out, and rewards owed to takers are still owed.
+     * left in the Kudos wallet is not paid out, and rewards owed to takers are still owed; F-M15 a: what happens to the
+     * platform fee account when the account is erased (docs/quizbuks/plans/impl/F-M15.md §2, §3): unpaid invoices are
+     * paid from it (and what it may not cover stays owed), prepayments are settled, the granted credit left is voided,
+     * the cash stays in the closed account, and money still arriving goes there too. The figures are those of the
+     * moment of asking; the account is erased after the cooling-off period.
      */
     static List<ErasureNotice> notices(ErasureSubject subject) {
         List<ErasureNotice> notices = new ArrayList<>();
-        long running = subject.rows(PUBLICATIONS).stream()
-            .filter(row -> PublisherKind.SPONSOR.equals(row.get("publisherKind"))
-                && PublicationAdmin.ENDABLE.contains(String.valueOf(row.get("status"))))
-            .count();
+        long running = subject.count(PUBLICATIONS);
         if (running > 0) {
             notices.add(ErasureNotice.of(NOTICE_PUBLICATIONS, Map.of("count", running)));
         }
-        BigDecimal balance = subject.rows(WALLETS).stream()
-            .map(row -> row.get("balance") instanceof Number n ? new BigDecimal(n.toString()) : BigDecimal.ZERO)
-            .reduce(BigDecimal.ZERO, BigDecimal::add);
+        List<Map<String, Object>> wallets = subject.rows(WALLETS);
+        BigDecimal balance = wallets.stream().filter(row -> KUDOS_WALLETS.contains(String.valueOf(row.get("kind"))))
+            .map(row -> amount(row.get("balance"))).reduce(BigDecimal.ZERO, BigDecimal::add);
         if (balance.signum() > 0) {
             notices.add(ErasureNotice.of(NOTICE_BALANCE, Map.of("balance", balance.toPlainString())));
         }
-        long open = subject.rows(CASH).stream()
-            .filter(row -> OPEN_CASH.contains(String.valueOf(row.get("status")))).count();
+        long open = subject.count(CASH);
         if (open > 0) {
             notices.add(ErasureNotice.of(NOTICE_CASH, Map.of("count", open)));
         }
+        BigDecimal gift = wallets.stream().filter(row -> QbWallets.FEE_CREDIT.equals(row.get("kind")))
+            .map(row -> amount(row.get("balance"))).reduce(BigDecimal.ZERO, BigDecimal::add);
+        BigDecimal cash = wallets.stream().filter(row -> QbWallets.CASH.equals(row.get("kind")))
+            .map(row -> amount(row.get("balance"))).reduce(BigDecimal.ZERO, BigDecimal::add);
+        BigDecimal cashHeld = wallets.stream().filter(row -> QbWallets.CASH.equals(row.get("kind")))
+            .map(row -> amount(row.get("held"))).reduce(BigDecimal.ZERO, BigDecimal::add);
+        long invoices = subject.count(UNPAID);
+        // What the invoices still owe, as QbFees.owed: their totals less the credit applied and what was paid.
+        BigDecimal owed = subject.sum(UNPAID_TOTAL).subtract(subject.sum(UNPAID_CREDITED))
+            .subtract(subject.sum(UNPAID_PAID)).max(BigDecimal.ZERO);
+        if (invoices > 0 || subject.count(POSTPAID) > 0) {
+            notices.add(ErasureNotice.of(NOTICE_FEE_UNPAID, Map.of("count", invoices, "amount", owed.toPlainString())));
+        }
+        // What pays them now: the granted credit, then the cash not held by a dispute (FeeAllocation's order).
+        BigDecimal available = gift.max(BigDecimal.ZERO).add(cash.subtract(cashHeld).max(BigDecimal.ZERO));
+        if (owed.compareTo(available) > 0) {
+            notices.add(ErasureNotice.of(NOTICE_FEE_SHORTFALL, Map.of("available", available.toPlainString(),
+                "short", owed.subtract(available).toPlainString())));
+        }
+        long deposits = subject.count(DEPOSITS);
+        if (deposits > 0) {
+            notices.add(ErasureNotice.of(NOTICE_DEPOSITS, Map.of("count", deposits,
+                "amount", subject.sum(DEPOSITS_LEFT).toPlainString())));
+        }
+        if (gift.signum() > 0 || subject.count(FROZEN) > 0) {
+            notices.add(ErasureNotice.of(NOTICE_GIFT_VOID, Map.of("amount", gift.max(BigDecimal.ZERO).toPlainString())));
+        }
+        if (cash.signum() > 0) {
+            notices.add(ErasureNotice.of(NOTICE_CASH_LEFT, Map.of("amount", cash.toPlainString())));
+        }
+        long topUps = subject.count(TOPUPS);
+        if (topUps > 0) {
+            notices.add(ErasureNotice.of(NOTICE_TOPUPS, Map.of("count", topUps)));
+        }
         return List.copyOf(notices);
+    }
+
+    private static BigDecimal amount(Object value) {
+        return value instanceof Number n ? new BigDecimal(n.toString()) : BigDecimal.ZERO;
     }
 
     @Bean

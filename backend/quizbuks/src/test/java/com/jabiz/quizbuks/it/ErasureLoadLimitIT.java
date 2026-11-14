@@ -77,6 +77,35 @@ class ErasureLoadLimitIT extends PlayItSupport {
         assertThat(found.get("qb.rewards-unclaimed").params()).containsEntry("count", (long) (owed + vouchers));
     }
 
+    @Test
+    void aSponsorWithManyInvoicesPrepaymentsAndTopUpsIsToldOfTheOpenOnes() {
+        String sponsor = newSponsor(unique("s-fm15a-fees"));
+        int unpaid = 2;
+        // 1,000 each, 300 of them paid and 100 credited: 600 owed each.
+        rows("qb_fee_invoice", null, HISTORY, n -> Map.of(
+            "sponsor_id", text(sponsor), "invoice_no", "'IT-' || ids.id", "total", "1000",
+            "paid_amount", "CASE WHEN n <= " + unpaid + " THEN 300 ELSE 1000 END",
+            "credit_applied", "CASE WHEN n <= " + unpaid + " THEN 100 ELSE 0 END",
+            "status", "CASE WHEN n <= " + unpaid + " THEN 'PARTIAL' ELSE 'PAID' END"));
+        int open = 1;
+        rows("qb_prepayment", null, HISTORY, n -> Map.of(
+            "sponsor_id", text(sponsor), "purpose", "'DISTRIBUTION'", "mode", "'PREPAID'",
+            "amount", "2000", "remaining", "CASE WHEN n <= " + open + " THEN 1500 ELSE 0 END",
+            "status", "CASE WHEN n <= " + open + " THEN 'OPEN' ELSE 'RELEASED' END"));
+        int waiting = 1;
+        rows("qb_topup", null, HISTORY, n -> Map.of(
+            "sponsor_id", text(sponsor), "method", "'BANK'", "amount", "5000",
+            "status", "CASE WHEN n <= " + waiting + " THEN 'AWAITING' ELSE 'CANCELLED' END"));
+
+        Map<String, ErasureNotice> found = noticesOf(sponsor);
+        assertThat(found.get("qb.fee-unpaid").params()).containsEntry("count", (long) unpaid)
+            .containsEntry("amount", String.valueOf(unpaid * 600));
+        assertThat(found.get("qb.deposits-held").params()).containsEntry("count", (long) open)
+            .containsEntry("amount", "1500");
+        assertThat(found).containsKey("qb.gift-void");
+        assertThat(found.get("qb.topup-pending").params()).containsEntry("count", (long) waiting);
+    }
+
     /** The notices the user is shown before asking, by code (the same read the request makes). */
     Map<String, ErasureNotice> noticesOf(String userId) {
         List<ErasureNotice> all = notices.of(userId).block();
