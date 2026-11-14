@@ -41,8 +41,12 @@ export function SettlementLines({ settlement, finance, amount, onClose }: {
   const { query, table, sortable } = usePaged(['qb-ext', 'settlement-lines', finance, settlement.settlementId],
     (offset, limit, sorts) => readSettlementLines(finance, settlement.settlementId, offset, limit, sorts), true, SORTS)
   const columns = useMemo<ColumnDef<SettlementLine, unknown>[]>(() => [
+    // An operator reads only its own Sponsors' names: one moved to another operator since has none here, and is shown
+    // as such with its id alone, nothing of where it went (#701 review L2). Finance sees every name.
     { id: 'sponsor', header: t('settlement.lines.sponsor'),
-      cell: ({ row }) => row.original.sponsorName ?? row.original.sponsorId },
+      cell: ({ row }) => row.original.sponsorName ?? (finance ? row.original.sponsorId
+        : <span data-testid="line-sponsor-moved">{t('settlement.lines.sponsorMoved')}
+            <span className="text-muted-foreground ml-1 text-xs">{row.original.sponsorId}</span></span>) },
     { id: 'lineKind', header: t('settlement.lines.kind'),
       cell: ({ row }) => <span data-testid="line-kind">{t(`settlement.lines.kinds.${row.original.lineKind}`,
         { defaultValue: row.original.lineKind })}</span> },
@@ -54,7 +58,7 @@ export function SettlementLines({ settlement, finance, amount, onClose }: {
       cell: ({ row }) => row.original.late
         ? <Badge variant="outline" data-testid="line-late">{t('settlement.lines.late')}</Badge> : null },
     { id: 'occurredAt', header: t('settlement.lines.occurredAt'), cell: ({ row }) => when(row.original.occurredAt) },
-  ], [t, feeKind, amount])
+  ], [t, feeKind, amount, finance])
   const download = async (format: ExportFormat) => {
     setBusy(format)
     try {

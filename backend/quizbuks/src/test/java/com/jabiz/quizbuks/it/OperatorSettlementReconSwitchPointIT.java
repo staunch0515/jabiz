@@ -14,9 +14,10 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * F-M12 c (review L2): a fee with no operator is asked about from the switch point of the operator that looks after its
- * sponsor, not from the earliest of all the operators'. Two operators with switch points a few months apart; a fee charged
- * between them is the old rule's for the later one's sponsor and not for the earlier one's.
+ * F-M12 (#701 review L3): a fee with no operator is asked about from the earliest switch point of the operators, by time
+ * alone: not by the operator that looks after its sponsor now, which changes when the sponsor moves (the difference
+ * would go away with nothing put right), and which a sponsor may not have, or whose operator may have no settlement of the
+ * new kind yet.
  */
 class OperatorSettlementReconSwitchPointIT extends CapItSupport {
 
@@ -40,25 +41,52 @@ class OperatorSettlementReconSwitchPointIT extends CapItSupport {
             + "?::timestamptz, 0, 0.5, 0, 0, 0, 0, 0, 'CREDITED', now(), 1, 0)", operatorId, month, end, end);
     }
 
+    /** An operator whose switch point is the end of {@code month} (Tokyo), with its first settlement of the new kind. */
+    private void switched(String operatorId, String month, String end, String next, String settledAt) {
+        oldSettlement(operatorId, month, end);
+        settle(operatorId, next, settledAt);
+    }
+
     @Test
-    void aFeeWithNoOperatorIsAskedAboutFromTheSwitchPointOfTheOperatorOfItsSponsor() {
+    void aFeeWithNoOperatorIsAskedAboutFromTheEarliestSwitchPointAndStaysWhenItsSponsorMoves() {
         String[] early = start(2053);
         String[] late = another(2053);
         clock.set(Instant.parse("2053-04-10T01:00:00Z"));
-        String earlyFee = String.valueOf(manualFee(early[1], 100));
-        OperatorSettlementReconIT.looseFee(earlyFee, UUID.randomUUID().toString());
-        String lateFee = String.valueOf(manualFee(late[1], 100));
-        OperatorSettlementReconIT.looseFee(lateFee, UUID.randomUUID().toString());
+        OperatorSettlementReconIT.looseFee(String.valueOf(manualFee(early[1], 100)), UUID.randomUUID().toString());
+        OperatorSettlementReconIT.looseFee(String.valueOf(manualFee(late[1], 100)), UUID.randomUUID().toString());
         // The switch points: the end of February for one operator (Tokyo), the end of April for the other.
-        oldSettlement(early[0], "2053-02", "2053-02-28T15:00:00Z");
-        oldSettlement(late[0], "2053-04", "2053-04-30T15:00:00Z");
-        settle(early[0], "2053-03", "2053-05-02T00:00:00Z");
-        settle(late[0], "2053-05", "2053-06-02T00:00:00Z");
+        switched(early[0], "2053-02", "2053-02-28T15:00:00Z", "2053-03", "2053-05-02T00:00:00Z");
+        switched(late[0], "2053-04", "2053-04-30T15:00:00Z", "2053-05", "2053-06-02T00:00:00Z");
         clock.set(Instant.parse("2053-06-05T00:00:00Z"));
-        // Charged on 10 April: after the first switch point, before the second.
-        assertThat(noOperator(early[1])).singleElement().satisfies(row -> assertThat(row)
-            .containsEntry("reference", "2053-04").extracting(r -> new java.math.BigDecimal(String.valueOf(r.get("actual"))))
-            .satisfies(actual -> assertThat(actual).isEqualByComparingTo("100")));
-        assertThat(noOperator(late[1])).isEmpty();
+        // Charged on 10 April, after the earliest switch point: both are asked about, whoever looks after the sponsor.
+        for (String sponsor : List.of(early[1], late[1])) {
+            assertThat(noOperator(sponsor)).singleElement().satisfies(row -> assertThat(row)
+                .containsEntry("reference", "2053-04").extracting(r -> new java.math.BigDecimal(String.valueOf(r.get("actual"))))
+                .satisfies(actual -> assertThat(actual).isEqualByComparingTo("100")));
+        }
+        // The sponsor moves: nothing was put right, and the difference stays.
+        run(com.jabiz.quizbuks.operator.OperatorProcesses.ASSIGN, hq(), body("userId", early[1], "operatorId", late[0],
+            "reason", "F-M12 L3"));
+        assertThat(noOperator(early[1])).hasSize(1);
+    }
+
+    @Test
+    void aSponsorWithNoOperatorAndOneWhoseOperatorHasNoNewSettlementAreAskedAboutToo() {
+        String[] switchedOne = start(2054);
+        String[] notYet = another(2054);
+        String alone = newSponsor(unique("fm12-l3-alone"));
+        cash(alone, 1_000);
+        clock.set(Instant.parse("2054-04-10T01:00:00Z"));
+        OperatorSettlementReconIT.looseFee(String.valueOf(manualFee(notYet[1], 100)), UUID.randomUUID().toString());
+        OperatorSettlementReconIT.looseFee(String.valueOf(manualFee(alone, 100)), UUID.randomUUID().toString());
+        // Looked after by no operator (none assigned, or its assignment gone).
+        execute("DELETE FROM qb_sponsor_operator WHERE user_id = ?", alone);
+        switched(switchedOne[0], "2054-02", "2054-02-28T15:00:00Z", "2054-03", "2054-05-02T00:00:00Z");
+        clock.set(Instant.parse("2054-05-05T00:00:00Z"));
+        // notYet's operator has no settlement of the new kind (no switch point of its own).
+        assertThat(noOperator(notYet[1])).singleElement().satisfies(row -> assertThat(row)
+            .containsEntry("reference", "2054-04"));
+        assertThat(noOperator(alone)).singleElement().satisfies(row -> assertThat(row)
+            .containsEntry("reference", "2054-04"));
     }
 }

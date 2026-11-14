@@ -27,7 +27,6 @@ import {
   useAuth,
   type ColumnDef,
 } from '@jabiz/admin'
-import { currentMonthInJapan } from './account-api'
 import { EmptyState, LoadFailed, Section, StatusBadge } from './components'
 import { money, useLabels, usePaged, usePoints } from './hooks'
 import { DICTIONARY, PERMISSION } from './ids'
@@ -110,8 +109,7 @@ function PayDialog({ settlement, onClose }: { settlement: Settlement; onClose: (
  */
 function WaitingSettlements() {
   const { t } = useTranslation(EXTENSION_NAMESPACE)
-  const waiting = useQuery({ queryKey: [...WAITING_KEY, currentMonthInJapan()],
-    queryFn: () => readWaitingSettlements(currentMonthInJapan()) })
+  const waiting = useQuery({ queryKey: [...WAITING_KEY], queryFn: readWaitingSettlements })
   const columns = useMemo<ColumnDef<WaitingSettlement, unknown>[]>(() => [
     { id: 'operator', header: t('settlement.waiting.operator'), cell: ({ row }) => row.original.operatorName },
     { id: 'month', header: t('settlement.waiting.month'), cell: ({ row }) => row.original.month },
@@ -129,7 +127,7 @@ function WaitingSettlements() {
       {waiting.isError
         ? <LoadFailed error={waiting.error} onRetry={() => void waiting.refetch()} />
         : (
-          <DataTable label={t('settlement.waiting.title')} columns={columns} data={waiting.data ?? []}
+          <DataTable label={t('settlement.waiting.title')} columns={columns} data={waiting.data?.operators ?? []}
             loading={waiting.isPending} getRowId={(row) => row.operatorId}
             empty={<EmptyState art="money" title={t('settlement.waiting.none')} />}
             rowProps={(row) => ({ 'data-testid': 'waiting-row', 'data-id': row.operatorId })} />
@@ -175,6 +173,8 @@ export default function SettlementsPage() {
     { id: 'plan', header: t('settlement.plan'), cell: ({ row }) => planLabel(row.original.plan) },
     { id: 'platformFees', header: t('settlement.platformFees'), meta: right,
       cell: ({ row }) => <span data-testid="settlement-platform-fees">{amount(row.original.platformFees)}</span> },
+    { id: 'costExcluded', header: t('settlement.costExcluded'), meta: right,
+      cell: ({ row }) => <span data-testid="settlement-cost-excluded">{amount(row.original.costExcluded)}</span> },
     { id: 'giftPaid', header: t('settlement.giftPaid'), meta: right,
       cell: ({ row }) => <span data-testid="settlement-gift-paid">{amount(row.original.giftPaid)}</span> },
     { id: 'share', header: t('settlement.share'), meta: right, cell: ({ row }) => amount(row.original.operatorShare) },

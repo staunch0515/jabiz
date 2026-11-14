@@ -1,6 +1,6 @@
 /*---
-id: qb.admin.operator-settlements-waiting
-description: "The operators' settlements that wait (F-M12 §6): each operator's earliest month without a settlement, earlier than the current one, and the steps it still waits for (DISTRIBUTION, INVOICE, EXPOSURE); none when only the daily run is missing"
+id: qb.system.operator-settlements-waiting
+description: "The operators' settlements that wait (F-M12 §6): each operator's earliest month without a settlement, earlier than the current one, and the steps it still waits for (DISTRIBUTION, INVOICE, EXPOSURE); none when only the daily run is missing. Run by QB_OPERATOR_SETTLEMENTS_WAITING with the server's month and zone (#701 review M2), not by a browser"
 entities: [QbOperator, QbOperatorSettlement, QbPublication, QbPublicationCard, QbDistributionSettlement, QbExposureSettlement, QbFeeCharge, QbFeeInvoice]
 datasets:
   QbOperator: urn:jabiz:dataset:default:QbOperator
@@ -23,12 +23,13 @@ list:
   sorts: [month, operatorName]
   defaultSort: { field: month, asc: true }
   key: [operatorId]
-permissions: [qb.admin.finance.read]
+permissions: [qb.operator.settlement.system]
 ---*/
 -- The head of each operator's line, as qb.system.operator-settlements-due takes it, with the steps the month waits for:
 -- the branches of qb.system.operator-settlement-readiness, written the same (OperatorReadinessTemplateTest compares
 -- them), with the month's bounds worked out here in the zone. steps is empty when nothing is pending (the daily run
--- has not settled the month yet).
+-- has not settled the month yet). :current and :zone come from the server (QB_OPERATOR_SETTLEMENTS_WAITING); the months
+-- looked at are still capped at 120 before :current, so that a wrong value cannot make the series long.
 WITH due_months AS (
     SELECT o.{{QbOperator.operatorId}} AS r_operator, m.start_of_month AS r_local_start
     FROM {{QbOperator}} o
@@ -39,7 +40,8 @@ WITH due_months AS (
                            AND os.{{QbOperatorSettlement.coveredFrom}} IS NULL),
                         date_trunc('month', o.{{QbOperator.createdAt}} AT TIME ZONE CAST(:zone AS text))) AS lower_month
     ) lo
-    CROSS JOIN LATERAL generate_series(lo.lower_month,
+    CROSS JOIN LATERAL generate_series(greatest(lo.lower_month,
+        CAST(CAST(:current AS text) || '-01' AS timestamp) - interval '120 months'),
         CAST(CAST(:current AS text) || '-01' AS timestamp) - interval '1 month', interval '1 month') AS m(start_of_month)
 ),
 unsettled AS (

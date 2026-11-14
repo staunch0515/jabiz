@@ -28,6 +28,8 @@ export interface Settlement {
   fixedFee: string
   /** Q87: the platform's fees charged to the operator's sponsors in the month; the share is on both. */
   platformFees: string
+  /** Of the platform fees, the cost and the kinds not shared (#701 review M4). */
+  costExcluded: string
   /** F-M12: the part of the fees paid with granted credit (not shared), what was taken back of it, what is carried on. */
   giftPaid: string
   giftRecovered: string
@@ -58,6 +60,7 @@ function toSettlement(row: Row): Settlement {
     plan: str(row.plan),
     fixedFee: amount(row.fixedFee),
     platformFees: amount(row.platformFees),
+    costExcluded: amount(row.costExcluded),
     giftPaid: amount(row.giftPaid),
     giftRecovered: amount(row.giftRecovered),
     giftCarriedOut: amount(row.giftCarriedOut),
@@ -172,13 +175,16 @@ export interface WaitingSettlement {
 export const WAITING_STEPS = ['DISTRIBUTION', 'INVOICE', 'EXPOSURE'] as const
 export const WAITING_KEY = ['qb-ext', 'settlements-waiting'] as const
 
-/** The months before `current` (`yyyy-MM`, Japan's: the fiscal year's zone) that are not settled yet, one per operator. */
-export async function readWaitingSettlements(current: string): Promise<WaitingSettlement[]> {
-  const page = await runQuery<Row>(TEMPLATE.settlementsWaiting, { params: { current, zone: 'Asia/Tokyo' }, limit: 100 })
-  return page.items.map((row) => ({
-    operatorId: String(row.operatorId),
-    operatorName: String(row.operatorName ?? row.operatorId),
-    month: String(row.month ?? ''),
-    steps: String(row.steps ?? '').split(',').filter(Boolean),
-  }))
+/**
+ * The operators whose earliest month without a settlement is before the current one, every one (one row each at
+ * most); the current month is the server's, in its fiscal year's zone (#701 review M2).
+ */
+export async function readWaitingSettlements(): Promise<{ current: string; operators: WaitingSettlement[] }> {
+  const output = await runProcess<{ current: string; operators: { operatorId: string; operatorName: string | null;
+    month: string; steps: string[] }[] }>(SETTLEMENT_PROCESS.waiting, {})
+  return {
+    current: output.current,
+    operators: output.operators.map((row) => ({ operatorId: row.operatorId,
+      operatorName: row.operatorName ?? row.operatorId, month: row.month, steps: row.steps })),
+  }
 }

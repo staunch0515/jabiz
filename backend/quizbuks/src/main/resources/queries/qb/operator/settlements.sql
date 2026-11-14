@@ -12,6 +12,7 @@ results:
   periodStart: { from: QbOperatorSettlement.periodStart }
   periodEnd: { from: QbOperatorSettlement.periodEnd }
   platformFees: { from: QbOperatorSettlement.platformFees }
+  costExcluded: { from: QbOperatorSettlement.costExcluded }
   giftPaid: { from: QbOperatorSettlement.giftPaid }
   giftRecovered: { from: QbOperatorSettlement.giftRecovered }
   giftCarriedOut: { from: QbOperatorSettlement.giftCarriedOut }
@@ -46,6 +47,7 @@ SELECT
     s.{{QbOperatorSettlement.periodStart}} AS periodStart,
     s.{{QbOperatorSettlement.periodEnd}} AS periodEnd,
     s.{{QbOperatorSettlement.platformFees}} AS platformFees,
+    s.{{QbOperatorSettlement.costExcluded}} AS costExcluded,
     s.{{QbOperatorSettlement.giftPaid}} AS giftPaid,
     s.{{QbOperatorSettlement.giftRecovered}} AS giftRecovered,
     s.{{QbOperatorSettlement.giftCarriedOut}} AS giftCarriedOut,

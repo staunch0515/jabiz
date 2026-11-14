@@ -67,7 +67,7 @@ class OperatorReadinessTemplateTest {
     /** F-M12 d: the waiting settlements' list for finance names the steps with the same conditions, too. */
     @Test
     void theWaitingListsStepsAreTheReadinessBranchesWrittenTheSame() throws IOException {
-        assertStepsWrittenTheSame(Path.of("src/main/resources/queries/qb/admin/operator-settlements-waiting.sql"));
+        assertStepsWrittenTheSame(Path.of("src/main/resources/queries/qb/system/operator-settlements-waiting.sql"));
     }
 
     private static void assertStepsWrittenTheSame(Path copy) throws IOException {

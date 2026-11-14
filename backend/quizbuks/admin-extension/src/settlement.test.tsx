@@ -34,7 +34,7 @@ vi.mock('@jabiz/admin', async (original) => {
 })
 
 const row = { settlementId: 's1', operatorId: 'op-1', operatorName: 'Kyushu Partners', month: '2026-11',
-  plan: '2', fixedFee: '20000', giftPaid: '4000', giftRecovered: '700', giftCarriedOut: '300', platformShare: '0.2', operatorShare: '17', prospectingCost: '0', creditNoteDeduction: '3', carriedIn: '0', payable: '17',
+  plan: '2', fixedFee: '20000', costExcluded: '1200', giftPaid: '4000', giftRecovered: '700', giftCarriedOut: '300', platformShare: '0.2', operatorShare: '17', prospectingCost: '0', creditNoteDeduction: '3', carriedIn: '0', payable: '17',
   carriedOut: '0', status: 'ISSUED', documentNo: 's1', documentRunId: 'run-1', paidOn: null }
 
 beforeAll(async () => {
@@ -47,10 +47,6 @@ const line = { lineId: 'l1', settlementId: 's1', lineKind: 'CHARGE', sponsorId: 
 
 beforeEach(() => {
   server.rows = {
-    [TEMPLATE.settlementsWaiting]: [
-      { operatorId: 'op-1', operatorName: 'Kyushu Partners', month: '2026-10', steps: 'DISTRIBUTION,INVOICE' },
-      { operatorId: 'op-2', operatorName: 'Kanto Partners', month: '2026-09', steps: '' },
-    ],
     [TEMPLATE.adminSettlementLines]: [line, { ...line, lineId: 'l2', lineKind: 'GIFT', late: false }],
     [TEMPLATE.ownSettlementLines]: [line],
   }
@@ -60,7 +56,11 @@ beforeEach(() => {
     const items = server.rows[id] ?? [row]
     return { items, offset: 0, limit: 20, ...(options.count ? { total: items.length } : {}) }
   })
-  server.runProcess.mockReset().mockResolvedValue({ settlementId: 's1', status: 'PAYING', approvalRequestId: 'r1' })
+  server.runProcess.mockReset().mockImplementation(async (code: string) => (code === SETTLEMENT_PROCESS.waiting
+    ? { current: '2026-11', operators: [
+      { operatorId: 'op-1', operatorName: 'Kyushu Partners', month: '2026-10', steps: ['DISTRIBUTION', 'INVOICE'] },
+      { operatorId: 'op-2', operatorName: 'Kanto Partners', month: '2026-09', steps: [] }] }
+    : { settlementId: 's1', status: 'PAYING', approvalRequestId: 'r1' }))
   server.get.mockReset().mockImplementation(async (path: string) => {
     if (path === '/api/dictionaries/{urn}') return [{ code: 'ISSUED', label: 'Issued' }]
     throw new ApiError(404, { detail: 'Not found' })
@@ -129,6 +129,8 @@ describe('the settlements', () => {
     renderPage()
     const settlement = await screen.findByTestId('settlement-row')
     expect(within(settlement).getByTestId('settlement-gift-paid')).toHaveTextContent('4,000')
+    // #701 review M4: the cost and the kinds not shared, apart from the platform fees.
+    expect(within(settlement).getByTestId('settlement-cost-excluded')).toHaveTextContent('1,200')
     expect(within(settlement).getByTestId('settlement-gift-recovered')).toHaveTextContent('700')
     expect(within(settlement).getByTestId('settlement-gift-carried-out')).toHaveTextContent('300')
     expect(screen.getByRole('columnheader', { name: 'Paid with granted credit (not shared)' })).toBeInTheDocument()
@@ -183,6 +185,17 @@ describe('the settlements', () => {
     expect(server.sessionFetch.mock.calls[0][0]).toBe('/api/queries/qb.operator.settlement-lines/export?format=xlsx')
   })
 
+  it('shows a Sponsor moved to another operator as such, with its id alone (#701 review L2)', async () => {
+    server.permissions = new Set([PERMISSION.operatorUse])
+    server.rows[TEMPLATE.ownSettlementLines] = [{ ...line, sponsorName: null }]
+    renderPage()
+    const user = userEvent.setup()
+    await user.click(await screen.findByTestId('settlement-lines-open'))
+    const dialog = await screen.findByTestId('settlement-lines')
+    const moved = await within(dialog).findByTestId('line-sponsor-moved')
+    expect(moved).toHaveTextContent(/^A Sponsor moved to another operatorsp-1$/)
+  })
+
   it('lists the waiting settlements for finance with the steps they wait for', async () => {
     server.permissions = new Set([PERMISSION.financeRead])
     const { container } = renderPage()
@@ -191,9 +204,9 @@ describe('the settlements', () => {
     expect(rows[0]).toHaveTextContent('Kyushu Partners')
     expect(rows[0]).toHaveTextContent('2026-10')
     expect(rows[0]).toHaveTextContent('distribution fees / monthly invoices of postpaid fees')
-    expect(rows[1]).toHaveTextContent('the settlement run has not finished')
-    expect(server.runQuery).toHaveBeenCalledWith(TEMPLATE.settlementsWaiting,
-      expect.objectContaining({ params: expect.objectContaining({ zone: 'Asia/Tokyo' }) }))
+    expect(rows[1]).toHaveTextContent('the daily settlement run')
+    // #701 review M2: the month and the zone are the server's; the browser gives neither.
+    expect(server.runProcess).toHaveBeenCalledWith(SETTLEMENT_PROCESS.waiting, {})
     await expectAccessible(container)
   })
 

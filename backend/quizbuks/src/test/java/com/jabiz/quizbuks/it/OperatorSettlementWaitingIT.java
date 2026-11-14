@@ -18,12 +18,13 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 /**
  * F-M12 d (docs/quizbuks/plans/impl/F-M12.md §6): finance's list of the settlements that wait,
- * {@code qb.admin.operator-settlements-waiting}: each operator's earliest month without a settlement and the steps it
- * still waits for, read with the conditions of the readiness template; only for {@code qb.admin.finance.read}.
+ * {@value OperatorSettlements#WAITING}: each operator's earliest month without a settlement and the steps it still
+ * waits for, read with the conditions of the readiness template; only for {@code qb.admin.finance.read}. The current
+ * month is the server's, in the fiscal year's zone (#701 review M2); the template is not open to a browser.
  */
 class OperatorSettlementWaitingIT extends CreditNoteItSupport {
 
-    private static final String TEMPLATE = "qb.admin.operator-settlements-waiting";
+    private static final String TEMPLATE = OperatorSettlements.WAITING_TEMPLATE;
 
     private String hq() {
         return TestTokens.bearer(tokens, "fm12d-hq", QbPermissions.OPERATORS_WRITE, QbPermissions.OPERATORS_READ);
@@ -33,17 +34,25 @@ class OperatorSettlementWaitingIT extends CreditNoteItSupport {
         return TestTokens.bearer(tokens, "fm12d-finance", QbPermissions.ADMIN_FINANCE_READ);
     }
 
-    private List<Map<String, Object>> waiting(String operatorId, String current) {
-        return items(TEMPLATE, financeToken(), Map.of("params", Map.of("current", current, "zone", TOKYO.getId()),
-            "limit", 100)).stream().filter(row -> operatorId.equals(row.get("operatorId"))).toList();
+    /** The process's rows for {@code operatorId}, at the test clock (whose month is the current one). */
+    @SuppressWarnings("unchecked")
+    private List<Map<String, Object>> waiting(String operatorId) {
+        Map<String, Object> output = run(OperatorSettlements.WAITING, financeToken(), Map.of());
+        assertThat(output).containsEntry("current", OperatorSettlements.currentMonth(clock.instant(), TOKYO));
+        return ((List<Map<String, Object>>) output.get("operators")).stream()
+            .filter(row -> operatorId.equals(row.get("operatorId"))).toList();
     }
 
     @Test
-    void onlyFinanceReadsIt() {
+    void onlyFinanceRunsItAndNobodyReadsTheTemplateFromABrowser() {
         for (String token : List.of(hq(), TestTokens.bearer(tokens, "fm12d-nobody", QbPermissions.OPERATOR_SETTLEMENT_SYSTEM))) {
+            refused(OperatorSettlements.WAITING, token, Map.of(), 403);
+        }
+        // The template takes the month and the zone; a browser cannot give them, finance included (#701 review M2).
+        for (String token : List.of(financeToken(), hq())) {
             client.post().uri("/api/queries/" + TEMPLATE).header(HttpHeaders.AUTHORIZATION, token)
                 .contentType(MediaType.APPLICATION_JSON)
-                .bodyValue(Map.of("params", Map.of("current", "2040-02", "zone", TOKYO.getId())))
+                .bodyValue(Map.of("params", Map.of("current", "9999-12", "zone", "Nowhere/At_All")))
                 .exchange().expectStatus().isForbidden();
         }
     }
@@ -59,28 +68,31 @@ class OperatorSettlementWaitingIT extends CreditNoteItSupport {
         assertThat(monthly(sponsor)).isEqualTo("CHARGED");
         String quiet = newOperator(hq(), unique("Quiet"));
 
+        // Not the current month (March), nor later ones.
+        assertThat(waiting(operatorId)).isEmpty();
+        clock.set(Instant.parse("2041-04-01T03:00:00Z"));
         // March is the earliest month without a settlement, and the invoice is what it waits for; the quiet one, whose
         // March has nothing to wait for, is listed too (only the daily run is missing), with no step.
-        assertThat(waiting(operatorId, "2041-04")).singleElement().satisfies(row -> {
-            assertThat(row).containsEntry("month", "2041-03").containsEntry("steps", "INVOICE");
+        assertThat(waiting(operatorId)).singleElement().satisfies(row -> {
+            assertThat(row).containsEntry("month", "2041-03").containsEntry("steps", List.of("INVOICE"));
             assertThat(row.get("operatorName")).isNotNull();
         });
-        assertThat(waiting(quiet, "2041-04")).singleElement().satisfies(row -> assertThat(row)
-            .containsEntry("month", "2041-03").containsEntry("steps", ""));
-        // Not the current month, nor later ones.
-        assertThat(waiting(operatorId, "2041-03")).isEmpty();
+        assertThat(waiting(quiet)).singleElement().satisfies(row -> assertThat(row)
+            .containsEntry("month", "2041-03").containsEntry("steps", List.of()));
 
         // Only the head of the line: with April over, March is still the one listed.
-        assertThat(waiting(operatorId, "2041-05")).singleElement().satisfies(row -> assertThat(row)
+        clock.set(Instant.parse("2041-05-01T03:00:00Z"));
+        assertThat(waiting(operatorId)).singleElement().satisfies(row -> assertThat(row)
             .containsEntry("month", "2041-03"));
+        clock.set(Instant.parse("2041-04-01T03:00:00Z"));
 
         assertThat(((FeeProcesses.ItemOutput) systemRun(FeeProcesses.INVOICE_ITEM, body("sponsorId", sponsor,
             "period", "2041-03"))).outcome()).isEqualTo("ISSUED");
-        assertThat(waiting(operatorId, "2041-04")).singleElement().satisfies(row -> assertThat(row)
-            .containsEntry("steps", ""));
+        assertThat(waiting(operatorId)).singleElement().satisfies(row -> assertThat(row)
+            .containsEntry("steps", List.of()));
 
         clock.set(Instant.parse("2041-04-02T01:00:00Z"));
         systemRun(OperatorSettlements.RUN, body("operatorId", operatorId, "month", "2041-03"));
-        assertThat(waiting(operatorId, "2041-04")).isEmpty();
+        assertThat(waiting(operatorId)).isEmpty();
     }
 }
