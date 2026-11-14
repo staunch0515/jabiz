@@ -216,11 +216,13 @@ class ReconChecksTest {
             .doesNotContainAnyElementsOf(ReconChecks.NOTES);
         assertThat(ReconChecks.OWNERS.keySet()).allSatisfy(code -> assertThat(ReconChecks.ALL).contains(code));
         assertThat(ReconChecks.ALL).allSatisfy(code -> assertThat(ReconChecks.owner(code)).as(code).isNotBlank());
-        // Five need attention (the two price ranges, the audience fee without its period, a credit with a due fee, and
-        // F-M10's AI help usage total, owned by the content administrators and leading to the AI page they can open),
-        // five are notes (the taker wallet's lag, the distribution fee at its floor, F-M8's unpurchased exposures,
-        // F-M12 c's suspended operator's credit to take back and F-M9's AI jobs beyond their reservation), the rest
-        // are differences.
+        // Each level's checks by name (each plan adds its own here, with its level and owner): for attention, the
+        // price ranges, the audience fee without its period, a credit with a due fee, a missed automatic payment,
+        // F-M10's AI help usage total (owned by the content administrators, leading to the AI page they can open) and
+        // F-M15's erased Sponsors' wind-ups; notes, the taker wallet's lag, the distribution fee at its floor, F-M8's
+        // unpurchased exposures, F-M12 c's suspended operator's credit to take back, F-M9's AI jobs beyond their
+        // reservation and fees an erased Sponsor owes; the rest are differences. How many of each is the code's: the
+        // operations table's heading is checked against it (ReconOperationsTableTest), never a number written here.
         assertThat(ReconChecks.ATTENTION).containsExactlyInAnyOrder(ReconChecks.DISTRIBUTION_PRICE_RANGE,
             ReconChecks.AUDIENCE_REFUND_NO_PERIOD, ReconChecks.CREDIT_UNUSED_WITH_DUE, ReconChecks.AUTO_PAY_MISSED,
             ReconChecks.HELP_USAGE_TOTAL, ReconChecks.EXPOSURE_PRICE_RANGE, ReconChecks.ERASED_CLOSE_OPEN,
@@ -238,8 +240,6 @@ class ReconChecksTest {
         assertThat(ReconChecks.link(ReconChecks.DISTRIBUTION_PRICE_RANGE)).isEqualTo(ReconTasks.RECONCILIATION_PAGE);
         assertThat(ReconChecks.ALL.stream().filter(c -> ReconChecks.level(c) == ReconChecks.Level.DIFFERENCE))
             .hasSize(ReconChecks.ALL.size() - ReconChecks.ATTENTION.size() - ReconChecks.NOTES.size());
-        assertThat(ReconChecks.ATTENTION).hasSize(8);
-        assertThat(ReconChecks.NOTES).hasSize(6);
         assertThat(ReconChecks.NOTES).contains(ReconChecks.OPERATOR_GIFT_CARRY_OPEN);
         // F-M12 c: the settlement's checks are differences, owned by finance (qb.reconcile), none for attention.
         for (String check : List.of(ReconChecks.OPERATOR_SETTLEMENT_WAITING, ReconChecks.OPERATOR_SETTLEMENT_COVERAGE,
