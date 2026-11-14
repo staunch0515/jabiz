@@ -103,6 +103,7 @@ import ProspectSettingsPage from './ProspectSettingsPage'
 import ProspectsPage from './ProspectsPage'
 import SettlementsPage from './SettlementsPage'
 import OperatorAccountPage from './OperatorAccountPage'
+import OperatorHelpPage from './OperatorHelpPage'
 import OperatorWithdrawalsPage from './OperatorWithdrawalsPage'
 
 /**
@@ -213,6 +214,8 @@ export default defineExtension({
     { path: PATH.operatorSettlements, element: <SettlementsPage /> },
     // Q48e-2: the operator's account and withdrawals, and finance's view of the withdrawals.
     { path: PATH.operatorAccount, element: <OperatorAccountPage /> },
+    // The operators' help: the help centre's questions of their audience.
+    { path: PATH.operatorHelp, element: <OperatorHelpPage /> },
     { path: PATH.operatorWithdrawals, element: <OperatorWithdrawalsPage /> },
     { path: PATH.referrals, element: <ReferralsPage /> },
     // Q47c: the audience rules and their prices (headquarters), and an operator's own prices.
@@ -251,6 +254,9 @@ export default defineExtension({
         // Q48e-2: the operator's account: balance, plan, bank account and withdrawals.
         { key: 'qb-operator-account', label: 'menu.operatorAccount', path: PATH.operatorAccount,
           icon: PiggyBank, permission: PERMISSION.operatorUse },
+        // The operators' help (the help centre's questions of their audience).
+        { key: 'qb-operator-help', label: 'menu.operatorHelp', path: PATH.operatorHelp, icon: LifeBuoy,
+          permission: PERMISSION.operatorUse },
         // Q47c: the operator's own prices of the audience rules.
         { key: 'qb-operator-audience-prices', label: 'menu.audiencePrices', path: PATH.operatorAudiencePrices,
           icon: Tags, permission: PERMISSION.operatorUse },
