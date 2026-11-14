@@ -58,6 +58,49 @@ class ExposureTemplatesIT extends ExposureFeeItSupport {
     }
 
     @Test
+    void thePendingEstimateOfThePageIsTheSettlementsOwnRoundingAtAnyUnitAndCount() {
+        autoApprove(true);
+        String provider = reviewedSponsor("fm8d-est-provider");
+        String sharedVideoId = approvedVideo(provider);
+        String hq = TestTokens.bearer(tokens, "fm8-finance", QbPermissions.FEE_MANAGE);
+        try {
+            for (String unit : new String[] {"1.3333", "1.5", "2.0001", "99.9999"}) {
+                String sponsor = reviewedSponsor("fm8d-est-" + unit.replace('.', 'p'));
+                grant(sponsor, 100_000, clock.instant().plus(Duration.ofDays(400)));
+                String operatorId = String.valueOf(query("SELECT operator_id FROM qb_sponsor_operator WHERE user_id = ?",
+                    sponsor).getFirst().get("operator_id"));
+                // The price the submission freezes: set before it, each unit its own publication.
+                run(com.jabiz.quizbuks.fee.ExposurePrices.SET, hq,
+                    body("operatorId", operatorId, "unit", unit, "reason", "F-M8d estimate test"));
+                String publicationId = draft(sponsor, "fm8d-est-" + unit, sharedVideoId, 200L, clock.instant());
+                submit(sponsorToken(sponsor), publicationId);
+                int counted = 0;
+                for (int target : new int[] {1, 3, 7, 30}) {
+                    for (; counted < target; counted++) {
+                        execute("INSERT INTO qb_exposure (exposure_id, publication_id, user_id, publisher_id, "
+                            + "provider_id, counted_at, surface, counted_sec, timer, capped_days, created_at, version) "
+                            + "VALUES (?, ?, ?, ?, ?, ?, 'START', 10, 'SCREEN', 0, ?, 1)",
+                            UUID.randomUUID().toString(), publicationId, "fm8d-est-" + UUID.randomUUID(), sponsor,
+                            provider, Timestamp.from(clock.instant()), Timestamp.from(clock.instant()));
+                    }
+                    Map<String, Object> fee = items("qb.sponsor.publication-exposure", sponsorToken(sponsor),
+                        Map.of("params", Map.of("publicationId", publicationId))).getFirst();
+                    // The page's estimate (SQL) and the settlement's own function (Java) say the same.
+                    assertThat(dec(fee.get("pendingEstimate"))).as("%d counted at %s", target, unit)
+                        .isEqualByComparingTo(com.jabiz.quizbuks.fee.ExposureFeeRules.cumulative(target,
+                            new java.math.BigDecimal(unit)));
+                }
+            }
+        } finally {
+            // The price the other tests of the class expect.
+            String operator = String.valueOf(query("SELECT operator_id FROM qb_sponsor_operator WHERE user_id = ?",
+                reviewedSponsor("fm8d-est-reset")).getFirst().get("operator_id"));
+            run(com.jabiz.quizbuks.fee.ExposurePrices.SET, hq, body("operatorId", operator, "unit", "1", "reason",
+                "F-M8d estimate test: back"));
+        }
+    }
+
+    @Test
     void thePagesReadTheirOwnFiguresAndNobodyElses() {
         autoApprove(true);
         String provider = reviewedSponsor("fm8d-provider");

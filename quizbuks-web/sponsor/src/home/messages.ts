@@ -19,7 +19,7 @@ const en = {
         fundsShort: 'Publications short of budget',
         rewardsWaiting: 'Rewards waiting for a top-up',
         invoicesOverdue: 'Overdue invoices',
-        feeInvoicesUncovered: 'Open invoices the platform fee account cannot cover',
+        feeInvoicesUncovered: 'Open invoices the Platform fee account cannot cover',
         creditsExpiring: 'Granted credit about to expire',
         exposureLow: 'Publications running low on exposures',
         onboardingInReview: 'Your Sponsor application is in review',

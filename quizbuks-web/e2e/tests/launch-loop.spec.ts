@@ -10,7 +10,7 @@ import { sharedVideos } from './exposure-videos'
 import { contentAdmin } from './legal'
 import { approvedSponsor, fund } from './wallet'
 import {
-  accessibleInBoth, expect, mailTo, openArea, PASSWORD, prepareQuizbuks, run, runJobNow, setControlledParam, signIn,
+  accessibleInBoth, adminToken, expect, mailTo, openArea, PASSWORD, prepareQuizbuks, run, runJobNow, setControlledParam, signIn,
   signOut,
   takerArea, test, tokenOf, unique,
 } from './support'
@@ -651,57 +651,104 @@ test.describe.serial('the first launch\'s loop', () => {
   })
 
   test('7c. F-M8 the exposure fee: bought when submitted, counted by takers, settled once it ends, the rest given back',
-    async ({ request }) => {
-      // A short run (the minute's check ends it when the exposures are used up, the final job settles after a grace).
+    async ({ page, request }) => {
+      // It runs 90 seconds (it ends by its time: two of the three exposures bought are used, so it is not used up), the
+      // grace of a minute after that, and the first final job after it.
       test.setTimeout(STEP_TIMEOUT_MS + 300_000)
       const { sora, operator, map } = loop
       const restore = await rememberParams(request, [
+        { key: 'qb.exposure.billing.enabled', absent: 'false' },
         { key: 'qb.exposure.min-purchase', absent: '100' },
         { key: 'qb.exposure.final.end-grace-sec', absent: '3600' },
       ])
       try {
+        await setControlledParam(request, 'qb.exposure.billing.enabled', 'true')
         await setControlledParam(request, 'qb.exposure.min-purchase', '2', { type: 'numeric', precision: 9, scale: 0 })
         await setControlledParam(request, 'qb.exposure.final.end-grace-sec', '60',
           { type: 'numeric', precision: 5, scale: 0 })
-        // Her operator's lead prices an exposure at 2 yen (within the headquarters' range of 1 to 100).
-        await run(request, operator.operatorToken, 'QB_OPERATOR_EXPOSURE_PRICE_SET', { unit: '2.0000',
+        // Her operator's lead prices an exposure at 20 yen (within the headquarters' range of 1 to 100): three bought set
+        // aside 60 and tax 6, two used come to 40 and tax 4, so 22 comes back (a tax that is not 0, and not a whole
+        // purchase used, so that the rounding and the giving back are both seen).
+        await run(request, operator.operatorToken, 'QB_OPERATOR_EXPOSURE_PRICE_SET', { unit: '20.0000',
           reason: 'Closed loop' })
         await fund(request, sora.token, 1000)
+        // The takers first, so that a slow runner does not find the publication ended before they watched it.
+        const watchers = [await taker(request, 'Exa'), await taker(request, 'Exb')]
         const videos = await sharedVideos(request, unique('loop'))
-        // Three exposures bought (3 x 2 = 6 yen and its tax, set aside); two takers watch it, so the third is given back.
+        const account = async () => {
+          const [w] = await query(request, sora.token, 'qb.sponsor.wallet', {})
+          return { spendable: Number(w.cashBalance) + Number(w.feeCreditBalance), held: Number(w.cashHeld) }
+        }
+        const before = await account()
         const made = await boundPublicationOf(request, sora.token, map!.treeId, map!.basics, unique('Video sprint '),
           { reward: 0, endInMs: 90_000, sharedVideoId: videos.vertical, exposureRequested: 3 })
         const [held] = (await query(request, sora.token, 'qb.sponsor.publication-prepayments',
           { publicationId: made.publicationId })).filter((row) => row.purpose === 'EXPOSURE')
-        expect(held).toEqual(expect.objectContaining({ status: 'OPEN' }))
+        expect(held).toEqual(expect.objectContaining({ status: 'OPEN', amount: 66 }))
         const [bought] = await query(request, sora.token, 'qb.sponsor.publication-exposure',
           { publicationId: made.publicationId })
-        expect(Number(bought.unit)).toBe(2)
+        expect(Number(bought.unit)).toBe(20)
         expect(Number(bought.purchased)).toBe(3)
 
-        for (const name of ['Exa', 'Exb']) {
-          const watcher = await taker(request, name)
+        for (const watcher of watchers) {
           const reported = await run(request, watcher.token, 'QB_EXPOSURE_REPORT', { reports: [{
             publicationId: made.publicationId, kind: 'EXPOSURE', surface: 'VERTICAL', seconds: 95,
             timer: 'SCREEN' }] })
           expect(reported.counted).toBe(1)
         }
 
-        // Ended by the minute's tick, then the final job charges the two exposures and gives back the third.
+        // The Sponsor's page: what is used and left, the low notice (1 of 3 is left: the share is raised to its most,
+        // a half, for it), and buying more, which the account cannot cover: the server's quote says how much is short
+        // and the purchase is refused with its detail. Both appearances.
+        await run(request, await adminToken(request), 'PARAM_SET', { key: 'qb.exposure.low-ratio', value: '0.5' })
+        await signIn(page, '/sponsor/', sora.email)
+        await page.goto(`/sponsor/publications/${made.publicationId}/fees`)
+        await expect(page.getByTestId('exposure-fee-price')).toContainText('20')
+        await expect(page.getByTestId('exposure-fee-left')).toContainText('1 of 3 left')
+        await expect(page.getByTestId('exposure-fee-bar')).toHaveAttribute('aria-valuenow', '2')
+        await expect(page.getByTestId('exposure-low')).toBeVisible()
+        await accessibleInBoth(page, 'sponsor exposure fee: progress and the low notice')
+        await page.getByTestId('exposure-buy-more').click()
+        await page.getByTestId('exposure-buy-additional').fill('100')
+        await expect(page.getByTestId('exposure-buy-estimate')).toBeVisible()
+        await expect(page.getByTestId('exposure-buy-short')).toBeVisible()
+        await accessibleInBoth(page, 'sponsor exposure fee: buying more, the account short')
+        await page.getByTestId('exposure-buy-confirm').click()
+        await expect(page.getByTestId('exposure-buy-problem')).toBeVisible()
+        await expect(page.getByTestId('exposure-buy-dialog')).toBeVisible()
+        await page.keyboard.press('Escape')
+
+        // Ended by its time, then the final job charges the two exposures and gives back the rest. The job is asked again
+        // (D77) so that a run whose time was before the end does not leave it to the next day's.
         await expect.poll(async () => {
           const [row] = await query(request, sora.token, 'qb.sponsor.publication-exposure',
             { publicationId: made.publicationId })
           if (row.finalSettled === true) return true
-          await runJobNow(request, 'qb.exposure-final').catch(() => undefined)
+          await runJobNow(request, 'qb.exposure-final')
           return false
         }, { message: 'the final settlement', timeout: 270_000, intervals: [10_000] }).toBe(true)
+        const ended = await publicationOf(request, sora.token, made.publicationId)
+        expect(ended).toEqual(expect.objectContaining({ status: 'ENDED', endReason: 'EXPIRED' }))
         const settlements = await query(request, sora.token, 'qb.sponsor.publication-exposure-settlements',
           { publicationId: made.publicationId })
-        expect(settlements).toEqual([expect.objectContaining({ final: true, toCount: 2, amount: 4 })])
+        expect(settlements).toEqual([expect.objectContaining({ final: true, toCount: 2, amount: 40, tax: 4, total: 44 })])
+        // The operator the fee belongs to is the Sponsor's (the video is another operator's provider's).
+        const [booked] = await query(request, await adminToken(request), 'qb.admin.exposure-settlements',
+          { publicationId: made.publicationId })
+        expect(booked).toEqual(expect.objectContaining({ operatorId: operator.operatorId, total: 44 }))
         const [after] = (await query(request, sora.token, 'qb.sponsor.publication-prepayments',
           { publicationId: made.publicationId })).filter((row) => row.purpose === 'EXPOSURE')
         expect(after).toEqual(expect.objectContaining({ status: 'RELEASED', remaining: 0 }))
+        // The account: what was held is free again, and only the 44 was spent (the 22 left of the 66 came back).
+        const now = await account()
+        expect(now.held).toBe(before.held)
+        expect(now.spendable).toBe(before.spendable - 44)
+        // After it ended the page tells what was settled, once, in both appearances.
+        await page.goto(`/sponsor/publications/${made.publicationId}/fees`)
+        await expect(page.getByTestId('exposure-settlement')).toHaveCount(1)
+        await accessibleInBoth(page, 'sponsor exposure fee: settled')
       } finally {
+        await run(request, await adminToken(request), 'PARAM_SET', { key: 'qb.exposure.low-ratio', value: '0.1' })
         await restore()
       }
     })

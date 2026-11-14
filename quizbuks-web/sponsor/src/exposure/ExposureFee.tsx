@@ -11,7 +11,7 @@ import {
   notify,
 } from '@jabiz/ui'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { useId, useState } from 'react'
+import { useEffect, useId, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { SPONSOR } from '../messages'
 import { formatKudos } from '../qb/kudos'
@@ -22,6 +22,7 @@ import {
   feeQuery,
   isRunningLow,
   readExposureFee,
+  quoteTopUp,
   readExposureSettlements,
   RUNNING_STATUSES,
   topUpExposure,
@@ -116,8 +117,19 @@ function BuyMoreDialog({ publicationId, fee, onClose }: {
       ])
       onClose()
     },
+    // A refusal (the exposures bought changed, the account is short) may mean the page is out of date: read it again.
+    onError: () => queryClient.invalidateQueries({ queryKey: feeQuery(publicationId) }),
   })
-  const estimate = additional !== null && fee.unit != null ? Math.ceil(additional * fee.unit) : null
+  // The price is the server's (what the top-up would set aside, with tax, and whether the account covers it): asked
+  // a moment after the typing stops, so that the page works out none of it itself.
+  const [asked, setAsked] = useState<number | null>(null)
+  useEffect(() => {
+    const timer = setTimeout(() => setAsked(additional !== null && additional > 0 ? additional : null), 400)
+    return () => clearTimeout(timer)
+  }, [additional])
+  const quote = useQuery({ queryKey: [...feeQuery(publicationId), 'quote', fee.purchased, asked],
+    queryFn: () => quoteTopUp(publicationId, fee.purchased ?? 0, asked ?? 0), enabled: asked !== null && asked === additional,
+    retry: false })
   return (
     <Dialog open onOpenChange={(open) => {
       if (!open && !buy.isPending) onClose()
@@ -136,9 +148,20 @@ function BuyMoreDialog({ publicationId, fee, onClose }: {
             <Input id={`${id}-additional`} inputMode="numeric" autoComplete="off" value={text}
               disabled={buy.isPending} data-testid="exposure-buy-additional"
               onChange={(event) => setText(event.target.value)} />
-            {estimate !== null && estimate > 0 && (
+            {quote.data && asked === additional && (
               <p className="text-muted-foreground text-sm" data-testid="exposure-buy-estimate">
-                {t('exposure.fee.estimate', { amount: formatKudos(estimate) })}
+                {t('exposure.fee.quote', { amount: formatKudos(quote.data.deposit) })}
+                {quote.data.shortfall > 0 && (
+                  <span className="text-destructive block" data-testid="exposure-buy-short">
+                    {t('exposure.fee.short', { available: formatKudos(quote.data.available),
+                      shortfall: formatKudos(quote.data.shortfall) })}
+                  </span>
+                )}
+              </p>
+            )}
+            {quote.isError && asked === additional && (
+              <p className="text-destructive text-sm" role="alert" data-testid="exposure-buy-quote-problem">
+                {problemText(quote.error)}
               </p>
             )}
           </div>

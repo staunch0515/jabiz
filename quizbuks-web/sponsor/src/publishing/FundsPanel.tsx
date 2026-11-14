@@ -56,6 +56,8 @@ export function FundsPanel({ publicationId, revision }: { publicationId: string;
                     <span className="text-muted-foreground" data-testid="publication-funds-unit">
                       {' '}{t('publishing.funds.exposureUnit', { n: item.purchased.toLocaleString(i18n.language),
                         unit: formatUnit(item.unit) })}
+                      {/* The least is the platform's (qb.exposure.min-purchase): said here as the server checks it. */}
+                      {item.least != null && ` ${t('publishing.funds.exposureLeast', { n: item.least.toLocaleString(i18n.language) })}`}
                     </span>
                   )}
                   {item.unit != null && item.purpose !== 'EXPOSURE' && (

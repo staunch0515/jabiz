@@ -8,6 +8,8 @@ export const FEE_TEMPLATE = {
 
 /** The process that buys more exposures for a running publication (`PublicationExposureTopUp`). */
 export const TOP_UP_PROCESS = 'QB_EXPOSURE_TOP_UP'
+/** The price of a top-up, read only: the page works out no figure of its own (F-M8d review M2). */
+export const TOP_UP_QUOTE_PROCESS = 'QB_EXPOSURE_TOP_UP_QUOTE'
 
 /** The statuses in which a publication runs (what it can still buy exposures in). */
 export const RUNNING_STATUSES: readonly string[] = ['SCHEDULED', 'LIVE', 'PAUSED', 'FUNDS_SHORT']
@@ -79,10 +81,14 @@ export async function readExposureSettlements(publicationId: string): Promise<Ex
   }))
 }
 
-/** Whether what is left of the purchase is at or below the share at which the Sponsor is told (never when it is 0). */
+/**
+ * Whether what is left of the purchase is at or below the share at which the Sponsor is told: never when the reminder
+ * is off, and not when none is left (the publication ends: "buy more to keep it running" is then too late to say).
+ */
 export function isRunningLow(fee: ExposureFee): boolean {
   if (fee.purchased == null || fee.purchased <= 0 || fee.lowRatio <= 0) return false
   const left = Math.max(0, fee.purchased - fee.counted)
+  if (left === 0) return false
   return left <= fee.purchased * Math.min(fee.lowRatio, 0.5)
 }
 
@@ -96,3 +102,18 @@ export interface TopUpOutput {
 /** Buys `additional` more; `expectedPurchased` is what the page saw (the server refuses when it has changed since). */
 export const topUpExposure = (publicationId: string, expectedPurchased: number, additional: number) =>
   runProcess<TopUpOutput>(TOP_UP_PROCESS, { publicationId, expectedPurchased, additional })
+
+export interface TopUpQuote {
+  purchased: number
+  /** What the top-up sets aside more, with its tax (the server's number: the difference of two totals' deposits). */
+  deposit: number
+  available: number
+  shortfall: number
+}
+
+/** What buying `additional` more would set aside, and whether the account covers it. */
+export async function quoteTopUp(publicationId: string, expectedPurchased: number, additional: number): Promise<TopUpQuote> {
+  const out = await runProcess<Record<string, unknown>>(TOP_UP_QUOTE_PROCESS, { publicationId, expectedPurchased, additional })
+  return { purchased: Number(out.purchased ?? 0), deposit: Number(out.deposit ?? 0), available: Number(out.available ?? 0),
+    shortfall: Number(out.shortfall ?? 0) }
+}

@@ -8,9 +8,9 @@ import { ExposureSection } from './ExposureCounts'
 import { isRunningLow } from './fee'
 
 interface Served { fee?: Record<string, unknown>[]; settlements?: Record<string, unknown>[]; status?: string;
-  topUp?: { status: number; body: unknown } }
+  topUp?: { status: number; body: unknown }; quote?: Record<string, unknown> }
 
-function serve({ fee = [], settlements = [], status = 'LIVE', topUp }: Served) {
+function serve({ fee = [], settlements = [], status = 'LIVE', topUp, quote }: Served) {
   const posted: { path: string; body: unknown }[] = []
   vi.spyOn(globalThis, 'fetch').mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
     const request = input instanceof Request ? input
@@ -28,6 +28,10 @@ function serve({ fee = [], settlements = [], status = 'LIVE', topUp }: Served) {
         return json(200, { items: fee, offset: 0, limit: 1 })
       case '/api/queries/qb.sponsor.publication-exposure-settlements':
         return json(200, { items: settlements, offset: 0, limit: 120 })
+      case '/api/processes/QB_EXPOSURE_TOP_UP_QUOTE/latest':
+        // The server's figure: the difference of two totals' deposits (here with tax), not additional x unit.
+        return json(200, { output: quote ?? { publicationId: 'pub-1', purchased: 150, deposit: 58, available: 1000,
+          shortfall: 0 } })
       case '/api/processes/QB_EXPOSURE_TOP_UP/latest':
         return json(topUp?.status ?? 200, topUp?.body ?? { output: { publicationId: 'pub-1', purchased: 150,
           frozen: 55, revision: 9 } })
@@ -74,11 +78,26 @@ describe('the exposure fee on a publication (F-M8)', () => {
     expect(await screen.findByTestId('exposure-low')).toHaveTextContent('Only 5 of the 100 exposures')
     await userEvent.click(screen.getByTestId('exposure-buy-more'))
     await userEvent.type(await screen.findByTestId('exposure-buy-additional'), '50')
-    expect(screen.getByTestId('exposure-buy-estimate')).toHaveTextContent('50')
+    // The figure is the server's quote (58 with tax), not 50 times the price; nothing is worked out here.
+    expect(await screen.findByTestId('exposure-buy-estimate')).toHaveTextContent('58')
+    expect(served.calls('/api/processes/QB_EXPOSURE_TOP_UP_QUOTE/latest').at(-1)).toMatchObject({
+      publicationId: 'pub-1', expectedPurchased: 100, additional: 50 })
+    expect(screen.queryByTestId('exposure-buy-short')).toBeNull()
     await userEvent.click(screen.getByTestId('exposure-buy-confirm'))
     await vi.waitFor(() => expect(served.calls('/api/processes/QB_EXPOSURE_TOP_UP/latest')).toHaveLength(1))
     expect(served.calls('/api/processes/QB_EXPOSURE_TOP_UP/latest')[0]).toMatchObject({
       publicationId: 'pub-1', expectedPurchased: 100, additional: 50 })
+  })
+
+  it('says how much the account is short, from the quote, before anything is bought', async () => {
+    const served = serve({ fee: [FEE], quote: { publicationId: 'pub-1', purchased: 5100, deposit: 5500, available: 300,
+      shortfall: 5200 } })
+    renderSection()
+    await userEvent.click(await screen.findByTestId('exposure-buy-more'))
+    await userEvent.type(await screen.findByTestId('exposure-buy-additional'), '5000')
+    expect(await screen.findByTestId('exposure-buy-short')).toHaveTextContent('300')
+    expect(screen.getByTestId('exposure-buy-short')).toHaveTextContent('5,200')
+    expect(served.calls('/api/processes/QB_EXPOSURE_TOP_UP/latest')).toHaveLength(0)
   })
 
   it('says why a purchase is refused and keeps the dialog open', async () => {
@@ -111,6 +130,8 @@ describe('the exposure fee on a publication (F-M8)', () => {
       settlements: 0, finalSettled: false, lowRatio: 0.1 }
     expect(isRunningLow(fee)).toBe(true)
     expect(isRunningLow({ ...fee, counted: 89 })).toBe(false)
+    // None left: the publication ends, so no 'buy more to keep it running'.
+    expect(isRunningLow({ ...fee, counted: 100 })).toBe(false)
     expect(isRunningLow({ ...fee, lowRatio: 0 })).toBe(false)
     expect(isRunningLow({ ...fee, purchased: null })).toBe(false)
     expect(isRunningLow({ ...fee, lowRatio: 0.9, counted: 49 })).toBe(false)
