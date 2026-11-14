@@ -174,6 +174,9 @@ class OperatorSettlementMoreIT extends CreditNoteItSupport {
         // The 500 given back first pays the 500 of cost carried: nothing is payable and nothing is carried on.
         assertThat(n(april, "carried_out")).isEqualByComparingTo("0");
         assertThat(n(april, "payable")).isEqualByComparingTo("0");
+        // L3: the 500 that paid the cost carried is kept on the settlement (it is the 4110 line below); March had none.
+        assertThat(n(april, "cost_offset")).isEqualByComparingTo("500");
+        assertThat(n(march, "cost_offset")).isEqualByComparingTo("0");
         // Over both months the operator was taken 500 + 0 and given back 500: the fee never happened.
         assertThat(n(march, "gift_recovered").add(n(april, "gift_recovered"))).isEqualByComparingTo("0");
         // 5140 returned 500; none of it is paid out (it paid the cost): recovered as 4110.

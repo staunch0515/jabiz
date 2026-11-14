@@ -137,6 +137,8 @@ export const TEMPLATE = {
   wallets: 'qb.admin.wallets',
   reconRuns: 'qb.admin.recon-runs',
   reconItems: 'qb.admin.recon-items',
+  /** F-M14: for how many days in a row an item for attention has been found (`qb.reconcile`). */
+  reconAttentionDays: 'qb.admin.recon-attention-days',
   monthly: 'qb.admin.monthly',
   balances: 'qb.admin.balances',
   /** Q87: the platform's fees charged to sponsors, their invoices, and the requests another administrator approves. */
@@ -385,6 +387,22 @@ export function referenceKind(check: string): 'topUp' | 'transfer' | null {
   return null
 }
 
+/**
+ * F-M14: how much a reconciliation check finding something matters, mirroring `ReconChecks.ATTENTION` and
+ * `ReconChecks.NOTES` (a Vitest reads the Java and fails on a difference); every other check is a difference.
+ */
+export const ATTENTION_CHECKS: ReadonlySet<string> = new Set(['DISTRIBUTION_PRICE_RANGE', 'AUDIENCE_REFUND_NO_PERIOD',
+  'CREDIT_UNUSED_WITH_DUE', 'HELP_USAGE_TOTAL', 'EXPOSURE_PRICE_RANGE'])
+export const NOTE_CHECKS: ReadonlySet<string> = new Set(['TAKER_WALLET_LAG', 'DISTRIBUTION_AT_FLOOR',
+  'EXPOSURE_UNPURCHASED'])
+
+export type ReconLevel = 'DIFFERENCE' | 'ATTENTION' | 'NOTE'
+
+/** The level of a check (backend `ReconChecks.level`). */
+export function reconLevel(check: string): ReconLevel {
+  return NOTE_CHECKS.has(check) ? 'NOTE' : ATTENTION_CHECKS.has(check) ? 'ATTENTION' : 'DIFFERENCE'
+}
+
 /** The transfer state a large transfer waits for its review in. */
 export const TRANSFER_REVIEW = 'REVIEW'
 
@@ -434,6 +452,8 @@ export const DICTIONARY = {
   topUpStatus: 'urn:jabiz:dict:quizbuks:topup-status',
   payoutAccountStatus: 'urn:jabiz:dict:quizbuks:payout-account-status',
   reconCheck: 'urn:jabiz:dict:quizbuks:recon-check',
+  /** F-M14: a check's level (difference, needs attention, note), keyed by the check. */
+  reconLevel: 'urn:jabiz:dict:quizbuks:recon-level',
   legalKind: 'urn:jabiz:dict:quizbuks:legal-kind',
   broadcastStatus: 'urn:jabiz:dict:quizbuks:broadcast-status',
   broadcastType: 'urn:jabiz:dict:quizbuks:broadcast-type',

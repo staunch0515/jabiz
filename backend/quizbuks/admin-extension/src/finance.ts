@@ -1,6 +1,6 @@
 import { ApiError, notify } from '@jabiz/admin'
 import type { ReconItem, TopUpFilter, TransferFilter } from './finance-api'
-import { isUserId } from './ids'
+import { isUserId, reconLevel } from './ids'
 
 /*
  * The finance pages' helpers that are not components (docs/quizbuks/plans/Q9c-admin-finance.md): the filters their
@@ -71,6 +71,25 @@ export function byCheck(items: ReconItem[]): [string, ReconItem[]][] {
   const groups = new Map<string, ReconItem[]>()
   for (const item of items) groups.set(item.checkCode, [...(groups.get(item.checkCode) ?? []), item])
   return [...groups.entries()]
+}
+
+/**
+ * F-M14: how many differences, items for attention and notes a run found, from its summary (JSON of the number found
+ * by each check) and the levels of the checks. An unreadable summary counts as nothing found.
+ */
+export function levelCounts(summary: string | null): { differences: number; attention: number; notes: number } {
+  const counts = { differences: 0, attention: 0, notes: 0 }
+  let found: unknown
+  try { found = summary ? JSON.parse(summary) : {} } catch { return counts }
+  if (typeof found !== 'object' || found === null) return counts
+  for (const [check, n] of Object.entries(found)) {
+    if (typeof n !== 'number' || !Number.isFinite(n)) continue
+    const level = reconLevel(check)
+    if (level === 'ATTENTION') counts.attention += n
+    else if (level === 'NOTE') counts.notes += n
+    else counts.differences += n
+  }
+  return counts
 }
 
 /** Tells why an action failed, in the server's words when it said why. */

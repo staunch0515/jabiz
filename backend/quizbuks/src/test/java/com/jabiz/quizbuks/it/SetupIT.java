@@ -585,6 +585,8 @@ class SetupIT extends QbItSupport {
         expected.put(QbParams.operatorGiftTreatment("MANUAL"), "PLATFORM");
         expected.put(QbParams.operatorGiftTreatment("LIGHT"), "PLATFORM");
         expected.put(QbParams.OPERATOR_GIFT_RECOVER_OUTSIDE_BASE, "false");
+        // F-M12 b: how long a settlement waits for the steps before it (controlled).
+        expected.put(QbParams.OPERATOR_SETTLEMENT_READINESS_MAX_DAYS, "5");
         // F-M3: how long the company verification's link is good (not controlled).
         expected.put(QbParams.VERIFICATION_LINK_HOURS, "48");
         // F-M5: when an ended publication's open prepayment is a difference (controlled since F-M14).

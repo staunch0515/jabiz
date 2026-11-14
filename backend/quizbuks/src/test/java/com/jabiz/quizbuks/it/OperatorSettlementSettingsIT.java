@@ -29,7 +29,8 @@ class OperatorSettlementSettingsIT extends CreditNoteItSupport {
         List<Object> ids = (List<Object>) setupOutput.get("proposals");
         List<String> keys = (List<String>) setupOutput.get("paramsProposed");
         for (int i = 0; i < ids.size(); i++) {
-            if (i < keys.size() && QbParams.OPERATOR_SHARE.contains(keys.get(i))) {
+            if (i < keys.size() && (QbParams.OPERATOR_SHARE.contains(keys.get(i))
+                || QbParams.OPERATOR_SETTLEMENT.contains(keys.get(i)))) {
                 continue;
             }
             run("CONTROL_CHANGE_PUBLISH", financeAdmin(), body("changeId", ids.get(i)));
@@ -73,7 +74,8 @@ class OperatorSettlementSettingsIT extends CreditNoteItSupport {
         Instant at = Instant.parse("2027-04-02T01:00:00Z");
         clock.set(at);
         int step = 0;
-        for (String key : QbParams.OPERATOR_SHARE) {
+        for (String key : java.util.stream.Stream.concat(QbParams.OPERATOR_SHARE.stream(),
+            QbParams.OPERATOR_SETTLEMENT.stream()).toList()) {
             if (key.equals(QbParams.operatorGiftTreatment("LIGHT"))) {
                 continue;
             }

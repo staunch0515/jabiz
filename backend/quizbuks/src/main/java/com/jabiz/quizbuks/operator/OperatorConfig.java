@@ -43,10 +43,13 @@ public class OperatorConfig {
 
     private final String poolRef;
     private final ZoneId zone;
+    private final int maxLines;
 
     OperatorConfig(@Value("${jabiz.storage.default-pool-ref:default}") String poolRef,
-        @Value("${jabiz.fiscal-year-zone:UTC}") String zone) {
+        @Value("${jabiz.fiscal-year-zone:UTC}") String zone,
+        @Value("${quizbuks.operator-settlement.max-lines:" + OperatorSettlements.MAX_LINES + "}") int maxLines) {
         this.poolRef = poolRef;
+        this.maxLines = maxLines;
         ZoneId zoneId;
         try {
             zoneId = ZoneId.of(zone);
@@ -301,8 +304,8 @@ public class OperatorConfig {
             .targetEntityType(QbSettlementLines.LINE)
             .asDefault()
             .permissions(QbPermissions.ADMIN_FINANCE_READ, QbPermissions.SPONSOR_VIEW_WRITE)
-            // One settlement writes all its lines in one transaction: up to MAX_LINES, not the default batch of 100.
-            .policy(p -> p.processOnlyWrites().maxWriteBatchSize(OperatorSettlements.MAX_LINES))
+            // One settlement writes its lines in one commit: the cap's, which they never exceed (the platform's default is 100).
+            .policy(p -> p.processOnlyWrites().maxWriteBatchSize(Math.max(maxLines, 100)))
             .storage(s -> s.driver("r2dbc-postgresql").connectionPoolRef(poolRef)));
     }
 
@@ -340,8 +343,9 @@ public class OperatorConfig {
 
     @Bean
     ProcessDefinition<OperatorSettlements.RunInput, OperatorSettlements.SettlementOutput, ProcessContext>
-        qbOperatorSettlementRun() {
-        return OperatorSettlements.run(zone);
+        qbOperatorSettlementRun(@Value("${quizbuks.operator-settlement.max-lines:"
+            + OperatorSettlements.MAX_LINES + "}") int maxLines) {
+        return OperatorSettlements.run(zone, maxLines);
     }
 
     @Bean
@@ -379,21 +383,24 @@ public class OperatorConfig {
     }
 
     /**
-     * On the 1st of every month at 16:13 UTC (01:13 on the 2nd in Tokyo): each operator's previous month (Japan's) is
-     * settled, one operator a transaction; a missed run is made up by the next, which settles only its own month.
+     * Every day at 02:13 in the fiscal year's zone except the 1st ({@code quizbuks.operator-settlement.cron},
+     * {@code QUIZBUKS_OPERATOR_SETTLEMENT_CRON}; F-M12 b, plan §3.1): each operator's earliest month that has ended
+     * without a settlement, one operator a transaction. A month that is stuck (its previous step not done, a failure) stays
+     * the one taken until it is settled, then the next day takes the one after it; the data decides what is taken, not
+     * the time. An hour later than the monthly run it replaces (01:13 Tokyo) on purpose: the distribution fees (00:37) and
+     * the invoices (01:17) of the day come first.
      */
     @Bean
     JobDefinition<OperatorSettlements.RunInput> qbOperatorSettlementJob(
         ProcessDefinition<OperatorSettlements.RunInput, OperatorSettlements.SettlementOutput, ProcessContext>
-            qbOperatorSettlementRun) {
-        return JobDefinition.forEach(OperatorSettlements.JOB, "0 13 16 1 * *", ZoneOffset.UTC,
-                JobItems.template(OperatorSettlements.DUE_TEMPLATE, scheduledTime -> {
-                    String month = OperatorSettlements.previousMonth(scheduledTime, zone);
-                    return Map.of("month", month, "periodEnd", OperatorSettlements.monthEnd(month, zone));
-                }, "operatorId"),
+            qbOperatorSettlementRun,
+        @Value("${quizbuks.operator-settlement.cron:0 13 2 2-31 * *}") String cron) {
+        return JobDefinition.forEach(OperatorSettlements.JOB, cron, zone,
+                JobItems.template(OperatorSettlements.DUE_TEMPLATE, scheduledTime -> Map.of("current",
+                    OperatorSettlements.currentMonth(scheduledTime, zone), "zone", zone.getId()), "operatorId"),
                 qbOperatorSettlementRun,
                 (scheduledTime, row) -> new OperatorSettlements.RunInput(String.valueOf(row.get("operatorId")),
-                    OperatorSettlements.previousMonth(scheduledTime, zone)))
+                    String.valueOf(row.get("month"))))
             .maxItems(1_000);
     }
 

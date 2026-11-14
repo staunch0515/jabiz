@@ -543,6 +543,29 @@ for (const appearance of ['light', 'dark'] as const) {
     await page.goto('/admin/qb/finance/reconciliation')
     await expect(page.getByTestId('recon-runs')).toBeVisible()
     await expectAccessible(page, at('admin finance reconciliation'))
+    // #688 review M3 (F-M14): a run with an item of each level, its help and the days of the one for attention. The
+    // rows are this test's own (served in place of the run's): the shared database's runs hold whatever the other tests
+    // left, and a difference there would be a broken ledger.
+    const rows = { offset: 0, limit: 100, total: 3, items: [
+      { itemId: 'e2e-d', checkCode: 'LEDGER_ZERO', partyId: null, reference: null, expected: 0, actual: 1, difference: 1 },
+      { itemId: 'e2e-a', checkCode: 'CREDIT_UNUSED_WITH_DUE', partyId: null, reference: null, expected: 0, actual: 5,
+        difference: 5 },
+      { itemId: 'e2e-n', checkCode: 'TAKER_WALLET_LAG', partyId: null, reference: null, expected: 1, actual: 2,
+        difference: 1 }] }
+    const days = { offset: 0, limit: 100, items: [{ checkCode: 'CREDIT_UNUSED_WITH_DUE', objectKey: '-', days: 2 }] }
+    await page.route('**/api/queries/qb.admin.recon-items', (route) => route.fulfill({ contentType: 'application/json',
+      body: JSON.stringify(rows) }))
+    await page.route('**/api/queries/qb.admin.recon-attention-days', (route) => route.fulfill({
+      contentType: 'application/json', body: JSON.stringify(days) }))
+    await page.goto('/admin/qb/finance/reconciliation?run=00000000-0000-4000-8000-000000000688')
+    await expect(page.getByTestId('recon-group')).toHaveCount(3)
+    await expect(page.locator('[data-testid="recon-level"][data-level="DIFFERENCE"]')).toBeVisible()
+    await expect(page.locator('[data-testid="recon-level"][data-level="ATTENTION"]')).toBeVisible()
+    await expect(page.locator('[data-testid="recon-level"][data-level="NOTE"]')).toBeVisible()
+    await expect(page.getByTestId('recon-days')).toBeVisible()
+    await expectAccessible(page, at('admin finance reconciliation run by level'))
+    await page.unroute('**/api/queries/qb.admin.recon-items')
+    await page.unroute('**/api/queries/qb.admin.recon-attention-days')
     await page.goto(`/admin/qb/finance/reports?month=${month}`)
     await expect(page.locator('[data-testid="monthly-row"][data-category="REWARD"]')).toBeVisible()
     await expect(page.getByTestId('balance-row').first()).toBeVisible()
