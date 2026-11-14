@@ -274,6 +274,27 @@ describe('the cost of drafting from a website (F-M9 b1)', () => {
     await expectAccessible()
   })
 
+  it('asks only when the text looks like a web address', async () => {
+    const calls = server({ quote: ENOUGH })
+    renderMenu()
+    const dialog = await openDialog()
+    const address = await within(dialog).findByTestId('site-address')
+    await userEvent.type(address, 'abc')
+    await new Promise((resolve) => setTimeout(resolve, 700))
+    expect(calls.of('/api/processes/QB_SITE_PROFILE_QUOTE/latest')).toHaveLength(0)
+    expect(within(dialog).queryByTestId('ai-quote')).toBeNull()
+    for (const bad of ['http://127.0.0.1/', 'https://user@www.aini.example/', 'https://www.aini.example:8443/', 'ftp://www.aini.example/']) {
+      await userEvent.clear(address)
+      await userEvent.type(address, bad)
+      await new Promise((resolve) => setTimeout(resolve, 700))
+      expect(calls.of('/api/processes/QB_SITE_PROFILE_QUOTE/latest'), bad).toHaveLength(0)
+    }
+    await userEvent.clear(address)
+    await userEvent.type(address, 'https://www.example.com/')
+    expect(await within(dialog).findByTestId('ai-quote')).toBeInTheDocument()
+    expect(calls.of('/api/processes/QB_SITE_PROFILE_QUOTE/latest').length).toBeGreaterThan(0)
+  })
+
   it('says what is short with a way to buy, and does not let the request be sent', async () => {
     const calls = server({ quote: SHORT })
     renderMenu()

@@ -4,18 +4,21 @@ import { AI_CREDIT_STANDING_QUERY, readAiCreditStanding } from '../aicredit/api'
 import { useUnreadConversations } from '../conversations/ConversationsPages'
 import { useChecklist } from '../profile/useChecklist'
 import { useMySponsor } from '../profile/api'
-import { readTodo, TODO_QUERY, type TodoCounts } from './api'
+import { readTodo, TODO_QUERY, type TodoCounts, type TodoReading } from './api'
 import { todoItems, type TodoItem } from './todo'
 
 /** How often the counts are asked again while the page is in front (as the menu's badge of the conversations). */
 const TODO_INTERVAL = 5 * 60_000
 
+/** The credit's standing is read when the home is entered, and not again within this time. */
+const STANDING_STALE_MS = 10 * 60_000
+
 /**
- * The counts of `qb.sponsor.todo`, read on entering, every five minutes and when the page comes back to the front, and
- * not at all while it is hidden (F-F3b: the same pace as the conversations' badge). A failure shows none. The menu's
- * badge and the home share the one query.
+ * The server's reading of `qb.sponsor.todo`, read on entering, every five minutes and when the page comes back to the
+ * front, and not at all while it is hidden (F-F3b: the same pace as the conversations' badge). A failure shows none.
+ * The menu's badge and the home share the one query.
  */
-export function useTodoCounts(enabled = true): TodoCounts | undefined {
+function useTodoReading(enabled: boolean): TodoReading | undefined {
   const todo = useQuery({ queryKey: TODO_QUERY, queryFn: () => readTodo(), enabled, refetchInterval: TODO_INTERVAL,
     refetchIntervalInBackground: false, refetchOnWindowFocus: false, staleTime: 30_000, retry: false })
   const { refetch } = todo
@@ -30,16 +33,19 @@ export function useTodoCounts(enabled = true): TodoCounts | undefined {
   return todo.data
 }
 
+export function useTodoCounts(enabled = true): TodoCounts | undefined {
+  return useTodoReading(enabled)?.counts
+}
+
 /**
- * Whether the AI credit is running low (F-M9 b1): the credit's standing, read as the counts are (on entering, every five
- * minutes, when the page comes back) and only for an approved sponsor. A failure shows nothing; the credit's page shares
- * the query.
+ * Whether the AI credit is running low (F-M9 b1): the credit's standing, read once on entering the home and only when
+ * the server's counts say it is worth it (`aiCreditCheck`: the AI fee is on and a low amount is set), for an approved
+ * sponsor. It is not polled and not read again on focus. A failure shows nothing; the credit's page shares the query.
  */
 function useAiCreditStanding(enabled: boolean) {
-  const standing = useQuery({ queryKey: AI_CREDIT_STANDING_QUERY, queryFn: readAiCreditStanding, enabled,
-    refetchInterval: TODO_INTERVAL, refetchIntervalInBackground: false, refetchOnWindowFocus: false, staleTime: 30_000,
+  return useQuery({ queryKey: AI_CREDIT_STANDING_QUERY, queryFn: readAiCreditStanding, enabled,
+    refetchInterval: false, refetchOnWindowFocus: false, refetchOnReconnect: false, staleTime: STANDING_STALE_MS,
     retry: false })
-  return standing
 }
 
 /**
@@ -50,9 +56,11 @@ function useAiCreditStanding(enabled: boolean) {
 export function useTodoItems(): { items: TodoItem[]; ready: boolean } {
   const sponsor = useMySponsor()
   const approved = sponsor.data?.reviewStatus === 'APPROVED'
-  const counts = useTodoCounts(approved)
+  const reading = useTodoReading(approved)
+  const counts = reading?.counts
   const unread = useUnreadConversations(approved)
-  const credit = useAiCreditStanding(approved)
+  const check = approved && reading?.aiCreditCheck === true
+  const credit = useAiCreditStanding(check)
   const checklist = useChecklist()
   const missing = checklist.items.filter((item) => !item.optional && !item.done).length
   const items = todoItems({
@@ -62,5 +70,5 @@ export function useTodoItems(): { items: TodoItem[]; ready: boolean } {
     onboardingInReview: sponsor.data?.reviewStatus === 'PENDING',
     profileMissing: checklist.ready ? missing : 0,
   })
-  return { items, ready: sponsor.isSuccess && checklist.ready && (!approved || (counts !== undefined && !credit.isPending)) }
+  return { items, ready: sponsor.isSuccess && checklist.ready && (!approved || (counts !== undefined && !(check && credit.isPending))) }
 }

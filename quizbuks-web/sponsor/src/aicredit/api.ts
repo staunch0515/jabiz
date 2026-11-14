@@ -4,7 +4,7 @@ import { AI_CREDIT_PATH } from '../shell/paths'
 
 /*
  * The AI credit's calls (F-M9 b1), typed by hand after `content.ai.AiCreditProcesses` and the templates
- * `qb.sponsor.ai-credit*`. The page shows the numbers the server gives and computes no money of its own: what may be
+ * `qb.sponsor.ai-credit-lots|jobs|movements`. The page shows the numbers the server gives and computes no money of its own: what may be
  * bought, given back or is available all come from `QB_AI_CREDIT_STANDING`.
  */
 
@@ -147,13 +147,13 @@ export interface AiCreditBought {
 }
 
 export async function buyAiCredit(amount: number, requestKey: string): Promise<AiCreditBought> {
-  const row = await runProcess<Row>(AI_CREDIT_PROCESS.buy, { amount, requestKey })
+  const row = await runProcess<Row>(AI_CREDIT_PROCESS.buy, { amount, requestKey }, { idempotencyKey: requestKey })
   return { prepaymentId: String(row.prepaymentId ?? ''), amount: num(row.amount), credit: num(row.credit),
     cash: num(row.cash), balance: num(row.balance) }
 }
 
 export async function giveBackAiCredit(amount: number, requestKey: string): Promise<{ amount: number }> {
-  const row = await runProcess<Row>(AI_CREDIT_PROCESS.giveBack, { amount, requestKey })
+  const row = await runProcess<Row>(AI_CREDIT_PROCESS.giveBack, { amount, requestKey }, { idempotencyKey: requestKey })
   return { amount: num(row.amount) }
 }
 

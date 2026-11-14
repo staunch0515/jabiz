@@ -17,6 +17,26 @@ import { cancelSiteDraft, discardSiteDraft, isReady, readSiteDrafts, requestSite
 import { SITE_FAILURES, SITE_POLL } from './ids'
 import './messages'
 
+/** An IPv4 or IPv6 literal (the latter in the brackets `URL` keeps): never a website's name. */
+const IP_HOST = /^(\d{1,3}\.){3}\d{1,3}$|^\[.*\]$/
+
+/**
+ * Whether the text looks like a web address worth asking the price of: http or https, a host name with a dot (not an
+ * IP address), no user name and no port. A half typed address is not asked about (the server limits the quotes).
+ */
+function looksLikeWebAddress(text: string): boolean {
+  const trimmed = text.trim()
+  if (trimmed === '') return false
+  try {
+    const url = new URL(/^[a-z][a-z\d+.-]*:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`)
+    return (url.protocol === 'https:' || url.protocol === 'http:') && url.hostname.includes('.')
+      && !url.hostname.endsWith('.') && !IP_HOST.test(url.hostname) && url.username === '' && url.password === ''
+      && url.port === ''
+  } catch {
+    return false
+  }
+}
+
 /**
  * "Draft from your website" (F-C7b, docs/quizbuks/plans/impl/F-C7.md): the sponsor gives the address, the languages and
  * what to draft, declares the website is theirs, accepts the AI notice on first use, and the server reads the website
@@ -62,7 +82,7 @@ export function SiteProfileDialog({ open, onClose, onReview, onPrompt }: {
     otherLanguages: others.filter((language) => language !== base), profile, products, quiz, rightsDeclared: rights })
   // The cost of the request as it stands, once an address is given and something is chosen (the form is shown). The
   // declaration is the sponsor's to make on sending, not on asking the price: the quote is asked as if it were made.
-  const quote = useAiQuote(AI_CREDIT_PROCESS.siteProfileQuote, open && address.trim() !== '' && (profile || products || quiz)
+  const quote = useAiQuote(AI_CREDIT_PROCESS.siteProfileQuote, open && looksLikeWebAddress(address) && (profile || products || quiz)
     && !running && !ready && latest?.status !== 'QUEUED' ? { ...input(), rightsDeclared: true } : null)
   const request = useMutation({
     mutationFn: () => requestSiteProfile({ ...input(),

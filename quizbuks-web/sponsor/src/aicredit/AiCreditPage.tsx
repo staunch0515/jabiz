@@ -280,6 +280,9 @@ function Glance({ standing, onGiveBack }: { standing: AiCreditStanding; onGiveBa
           <AlertDescription>{t('aiCredit.glance.low')}</AlertDescription>
         </Alert>
       )}
+      {standing.feeOn && (standing.available === null || standing.returnable === null || standing.unbilledWithTax === null) && (
+        <Alert data-testid="ai-credit-tax-unset"><AlertDescription>{t('aiCredit.glance.taxUnset')}</AlertDescription></Alert>
+      )}
       <DescriptionList columns={4} items={[
         { key: 'available', label: t('aiCredit.glance.available'),
           value: <span data-testid="ai-credit-available">{orDash(standing.available)}</span> },
@@ -348,11 +351,13 @@ function Jobs() {
     { id: 'status', header: t('aiCredit.jobs.status'), enableSorting: false,
       cell: ({ row }) => status(row.original.status) },
     { id: 'reserved', header: t('aiCredit.jobs.reserved'), enableSorting: false, meta: { className: 'text-right' },
-      cell: ({ row }) => orDash(row.original.reservedYen) },
+      // Still running: its reservation; the fee is not known yet.
+      cell: ({ row }) => (row.original.finishedAt === null ? orDash(row.original.reservedYen) : '—') },
     { id: 'fee', header: t('aiCredit.jobs.fee'), enableSorting: false, meta: { card: 'badge', className: 'text-right' },
-      cell: ({ row }) => orDash(row.original.feeYen) },
+      // Finished: its fee; what was reserved is released.
+      cell: ({ row }) => (row.original.finishedAt === null ? '—' : orDash(row.original.feeYen)) },
     { id: 'charge', header: t('aiCredit.jobs.charge'), enableSorting: false,
-      cell: ({ row }) => (row.original.charged ? t('aiCredit.jobs.charged')
+      cell: ({ row }) => (row.original.finishedAt === null ? '—' : row.original.charged ? t('aiCredit.jobs.charged')
         : row.original.feeYen ? t('aiCredit.jobs.waiting') : t('aiCredit.jobs.noFee')) },
   ], [t, kind, status])
   return (

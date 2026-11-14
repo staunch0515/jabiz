@@ -30,10 +30,12 @@ interface Options {
   complete?: boolean
   /** F-M9 b1: the AI credit's standing (`low`), or that it could not be read. */
   low?: boolean | 'fail'
+  /** The template's `aiCreditCheck` (the fee is on and a low amount is set): the credit is read only when 1. */
+  check?: 0 | 1
 }
 
 /** The server of an approved (or not) sponsor; what is not named answers "not found". Records the todo asks. */
-function server({ status = 'APPROVED', counts = NO_TODO, unread = 0, complete = true, low = false }: Options = {}) {
+function server({ status = 'APPROVED', counts = NO_TODO, unread = 0, complete = true, low = false, check = 1 }: Options = {}) {
   const asked: Record<string, unknown>[] = []
   const standing: Record<string, unknown>[] = []
   vi.spyOn(globalThis, 'fetch').mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -55,7 +57,7 @@ function server({ status = 'APPROVED', counts = NO_TODO, unread = 0, complete = 
           contactName: 'Sara' } }] })
       case '/api/queries/qb.sponsor.todo':
         asked.push((body?.params ?? {}) as Record<string, unknown>)
-        return counts === 'fail' ? json(403, { title: 'Forbidden' }) : page([counts])
+        return counts === 'fail' ? json(403, { title: 'Forbidden' }) : page([{ ...counts, aiCreditCheck: check }])
       case '/api/processes/QB_AI_CREDIT_STANDING/latest':
         standing.push(body ?? {})
         return low === 'fail' ? json(403, { title: 'Forbidden' }) : json(200, { output: { feeOn: true, remaining: 100,
@@ -182,6 +184,34 @@ describe('the home\'s to-do list (F-F3b)', () => {
     // Not reading the credit does not stop the rest of the list from being known.
     expect(await screen.findByTestId('todo-empty')).toBeInTheDocument()
     expect(screen.queryByTestId('todo-aiCreditLow')).toBeNull()
+  })
+
+  it('reads the AI credit once when the template asks for it, and never when it does not', async () => {
+    const asking = server({ low: true, check: 1 })
+    window.history.replaceState(null, '', '/home')
+    const { unmount } = render(<App />)
+    await screen.findByTestId('todo-aiCreditLow')
+    expect(asking.standing).toHaveLength(1)
+    // The standing is not read again on the page coming back to the front or on focus (and has no interval).
+    document.dispatchEvent(new Event('visibilitychange'))
+    window.dispatchEvent(new Event('focus'))
+    await new Promise((resolve) => setTimeout(resolve, 50))
+    expect(asking.standing).toHaveLength(1)
+    unmount()
+    vi.restoreAllMocks()
+    const quiet = server({ low: true, check: 0 })
+    render(<App />)
+    expect(await screen.findByTestId('todo-empty')).toBeInTheDocument()
+    expect(quiet.standing).toEqual([])
+    expect(screen.queryByTestId('todo-aiCreditLow')).toBeNull()
+  })
+
+  it('never lists the check as an item', async () => {
+    server({ counts: NO_TODO, check: 1, low: false })
+    window.history.replaceState(null, '', '/home')
+    render(<App />)
+    expect(await screen.findByTestId('todo-empty')).toBeInTheDocument()
+    expect(screen.queryByTestId('todo-aiCreditCheck')).toBeNull()
   })
 
   it('does not read the AI credit before the approval', async () => {

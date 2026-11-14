@@ -26,11 +26,12 @@ interface Options {
   buy?: { status: number; body: unknown }
   giveBack?: { status: number; body: unknown }
   lots?: Record<string, unknown>[]
+  jobs?: Record<string, unknown>[]
 }
 
 /** The server as the AI credit's page sees it; the standing moves on with a purchase or a return. */
 function server(options: Options = {}) {
-  const posted: { path: string; body: Record<string, unknown> }[] = []
+  const posted: { path: string; body: Record<string, unknown>; key: string | null }[] = []
   let standing = { ...STANDING, ...options.standing }
   const movements: Record<string, unknown>[] = [
     { movementId: 'm1', kind: 'CHARGE', amount: '-220', credit: '-20', cash: '-200', balance: '5000',
@@ -43,7 +44,7 @@ function server(options: Options = {}) {
     const url = new URL(request.url, window.location.origin)
     const path = decodeURIComponent(url.pathname)
     const body = request.method === 'POST' ? await request.clone().json().catch(() => null) : null
-    if (request.method === 'POST' && path.startsWith('/api/processes/')) posted.push({ path, body })
+    if (request.method === 'POST' && path.startsWith('/api/processes/')) posted.push({ path, body, key: request.headers.get('Idempotency-Key') })
     const page = (items: unknown[]) => json(200, { items, offset: 0, limit: 10, total: items.length })
     switch (path) {
       case '/api/auth/entries/sponsor':
@@ -80,7 +81,7 @@ function server(options: Options = {}) {
           { subAccount: 'FEE_CREDIT', lotId: 'l3', amount: '300', expiresAt: '2026-10-01T00:00:00Z',
             voidedAt: '2026-10-01T00:05:00Z' }])
       case '/api/queries/qb.sponsor.ai-credit-jobs':
-        return page([
+        return page(options.jobs ?? [
           { aiJobId: 'j2', kind: 'QUESTIONS', status: 'READY', requestedAt: '2026-11-13T01:00:00Z',
             finishedAt: '2026-11-13T01:02:00Z', reservedYen: '0', feeYen: '200', feePeriod: '2026-11', charged: false },
           { aiJobId: 'j1', kind: 'TRANSLATION', status: 'ACCEPTED', requestedAt: '2026-10-13T01:00:00Z',
@@ -176,8 +177,10 @@ describe('the AI credit page (F-M9 b1)', () => {
     const bought = await screen.findByTestId('ai-credit-bought')
     expect(bought).toHaveTextContent('2,000 Kudos')
     expect(bought).toHaveTextContent('400 Kudos from granted credit and 1,600 Kudos from cash')
-    expect(posted.filter((p) => p.path.endsWith('QB_AI_CREDIT_BUY/latest'))).toEqual([{
-      path: '/api/processes/QB_AI_CREDIT_BUY/latest', body: { amount: 2000, requestKey: expect.stringMatching(/-/) } }])
+    const buys = posted.filter((p) => p.path.endsWith('QB_AI_CREDIT_BUY/latest'))
+    expect(buys).toEqual([{ path: '/api/processes/QB_AI_CREDIT_BUY/latest', key: expect.stringMatching(/-/),
+      body: { amount: 2000, requestKey: expect.stringMatching(/-/) } }])
+    expect(buys[0].key).toBe(buys[0].body.requestKey)
     await expectAccessible()
     await user.click(within(dialog).getByTestId('ai-credit-buy-close'))
     await waitFor(() => expect(screen.getByTestId('ai-credit-remaining')).toHaveTextContent('7,000 Kudos'))
@@ -219,8 +222,9 @@ describe('the AI credit page (F-M9 b1)', () => {
     await expectAccessible()
     await user.click(within(dialog).getByTestId('ai-credit-return-submit'))
     expect(await screen.findByTestId('ai-credit-returned')).toHaveTextContent('4,480 Kudos')
-    expect(posted.filter((p) => p.path.endsWith('QB_AI_CREDIT_RETURN/latest'))[0].body)
-      .toEqual({ amount: 4480, requestKey: expect.any(String) })
+    const returns = posted.filter((p) => p.path.endsWith('QB_AI_CREDIT_RETURN/latest'))
+    expect(returns[0].body).toEqual({ amount: 4480, requestKey: expect.any(String) })
+    expect(returns[0].key).toBe(returns[0].body.requestKey)
     await user.click(within(dialog).getByTestId('ai-credit-return-close'))
     await waitFor(() => expect(screen.getByTestId('ai-credit-return')).toBeDisabled())
     await waitFor(() => expect(screen.getAllByTestId('ai-credit-movement').map((row) => row.getAttribute('data-kind')))
@@ -231,6 +235,35 @@ describe('the AI credit page (F-M9 b1)', () => {
     server({ standing: { returnable: null, available: null } })
     await open()
     expect(screen.getByTestId('ai-credit-return')).toBeDisabled()
+  })
+
+  it('says why the amounts are missing while the fee\'s tax rate is not set', async () => {
+    server({ standing: { available: null, returnable: null, unbilledWithTax: null } })
+    await open()
+    expect(screen.getByTestId('ai-credit-tax-unset')).toHaveTextContent('once the platform has set it')
+    expect(screen.getByTestId('ai-credit-available')).toHaveTextContent('—')
+    await expectAccessible()
+    expect(document.body).not.toHaveTextContent(/JPY|yen/i)
+  })
+
+  it('does not say it when the amounts are known', async () => {
+    server()
+    await open()
+    expect(screen.queryByTestId('ai-credit-tax-unset')).toBeNull()
+  })
+
+  it('shows a running request\'s reservation and a finished one\'s fee, by whether it has finished', async () => {
+    server({ jobs: [
+      { aiJobId: 'r1', kind: 'QUESTIONS', status: 'READY', requestedAt: '2026-11-14T01:00:00Z', finishedAt: null,
+        reservedYen: '300', feeYen: null, feePeriod: null, charged: false },
+      { aiJobId: 'r2', kind: 'QUESTIONS', status: 'ACCEPTED', requestedAt: '2026-11-13T01:00:00Z',
+        finishedAt: '2026-11-13T01:02:00Z', reservedYen: '300', feeYen: '200', feePeriod: '2026-11', charged: false }] })
+    await open()
+    const rows = await screen.findAllByTestId('ai-credit-job')
+    expect(rows[0]).toHaveTextContent('300 Kudos')
+    expect(rows[0]).not.toHaveTextContent('200 Kudos')
+    expect(rows[1]).toHaveTextContent('200 Kudos')
+    expect(rows[1]).not.toHaveTextContent('300 Kudos')
   })
 
   it('shows an empty state for each table', async () => {
