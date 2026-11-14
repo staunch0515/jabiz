@@ -103,6 +103,31 @@ public class AiConfig {
         return AiUserKeys.of(integrityKey);
     }
 
+    /** F-M9a-2: the month's AI fees of a sponsor, charged from their AI credit (an item of {@value AiFeeSettlements#JOB}). */
+    @Bean
+    ProcessDefinition<AiFeeSettlements.SettleRef, com.jabiz.quizbuks.fee.FeeProcesses.ItemOutput, ProcessContext>
+        qbAiFeeSettle() {
+        return AiFeeSettlements.settle(zone);
+    }
+
+    /**
+     * F-M9a-2: the AI fees of the months before this one, on the 1st at 00:27 in the fiscal year's zone
+     * ({@code quizbuks.ai-fee.monthly-cron}); missed runs are run again with {@code JOB_RUN_REQUEST}.
+     */
+    @Bean
+    JobDefinition<AiFeeSettlements.SettleRef> qbAiFeeMonthlyJob(
+        ProcessDefinition<AiFeeSettlements.SettleRef, com.jabiz.quizbuks.fee.FeeProcesses.ItemOutput, ProcessContext>
+            qbAiFeeSettle,
+        @Value("${quizbuks.ai-fee.monthly-cron:" + AiFeeSettlements.CRON + "}") String cron) {
+        return JobDefinition.forEach(AiFeeSettlements.JOB, cron, zone,
+                JobItems.template(AiFeeSettlements.DUE_TEMPLATE, scheduledTime -> Map.of("month",
+                    com.jabiz.quizbuks.fee.FeeRules.period(scheduledTime, zone)), "itemKey"),
+                qbAiFeeSettle,
+                (scheduledTime, row) -> new AiFeeSettlements.SettleRef(String.valueOf(row.get("sponsorId")),
+                    com.jabiz.quizbuks.fee.FeeRules.period(scheduledTime, zone)))
+            .maxItems(10_000);
+    }
+
     @Bean
     EntityDefinition qbAiJobEntity() {
         return QbAi.JOB_ENTITY;

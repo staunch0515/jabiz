@@ -11,7 +11,7 @@ results:
   subAccount: { kind: { type: text, maxLength: 20 } }
   lotId:      { kind: { type: text, maxLength: 36 } }
   amount:     { kind: { type: numeric, precision: 19, scale: 0 } }
-  expiresAt:  { like: QbFeeCreditGrant.expiresAt }
+  expiresAt:  { from: QbFeeCreditGrant.expiresAt }
 list:
   sorts: [lotId]
   defaultSort: { field: lotId, asc: true }

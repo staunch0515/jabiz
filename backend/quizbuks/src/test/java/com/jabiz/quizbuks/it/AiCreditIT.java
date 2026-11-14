@@ -32,119 +32,8 @@ import static org.assertj.core.api.Assertions.assertThat;
  * its outcome works out. The fee is on in each test and off after it ({@code qb.ai.fee.enabled} is off by default: the
  * requests are then free, as before).
  */
-class AiCreditIT extends AiItSupport {
+class AiCreditIT extends AiCreditItSupport {
 
-    private static final BigDecimal MARKUP = new BigDecimal("1.5");
-    private static final BigDecimal RATE = new BigDecimal("150");
-    private static final BigDecimal TAX = new BigDecimal("0.10");
-
-    /** Whether this class's schema has Kudos selling on (each test class has a schema of its own). */
-    private static boolean selling;
-
-    @BeforeEach
-    void freshDay() {
-        aiOn();
-        if (!selling) {
-            param(QbParams.KUDOS_SELL_ENABLED, "true");
-            selling = true;
-        }
-        advance(Duration.ofDays(1));
-    }
-
-    @AfterEach
-    void feeOff() {
-        if (feeIs("true")) {
-            param(QbParams.AI_FEE_ENABLED, "false");
-        }
-    }
-
-    private static boolean feeIs(String value) {
-        List<Map<String, Object>> rows = query("SELECT param_value FROM sys_param_version WHERE param_key = ? "
-            + "ORDER BY effect_start_time DESC, version_no DESC LIMIT 1", QbParams.AI_FEE_ENABLED);
-        return !rows.isEmpty() && value.equals(String.valueOf(rows.getFirst().get("param_value")));
-    }
-
-    private void feeOn() {
-        if (!feeIs("true")) {
-            param(QbParams.AI_FEE_ENABLED, "true");
-        }
-    }
-
-    private static String title() {
-        return "AI credit " + UUID.randomUUID();
-    }
-
-    /** Money in the sponsor's cash account: Kudos credited and sold back. */
-    private void cash(String sponsor, long amount) {
-        credit(sponsor, amount);
-        run(KudosExchanges.SELL, sponsorToken(sponsor), body("amount", amount));
-    }
-
-    /** Fee credit as F-M2 grants it (5140 / 2190, the lot, the wallet's cache), expiring in a year. */
-    private String grant(String sponsor, long amount) {
-        String grantId = UUID.randomUUID().toString();
-        Instant expiresAt = clock.instant().plus(Duration.ofDays(365));
-        execute("INSERT INTO qb_fee_credit_grant (grant_id, sponsor_id, source, source_key, amount, remaining, "
-            + "voided_amount, granted_at, expires_at, version) VALUES (?, ?, 'MANUAL', ?, ?, ?, 0, ?, ?, 1)", grantId,
-            sponsor, "test:" + grantId, amount, amount, Timestamp.from(clock.instant()), Timestamp.from(expiresAt));
-        run("LEDGER_POST", TestTokens.bearer(tokens, "ledger-test", "ledger.post"), body("bookingTime",
-            clock.instant().toString(), "description", "Granted credit (test)", "sourceEntity", "QbFeeCreditGrant",
-            "sourceId", grantId, "entries", List.of(
-                body("accountCode", "5140", "direction", "DEBIT", "amount", amount, "dimensions",
-                    Map.of("party", sponsor)),
-                body("accountCode", "2190", "direction", "CREDIT", "amount", amount, "dimensions",
-                    Map.of("party", sponsor)))));
-        execute("INSERT INTO qb_wallet (wallet_id, owner_id, kind, balance, pending_count, pending_amount, pending_out, "
-            + "version) VALUES (?, ?, 'FEE_CREDIT', ?, 0, 0, 0, 1) ON CONFLICT (owner_id, kind) DO UPDATE SET "
-            + "balance = qb_wallet.balance + EXCLUDED.balance, version = qb_wallet.version + 1",
-            UUID.randomUUID().toString(), sponsor, amount);
-        return grantId;
-    }
-
-    /** Sets the least purchase (not created by the setup: the first change gives its kind). */
-    private void minPurchase(String value) {
-        Map<String, Object> values = new java.util.LinkedHashMap<>();
-        values.put("paramKey", QbParams.AI_CREDIT_MIN_PURCHASE);
-        values.put("value", value);
-        if (query("SELECT 1 FROM sys_param_version WHERE param_key = ?", QbParams.AI_CREDIT_MIN_PURCHASE).isEmpty()) {
-            values.put("valueKind", QbParams.AI_CREDIT_MIN_PURCHASE_KIND);
-        }
-        Map<String, Object> change = run("CONTROL_CHANGE_PROPOSE", proposer(), body("targetEntity", "SysParam",
-            "values", values, "reason", "F-M9 test"));
-        run("CONTROL_CHANGE_PUBLISH", financeAdmin(), body("changeId", change.get("changeId")));
-    }
-
-    private Map<String, Object> buy(String sponsor, long amount) {
-        return run(AiCredits.BUY, sponsorToken(sponsor), body("amount", amount, "requestKey",
-            UUID.randomUUID().toString()));
-    }
-
-    private static Map<String, Object> aiCredit(String sponsor) {
-        List<Map<String, Object>> rows = query("SELECT * FROM qb_prepayment WHERE sponsor_id = ? AND purpose = 'AI'",
-            sponsor);
-        assertThat(rows).as("one AI credit a sponsor").hasSizeLessThanOrEqualTo(1);
-        return rows.isEmpty() ? Map.of() : rows.getFirst();
-    }
-
-    private static BigDecimal money(Object value) {
-        return value == null ? null : new BigDecimal(value.toString());
-    }
-
-    /** The ledger's net of an account for the sponsor (debits less credits). */
-    private static BigDecimal net(String account, String sponsor) {
-        Object net = query("SELECT coalesce(sum(CASE WHEN e.direction = 'DEBIT' THEN e.amount ELSE -e.amount END), 0) "
-            + "AS n FROM ledger_entry_version e JOIN ledger_account_version a ON a.account_id = e.account_id "
-            + "WHERE a.account_code = ? AND e.dimension_1 = ?", account, sponsor).getFirst().get("n");
-        return money(net);
-    }
-
-    /** Runs the jobs, letting their retries come due, until the job is no longer queued. */
-    private void runUntilDone(Object aiJobId) {
-        for (int i = 0; i < 6 && job(aiJobId).get("finished_at") == null; i++) {
-            runJobs();
-            advance(Duration.ofMinutes(3));
-        }
-    }
 
     @Test
     void withTheFeeOffARequestIsFreeAndReservesNothing() {
@@ -374,20 +263,6 @@ class AiCreditIT extends AiItSupport {
             .hasToString("1");
     }
 
-    /** A sponsor with 5,000 yen of AI credit, their token and a quiz with an article. */
-    private List<String> charged(String prefix) {
-        String sponsor = newSponsor(prefix + UUID.randomUUID());
-        cash(sponsor, 5_000);
-        buy(sponsor, 5_000);
-        String token = sponsorFull(sponsor);
-        List<String> quiz = quizWithArticle(token, title(), "Material for " + prefix);
-        return List.of(sponsor, token, quiz.get(0), quiz.get(1));
-    }
-
-    /** The fee of the job's answered dollars at the frozen markup and rate. */
-    private static BigDecimal feeOf(Map<String, Object> job) {
-        return AiFeeRules.fee(money(job.get("billable_usd")), money(job.get("fee_markup")), money(job.get("fee_usd_jpy")));
-    }
 
     /**
      * #692 review M3: a failed job is charged what the provider answered (here a cut answer, billed in full), and nothing

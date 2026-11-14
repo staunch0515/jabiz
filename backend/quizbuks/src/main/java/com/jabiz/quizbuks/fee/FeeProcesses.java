@@ -146,8 +146,17 @@ public final class FeeProcesses {
     }
 
     /** @param invoiceId the prepaid charge's invoice, if one was made; {@code paid} whether it is paid already */
+    /**
+     * @param fromCredit F-M9: what its prepayment paid of it from fee credit (0 without a prepayment)
+     * @param fromCash   F-M9: and from cash
+     */
     public record ChargeOutput(String chargeId, BigDecimal total, String billingMode, String invoiceId,
-        boolean paid) {}
+        boolean paid, BigDecimal fromCredit, BigDecimal fromCash) {
+
+        public ChargeOutput(String chargeId, BigDecimal total, String billingMode, String invoiceId, boolean paid) {
+            this(chargeId, total, billingMode, invoiceId, paid, BigDecimal.ZERO, BigDecimal.ZERO);
+        }
+    }
 
     public record MonthlyInput(@NotBlank @Size(max = 128) String sponsorId,
         @NotBlank @Pattern(regexp = "\\d{4}-\\d{2}") String period) {}
@@ -271,7 +280,11 @@ public final class FeeProcesses {
             .contextFactory(FeeProcesses::context)
             .outputMapper(ctx -> new ChargeOutput((String) ctx.get(CHARGE_ID), ctx.get(TOTAL, BigDecimal.class),
                 (String) ctx.get(BILLING_MODE), ctx.contains(INVOICE_ID) ? (String) ctx.get(INVOICE_ID) : null,
-                Boolean.TRUE.equals(ctx.get(PAID_NOW))))
+                Boolean.TRUE.equals(ctx.get(PAID_NOW)),
+                ctx.contains(SETTLEMENT) ? ctx.get(SETTLEMENT, FeeSettlement.SettleOutput.class).credit()
+                    : BigDecimal.ZERO,
+                ctx.contains(SETTLEMENT) ? ctx.get(SETTLEMENT, FeeSettlement.SettleOutput.class).cash()
+                    : BigDecimal.ZERO))
             .step("Load the fee parameters", LoadParams.<ProcessContext>of(ProcessContext::opTime, PARAMS,
                 QbParams.FEE_TAX_RATE, QbParams.FEE_DEFAULT_BILLING_MODE, QbParams.FEE_DUE_DAYS))
             .step("Load the sponsor and their operator", QueryEntities.<ProcessContext>all(
@@ -393,9 +406,19 @@ public final class FeeProcesses {
         return given.max(BigDecimal.ZERO).min(input.amount());
     }
 
-    /** F-M11: the operator given by the caller, else the sponsor's operator now. */
+    /**
+     * F-M9 (plan §4 item 3, review M1): the operator a caller gives for a fee that belongs to no operator (an AI job
+     * asked before the sponsor's onboarding), so that it is not given to the operator the sponsor has now. Never
+     * stored: the fee's operator is empty.
+     */
+    public static final String NO_OPERATOR = "-";
+
+    /** F-M11: the operator given by the caller ({@link #NO_OPERATOR}: none), else the sponsor's operator now. */
     static String operatorOf(ProcessContext ctx) {
         String given = chargeInput(ctx).operatorId();
+        if (NO_OPERATOR.equals(given)) {
+            return null;
+        }
         if (given != null && !given.isBlank()) {
             return given;
         }
