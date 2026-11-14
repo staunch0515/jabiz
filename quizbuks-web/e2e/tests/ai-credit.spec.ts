@@ -1,6 +1,6 @@
 import { aiReady, quizForAi } from './ai'
 import { approvedSponsor } from './publishing'
-import { expect, expectAccessible, prepareQuizbuks, setAppearance, signIn, test, unique } from './support'
+import { expect, expectAccessible, openArea, prepareQuizbuks, setAppearance, signIn, test, unique } from './support'
 import { fund } from './wallet'
 
 /*
@@ -26,7 +26,9 @@ for (const appearance of ['light', 'dark'] as const) {
       await fund(request, sponsor.token, 20_000)
       const quizId = await quizForAi(request, sponsor.token, unique('AI credit quiz '))
       await signIn(page, '/sponsor/', sponsor.email)
-      await page.goto('/sponsor/money/ai')
+      // Signed in once the home is drawn (a navigation before that would land on the sign-in page).
+      await expect(page.getByTestId('dashboard-status')).toBeVisible()
+      await openArea(page, 'money', 'ai')
 
       const glance = page.getByTestId('ai-credit-glance')
       await expect(glance).toBeVisible()
