@@ -47,6 +47,54 @@ class AiChargingTest {
         assertThat(AiProcesses.charged(recorded, 0, job)).isEqualTo(AiProcesses.usage(recorded));
     }
 
+    /**
+     * F-M9 (plan §2, H1): what a handler estimated for a call that got no answer is kept apart from what the provider's
+     * answers reported. The job is charged both (its tokens and dollars, as before), but only the answered part is the
+     * sponsor's ({@link AiProcesses#usage}); the estimate and the dead attempts' are the platform's.
+     */
+    @Test
+    void anUnansweredCallsEstimateIsChargedButKeptApartFromTheAnsweredUsage() {
+        EntityInstance job = job(QbAi.KIND_QUESTIONS, ClaudeService.HAIKU, 3_000, params(2, 150_000L));
+        Map<String, Long> recorded = Map.of(AiQuestionsJob.INPUT_TOKENS, 1_200L, AiQuestionsJob.OUTPUT_TOKENS, 800L,
+            AiUsageMetrics.ESTIMATED_INPUT_TOKENS, 150_000L, AiUsageMetrics.ESTIMATED_OUTPUT_TOKENS, 3_000L,
+            AiUsageMetrics.ESTIMATED_LONG_INPUT_TOKENS, 150_000L, AiUsageMetrics.ESTIMATED_LONG_OUTPUT_TOKENS, 3_000L);
+        assertThat(AiProcesses.usage(recorded)).isEqualTo(new ClaudeApi.Usage(1_200, 800));
+        assertThat(AiUsageMetrics.estimated(recorded)).isEqualTo(new ClaudeApi.Usage(150_000, 3_000, 0, 0, 150_000,
+            3_000));
+        ClaudeApi.Usage charged = AiProcesses.charged(recorded, 0, job);
+        assertThat(charged).isEqualTo(new ClaudeApi.Usage(151_200, 3_800, 0, 0, 150_000, 3_000));
+        // An attempt that recorded nothing is on top, as before.
+        ClaudeApi.Usage each = AiProcesses.unrecordedAttempt(job);
+        assertThat(AiProcesses.charged(recorded, 1, job).inputTokens()).isEqualTo(151_200 + each.inputTokens());
+        // The other readers of the metrics (the AI help, the prospecting) see the estimate in the totals, as before.
+        assertThat(AiUsageMetrics.merged(recorded)).containsEntry(AiQuestionsJob.INPUT_TOKENS, 151_200L)
+            .containsEntry(AiQuestionsJob.OUTPUT_TOKENS, 3_800L).containsEntry(AiQuestionsJob.LONG_INPUT_TOKENS, 150_000L)
+            .containsEntry(AiQuestionsJob.LONG_OUTPUT_TOKENS, 3_000L)
+            .doesNotContainKeys(AiUsageMetrics.ESTIMATED_INPUT_TOKENS, AiUsageMetrics.ESTIMATED_OUTPUT_TOKENS);
+        assertThat(AiUsageMetrics.merged(Map.of(AiQuestionsJob.INPUT_TOKENS, 5L))).containsExactly(
+            Map.entry(AiQuestionsJob.INPUT_TOKENS, 5L));
+    }
+
+    /** F-M9 (H1): a call that may have been billed but got no answer is recorded under the estimate's own metrics. */
+    @Test
+    void anEstimateIsRecordedUnderItsOwnMetricsPricedAsACallIs() {
+        Map<String, Long> metrics = new LinkedHashMap<>();
+        com.jabiz.external.ExternalJobContext ctx = new com.jabiz.external.ExternalJobContext() {
+            public String jobId() { return "job"; }
+            public int attempt() { return 1; }
+            public String idempotencyKey() { return "key"; }
+            public java.time.Instant deadline() { return java.time.Instant.EPOCH; }
+            public com.jabiz.external.ExternalHttp http(String service) { throw new UnsupportedOperationException(); }
+            public String secret(String service, String name) { throw new UnsupportedOperationException(); }
+            public void recordUsage(String metric, long quantity) { metrics.merge(metric, quantity, Long::sum); }
+        };
+        ClaudeCalls.recordEstimate(ctx, ClaudeService.HAIKU, new ClaudeApi.Usage(150_000, 3_000));
+        ClaudeCalls.recordEstimate(ctx, ClaudeService.OPUS, new ClaudeApi.Usage(1_000, 500));
+        assertThat(metrics).containsExactlyInAnyOrderEntriesOf(Map.of(
+            AiUsageMetrics.ESTIMATED_INPUT_TOKENS, 151_000L, AiUsageMetrics.ESTIMATED_OUTPUT_TOKENS, 3_500L,
+            AiUsageMetrics.ESTIMATED_LONG_INPUT_TOKENS, 150_000L, AiUsageMetrics.ESTIMATED_LONG_OUTPUT_TOKENS, 3_000L));
+    }
+
     @Test
     void aCoverAttemptIsChargedItsReservationAndTheCoversOutput() {
         long reserved = AiLimits.reservedInput(900, 0);
@@ -123,5 +171,49 @@ class AiChargingTest {
             + JSON.writeValueAsString(AiPrompt.schema()).getBytes(StandardCharsets.UTF_8).length;
         assertThat(AiLimits.FRAMING_TOKENS).as("questions: " + bytes + " bytes of system prompt and schema")
             .isGreaterThanOrEqualTo((bytes + 2) / 3 + margin);
+    }
+
+    /**
+     * #692 re-review: a website draft reserves the web reader's every call at the job's own limits, or the controlled
+     * limits below them (the calls, the pages and the output, qb.ai.fee.site-profile.*); other kinds are unchanged.
+     */
+    @Test
+    void aWebsiteDraftReservesItsOwnLimitsOrTheControlledOnesBelowThem() {
+        long reserved = SiteProfileJob.reservedInput(10);
+        EntityInstance site = job(QbAi.KIND_SITE_PROFILE, ClaudeService.SONNET, 1_000,
+            Map.of("reservedInputTokens", reserved, "maxOutputTokens", SiteProfileJob.MAX_OUTPUT_TOKENS));
+        AiSettings.Fee none = new AiSettings.Fee(true, BigDecimal.ONE, BigDecimal.ONE, BigDecimal.ZERO, null);
+        assertThat(AiProcesses.mostOfAttempt(site, none)).isEqualTo(ClaudeWebResearch.mostOfAttempt(
+            ClaudeService.SONNET, reserved, SiteProfileJob.MAX_OUTPUT_TOKENS));
+        AiSettings.Fee limited = new AiSettings.Fee(true, BigDecimal.ONE, BigDecimal.ONE, BigDecimal.ZERO, null, 2, 3,
+            8_000);
+        ClaudeApi.Usage lower = AiProcesses.mostOfAttempt(site, limited);
+        assertThat(lower).isEqualTo(ClaudeWebResearch.attempt(ClaudeService.SONNET, SiteProfileJob.reservedInput(3),
+            8_000, 2));
+        // Two calls: the pages' input twice and the first call's output once more, 8,000 out each.
+        assertThat(lower.inputTokens()).isEqualTo(2 * SiteProfileJob.reservedInput(3) + 8_000);
+        assertThat(lower.outputTokens()).isEqualTo(16_000);
+        // Limits above the job's own are the job's (the pages and the output never reserve more than it may use).
+        AiSettings.Fee above = new AiSettings.Fee(true, BigDecimal.ONE, BigDecimal.ONE, BigDecimal.ZERO, null, 4, 50,
+            1_000_000);
+        assertThat(AiProcesses.mostOfAttempt(site, above)).isEqualTo(AiProcesses.mostOfAttempt(site, none));
+        // A question job reserves what it did.
+        EntityInstance questions = job(QbAi.KIND_QUESTIONS, ClaudeService.SONNET, 4_000, Map.of("count", 3));
+        assertThat(AiProcesses.mostOfAttempt(questions, limited)).isEqualTo(AiProcesses.unrecordedAttempt(questions));
+    }
+
+    /** The limits are read from their stored text: absent, not a whole number or out of range is the job's own. */
+    @Test
+    void aWebsiteDraftsLimitsOutOfRangeAreTheJobsOwn() {
+        Map<String, String> values = new LinkedHashMap<>();
+        values.put(com.jabiz.quizbuks.setup.QbParams.AI_FEE_SITE_CALLS, "5");
+        values.put(com.jabiz.quizbuks.setup.QbParams.AI_FEE_SITE_PAGES, "0");
+        values.put(com.jabiz.quizbuks.setup.QbParams.AI_FEE_SITE_OUTPUT, "8000");
+        AiSettings.Fee fee = AiSettings.of(values).fee();
+        assertThat(fee.siteCalls()).isNull();
+        assertThat(fee.sitePages()).isNull();
+        assertThat(fee.siteOutput()).isEqualTo(8_000);
+        values.put(com.jabiz.quizbuks.setup.QbParams.AI_FEE_SITE_CALLS, "2");
+        assertThat(AiSettings.of(values).fee().siteCalls()).isEqualTo(2);
     }
 }
