@@ -110,6 +110,65 @@ class MoneyCloseIT extends MoneyCloseItSupport {
     }
 
     @Test
+    void theMonthIsInvoicedOnlyAfterTheDistributionFeesFinalSettlementTheDayAfterTheErasure() {
+        // Plan H1 (Fable's review of the first draft): a postpaid sponsor erased while a publication runs; its
+        // distribution fee is settled for good the day after (period: the month of the erasure). The month's invoice
+        // waits for that (DEPOSIT_OPEN, no invoice), then takes the fee: no postpaid fee is left without an invoice.
+        autoApprove(true);
+        param(QbParams.DISTRIBUTION_BILLING_ENABLED, "true");
+        try {
+            String sponsor = newSponsor(unique("s-fm15b-h1"));
+            billing(sponsor, "POSTPAID", 50_000);
+            credit(sponsor, 5_000);
+            String operator = String.valueOf(query("SELECT operator_id FROM qb_sponsor_operator WHERE user_id = ?",
+                sponsor).getFirst().get("operator_id"));
+            run(com.jabiz.quizbuks.fee.DistributionPrices.SET, com.jabiz.runtime.test.TestTokens.bearer(tokens,
+                "fm15b-hq", com.jabiz.quizbuks.QbPermissions.FEE_MANAGE), body("operatorId", operator, "rate", "0.05",
+                "unitFloor", "1", "unitCeiling", "20", "minimumDeposit", 500, "reason", "F-M15 b H1"));
+            String publicationId = livePublication(sponsor, "FM15b H1", Map.of("maxWinners", 30, "regions",
+                List.of("GLOBAL")));
+            for (int i = 0; i < 3; i++) {
+                start(taker(newTaker(unique("t-fm15b-h1-" + i), null)), publicationId);
+            }
+            assertThat(prepayments(publicationId)).anySatisfy(row -> assertThat(row)
+                .containsEntry("purpose", "DISTRIBUTION").containsEntry("status", "OPEN"));
+            erase(sponsor);
+            if (!"ENDED".equals(status(publicationId))) {
+                run("QB_PUBLICATION_ADMIN_END", com.jabiz.runtime.test.TestTokens.bearer(tokens, "fm15b-content",
+                    com.jabiz.quizbuks.QbPermissions.ADMIN_CONTENT_WRITE), Map.of("publicationId", publicationId,
+                    "reason", "F-M15 b H1"));
+            }
+
+            // The day of the erasure: the deposit is open, nothing is invoiced.
+            assertThat(close(sponsor).outcome()).isEqualTo(MoneyClose.WAITING_DEPOSITS);
+            assertThat(query("SELECT * FROM qb_fee_invoice WHERE sponsor_id = ?", sponsor)).isEmpty();
+
+            // Later (in production the next day; here the same month): the final settlement charges the fee and
+            // releases the deposit.
+            clock.set(clock.instant().plus(Duration.ofHours(4)));
+            systemRun(com.jabiz.quizbuks.fee.DistributionSettlements.SETTLE, body("publicationId", publicationId,
+                "sponsorId", sponsor, "period", null, "last", true));
+            List<Map<String, Object>> fees = query("SELECT DISTINCT ON (charge_id) * FROM qb_fee_charge_version "
+                + "WHERE sponsor_id = ? AND kind = 'DISTRIBUTION' ORDER BY charge_id, version_no DESC", sponsor);
+            assertThat(fees).singleElement().satisfies(fee -> assertThat(fee).containsEntry("billing_mode", "POSTPAID"));
+            assertThat(prepayments(publicationId)).allSatisfy(row -> assertThat(row.get("status")).isNotEqualTo("OPEN"));
+
+            MoneyClose.CloseOutput done = close(sponsor);
+            assertThat(done.invoicesIssued()).isEqualTo(1);
+            Map<String, Object> invoice = query("SELECT * FROM qb_fee_invoice WHERE sponsor_id = ?", sponsor).getFirst();
+            assertThat(invoice).containsEntry("period", fees.getFirst().get("period"));
+            assertThat(money(invoice.get("total"))).isPositive();
+            // No month with a postpaid fee left without its invoice, and the receivable agrees.
+            assertThat(items(MoneyClose.UNINVOICED_TEMPLATE, com.jabiz.runtime.test.TestTokens.bearer(tokens,
+                "fm15b-job", "qb.fee.system"), Map.of("limit", 100, "params", Map.of("sponsorId", sponsor)))).isEmpty();
+            assertThat(differences(sponsor)).isEmpty();
+            assertBooksBalance();
+        } finally {
+            param(QbParams.DISTRIBUTION_BILLING_ENABLED, "false");
+        }
+    }
+
+    @Test
     void aWindUpDoneWithFeesOwedKeepsItsReasonWhenALaterRunStopsAndIsTakenAgain() {
         // Review M1: done with fees owed, cash arrives later; a run the switch stops keeps FEE_OWED and the daily job
         // still takes it.
