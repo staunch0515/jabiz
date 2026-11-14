@@ -99,6 +99,11 @@ public final class FeeProcesses {
     public static final String OVERDUE_DUE_TEMPLATE = "qb.system.fee-overdue-due";
     public static final String DOCUMENT_TEMPLATE = "qb.sponsor.fee-invoice-doc";
     public static final String LINES_TEMPLATE = "qb.sponsor.fee-invoice-lines";
+    /** F-M13: the lines by tax rate, and what the invoice was paid with (one row); both read the sponsor's own datasets. */
+    public static final String RATES_TEMPLATE = "qb.sponsor.fee-invoice-rates";
+    public static final String SOURCES_TEMPLATE = "qb.sponsor.fee-invoice-sources";
+    /** The template parameter of the day the payment status is as of. */
+    static final String AS_OF_DAY = "asOfDay";
     public static final String UNINVOICED_TEMPLATE = "qb.sponsor.fee-uninvoiced";
     public static final String ISSUER_TEMPLATE = "qb.sponsor.receipt-issuer";
     public static final String LAYOUT_ID = "qb.fee_invoice";
@@ -564,6 +569,7 @@ public final class FeeProcesses {
         values.put("paidAmount", paidAmount);
         values.put("creditApplied", creditApplied);
         values.put("issuedAt", ctx.opTime());
+        values.put("issuedOn", FeeRules.issuedOn(ctx.opTime(), zone));
         values.put("dueOn", FeeRules.dueOn(ctx.opTime(), dueDays, zone));
         values.put("paidAt", paid ? ctx.opTime() : null);
         values.put("paymentTransactionId", paid ? settled.transactionId() : null);
@@ -708,6 +714,7 @@ public final class FeeProcesses {
         values.put("creditApplied", credit);
         values.put("paidAt", paid ? ctx.opTime() : null);
         values.put("issuedAt", ctx.opTime());
+        values.put("issuedOn", FeeRules.issuedOn(ctx.opTime(), zone));
         values.put("dueOn", FeeRules.dueOn(ctx.opTime(),
             ctx.get(PARAMS, ParamValues.class).get(QbParams.FEE_DUE_DAYS, BigDecimal.class), zone));
         values.put("remindersSent", BigDecimal.ZERO);
@@ -949,7 +956,7 @@ public final class FeeProcesses {
 
     // ---- the document -----------------------------------------------------------------------------------------------
 
-    public static ProcessDefinition<DocumentInput, InvoiceOutput, ProcessContext> document() {
+    public static ProcessDefinition<DocumentInput, InvoiceOutput, ProcessContext> document(ZoneId zone) {
         return ProcessDefinition.define(DOCUMENT, 1, DocumentInput.class, InvoiceOutput.class, ProcessContext.class,
             pb -> pb
                 .description("Issues the PDF of a platform fee invoice of one's own, or gives the one already issued.")
@@ -978,10 +985,21 @@ public final class FeeProcesses {
                             "The issuer's name is not set", Map.of("param", QbParams.ISSUER_NAME)));
                     }
                 })
+                .compute("Refuse a voided invoice that has no document", (metadata, ctx) -> {
+                    // F-M13: one already issued stays downloadable (the original is kept); a voided invoice with none
+                    // is not issued now (a document of something void would claim a debt that is not owed).
+                    if (QbFees.VOID.equals(invoice(ctx).get("status")) && invoice(ctx).get("documentRunId") == null) {
+                        throw new BusinessRuleViolationException(new Violation("invoiceId", FeeCodes.FEE_INVOICE_STATE,
+                            "The invoice is voided", Map.of()));
+                    }
+                })
                 .step("Issue the document", CallProcess.<ProcessContext>when(
                     ctx -> invoice(ctx).get("documentRunId") == null, DocumentProcesses.ISSUE, 1,
-                    ctx -> new DocumentProcesses.IssueInput(LAYOUT_ID, Map.of(INVOICE_ID, ctx.get(INVOICE_ID)), null,
-                        null, ctx.get(INPUT, DocumentInput.class).language()), ISSUED))
+                    // The payment status is stated as of the issue's day in the fiscal zone: a snapshot, as the
+                    // document is (F-M13 §3.2); the time itself is never read by the template.
+                    ctx -> new DocumentProcesses.IssueInput(LAYOUT_ID, Map.of(INVOICE_ID, ctx.get(INVOICE_ID),
+                        AS_OF_DAY, FeeRules.issuedOn(ctx.opTime(), zone)), null, null,
+                        ctx.get(INPUT, DocumentInput.class).language()), ISSUED))
                 .compute("Record the document", (metadata, ctx) -> {
                     if (ctx.contains(ISSUED)) {
                         DocumentProcesses.IssueOutput issued = ctx.get(ISSUED, DocumentProcesses.IssueOutput.class);

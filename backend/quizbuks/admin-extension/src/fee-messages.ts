@@ -66,6 +66,8 @@ export const feeMessages = {
     void: 'Void…',
     charges: { table: 'Charges', none: 'No fees charged yet.' },
     invoices: { table: 'Invoices', none: 'No invoices yet.' },
+    sources: { gift: 'Granted credit', prepayment: 'Prepayment', prepaymentGift: 'of which granted credit: {{amount}}',
+      cash: 'Cash', creditNote: 'Credit notes', unpaid: 'Still owed' },
     requests: { table: 'Requests', none: 'No requests yet.' },
     creditNotes: {
       title: 'Credit notes',
@@ -242,6 +244,8 @@ export const feeMessages = {
     void: '作废…',
     charges: { table: '记费', none: '还没有记费。' },
     invoices: { table: '账单', none: '还没有账单。' },
+    sources: { gift: '赠送额度', prepayment: '预付款', prepaymentGift: '其中赠送额度：{{amount}}', cash: '现金',
+      creditNote: '贷项凭证', unpaid: '仍未付' },
     requests: { table: '申请', none: '还没有申请。' },
     creditNotes: {
       title: '贷项凭证',
@@ -418,6 +422,8 @@ export const feeMessages = {
     void: '取り消し…',
     charges: { table: '請求', none: 'まだ請求はありません。' },
     invoices: { table: '請求書', none: 'まだ請求書はありません。' },
+    sources: { gift: '付与クレジット', prepayment: '前払金', prepaymentGift: 'うち付与クレジット：{{amount}}', cash: '現金',
+      creditNote: '返還インボイス', unpaid: '未払い' },
     requests: { table: '申請', none: 'まだ申請はありません。' },
     creditNotes: {
       title: '返還インボイス',

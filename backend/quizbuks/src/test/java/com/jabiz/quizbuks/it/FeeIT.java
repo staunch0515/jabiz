@@ -167,6 +167,18 @@ class FeeIT extends PlayItSupport {
             body("invoiceId", invoice.get("invoice_id")), 404);
     }
 
+    /** The text of an archived document, as the sponsor downloads it. */
+    String documentText(String token, Object runId) {
+        byte[] pdf = client.get().uri("/api/documents/runs/{id}/pdf", runId)
+            .header(org.springframework.http.HttpHeaders.AUTHORIZATION, token).exchange().expectStatus().isOk()
+            .expectBody(byte[].class).returnResult().getResponseBody();
+        try (org.apache.pdfbox.pdmodel.PDDocument document = org.apache.pdfbox.Loader.loadPDF(pdf)) {
+            return new org.apache.pdfbox.text.PDFTextStripper().getText(document).replaceAll("\\s+", " ");
+        } catch (java.io.IOException e) {
+            throw new IllegalStateException(e);
+        }
+    }
+
     @Test
     @Order(2)
     void anUnpaidPrepaidInvoiceStopsBuyingKudosAndSubmittingUntilItIsPaid() {
@@ -278,8 +290,19 @@ class FeeIT extends PlayItSupport {
         Map<String, Object> invoice = invoices(sponsor).getFirst();
         assertThat(invoice).containsEntry("status", "PAID");
         assertThat(balance(sponsor, QbWallets.CASH)).isEqualByComparingTo("1800");
-        // Voided: the fee's postings and the payment reversed, the cash given back.
+        // F-M13: the invoice's document names the fee by its reason, states the day it was issued (the fiscal zone's, not
+        // an instant), the tax rate and the payment status as of that day, and no longer a 'status' of its own.
         String invoiceId = String.valueOf(invoice.get("invoice_id"));
+        assertThat(String.valueOf(invoice.get("issued_on"))).isEqualTo(
+            clock.instant().atZone(TOKYO).toLocalDate().toString());
+        Map<String, Object> document = run(FeeProcesses.DOCUMENT, sponsorToken(sponsor),
+            body("invoiceId", invoiceId, "language", "en"));
+        String text = documentText(sponsorToken(sponsor), document.get("documentRunId"));
+        assertThat(text).contains("Custom report").contains("Issued on").contains("Tax rate")
+            .contains("Payment status as of").contains("Paid with cash").contains("Still owed")
+            .doesNotContain("(UTC)").doesNotContain("Status");
+        assertThat(text).contains(clock.instant().atZone(TOKYO).toLocalDate().toString());
+        // Voided: the fee's postings and the payment reversed, the cash given back.
         Map<String, Object> voiding = run(FeeRequests.RECORD, finance(), body("kind", "VOID", "invoiceId", invoiceId,
             "reason", "Charged twice"));
         approve((String) voiding.get("approvalRequestId"));
@@ -417,5 +440,44 @@ class FeeIT extends PlayItSupport {
             Map.of("invoiceId", String.valueOf(monthInvoice.get("invoice_id")))))).hasSize(1);
         assertThat(items("qb.sponsor.wallet", sponsorToken(sponsor), Map.of()).getFirst())
             .containsEntry("uninvoicedTotal", 0).containsEntry("unpaidTotal", 1100);
+    }
+
+    @Test
+    @Order(100)
+    void aVoidedInvoiceKeepsItsIssuedDocumentAndIssuesNoneAfter() {
+        switches();
+        String sponsor = newSponsor(unique("s-fm13-void"));
+        cash(sponsor, 6000);
+        String kept = voidManualInvoice(sponsor, 500, "Kept");
+        // Issued before it was voided: its original is still the sponsor's to download.
+        // (Issuing needs the invoice not void, so the order is: issue, then void.)
+        assertThat(kept).isNotBlank();
+        String none = voidManualInvoice(sponsor, 600, "None");
+        assertThat(codes(refused(FeeProcesses.DOCUMENT, sponsorToken(sponsor), body("invoiceId", none), 422)))
+            .containsExactly(FeeCodes.FEE_INVOICE_STATE);
+        // The one with a document gives the same run after its void.
+        Map<String, Object> again = run(FeeProcesses.DOCUMENT, sponsorToken(sponsor), body("invoiceId", kept));
+        assertThat(again.get("documentRunId")).isNotNull();
+    }
+
+    /** A manual fee of the amount, its invoice (issued first when the reason is "Kept"), voided with the approval. */
+    private String voidManualInvoice(String sponsor, int amount, String reason) {
+        Map<String, Object> requested = run(FeeRequests.RECORD, finance(), body("kind", "MANUAL", "sponsorId", sponsor,
+            "amount", amount, "reason", reason));
+        approve((String) requested.get("approvalRequestId"));
+        Map<String, Object> invoice = invoices(sponsor).stream()
+            .filter(row -> row.get("charge_id") != null && String.valueOf(charges(sponsor).stream()
+                .filter(c -> reason.equals(c.get("reason"))).findFirst().orElseThrow().get("charge_id"))
+                .equals(row.get("charge_id"))).findFirst().orElseThrow();
+        String invoiceId = String.valueOf(invoice.get("invoice_id"));
+        if ("Kept".equals(reason)) {
+            run(FeeProcesses.DOCUMENT, sponsorToken(sponsor), body("invoiceId", invoiceId, "language", "en"));
+        }
+        Map<String, Object> voiding = run(FeeRequests.RECORD, finance(), body("kind", "VOID", "invoiceId", invoiceId,
+            "reason", "Charged twice"));
+        approve((String) voiding.get("approvalRequestId"));
+        assertThat(query("SELECT status FROM qb_fee_invoice WHERE invoice_id = ?", invoiceId).getFirst())
+            .containsEntry("status", "VOID");
+        return invoiceId;
     }
 }

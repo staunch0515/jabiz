@@ -441,9 +441,23 @@ export interface InvoiceRow {
   creditApplied: number
   status: InvoiceStatus
   issuedAt: string
+  /** F-M13: the day it was issued (the fiscal zone's), which the document states. */
+  issuedOn: string
   dueOn: string | null
   paidAt: string | null
+  /** F-M13: when it was voided. */
+  voidedAt: string | null
   documentRunId: string | null
+}
+
+/** F-M13: what an invoice was paid with: the five that add up to the total, and the gift part inside the prepayment's. */
+export interface InvoiceSources {
+  gift: number
+  prepayment: number
+  prepaymentGift: number
+  cash: number
+  creditNote: number
+  unpaid: number
 }
 
 export async function searchFeeInvoices({ sorts, offset, limit }: TopUpSearch) {
@@ -462,8 +476,10 @@ export async function searchFeeInvoices({ sorts, offset, limit }: TopUpSearch) {
       creditApplied: num(row.creditApplied),
       status: invoiceStatusOf(row.status),
       issuedAt: String(row.issuedAt ?? ''),
+      issuedOn: String(row.issuedOn ?? ''),
       dueOn: str(row.dueOn),
       paidAt: str(row.paidAt),
+      voidedAt: str(row.voidedAt),
       documentRunId: str(row.documentRunId),
     })),
   }
@@ -767,3 +783,16 @@ export async function readFeePayments(offset: number, limit: number) {
 export const readFeeSubAccounts = (): Promise<DictionaryItem[]> => readDictionary(WALLET_DICTIONARY.feeSubAccount)
 export const readFeeCreditSources = (): Promise<DictionaryItem[]> => readDictionary(WALLET_DICTIONARY.feeCreditSource)
 export const readCashSources = (): Promise<DictionaryItem[]> => readDictionary(WALLET_DICTIONARY.cashSource)
+
+/** F-M13: what the invoice was paid with, as of now (the document's is as of its issue). */
+export async function readInvoiceSources(invoiceId: string): Promise<InvoiceSources> {
+  const row = (await runQuery<Row>(WALLET_TEMPLATE.invoiceSources, { params: { invoiceId }, limit: 1 })).items[0] ?? {}
+  return {
+    gift: num(row.sourceGift),
+    prepayment: num(row.sourcePrepayment),
+    prepaymentGift: num(row.sourcePrepaymentGift),
+    cash: num(row.sourceCash),
+    creditNote: num(row.sourceCreditNote),
+    unpaid: num(row.sourceUnpaid),
+  }
+}

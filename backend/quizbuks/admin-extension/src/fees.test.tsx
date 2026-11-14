@@ -123,7 +123,9 @@ beforeEach(() => {
                 : id === TEMPLATE.feePayments || id === TEMPLATE.operatorFeePayments ? PAYMENTS
                   : id === TEMPLATE.feeCreditSummary ? SUMMARY
                     : id === TEMPLATE.feeCreditGrants ? GRANTS
-                      : id === TEMPLATE.operatorFeeCreditOnboarding ? server.onboarding : []
+                      : id === TEMPLATE.operatorFeeCreditOnboarding ? server.onboarding
+                        : id === TEMPLATE.feeInvoiceSources ? [{ sourceGift: 200, sourcePrepayment: 300,
+                          sourcePrepaymentGift: 100, sourceCash: 0, sourceCreditNote: 0, sourceUnpaid: 600 }] : []
     return { items, offset: 0, limit: 20, ...(options.count ? { total: items.length } : {}) }
   })
   server.runProcess.mockReset().mockResolvedValue({ requestId: REQUEST, kind: 'MANUAL', status: 'REVIEW',
@@ -230,6 +232,18 @@ describe('FeesPage', () => {
     expect(within(row).getByTestId('fee-invoice-credit-applied')).toHaveTextContent('500')
     // 1,100 less 500 by credit notes and 300 paid.
     expect(within(row).getByTestId('fee-invoice-owed')).toHaveTextContent('300')
+  })
+
+  it('opens an invoice under its row to show what it was paid with (F-M13)', async () => {
+    renderAt('/qb/finance/fees?tab=invoices', '/qb/finance/fees', <FeesPage />)
+    const row = await screen.findByTestId('fee-invoice-row')
+    await userEvent.setup().click(within(row).getByRole('button', { name: 'dataTable.expandRow' }))
+    const sources = await screen.findByTestId('fee-invoice-sources')
+    expect(within(sources).getByTestId('fee-invoice-source-gift')).toHaveTextContent('200')
+    expect(within(sources).getByTestId('fee-invoice-source-prepayment')).toHaveTextContent('300')
+    expect(sources).toHaveTextContent('of which granted credit: ¥100')
+    expect(within(sources).getByTestId('fee-invoice-source-unpaid')).toHaveTextContent('600')
+    await expectAccessible(sources)
   })
 
   it('lists the credit notes for finance, with who issued one by hand (F-M7)', async () => {

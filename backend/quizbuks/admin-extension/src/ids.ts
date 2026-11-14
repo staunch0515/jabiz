@@ -142,6 +142,8 @@ export const TEMPLATE = {
   /** Q87: the platform's fees charged to sponsors, their invoices, and the requests another administrator approves. */
   feeCharges: 'qb.admin.fee-charges',
   feeInvoices: 'qb.admin.fee-invoices',
+  /** F-M13: what an invoice was paid with, in one row (the sponsor's template is the same statement). */
+  feeInvoiceSources: 'qb.admin.fee-invoice-sources',
   /** F-M1: one Sponsor's account that pays the platform's fees (finance; an operator's own Sponsors'), and in all. */
   feeAccount: 'qb.admin.fee-account',
   feeAccountLots: 'qb.admin.fee-account-lots',

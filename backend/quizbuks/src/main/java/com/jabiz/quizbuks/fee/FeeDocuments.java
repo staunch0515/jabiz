@@ -17,9 +17,15 @@ public final class FeeDocuments {
         .number(FeeProcesses.DOCUMENT_TEMPLATE, "invoiceNo")
         .party("issuer", FeeProcesses.ISSUER_TEMPLATE, "name", "address", "registrationNo")
         .party("sponsor", FeeProcesses.DOCUMENT_TEMPLATE, "company", "contactName")
-        .facts(FeeProcesses.DOCUMENT_TEMPLATE, "period", "billingMode", "issuedAt", "dueOn", "status", "creditApplied")
-        .table(FeeProcesses.LINES_TEMPLATE, "kind", "period", "description", "amount", "tax", "total")
+        // F-M13: the day it was issued (the fiscal zone's), not an instant; the state is not stated (it would be as old
+        // as the document): what was paid, and with what, is, as of a day.
+        .facts(FeeProcesses.DOCUMENT_TEMPLATE, "period", "billingMode", "issuedOn", "dueOn")
+        .table(FeeProcesses.LINES_TEMPLATE, "kind", "period", "description", "taxRate", "amount", "tax", "total")
+        .table(FeeProcesses.RATES_TEMPLATE, "taxRate", "rateNet", "rateTax", "rateGross")
         .totals(FeeProcesses.DOCUMENT_TEMPLATE, "amount", "tax", "total")
+        .text("paymentAsOf", FeeProcesses.SOURCES_TEMPLATE, "asOf")
+        .facts(FeeProcesses.SOURCES_TEMPLATE, "sourceGift", "sourcePrepayment", "sourcePrepaymentGift", "sourceCash",
+            "sourceCreditNote", "sourceUnpaid")
         .note("note"));
 
     /**

@@ -1,4 +1,4 @@
-import { formatDate, formatDateTime } from '@jabiz/client'
+import { formatDate } from '@jabiz/client'
 import {
   Alert,
   AlertDescription,
@@ -25,6 +25,7 @@ import {
   invoiceOwed,
   payEarly,
   payInvoice,
+  readInvoiceSources,
   readInvoiceStatuses,
   searchFeeInvoices,
   WALLET_QUERY,
@@ -109,7 +110,7 @@ export function Invoices({ wallet }: { wallet: SponsorWallet }) {
   const accountAvailable = feeAccountAvailable(wallet)
   const columns = useMemo<ColumnDef<InvoiceRow, unknown>[]>(() => [
     { id: 'issuedAt', header: t('wallet.invoices.issued'), meta: { card: 'subtitle' },
-      cell: ({ row }) => formatDateTime(row.original.issuedAt) },
+      cell: ({ row }) => formatDate(row.original.issuedOn || row.original.issuedAt) },
     { id: 'invoiceNo', header: t('wallet.invoices.number'), enableSorting: false, meta: { card: 'title' },
       cell: ({ row }) => <span data-testid="invoice-row-number">{row.original.invoiceNo}</span> },
     { id: 'period', header: t('wallet.invoices.period'), enableSorting: false,
@@ -133,9 +134,17 @@ export function Invoices({ wallet }: { wallet: SponsorWallet }) {
       cell: ({ row }) => (row.original.dueOn ? formatDate(row.original.dueOn) : '—') },
     { id: 'status', header: t('wallet.invoices.status'), meta: { card: 'badge' },
       cell: ({ row }) => (
-        <Badge variant={STATUS_BADGES[row.original.status]} data-testid="invoice-row-status" data-status={row.original.status}>
-          {statusLabel(row.original.status)}
-        </Badge>
+        <>
+          <Badge variant={STATUS_BADGES[row.original.status]} data-testid="invoice-row-status" data-status={row.original.status}>
+            {statusLabel(row.original.status)}
+          </Badge>
+          {/* F-M13: the day it was voided; the reason is the headquarters' only. */}
+          {row.original.status === 'VOID' && row.original.voidedAt && (
+            <span className="text-muted-foreground block text-xs" data-testid="invoice-row-voided-on">
+              {t('wallet.invoices.voidedOn', { date: formatDate(row.original.voidedAt) })}
+            </span>
+          )}
+        </>
       ) },
     { id: 'actions', header: () => <span className="sr-only">{t('wallet.invoices.document')}</span>, enableSorting: false,
       meta: { card: 'actions' },
@@ -156,7 +165,8 @@ export function Invoices({ wallet }: { wallet: SponsorWallet }) {
                 <span className="sr-only">: {invoice.invoiceNo}</span>
               </Button>
             )}
-            {invoice.status !== 'VOID' && (
+            {/* F-M13: a voided invoice's original stays downloadable once it was issued; none is issued after. */}
+            {(invoice.status !== 'VOID' || invoice.documentRunId) && (
               <Button size="sm" variant="outline" disabled={download.isPending} aria-busy={download.isPending || undefined}
                 data-testid="invoice-row-document" onClick={() => download.mutate(invoice.invoiceId)}>
                 <FileDown aria-hidden />
@@ -218,9 +228,39 @@ export function Invoices({ wallet }: { wallet: SponsorWallet }) {
               setSorting(next)
               setPagination((p) => ({ ...p, pageIndex: 0 }))
             }}
+            renderExpanded={(row) => <InvoiceSources invoiceId={row.invoiceId} total={row.total} />}
             rowProps={(row) => ({ 'data-testid': 'invoice-row', 'data-invoice': row.invoiceId, 'data-status': row.status })} />
         )}
       <CreditNotes />
     </section>
+  )
+}
+
+/**
+ * F-M13: what an invoice was paid with, as of now (the document's own is as of the day it was issued, and does not
+ * change): the same statement as the document's, so the two never disagree on how it is counted.
+ */
+function InvoiceSources({ invoiceId, total }: { invoiceId: string; total: number }) {
+  const { t } = useTranslation(SPONSOR)
+  const { t: tQb } = useTranslation(QB)
+  const sources = useQuery({ queryKey: [...WALLET_QUERY, 'invoice-sources', invoiceId],
+    queryFn: () => readInvoiceSources(invoiceId) })
+  if (sources.isError) return <p className="text-destructive text-sm" role="alert">{tQb('failed')}</p>
+  if (!sources.data) return null
+  const s = sources.data
+  return (
+    <div data-testid="invoice-sources" data-total={total}>
+      <h3 className="mb-2 text-sm font-semibold">{t('wallet.invoices.sources.title')}</h3>
+      <DescriptionList columns={3} items={[
+        { key: 'gift', label: t('wallet.invoices.sources.gift'), value: formatKudos(s.gift) },
+        { key: 'prepayment', label: t('wallet.invoices.sources.prepayment'),
+          value: formatKudos(s.prepayment) + (s.prepaymentGift > 0
+            ? ` (${t('wallet.invoices.sources.prepaymentGift', { amount: formatKudos(s.prepaymentGift) })})` : '') },
+        { key: 'cash', label: t('wallet.invoices.sources.cash'), value: formatKudos(s.cash) },
+        { key: 'creditNote', label: t('wallet.invoices.sources.creditNote'), value: formatKudos(s.creditNote) },
+        { key: 'unpaid', label: t('wallet.invoices.sources.unpaid'), value: formatKudos(s.unpaid) },
+      ]} />
+      <p className="text-muted-foreground mt-2 text-xs">{t('wallet.invoices.sources.note')}</p>
+    </div>
   )
 }

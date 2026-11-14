@@ -69,6 +69,18 @@ The top of "Money → Platform fee account" shows the total, the Granted credit 
 
 A credit note lowers what you owe in platform fees; the fee and its invoice stay as they were. One is issued when a publication ends early, for the unused days of its audience rule fee (whether they are given back depends on the platform's setting; a takedown by the platform is not), or when the platform's finance staff correct a fee (approved by a second administrator). It first pays what the fee's invoice still owes; for a prepaid fee it then gives the rest back to where it was paid from (cash or granted credit; granted credit that has expired is not given back); anything still left pays your next invoices first. See each credit note and download its PDF under "Credit notes" in "Money → Invoices"; an invoice shows what credit notes paid of it.
 
+### 中文 · 账单上写着"付款情况"，是现在的吗？
+
+不是。账单的 PDF 是您**第一次下载那天**做的，写明"付款情况截至"那一天：赠送额度、预付款、现金、贷项凭证各付了多少，还有多少没付。之后再付款，PDF 不会改（它是一份固定的文件）；最新的付款情况在"资金 → 账单"里点开那一行看。金额、税与明细永远不变；税按税率分别小计。已作废的账单仍可下载原件，页面会写明作废的日期。
+
+### 日本語 · 請求書の「支払状況」は現在のものですか？
+
+いいえ。請求書の PDF は**初めてダウンロードした日**に作られ、「支払状況（基準日）」としてその日の付与クレジット・前払金・現金・返還インボイスでの支払額と、未払い額が記されます。その後に支払っても PDF は変わりません（固定された書類です）。最新の支払状況は「資金 → 請求書」で該当の行を開くと確認できます。金額・税・明細は変わらず、税は税率ごとに小計されます。取り消された請求書も、すでに発行された原本はダウンロードでき、取消日が表示されます。
+
+### English · Is the "payment status" on an invoice current?
+
+No. An invoice's PDF is made the **day you first download it**, and states the payment status as of that day: how much was paid with Granted credit, the prepayment, cash and credit notes, and what is still owed. Later payments do not change the PDF (it is a fixed document); the latest status is under "Money → Invoices", on the row you open. The amounts, tax and lines never change; tax is subtotalled by rate. A voided invoice's original can still be downloaded, and the page says the day it was voided.
+
 ### 中文 · 学分现在能用吗？
 
 **首次上线时学分暂不使用。** 现在发起方页面的菜单中没有"钱包"，不能用现金换学分，学分不能换回现金，也不能转账或提现；发布暂时不能把学分设为奖励（奖励方式是到店领取的奖品、电子奖品等）。支付平台费用的是"平台费账户"，不是学分钱包。学分何时开放使用，请留意平台的公告；此前请不要为学分充值。

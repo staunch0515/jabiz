@@ -322,8 +322,8 @@ class ExposureFeeIT extends ExposureFeeItSupport {
         submit(sponsorToken(a[0]), a[1]);
         String invoiceId = java.util.UUID.randomUUID().toString();
         execute("INSERT INTO qb_fee_invoice (invoice_id, invoice_no, sponsor_id, billing_mode, period, amount, tax, "
-            + "total, status, issued_at, due_on) VALUES (?, ?, ?, 'PREPAID', '2026-10', 1000, 100, 1100, 'OPEN', now(), "
-            + "current_date)", invoiceId, "IT-" + invoiceId.substring(0, 8), a[0]);
+            + "total, status, issued_at, issued_on, due_on) VALUES (?, ?, ?, 'PREPAID', '2026-10', 1000, 100, 1100, "
+            + "'OPEN', now(), current_date, current_date)", invoiceId, "IT-" + invoiceId.substring(0, 8), a[0]);
         assertThat(codes(refused(PublicationExposureTopUp.TOP_UP, sponsorToken(a[0]), topUp(a[0], a[1], 105, 5), 422)))
             .contains(FeeCodes.FEE_UNPAID);
         assertThat(dec(exposurePrepayment(a[1]).get("amount"))).isEqualByComparingTo("115");

@@ -236,10 +236,10 @@ class SponsorTodoIT extends VideoUseItSupport {
         Instant now = clock.instant();
         boolean paid = "PAID".equals(status);
         execute("INSERT INTO qb_fee_invoice (invoice_id, invoice_no, sponsor_id, billing_mode, period, amount, tax, "
-            + "total, paid_amount, status, issued_at, due_on, paid_at, payment_transaction_id) VALUES (?, ?, ?, "
-            + "'POSTPAID', ?, 1000, 100, 1100, ?, ?, ?, ?::date, ?, ?)", id, "TODO-" + id.substring(0, 8), sponsor,
+            + "total, paid_amount, status, issued_at, issued_on, due_on, paid_at, payment_transaction_id) VALUES "
+            + "(?, ?, ?, 'POSTPAID', ?, 1000, 100, 1100, ?, ?, ?, ?::date, ?::date, ?, ?)", id, "TODO-" + id.substring(0, 8), sponsor,
             period, paid ? 1100 : 0, status, Timestamp.from(now.minus(Duration.ofDays(40))),
-            now.minus(Duration.ofDays(10)).toString().substring(0, 10), paid ? Timestamp.from(now) : null,
+            now.minus(Duration.ofDays(40)).toString().substring(0, 10), now.minus(Duration.ofDays(10)).toString().substring(0, 10), paid ? Timestamp.from(now) : null,
             paid ? "pay-" + id : null);
     }
 

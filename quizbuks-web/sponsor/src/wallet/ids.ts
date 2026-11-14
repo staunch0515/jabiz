@@ -37,6 +37,8 @@ export const WALLET_TEMPLATE = {
   cashSettings: 'qb.sponsor.cash-settings',
   /** Q87b: the platform's invoices, the fees charged and an invoice's lines. */
   feeInvoices: 'qb.sponsor.fee-invoices',
+  /** F-M13: what an invoice was paid with, in one row (the same statement as the document's). */
+  invoiceSources: 'qb.sponsor.fee-invoice-sources',
   feeCharges: 'qb.sponsor.fee-charges',
   feeInvoiceLines: 'qb.sponsor.fee-invoice-lines',
   /** F-M1: the account's lots with money left, and how each fee was paid. */

@@ -143,6 +143,31 @@ class FeeAccountIT extends PlayItSupport {
         return found.stream().filter(row -> sponsor.equals(row.get("sponsorId"))).toList();
     }
 
+    /** F-M13: what the invoice was paid with, as the sponsor reads it and as finance does (the same statement twice). */
+    Map<String, Object> sources(String token, Object invoiceId) {
+        Map<String, Object> own = items("qb.sponsor.fee-invoice-sources", token,
+            Map.of("params", Map.of("invoiceId", String.valueOf(invoiceId)))).getFirst();
+        assertThat(items("qb.admin.fee-invoice-sources", finance(),
+            Map.of("params", Map.of("invoiceId", String.valueOf(invoiceId)))).getFirst()).isEqualTo(own);
+        // The identity: the five add up to the total (a voided invoice owes and holds nothing: 0). The prepayment's own
+        // gift part is inside the prepayment's, so it is not added.
+        BigDecimal sum = BigDecimal.ZERO;
+        for (String key : List.of("sourceGift", "sourcePrepayment", "sourceCash", "sourceCreditNote", "sourceUnpaid")) {
+            sum = sum.add(new BigDecimal(String.valueOf(own.get(key))));
+        }
+        assertThat(sum).isEqualByComparingTo(voided(invoiceId) ? BigDecimal.ZERO
+            : new BigDecimal(String.valueOf(invoiceRow(invoiceId).get("total"))));
+        return own;
+    }
+
+    Map<String, Object> invoiceRow(Object invoiceId) {
+        return query("SELECT * FROM qb_fee_invoice WHERE invoice_id = ?", String.valueOf(invoiceId)).getFirst();
+    }
+
+    boolean voided(Object invoiceId) {
+        return "VOID".equals(invoiceRow(invoiceId).get("status"));
+    }
+
     @Test
     void twoLotsOfCreditAndTheCashPayAFeeInFullTheEarliestToExpireFirst() {
         String sponsor = newSponsor(unique("s-fm1-full"));
@@ -190,6 +215,10 @@ class FeeAccountIT extends PlayItSupport {
             .hasSize(3);
         assertThat(items("qb.sponsor.fee-payments", sponsorToken(newSponsor(unique("s-fm1-else"))), Map.of()))
             .isEmpty();
+        // F-M13: the invoice's payment status: 800 of granted credit, 300 of cash, nothing owed, the same for finance.
+        assertThat(sources(token, invoice(sponsor).get("invoice_id"))).containsEntry("sourceGift", 800)
+            .containsEntry("sourceCash", 300).containsEntry("sourcePrepayment", 0).containsEntry("sourceCreditNote", 0)
+            .containsEntry("sourceUnpaid", 0);
         assertThat(differences(sponsor)).isEmpty();
         // The monthly report: the payment is FEE_PAID, its columns what each sub-account paid (debit less credit).
         java.time.YearMonth month = java.time.YearMonth.from(clock.instant().atZone(java.time.ZoneOffset.UTC));
@@ -220,6 +249,9 @@ class FeeAccountIT extends PlayItSupport {
         String token = sponsorToken(sponsor);
         // What is still owed: 600; nothing to pay it with yet.
         assertThat(items("qb.sponsor.wallet", token, Map.of()).getFirst()).containsEntry("unpaidTotal", 600);
+        // F-M13: 200 of granted credit and 300 of cash paid it; 600 is owed.
+        assertThat(sources(token, invoiceId)).containsEntry("sourceGift", 200).containsEntry("sourceCash", 300)
+            .containsEntry("sourceUnpaid", 600);
         assertThat(codes(refused(FeeProcesses.PAY, token, body("invoiceId", invoiceId), 422)))
             .containsExactly(FeeCodes.FEE_CASH_SHORT);
 
@@ -230,6 +262,8 @@ class FeeAccountIT extends PlayItSupport {
         cash(sponsor, 1000);
         assertThat(run(FeeProcesses.PAY, token, body("invoiceId", invoiceId))).containsEntry("status", QbFees.PAID)
             .containsEntry("paidAmount", 1100).containsEntry("paidNow", 200).containsEntry("cashBalance", 800);
+        assertThat(sources(token, invoiceId)).containsEntry("sourceGift", 200).containsEntry("sourceCash", 900)
+            .containsEntry("sourceUnpaid", 0);
         Map<String, Object> paid = invoice(sponsor);
         assertThat(paid.get("payment_transaction_id")).isNotNull();
         assertThat(paid.get("paid_at")).isNotNull();
@@ -248,6 +282,9 @@ class FeeAccountIT extends PlayItSupport {
         run("APPROVAL_DECIDE", content(), body("requestId", voiding.get("approvalRequestId"), "decision", "APPROVE"));
         deliverEvents();
         assertThat(invoice(sponsor)).containsEntry("status", QbFees.VOID);
+        // Voided: what was paid was given back, so nothing is owed and nothing stays paid.
+        assertThat(sources(token, invoiceId)).containsEntry("sourceGift", 0).containsEntry("sourceCash", 0)
+            .containsEntry("sourceUnpaid", 0);
         assertThat(remaining("qb_fee_credit_grant", "grant_id", credit)).isEqualByComparingTo("200");
         assertThat(remaining("qb_cash_lot", "lot_id", first)).isEqualByComparingTo("300");
         assertThat(balance(sponsor, QbWallets.FEE_CREDIT)).isEqualByComparingTo("200");

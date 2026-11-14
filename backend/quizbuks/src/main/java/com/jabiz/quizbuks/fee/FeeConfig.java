@@ -613,7 +613,7 @@ public class FeeConfig {
 
     @Bean
     ProcessDefinition<FeeProcesses.DocumentInput, FeeProcesses.InvoiceOutput, ProcessContext> qbFeeInvoiceDocument() {
-        return FeeProcesses.document();
+        return FeeProcesses.document(zone);
     }
 
     @Bean
