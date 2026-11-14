@@ -1,5 +1,5 @@
 import { api, ApiError, runProcess, runQuery, sessionFetch, unwrap, type Filter } from '@jabiz/admin'
-import { PROCESS, STALE_AFTER_MS, TEMPLATE, type ReportId } from './ids'
+import { ATTENTION_CHECKS, PAGE_LIMIT, PROCESS, STALE_AFTER_MS, TEMPLATE, type ReportId } from './ids'
 import type { SortSpec } from './api'
 
 /*
@@ -66,6 +66,8 @@ export interface ReconSummary {
   lastRunAt: string | null
   lastRunStatus: string | null
   lastRunItems: number
+  /** The run's summary: JSON of the number found by each check (F-M14: for the counts by level). */
+  lastRunSummary: string | null
   openTasks: number
 }
 
@@ -76,6 +78,7 @@ export async function readReconSummary(): Promise<ReconSummary> {
     lastRunAt: str(row.lastRunAt),
     lastRunStatus: str(row.lastRunStatus),
     lastRunItems: num(row.lastRunItems),
+    lastRunSummary: str(row.lastRunSummary),
     openTasks: num(row.openTasks),
   }
 }
@@ -286,6 +289,8 @@ export interface ReconRun {
   status: string
   itemCount: number
   checkedAt: string | null
+  /** Every check's count as JSON (the run's summary), for the counts by level. */
+  summary: string | null
 }
 
 export async function readReconRuns(offset: number, limit: number, sorts?: SortSpec[], more?: Filter[]): Promise<Page<ReconRun>> {
@@ -293,7 +298,8 @@ export async function readReconRuns(offset: number, limit: number, sorts?: SortS
   return {
     total: page.total,
     items: page.items.map((row) => ({ runId: String(row.runId), scheduledTime: str(row.scheduledTime),
-      status: String(row.status ?? ''), itemCount: num(row.itemCount), checkedAt: str(row.checkedAt) })),
+      status: String(row.status ?? ''), itemCount: num(row.itemCount), checkedAt: str(row.checkedAt),
+      summary: str(row.summary) })),
   }
 }
 
@@ -318,6 +324,21 @@ export async function readReconItems(runId: string, offset: number, limit: numbe
       partyId: str(row.partyId), reference: str(row.reference), expected: amount(row.expected),
       actual: amount(row.actual), difference: amount(row.difference) })),
   }
+}
+
+/**
+ * F-M14: for how many days an item for attention of a run has been found in a row, by check and object (the item's
+ * reference, else its party, else '-'); the page looks an item up by {@link attentionKey}.
+ */
+export async function readAttentionDays(runId: string): Promise<Map<string, number>> {
+  const page = await runQuery<Row>(TEMPLATE.reconAttentionDays,
+    { params: { runId, checks: [...ATTENTION_CHECKS] }, limit: PAGE_LIMIT })
+  return new Map(page.items.map((row) => [`${String(row.checkCode)}:${String(row.objectKey)}`, num(row.days)]))
+}
+
+/** The key of an item in {@link readAttentionDays}. */
+export function attentionKey(item: Pick<ReconItem, 'checkCode' | 'reference' | 'partyId'>): string {
+  return `${item.checkCode}:${item.reference ?? item.partyId ?? '-'}`
 }
 
 /** A report's period: the month's first instant and the next month's, in UTC (the reports' zone). */

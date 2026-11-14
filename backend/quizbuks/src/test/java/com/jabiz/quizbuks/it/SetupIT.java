@@ -585,6 +585,8 @@ class SetupIT extends QbItSupport {
         expected.put(QbParams.operatorGiftTreatment("MANUAL"), "PLATFORM");
         expected.put(QbParams.operatorGiftTreatment("LIGHT"), "PLATFORM");
         expected.put(QbParams.OPERATOR_GIFT_RECOVER_OUTSIDE_BASE, "false");
+        // F-M12 b: how long a settlement waits for the steps before it (controlled).
+        expected.put(QbParams.OPERATOR_SETTLEMENT_READINESS_MAX_DAYS, "5");
         // F-M9: the AI fee (its least purchase is not created here).
         expected.put(QbParams.AI_FEE_ENABLED, "false");
         expected.put(QbParams.AI_FEE_MARKUP, "1.50");

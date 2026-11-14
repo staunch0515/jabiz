@@ -8,6 +8,7 @@ datasets:
   QbOperatorSettlementLine: urn:jabiz:dataset:default:QbOperatorSettlementLine
 params:
   operatorId: { like: QbFeeCharge.operatorId, required: true, description: The operator }
+  maxVoids:   { kind: { type: numeric, precision: 9, scale: 0 }, required: true, description: "At most this many voids, the oldest fee first (the cap on a settlement's lines, plus one)" }
 results:
   chargeId:     { from: QbFeeCharge.chargeId }
   sponsorId:    { from: QbFeeCharge.sponsorId }
@@ -22,6 +23,9 @@ permissions: [qb.operator.settlement.system]
 ---*/
 -- A fee with a CHARGE line (counted for this operator) whose invoice is voided now and no VOID line yet. The void is
 -- taken at the CHARGE line's rates (the operator may have changed plan since), so they ride along.
+-- Bounded (F-M12 b, review H1): at most maxVoids, the oldest fee first (chargedAt, charge id in the C collation, as the caller
+-- sorts); the rest are taken by a later settlement (a fee with a VOID line is not read again).
+WITH voided AS (
 SELECT c.{{QbFeeCharge.chargeId}} AS chargeId,
        c.{{QbFeeCharge.sponsorId}} AS sponsorId,
        c.{{QbFeeCharge.kind}} AS kind,
@@ -47,3 +51,8 @@ WHERE c.{{QbFeeCharge.operatorId}} = :operatorId
   AND NOT EXISTS (SELECT 1 FROM {{QbOperatorSettlementLine}} v
                   WHERE v.{{QbOperatorSettlementLine.lineKind}} = 'VOID'
                     AND v.{{QbOperatorSettlementLine.chargeId}} = CAST(c.{{QbFeeCharge.chargeId}} AS text))
+)
+SELECT v.chargeId, v.sponsorId, v.kind, v.period, v.amount, v.excluded, v.shareRate, v.recoveryRate, v.chargedAt FROM (
+    SELECT v0.*, row_number() OVER (ORDER BY v0.chargedAt, CAST(v0.chargeId AS text) COLLATE "C") AS seq FROM voided v0
+) v
+WHERE v.seq <= :maxVoids

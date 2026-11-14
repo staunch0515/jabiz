@@ -29,6 +29,9 @@ class SetupExistingThresholdsIT extends QbItSupport {
         ordinaryRow(QbParams.PREPAYMENT_RELEASE_OVERDUE_DAYS, "5");
         ordinaryRow(QbParams.AUDIENCE_REFUND_MISSING_AFTER_HOURS, "48");
 
+        // The second run proposes nothing for them because of the first run's setup records (QB_SETUP skips a
+        // parameter whose record is there, QbSetupProcesses: !recorder.isNew(param)), not because of the rows above;
+        // the rows only stand for the values the installation has.
         Map<String, Object> again = setup();
         assertThat(String.valueOf(again.get("paramsProposed"))).doesNotContain(QbParams.PREPAYMENT_RELEASE_OVERDUE_DAYS)
             .doesNotContain(QbParams.AUDIENCE_REFUND_MISSING_AFTER_HOURS);
