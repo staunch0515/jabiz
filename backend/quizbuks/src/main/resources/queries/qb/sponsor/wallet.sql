@@ -36,6 +36,7 @@ results:
   cashFromOperator: { kind: { type: monetary, currency: JPY, scale: 0 } }
   prepaymentHeld: { kind: { type: monetary, currency: JPY, scale: 0 } }
   creditNoteCredit: { kind: { type: monetary, currency: JPY, scale: 0 } }
+  autoPay:       { kind: { type: bool } }
 permissions: [qb.sponsor.finance.read]
 ---*/
 -- Every dataset is the caller's own (their wallet, top-ups and ledger lines), so this is one row. The balance is the
@@ -62,7 +63,9 @@ SELECT
     coalesce(fc.fc_balance, 0)      AS feeCreditBalance,
     coalesce(ol.ol_remaining, 0)    AS cashFromOperator,
     coalesce(pp.pp_remaining, 0)    AS prepaymentHeld,
-    coalesce(cn.cn_left, 0)         AS creditNoteCredit
+    coalesce(cn.cn_left, 0)         AS creditNoteCredit,
+    -- F-M13c: whether unpaid invoices are paid by themselves (only the value true is on, as the payment reads it).
+    coalesce((SELECT max(a.{{SysParam.value}}) FROM {{SysParam}} a WHERE a.{{SysParam.paramKey}} = 'qb.fee.auto-pay.enabled') = 'true', false) AS autoPay
 FROM (SELECT 1 AS one) base
 -- F-M7: the credit notes' credit not used yet, which the next invoices take first (their total less what they gave
 -- back and what their credit paid).

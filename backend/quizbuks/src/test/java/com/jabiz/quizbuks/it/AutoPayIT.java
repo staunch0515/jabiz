@@ -77,8 +77,11 @@ class AutoPayIT extends PlayItSupport {
         param(QbParams.FEE_AUTO_PAY_ENABLED, "false");
         assertThat(autoPay(sponsor).outcome()).isEqualTo("OFF");
         assertThat((BigDecimal) row(invoiceId).get("paid_amount")).isEqualByComparingTo("0");
+        // The sponsor's wallet says so too (F-M13c): off, then on.
+        assertThat(items("qb.sponsor.wallet", sponsorToken(sponsor), Map.of()).getFirst()).containsEntry("autoPay", false);
 
         param(QbParams.FEE_AUTO_PAY_ENABLED, "true");
+        assertThat(items("qb.sponsor.wallet", sponsorToken(sponsor), Map.of()).getFirst()).containsEntry("autoPay", true);
         FeeAutoPay.AutoPayOutput first = autoPay(sponsor);
         assertThat(first.outcome()).isEqualTo("PAID");
         assertThat(first.paid()).isEqualByComparingTo("400");
