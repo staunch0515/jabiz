@@ -173,6 +173,20 @@ public final class QbParams {
     public static final String AI_FEE_USD_JPY = "qb.ai.fee.usd-jpy";
     public static final String AI_CREDIT_MIN_PURCHASE = "qb.ai.credit.min-purchase";
     /**
+     * F-M9b (coordinator 2026-11-14): below this many yen available, the Sponsor's home and AI credit page say the AI
+     * credit is short. Controlled and optional (not created by {@code QB_SETUP}): not set, nothing is said
+     * (launch checklist). The first change gives it {@link #AI_CREDIT_MIN_PURCHASE_KIND}.
+     */
+    public static final String AI_CREDIT_LOW_AMOUNT = "qb.ai.credit.low-amount";
+    /**
+     * F-M9b (coordinator 2026-11-14): "AI credit short" is said only to a Sponsor who made a charged AI request within
+     * this many days (a Sponsor who never uses AI is never told). Controlled and optional, not created by
+     * {@code QB_SETUP}: not set (or not a whole number from 1 to 365), {@link #AI_CREDIT_LOW_RECENT_DAYS_DEFAULT}. The
+     * first change gives it {@link #AI_FEE_SITE_LIMIT_KIND} (a whole number).
+     */
+    public static final String AI_CREDIT_LOW_RECENT_DAYS = "qb.ai.credit.low-recent-days";
+    public static final int AI_CREDIT_LOW_RECENT_DAYS_DEFAULT = 30;
+    /**
      * F-M9: the AI fee's controlled parameters that {@code QB_SETUP} creates (the last of {@link #CONTROLLED});
      * {@link #AI_CREDIT_MIN_PURCHASE} is controlled too but optional ({@code SetupConfig}).
      */
@@ -204,7 +218,10 @@ public final class QbParams {
     /** The kind the controlled change that first sets one of {@link #AI_FEE_SITE_LIMITS} gives (a whole number). */
     public static final Map<String, Object> AI_FEE_SITE_LIMIT_KIND = Map.of("type", "numeric", "precision", 6,
         "scale", 0);
-    /** The kind the controlled change that first sets {@link #AI_CREDIT_MIN_PURCHASE} gives (yen, whole). */
+    /**
+     * The kind the controlled change that first sets {@link #AI_CREDIT_MIN_PURCHASE} (or {@link #AI_CREDIT_LOW_AMOUNT})
+     * gives (yen, whole).
+     */
     public static final Map<String, Object> AI_CREDIT_MIN_PURCHASE_KIND = Map.of("type", "monetary", "currency", "JPY",
         "scale", 0);
     public static final String OPERATOR_SHARE_KINDS = "qb.operator.share.kinds";

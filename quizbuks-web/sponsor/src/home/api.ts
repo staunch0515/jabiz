@@ -17,12 +17,18 @@ export type TodoCounts = Record<TodoColumn, number>
 
 export const NO_TODO: TodoCounts = Object.fromEntries(TODO_COLUMNS.map((column) => [column, 0])) as TodoCounts
 
-export async function readTodo(at: string = minuteNow()): Promise<TodoCounts> {
+/** The counts and whether the AI credit's standing is worth reading (`aiCreditCheck`, never listed as an item). */
+export interface TodoReading {
+  counts: TodoCounts
+  aiCreditCheck: boolean
+}
+
+export async function readTodo(at: string = minuteNow()): Promise<TodoReading> {
   const row = (await runQuery<Record<string, unknown>>(TODO_TEMPLATE, { params: { at }, limit: 1 })).items[0]
   const counts = { ...NO_TODO }
   for (const column of TODO_COLUMNS) {
     const n = Number(row?.[column] ?? 0)
     counts[column] = Number.isFinite(n) && n > 0 ? Math.floor(n) : 0
   }
-  return counts
+  return { counts, aiCreditCheck: Number(row?.aiCreditCheck) === 1 }
 }

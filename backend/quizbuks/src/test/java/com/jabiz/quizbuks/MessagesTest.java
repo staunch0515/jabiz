@@ -214,6 +214,29 @@ class MessagesTest {
                 "query.qb.admin.ai-settings", "query.qb.system.ai-expired", "param.qb.ai.candidates.expire-days");
     }
 
+    /**
+     * F-M9b (#707 review M2): the AI credit's refusals a Sponsor reads name no currency, the amounts in points as the
+     * app shows every amount (Q61: Kudos, 学分, クドス).
+     */
+    @Test
+    void theAiCreditsRefusalsNameNoCurrency() throws IOException {
+        java.util.List<String> codes = java.util.List.of("QB_AI_CREDIT_SHORT", "QB_AI_CREDIT_MIN",
+            "QB_AI_CREDIT_FUNDS_SHORT", "QB_AI_CREDIT_RETURN_ABOVE", "QB_AI_FEE_TAX_UNSET");
+        java.util.Map<String, String> unit = java.util.Map.of("en", "Kudos", "zh", "学分", "ja", "クドス");
+        for (String language : java.util.List.of("en", "zh", "ja")) {
+            Properties texts = load(language);
+            for (String code : codes) {
+                String text = texts.getProperty(code);
+                assertThat(text).as(language + " " + code).isNotBlank()
+                    .doesNotContainPattern("(?i)\\byen\\b|円|日元|JPY");
+                if (text.contains("{")) {
+                    assertThat(text).as(language + " " + code + " names its amounts in points")
+                        .contains(unit.get(language));
+                }
+            }
+        }
+    }
+
     @Test
     void matchingHasItsTexts() throws IOException {
         // Q47: the codes, the processes and the two entities.

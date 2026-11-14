@@ -127,11 +127,14 @@
 
 ## 7 页面与运营闭合
 
-- **发起方**（b）：
-  - `/money/ai` `AiCreditPage`：额度合计（赠送 / 现金，每笔赠送的到期日）、可用额、本月未记费金额、"购买"（金额、最低购买额、预览"先用赠送，余下用现金"）、"退回"、用量明细（模板 `qb.sponsor.ai-credit` 新：作业的日期、种类、费用 / "预留中"、状态；变动记录来自 `QbAiCreditMovement`）。
+- **发起方**（b1，总控 2026-11-14 改写）：
+  - `/money/ai` `AiCreditPage`：一览（可用、剩余、预留中、未记费含税，取自只读流程 `QB_AI_CREDIT_STANDING`）；"购买"（金额；设了最低购买额时写明；显示平台费账户中可用的赠送额度与现金，"赠送先用、余下用现金"只作文字说明，成功后显示服务器给出的拆分）；"退回"（金额，或"全部可退" = 流程给出的 `returnable`）；明细三张表（模板 `qb.sponsor.ai-credit-lots`、`qb.sponsor.ai-credit-jobs`、`qb.sponsor.ai-credit-movements`；一览的模板 `qb.sponsor.ai-credit` 已删，#707 审查 L4，都是发起方自己的数据集 `FeeConfig.own`）。页面只显示模板与流程给的数，前端不重算。
   - 钱包页 `FeeAccount` 的预付款块把 AI 额度分开显示（`qb.sponsor.wallet` 的 `prepaymentHeld` 排除用途 `AI`，另加 `aiCreditHeld`）。
-  - 三个 AI 面板（题目、翻译、官网生成）：显示可用额、"本次最多约 ¥X"（`QB_AI_FEE_QUOTE`）与"购买"；额度不足的 422 直接给入口。首页"待我处理"加"AI 额度不足"（可用额低于 `qb.ai.credit.low-amount` 且近 30 天用过 AI 时）。
-  - 费用不显示美元，只显示日元；帮助 `docs/quizbuks/help/ai-credit.md`（新，三语）写清"按大模型收费的 150%、汇率、向上取整、赠送先用、赠送到期、可退回、超时或没有回答的调用不收费（失败的作业有回答的用量照收，含平台自己的重试，以问题 13 的答案为准）"，并更新 `manual-sponsor.*` 与官网生成的帮助 `site-profile.md`。
+  - 报价：四个只读流程 `QB_AI_QUESTIONS_QUOTE`、`QB_AI_TRANSLATE_QUOTE`、`QB_AI_PUBLICATION_TRANSLATE_QUOTE`、`QB_SITE_PROFILE_QUOTE`，与各自的请求共用构建器（同一段代码 `AiProcesses.feeQuote` 算预留与报价）；权限与入口范围同请求（读不到别人的测验或发布）；不取锁、不写业务数据（平台照常记操作记录 `op_process`；带幂等键调用时另记 `op_process_result`；AI 说明既不要求也不记录）；额度不足是答案而非拒绝（`enough`、`shortYen`）；`jabiz.process.rate-limits` 按用户 300/小时（同曝光费的报价）。IT `AiQuoteIT`：四种各一例断言"报价的本次最多 == 随后同输入请求的预留"；`ProcessAccessIT` 断言四者开放、权限与邮箱要求同请求、有限流。
+  - 三个 AI 面板（题目、翻译、官网生成）显示"本次最多 ¥X，可用 ¥Y"，不足时给出差额与购买入口并禁用提交；请求因 `QB_AI_CREDIT_SHORT` 被拒时同样给入口。
+  - 首页"待我处理"的"AI 额度不足"：`QB_AI_CREDIT_STANDING` 的 `low`（收费开着、`qb.ai.credit.low-amount` 已设、可用低于它，**且近 N 天有过收费的 AI 请求**：N 为 `qb.ai.credit.low-recent-days`，可选受控，未设为 30；从不用 AI 的发起方不被提示，总控 2026-11-14）。`qb.ai.credit.low-amount` 是可选的受控参数，不进 setup，**未设即不提示**；`launch-checklist.md` 有一行提醒上线前决定（与最低购买额并列）。
+  - 金额按应用规则显示为点数（Kudos，Q61；总控 2026-11-14，#707 审查 M2），不显示美元、不写币种名；发起方能看到的服务器消息（`QB_AI_CREDIT_SHORT` 等）同样用点数；帮助 `docs/quizbuks/help/ai-credit.md`（新，三语）、`manual-sponsor.*` 的"资金"与官网生成的帮助 `site-profile.md`。
+- **b2**（之后另一个 PR）：运营商与总部的页面（下面两项）。
 - **运营商管理系统**：发起方详情加 AI 额度余额与本月 AI 费（只读，限自己的发起方）；AI 费出现在现有的费用列表（种类 `AI`）。**新增的视图 / 模板声明 `withinEntryScope`**（D64，按运营商限定，同现有运营商页的写法），并测试别的运营商看不到。
 - **平台管理系统**（`/qb/ai`）：`qb.admin.ai-jobs` 加费用列（美元成本、日元费用、平台承担、运营商）；新模板 `qb.admin.ai-fees`（按月、发起方、运营商：成本美元、收费日元、**承担（`absorbedYen` 与 `unrecordedUsd` 分列并合计）**、未记费、额度余额；可导出）；倍数 / 汇率 / 最低购买额 / 开关的受控变更入口沿用参数页。
 - **任务与自动收尾**：`qb.ai-fee-monthly`、`qb.ai-credit-expire`（均可补跑）；预留随作业结束释放（发起方自己取消的，预留留到 `QB_AI_JOB_CANCELLED` 才释放）；到期提醒复用 F-M2 的赠送到期提醒（赠送还在 AI 额度中时也提醒，实现时确认 `qb.fee-credit-remind` 的取项含这部分）。

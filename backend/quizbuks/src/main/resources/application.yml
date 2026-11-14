@@ -79,6 +79,14 @@ jabiz:
       # F-M8d: the dialog quotes a top-up while the number is typed (debounced, cached for a short while): a few hundred an
       # hour is a person adjusting it many times, not a script; the quote reads and writes nothing but takes the work of one read.
       "[QB_EXPOSURE_TOP_UP_QUOTE]": { per-user: 300, period: 1h }
+      # F-M9b: the AI requests' quotes, read each time a sponsor changes the request in its dialog (as the exposure quote).
+      "[QB_AI_QUESTIONS_QUOTE]": { per-user: 300, period: 1h }
+      "[QB_AI_TRANSLATE_QUOTE]": { per-user: 300, period: 1h }
+      "[QB_AI_PUBLICATION_TRANSLATE_QUOTE]": { per-user: 300, period: 1h }
+      "[QB_SITE_PROFILE_QUOTE]": { per-user: 300, period: 1h }
+      # #707 review M1: the AI credit's standing, read once on entering the home (only with the fee on and low-amount set)
+      # and by the AI credit page.
+      "[QB_AI_CREDIT_STANDING]": { per-user: 300, period: 1h }
       # Q16: importing a quiz file makes a whole draft (up to 100 questions) in one transaction. F-C4: a sponsor
       # package's check page checks every quiz file it carries (each version and the current content) once.
       "[QB_QUIZ_IMPORT_CHECK]": { per-user: 300, period: 1h }

@@ -7,6 +7,7 @@ import com.jabiz.query.QueryPredicate;
 import com.jabiz.runtime.EntityInstance;
 import com.jabiz.runtime.process.steps.QueryEntities;
 import com.jabiz.runtime.BusinessRuleViolationException;
+import com.jabiz.quizbuks.fee.AiCreditGiveBack;
 import com.jabiz.quizbuks.fee.AiFeeRules;
 import com.jabiz.quizbuks.fee.FeeRules;
 import com.jabiz.quizbuks.fee.Prepayments;
@@ -141,19 +142,41 @@ final class AiFees {
     }
 
     /**
-     * At a request, under the sponsor's AI lock and everybody's: freezes the fee on the job to come. A kind the platform
-     * pays for, or the switch off, is {@code NONE}; otherwise the request reserves the most it may cost, refused when the
-     * credit cannot hold it or when its price is not known.
+     * F-M9b: what a request may cost and what the credit can hold for it, as the request reads them (its quote and its
+     * reservation are this one figure, coordinator 2026-11-14).
+     *
+     * @param charged      whether the request is charged (the fee on and a charged kind); the rest null when not
+     * @param maxYen       the most it may cost, with its tax rounded up: what it reserves
+     * @param available    what the credit can hold now (expired or voided fee credit left out)
+     * @param minPurchase  the least purchase (qb.ai.credit.min-purchase), null when not set
+     */
+    record Quote(boolean charged, BigDecimal maxYen, BigDecimal available, BigDecimal minPurchase) {
+
+        static final Quote FREE = new Quote(false, null, null, null);
+
+        boolean enough() {
+            return !charged || available.compareTo(maxYen) >= 0;
+        }
+
+        /** What the credit lacks for the request: 0 when it is enough. */
+        BigDecimal shortfall() {
+            return enough() ? BigDecimal.ZERO : maxYen.subtract(available);
+        }
+    }
+
+    /**
+     * The quote of a request about to be recorded: {@link Quote#FREE} for a kind the platform pays for or with the switch
+     * off; otherwise the most it may cost and what the credit can hold, refused only when the price is not known (or a
+     * fee parameter is not usable). It writes nothing and takes no lock: a request reads it again under its locks.
      *
      * @param attempt the most one attempt may use ({@link AiProcesses#unrecordedAttempt} of the job to come), read only
      *                for a charged request
      */
-    static void reserve(ProcessContext ctx, AiSettings settings, String kind,
+    static Quote quote(ProcessContext ctx, AiSettings settings, String kind,
         java.util.function.Supplier<ClaudeApi.Usage> attempt, int attempts, long searches, boolean mayFallBack) {
         AiSettings.Fee fee = settings.fee();
         if (!fee.enabled() || !CHARGED_KINDS.contains(kind)) {
-            ctx.put(FROZEN, new Frozen(QbAi.FEE_NONE, null, null, null, BigDecimal.ZERO));
-            return;
+            return Quote.FREE;
         }
         List<Violation> problems = new ArrayList<>(settings.feeProblems());
         BigDecimal maxUsd = problems.isEmpty() ? AiCost.maxOf(settings.model(), attempt.get(), attempts, searches,
@@ -166,29 +189,67 @@ final class AiFees {
             throw new BusinessRuleViolationException(problems);
         }
         BigDecimal reservation = AiFeeRules.reservation(maxUsd, fee.markup(), fee.usdJpy(), fee.taxRate());
-        Standing standing = standing(ctx, null);
-        BigDecimal available = standing.available(fee.taxRate());
-        if (readsLots(ctx)) {
-            // #699 re-review L2: expired fee credit, or a voided grant's, beyond what the open jobs hold is the next
-            // expiry's to void: never reserved by a new request (no day's window before the daily job).
-            available = available.min(AiFeeRules.usable(Prepayments.aiLots(ctx), standing.occupied(fee.taxRate()),
-                ctx.opTime()));
+        return new Quote(true, reservation, room(ctx, fee.taxRate()).available(), fee.minPurchase());
+    }
+
+    /**
+     * #707 review M3: what the credit can hold for a new request and what may be given back now, the one reading of a
+     * request, its quote, the standing and the return ({@link AiCreditGiveBack#returnable}, which the return's
+     * sub-process applies to the same lots and what the open jobs hold).
+     *
+     * @param available  what a new request can use: the credit less what the open jobs hold, and (#699 re-review L2)
+     *                   never the expired or voided fee credit beyond what they hold, the next expiry's to void
+     * @param returnable what may be given back: the lots less what the open jobs hold and the expired fee credit
+     */
+    record Room(BigDecimal available, BigDecimal returnable) {}
+
+    /**
+     * The {@link Room} of the standing {@link #queries} read and the lots ({@link Prepayments#HELD_LOTS}). Every caller
+     * reads the lots whenever the credit holds something ({@link #holdsCredit}: the request and its quotes through
+     * {@link #readsLots}, the standing directly); a credit that holds nothing has no lots and no room. #707 review M3:
+     * a credit that holds something with no lots read is a caller's defect, never a room of 0.
+     */
+    static Room room(ProcessContext ctx, BigDecimal taxRate) {
+        return room(standing(ctx, null), holdsCredit(ctx), Prepayments.aiLots(ctx), taxRate, ctx.opTime());
+    }
+
+    static Room room(Standing standing, boolean holds, List<AiFeeRules.Lot> lots, BigDecimal taxRate,
+        java.time.Instant now) {
+        if (holds && lots.isEmpty()) {
+            throw new IllegalStateException("The AI credit holds " + standing.remaining() + " but its lots were not "
+                + "read (" + Prepayments.HELD_TEMPLATE + ")");
         }
-        if (available.compareTo(reservation) < 0) {
+        BigDecimal returnable = AiCreditGiveBack.returnable(lots, standing.occupied(taxRate), now);
+        return new Room(standing.available(taxRate).min(returnable), returnable);
+    }
+
+    /**
+     * At a request, under the sponsor's AI lock and everybody's: freezes the fee on the job to come, from its
+     * {@link #quote}. Not charged is {@code NONE}; otherwise the request reserves the most it may cost, refused when the
+     * credit cannot hold it.
+     */
+    static void reserve(ProcessContext ctx, AiSettings settings, Quote quote) {
+        if (!quote.charged()) {
+            ctx.put(FROZEN, new Frozen(QbAi.FEE_NONE, null, null, null, BigDecimal.ZERO));
+            return;
+        }
+        AiSettings.Fee fee = settings.fee();
+        if (!quote.enough()) {
             Map<String, Object> details = new LinkedHashMap<>();
-            details.put("needed", reservation);
-            details.put("available", available);
+            details.put("needed", quote.maxYen());
+            details.put("available", quote.available());
             if (fee.minPurchase() != null) {
                 // Not set (an optional parameter): no detail; a null one would fail the refusal itself (a 500).
                 details.put("minPurchase", fee.minPurchase());
             }
             throw new BusinessRuleViolationException(List.of(new Violation(null, AiCodes.CREDIT_SHORT,
-                "The AI credit holds " + available + " yen; this request may cost up to " + reservation, details)));
+                "The AI credit holds " + quote.available() + " yen; this request may cost up to " + quote.maxYen(),
+                details)));
         }
         List<EntityInstance> operator = rows(ctx, OPERATOR_ROWS);
         ctx.put(FROZEN, new Frozen(QbAi.FEE_CREDIT,
             operator.isEmpty() ? null : (String) operator.getFirst().get("operatorId"), fee.markup(), fee.usdJpy(),
-            reservation));
+            quote.maxYen()));
     }
 
     /**
@@ -201,6 +262,11 @@ final class AiFees {
             || !CHARGED_KINDS.contains((String) ctx.get(AiProcesses.KIND))) {
             return false;
         }
+        return holdsCredit(ctx);
+    }
+
+    /** Whether the sponsor's open AI credit holds something ({@link #queries} read it). */
+    static boolean holdsCredit(ProcessContext ctx) {
         List<EntityInstance> credit = rows(ctx, CREDIT_ROWS);
         return !credit.isEmpty() && money(credit.getFirst().get("remaining")).signum() > 0;
     }

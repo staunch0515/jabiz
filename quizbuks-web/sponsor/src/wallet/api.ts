@@ -60,6 +60,8 @@ export interface SponsorWallet {
   cashFromOperator: number
   /** F-M5: what the prepayments of the Sponsor's publications still hold (set aside, not yet charged or given back). */
   prepaymentHeld: number
+  /** F-M9b: what the Sponsor's AI credit holds (bought for AI requests; apart from the publications' prepayments). */
+  aiCreditHeld: number
   /** F-M7: the credit of credit notes not used yet; the next invoices take it first. */
   creditNoteCredit: number
 }
@@ -143,6 +145,7 @@ export async function readWallet(): Promise<SponsorWallet> {
     feeCreditBalance: num(row.feeCreditBalance),
     cashFromOperator: num(row.cashFromOperator),
     prepaymentHeld: num(row.prepaymentHeld),
+    aiCreditHeld: num(row.aiCreditHeld),
     creditNoteCredit: num(row.creditNoteCredit),
   }
 }

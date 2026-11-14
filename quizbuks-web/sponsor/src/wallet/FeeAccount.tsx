@@ -98,6 +98,10 @@ export function FeeAccount({ wallet }: { wallet: SponsorWallet }) {
         ...(wallet.prepaymentHeld > 0
           ? [{ key: 'prepaymentHeld', label: t('wallet.feeAccount.prepaymentHeld'),
             value: <span data-testid="fee-account-prepayment-held">{formatKudos(wallet.prepaymentHeld)}</span> }] : []),
+        // F-M9b: the AI credit, apart from the publications' prepayments; its page tells more.
+        ...(wallet.aiCreditHeld > 0
+          ? [{ key: 'aiCreditHeld', label: t('wallet.feeAccount.aiCreditHeld'),
+            value: <span data-testid="fee-account-ai-credit">{formatKudos(wallet.aiCreditHeld)}</span> }] : []),
         // F-M7: the credit of credit notes not used yet; the next invoices take it first.
         ...(wallet.creditNoteCredit > 0
           ? [{ key: 'creditNoteCredit', label: t('wallet.feeAccount.creditNoteCredit'),

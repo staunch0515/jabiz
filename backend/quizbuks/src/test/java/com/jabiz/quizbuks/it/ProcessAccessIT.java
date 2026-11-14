@@ -243,6 +243,9 @@ class ProcessAccessIT extends QbItSupport {
     @Autowired
     ProcessRegistry registry;
 
+    @Autowired
+    org.springframework.core.env.Environment environment;
+
     @Test
     void theClosedProcessesAreDeclaredSo() {
         Map<String, ProcessAccess> declared = registry.all().stream()
@@ -286,6 +289,28 @@ class ProcessAccessIT extends QbItSupport {
         assertThat(catalog).extracting(entry -> entry.get("name"))
             .contains("QB_SETUP", "QB_QUIZ_DELETE", "QB_PUBLICATION_SUBMIT", "QB_TOPUP_START")
             .doesNotContainAnyElementsOf(CLOSED.keySet());
+    }
+
+    /**
+     * F-M9b (coordinator 2026-11-14): each AI quote is open to the same callers as its request (permissions and the
+     * verified e-mail), so that a quote reads nothing its request could not, and each has a limit per user.
+     */
+    @Test
+    void theAiQuotesAreOpenToTheCallersOfTheirRequestsAndLimited() {
+        Map<String, String> quotes = Map.of(
+            "QB_AI_QUESTIONS_QUOTE", "QB_AI_QUESTIONS_REQUEST",
+            "QB_AI_TRANSLATE_QUOTE", "QB_AI_TRANSLATE_REQUEST",
+            "QB_AI_PUBLICATION_TRANSLATE_QUOTE", "QB_AI_PUBLICATION_TRANSLATE_REQUEST",
+            "QB_SITE_PROFILE_QUOTE", "QB_SITE_PROFILE_REQUEST");
+        quotes.forEach((quote, request) -> {
+            ProcessDefinition<?, ?, ?> asked = registry.findLatest(quote).orElseThrow();
+            ProcessDefinition<?, ?, ?> theRequest = registry.findLatest(request).orElseThrow();
+            assertThat(asked.access()).as(quote).isEqualTo(ProcessAccess.OPEN);
+            assertThat(asked.permissions()).as(quote).isEqualTo(theRequest.permissions());
+            assertThat(asked.verifiedEmail()).as(quote).isEqualTo(theRequest.verifiedEmail()).isTrue();
+            assertThat(environment.getProperty("jabiz.process.rate-limits[" + quote + "].per-user"))
+                .as(quote + " is limited per user").isNotNull();
+        });
     }
 
     private String tokenOf(String userId, String roleCode) {

@@ -22,6 +22,7 @@ F-F5（`docs/quizbuks/first-launch-spec.md`）固定的用词。界面、邮件�
 | 付平台费的账户 | 平台费账户 | プラットフォーム利用料アカウント | Platform fee account | |
 | 赠送的平台费额度 | 赠送额度 | 付与クレジット | Granted credit | |
 | AI 的额度 | AI 额度 | AI クレジット | AI credit | |
+| AI 请求在额度中暂留、结束时结算的部分（F-M9，#707 审查 L3：AI 额度的页面与帮助只用这个词） | 预留 | 予約 | reserved | |
 | AI 计算用量的单位 | Token（第一次出现时解释为"AI 计算用量的单位"；不译、不写"令牌"） | トークン | token | 令牌（指 AI 用量时；登录、邮件链接等处的令牌是另一个意思，不受影响） |
 | 减少应收的单据（F-M7） | 贷项凭证 | 返還インボイス | Credit note | |
 

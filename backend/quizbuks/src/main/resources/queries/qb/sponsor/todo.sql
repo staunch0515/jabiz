@@ -4,7 +4,8 @@ description: >-
   F-F3b: what the sponsor has to do, as counts for the home page's "to do" list and the prizes badge - claims to
   confirm, digital prizes to send or disputed, publications short of budget, rewards waiting for a top-up, overdue
   platform fee invoices, open ones the fee account cannot cover, items in review (publications, the public page, shared videos), the uses of the sponsor's
-  shared videos waiting for the sponsor as provider, and platform fee Kudos about to expire
+  shared videos waiting for the sponsor as provider, and platform fee Kudos about to expire; and (F-M9b) whether the
+  home asks if the AI credit is short (aiCreditCheck)
 entities: [QbRedemption, QbDigitalPrize, QbPublicationCard, QbPublication, QbWallet, QbFeeInvoice, QbSponsorPage, QbSharedVideo, QbVideoUse, QbFeeCreditGrant, QbExposure, SysParam]
 datasets:
   QbRedemption: urn:jabiz:dataset:sponsor:QbRedemption
@@ -34,6 +35,7 @@ results:
   feeInvoicesUncovered: { kind: { type: numeric, precision: 9, scale: 0 } }
   creditsExpiring:      { kind: { type: numeric, precision: 9, scale: 0 } }
   exposureLow:          { kind: { type: numeric, precision: 9, scale: 0 } }
+  aiCreditCheck:        { kind: { type: numeric, precision: 1, scale: 0 } }
 permissions: [qb.publication.write]
 ---*/
 -- One row of counts, every dataset the caller's own (the sponsor datasets hold their rows; the provider's uses are
@@ -93,4 +95,10 @@ SELECT
         AND c.{{QbPublicationCard.status}} IN ('SCHEDULED', 'LIVE', 'PAUSED', 'FUNDS_SHORT')
         AND q.ratio > 0
         AND x.n < c.{{QbPublicationCard.exposurePurchased}}
-        AND c.{{QbPublicationCard.exposurePurchased}} - x.n <= c.{{QbPublicationCard.exposurePurchased}} * q.ratio) AS exposureLow
+        AND c.{{QbPublicationCard.exposurePurchased}} - x.n <= c.{{QbPublicationCard.exposurePurchased}} * q.ratio) AS exposureLow,
+    -- F-M9b (#707 review M1): 1 when the AI fee is on and qb.ai.credit.low-amount is set, the only case the home asks
+    -- QB_AI_CREDIT_STANDING whether the AI credit is short (not a count: the page does not list it).
+    (SELECT CASE WHEN EXISTS (SELECT 1 FROM {{SysParam}} f WHERE f.{{SysParam.paramKey}} = 'qb.ai.fee.enabled'
+                                AND f.{{SysParam.value}} = 'true')
+                  AND EXISTS (SELECT 1 FROM {{SysParam}} l WHERE l.{{SysParam.paramKey}} = 'qb.ai.credit.low-amount')
+                 THEN 1 ELSE 0 END) AS aiCreditCheck

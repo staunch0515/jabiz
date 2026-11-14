@@ -1,4 +1,4 @@
-import { ASSETS_PATH, BILLS_PATH, CONVERSATIONS_PATH, DIGITAL_PRIZES_PATH, FEE_ACCOUNT_PATH, REDEEM_PATH, WALLET_PATH,
+import { AI_CREDIT_PATH, ASSETS_PATH, BILLS_PATH, CONVERSATIONS_PATH, DIGITAL_PRIZES_PATH, FEE_ACCOUNT_PATH, REDEEM_PATH, WALLET_PATH,
 } from '../shell/paths'
 import { profilePath, PROFILE_PATH } from '../profile/paths'
 import { PUBLICATIONS_PATH } from '../publishing/paths'
@@ -8,9 +8,9 @@ import { NO_TODO, type TodoColumn, type TodoCounts } from './api'
  * What the home's "to do" list is made of (F-F3b, docs/quizbuks/plans/impl/F-F3.md section 3): each item is a count and
  * the page that handles it. The server's counts come from `qb.sponsor.todo`; the unread conversations (the menu's
  * badge), the application in review and the profile's missing parts are what the page already reads. An item with
- * none is not shown. AI credit short (F-M9) is not here yet: its column and a row of its own come with that item.
+ * none is not shown. The AI credit running low (F-M9 b1) is read from the credit's standing, not from the counts.
  */
-export type TodoKey = TodoColumn | 'unreadConversations' | 'onboardingInReview' | 'profileMissing'
+export type TodoKey = TodoColumn | 'unreadConversations' | 'onboardingInReview' | 'profileMissing' | 'aiCreditLow'
 
 export interface TodoItem {
   key: TodoKey
@@ -29,6 +29,7 @@ export const TODO_PATH: Record<TodoKey, string> = {
   invoicesOverdue: BILLS_PATH,
   feeInvoicesUncovered: BILLS_PATH,
   creditsExpiring: FEE_ACCOUNT_PATH,
+  aiCreditLow: AI_CREDIT_PATH,
   exposureLow: `${PUBLICATIONS_PATH}?exposureLow=1`,
   onboardingInReview: PROFILE_PATH,
   publicationsInReview: `${PUBLICATIONS_PATH}?status=PENDING_REVIEW`,
@@ -40,13 +41,15 @@ export const TODO_PATH: Record<TodoKey, string> = {
 
 /** The order of the list: what waits for a person first, then money, then what is in review, then the profile. */
 export const TODO_ORDER: readonly TodoKey[] = ['claimsToConfirm', 'digitalToSend', 'unreadConversations', 'fundsShort',
-  'rewardsWaiting', 'invoicesOverdue', 'feeInvoicesUncovered', 'creditsExpiring', 'exposureLow', 'onboardingInReview', 'publicationsInReview', 'pageInReview',
+  'rewardsWaiting', 'invoicesOverdue', 'feeInvoicesUncovered', 'creditsExpiring', 'aiCreditLow', 'exposureLow', 'onboardingInReview', 'publicationsInReview', 'pageInReview',
   'sharedVideosInReview', 'videoUsesToConfirm', 'profileMissing']
 
 export interface TodoInput {
   /** The server's counts; none until they are read (or when they could not be). */
   counts: TodoCounts | undefined
   unreadConversations: number
+  /** The AI credit is running low (the server's `low`; false until it is read, or when it could not be). */
+  aiCreditLow: boolean
   /** The application is in review. */
   onboardingInReview: boolean
   /** The profile's parts still missing that are needed to publish (none until the checklist is read). */
@@ -59,6 +62,7 @@ export function todoItems(input: TodoInput): TodoItem[] {
   const count: Record<TodoKey, number> = {
     ...counts,
     unreadConversations: input.unreadConversations,
+    aiCreditLow: input.aiCreditLow ? 1 : 0,
     onboardingInReview: input.onboardingInReview ? 1 : 0,
     profileMissing: input.profileMissing,
   }

@@ -57,7 +57,8 @@ import { Redirect } from '../qb/router'
 import { BankTopUpPage } from '../wallet/BankTopUpPage'
 import { bankTopUpIdOf, topUpIdOf } from '../wallet/api'
 import { TopUpPage } from '../wallet/TopUpPage'
-import { AiCreditPage, BillsPage, FeeAccountPage, WalletPage } from '../wallet/WalletPage'
+import { AiCreditPage } from '../aicredit/AiCreditPage'
+import { BillsPage, FeeAccountPage, WalletPage } from '../wallet/WalletPage'
 import { areaShown, placeOf, rootOf, shownTabs, AREAS, type ShellState } from './areas'
 import {
   AI_CREDIT_PATH,
