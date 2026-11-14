@@ -81,7 +81,7 @@ public final class PublicationExposureTopUp {
         return ProcessDefinition.define(TOP_UP, 1, TopUpInput.class, TopUpOutput.class, ProcessContext.class, pb -> {
             pb.description("Buys more exposures for the caller's publication that bought some, setting their fee aside.")
                 .outputMapper(ctx -> ctx.get(OUTPUT, TopUpOutput.class));
-            prefix(pb);
+            prefix(pb, true);
             pb.compute("Check the funds", (metadata, ctx) -> checkFunds(ctx))
                 .step("Add to the prepayment", CallProcess.<ProcessContext>when(
                     ctx -> !ctx.hasViolations() && ctx.contains(DEPOSIT) && deposit(ctx).signum() > 0,
@@ -124,37 +124,40 @@ public final class PublicationExposureTopUp {
         return ProcessDefinition.define(QUOTE, 1, TopUpInput.class, QuoteOutput.class, ProcessContext.class, pb -> {
             pb.description("Prices a top-up of the exposures bought, as the top-up would set it aside, writing nothing.")
                 .outputMapper(ctx -> ctx.get(OUTPUT, QuoteOutput.class));
-            prefix(pb);
+            prefix(pb, false);
             pb.compute("Answer", (metadata, ctx) -> {
                 if (ctx.hasViolations() || !ctx.contains(DEPOSIT)) {
                     return;
                 }
                 BigDecimal deposit = deposit(ctx);
-                PrepaymentRules.Funds funds = deposit.signum() > 0
-                    ? PublicationPrepayments.funds(ctx, ctx.get(MODE, String.class)) : null;
+                // The account's own figure even when nothing more is set aside (a unit below 1 yen), not a 0.
+                PrepaymentRules.Funds funds = PublicationPrepayments.funds(ctx, ctx.get(MODE, String.class));
                 ctx.put(OUTPUT, new QuoteOutput(UUID.fromString(String.valueOf(PublicationEditing.publication(ctx).id())),
-                    bought(ctx), deposit, funds == null ? BigDecimal.ZERO : funds.available(),
-                    funds == null ? BigDecimal.ZERO : funds.shortfall()));
+                    bought(ctx), deposit, funds.available(), funds.shortfall()));
             });
         });
     }
 
     /** What the top-up and its quote share: who may, the lock, the reads and the figures. */
-    private static <O> void prefix(com.jabiz.process.ProcessDefinitionBuilder<TopUpInput, O, ProcessContext> pb) {
+    private static <O> void prefix(com.jabiz.process.ProcessDefinitionBuilder<TopUpInput, O, ProcessContext> pb,
+        boolean locked) {
         pb.permissions(QbPermissions.PUBLICATION_WRITE)
             .requiresVerifiedEmail()
             .actsOn(QbPublications.PUBLICATION, "publicationId")
             .contextFactory((start, input) -> PublicationEditing.start(start, input, input.publicationId()));
         CallerChecks.refuseBanned(pb);
         pb.steps(ConsentChecks.sponsor())
-            .steps(PublicationEditing::lockAndLoad)
+            // The quote reads without the locks, as the funds check does: what it says is read, and the top-up works the
+            // same figures out again under the locks, so a quote that went stale is the top-up's refusal, not a wrong charge.
+            .steps(locked ? PublicationEditing::lockAndLoad : PublicationEditing::load)
             .step("Load the fee parameters", LoadParams.<ProcessContext>optional(ProcessContext::opTime,
                 PublicationLifecycle.FEE_PARAMS, QbParams.FEE_TAX_RATE, QbParams.FEE_DEFAULT_BILLING_MODE,
                 QbParams.FEE_OVERDUE_BLOCK, QbParams.EXPOSURE_TOP_UP_MAX))
             // Fees overdue beyond what the sponsor's billing allows stop a top-up as they stop a submission.
             .steps(b -> FeeGate.load(b, ctx -> ctx.request().actorId()))
-            .step("Lock the sponsor's wallets", HoldLock.<ProcessContext>exclusive(ctx -> QbWallets.lockName(
-                QbWallets.SPONSOR, PublicationPrepayments.sponsorOf(PublicationEditing.publication(ctx)))))
+            .step("Lock the sponsor's wallets", HoldLock.<ProcessContext>exclusive(ctx -> !locked ? null
+                : QbWallets.lockName(QbWallets.SPONSOR,
+                    PublicationPrepayments.sponsorOf(PublicationEditing.publication(ctx)))))
             .step("Read the account and the exposures' prepayment", QueryEntities.<ProcessContext>all(
                 reads()))
             // Its parts so far: every top-up adds some, and a prepayment of more parts than MAX_PARTS cannot be given back.

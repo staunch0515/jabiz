@@ -129,7 +129,8 @@ function BuyMoreDialog({ publicationId, fee, onClose }: {
   }, [additional])
   const quote = useQuery({ queryKey: [...feeQuery(publicationId), 'quote', fee.purchased, asked],
     queryFn: () => quoteTopUp(publicationId, fee.purchased ?? 0, asked ?? 0), enabled: asked !== null && asked === additional,
-    retry: false })
+    // The same question is not asked again at once (typing back and forth over the same number).
+    staleTime: 30_000, retry: false })
   return (
     <Dialog open onOpenChange={(open) => {
       if (!open && !buy.isPending) onClose()

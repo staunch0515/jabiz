@@ -697,27 +697,6 @@ test.describe.serial('the first launch\'s loop', () => {
           expect(reported.counted).toBe(1)
         }
 
-        // The Sponsor's page: what is used and left, the low notice (1 of 3 is left: the share is raised to its most,
-        // a half, for it), and buying more, which the account cannot cover: the server's quote says how much is short
-        // and the purchase is refused with its detail. Both appearances.
-        await run(request, await adminToken(request), 'PARAM_SET', { key: 'qb.exposure.low-ratio', value: '0.5' })
-        await signIn(page, '/sponsor/', sora.email)
-        await page.goto(`/sponsor/publications/${made.publicationId}/fees`)
-        await expect(page.getByTestId('exposure-fee-price')).toContainText('20')
-        await expect(page.getByTestId('exposure-fee-left')).toContainText('1 of 3 left')
-        await expect(page.getByTestId('exposure-fee-bar')).toHaveAttribute('aria-valuenow', '2')
-        await expect(page.getByTestId('exposure-low')).toBeVisible()
-        await accessibleInBoth(page, 'sponsor exposure fee: progress and the low notice')
-        await page.getByTestId('exposure-buy-more').click()
-        await page.getByTestId('exposure-buy-additional').fill('100')
-        await expect(page.getByTestId('exposure-buy-estimate')).toBeVisible()
-        await expect(page.getByTestId('exposure-buy-short')).toBeVisible()
-        await accessibleInBoth(page, 'sponsor exposure fee: buying more, the account short')
-        await page.getByTestId('exposure-buy-confirm').click()
-        await expect(page.getByTestId('exposure-buy-problem')).toBeVisible()
-        await expect(page.getByTestId('exposure-buy-dialog')).toBeVisible()
-        await page.keyboard.press('Escape')
-
         // Ended by its time, then the final job charges the two exposures and gives back the rest. The job is asked again
         // (D77) so that a run whose time was before the end does not leave it to the next day's.
         await expect.poll(async () => {
@@ -743,7 +722,37 @@ test.describe.serial('the first launch\'s loop', () => {
         const now = await account()
         expect(now.held).toBe(before.held)
         expect(now.spendable).toBe(before.spendable - 44)
-        // After it ended the page tells what was settled, once, in both appearances.
+        // The Sponsor's page, on a publication of its own that is not in a hurry (the first ends within the minute):
+        // what is used and left, the low notice (1 of 3 is left: the share is raised to its most, a half, for it), and
+        // buying more than the account can cover: the server's quote says how much is short and the purchase is
+        // refused with its detail. Both appearances.
+        const slow = await boundPublicationOf(request, sora.token, map!.treeId, map!.basics, unique('Video slow '),
+          { reward: 0, sharedVideoId: videos.vertical, exposureRequested: 3 })
+        for (const watcher of watchers) {
+          const reported = await run(request, watcher.token, 'QB_EXPOSURE_REPORT', { reports: [{
+            publicationId: slow.publicationId, kind: 'EXPOSURE', surface: 'VERTICAL', seconds: 95, timer: 'SCREEN' }] })
+          expect(reported.counted).toBe(1)
+        }
+        await run(request, await adminToken(request), 'PARAM_SET', { key: 'qb.exposure.low-ratio', value: '0.5' })
+        await signIn(page, '/sponsor/', sora.email)
+        await page.goto(`/sponsor/publications/${slow.publicationId}/fees`)
+        await expect(page.getByTestId('exposure-fee-price')).toContainText('20')
+        await expect(page.getByTestId('exposure-fee-left')).toContainText('1 of 3 left')
+        await expect(page.getByTestId('exposure-fee-bar')).toHaveAttribute('aria-valuenow', '2')
+        await expect(page.getByTestId('exposure-low')).toBeVisible()
+        await accessibleInBoth(page, 'sponsor exposure fee: progress and the low notice')
+        // A purchase of more than ten times what the account holds: whatever it holds, it cannot cover it.
+        const tooMany = Math.ceil((await account()).spendable * 10 / 20) + 1
+        await page.getByTestId('exposure-buy-more').click()
+        await page.getByTestId('exposure-buy-additional').fill(String(tooMany))
+        await expect(page.getByTestId('exposure-buy-estimate')).toBeVisible()
+        await expect(page.getByTestId('exposure-buy-short')).toBeVisible()
+        await accessibleInBoth(page, 'sponsor exposure fee: buying more, the account short')
+        await page.getByTestId('exposure-buy-confirm').click()
+        await expect(page.getByTestId('exposure-buy-problem')).toBeVisible()
+        await expect(page.getByTestId('exposure-buy-dialog')).toBeVisible()
+        await page.keyboard.press('Escape')
+        // The first one, ended and settled: the page tells what was settled, once.
         await page.goto(`/sponsor/publications/${made.publicationId}/fees`)
         await expect(page.getByTestId('exposure-settlement')).toHaveCount(1)
         await accessibleInBoth(page, 'sponsor exposure fee: settled')
