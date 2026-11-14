@@ -80,6 +80,23 @@ public final class FeeRules {
         }
     }
 
+    /**
+     * The month a postpaid fee is charged to (F-M6 §9.6; F-M15 b, Fable's re-review): its own month, unless that
+     * month's invoice is out, then the month it is charged in, unless that one's is out too (a wind-up invoices the
+     * current month), then the month after that. Never a month whose invoice is out: its fee would stay receivable
+     * without an invoice. {@code invoiced} holds the months among the two whose invoice is out.
+     */
+    public static String chargePeriod(String own, String now, java.util.Set<String> invoiced) {
+        if (!invoiced.contains(own)) {
+            return own;
+        }
+        if (!invoiced.contains(now) && now.compareTo(own) > 0) {
+            return now;
+        }
+        String next = MONTH.format(YearMonth.parse(now, MONTH).plusMonths(1));
+        return next.compareTo(own) > 0 ? next : MONTH.format(YearMonth.parse(own, MONTH).plusMonths(1));
+    }
+
     public static Instant periodStart(String period, ZoneId zone) {
         return YearMonth.parse(period, MONTH).atDay(1).atStartOfDay(zone).toInstant();
     }

@@ -33,8 +33,10 @@ permissions: [qb.wallet.system]
 --   expected 0, actual what is left. A voided invoice that gives back to such a lot voids it again at once.
 -- ERASED_CLOSE_OPEN (attention, finance): a wind-up still WAITING qb.erasure.close.alert-days or more after the erasure
 --   (one closure a sponsor: the sponsor names it): expected 0, actual the whole days waited (an item is what differs).
--- ERASED_FEE_OWED (a note): a sponsor wound up whose invoices still owe (total - credit applied - paid): expected 0,
---   actual what is owed. It is the record of an erased sponsor's fees owed (their overdue reminders stop, §9 M4).
+-- ERASED_FEE_OWED (a note): a sponsor wound up whose invoices still owe (total - credit applied - paid), plus the
+--   postpaid fees charged since and not invoiced yet (Fable's re-review; the condition of
+--   qb.system.money-close-uninvoiced): expected 0, actual what is owed (nothing owed: equal, so no item). It is the record of an erased sponsor's
+--   fees owed (their overdue reminders stop, §9 M4).
 -- ERASED_NO_CLOSURE (attention, review M1): an erasure qb.erasure.close.alert-days or more ago of a user who had the
 --   platform fee account (a CASH or FEE_CREDIT wallet, a grant, an invoice, a prepayment, a postpaid fee, a
 --   manual credit or a fee request under review: the definition
@@ -62,13 +64,21 @@ WHERE c.{{QbSponsorClosure.status}} = 'WAITING'
 UNION ALL
 SELECT CAST('ERASED_FEE_OWED' AS varchar(30)), CAST(c.{{QbSponsorClosure.sponsorId}} AS varchar(128)),
        CAST(NULL AS varchar(128)), CAST(0 AS numeric),
-       CAST(sum(i.{{QbFeeInvoice.total}} - i.{{QbFeeInvoice.creditApplied}} - i.{{QbFeeInvoice.paidAmount}}) AS numeric)
+       CAST(coalesce((SELECT sum(i.{{QbFeeInvoice.total}} - i.{{QbFeeInvoice.creditApplied}} - i.{{QbFeeInvoice.paidAmount}})
+                      FROM {{QbFeeInvoice}} i
+                      WHERE i.{{QbFeeInvoice.sponsorId}} = c.{{QbSponsorClosure.sponsorId}}
+                        AND i.{{QbFeeInvoice.status}} IN ('OPEN', 'PARTIAL', 'OVERDUE')), 0)
+          + coalesce((SELECT sum(f.{{QbFeeCharge.total}}) FROM {{QbFeeCharge}} f
+                      WHERE f.{{QbFeeCharge.sponsorId}} = c.{{QbSponsorClosure.sponsorId}}
+                        AND f.{{QbFeeCharge.billingMode}} = 'POSTPAID'
+                        AND NOT EXISTS (SELECT 1 FROM {{QbFeeInvoice}} ni
+                                        WHERE ni.{{QbFeeInvoice.sponsorId}} = f.{{QbFeeCharge.sponsorId}}
+                                          AND ((ni.{{QbFeeInvoice.period}} = f.{{QbFeeCharge.period}}
+                                                AND ni.{{QbFeeInvoice.chargeId}} IS NULL)
+                                               OR ni.{{QbFeeInvoice.chargeId}} = CAST(f.{{QbFeeCharge.chargeId}} AS text)))), 0)
+          AS numeric)
 FROM {{QbSponsorClosure}} c
-JOIN {{QbFeeInvoice}} i ON i.{{QbFeeInvoice.sponsorId}} = c.{{QbSponsorClosure.sponsorId}}
 WHERE c.{{QbSponsorClosure.status}} = 'CLOSED'
-  AND i.{{QbFeeInvoice.status}} IN ('OPEN', 'PARTIAL', 'OVERDUE')
-  AND i.{{QbFeeInvoice.total}} - i.{{QbFeeInvoice.creditApplied}} - i.{{QbFeeInvoice.paidAmount}} > 0
-GROUP BY c.{{QbSponsorClosure.sponsorId}}
 UNION ALL
 SELECT CAST('ERASED_NO_CLOSURE' AS varchar(30)), CAST(e.{{Erasure.userId}} AS varchar(128)),
        CAST(NULL AS varchar(128)), CAST(1 AS numeric), CAST(0 AS numeric)

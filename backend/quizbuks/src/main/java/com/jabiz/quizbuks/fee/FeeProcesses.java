@@ -308,8 +308,10 @@ public final class FeeProcesses {
                 QueryEntities.query(QbFees.defaultDataset(QbFees.INVOICE), ctx -> EntityQuery.builder()
                     .where(new QueryPredicate.And(List.of(
                         new QueryPredicate.Eq("sponsorId", chargeInput(ctx).sponsorId()),
-                        new QueryPredicate.Eq("period", chargeInput(ctx).period()),
-                        new QueryPredicate.IsNull("chargeId")))).limit(1).build(), MONTH_INVOICE)))
+                        // F-M15 b: and the current month's (a wind-up invoices it), in the same statement.
+                        new QueryPredicate.In("period", List.of(chargeInput(ctx).period(),
+                            FeeRules.period(ctx.opTime(), zone))),
+                        new QueryPredicate.IsNull("chargeId")))).limit(2).build(), MONTH_INVOICE)))
             // F-M7 (§10.3-4): a prepaid fee's invoice takes the credit notes' credit left first. Read (H1 of the
             // review: summed in SQL) before anything is written, and only when the prepayment cannot pay it all.
             .step("Read the credit left", RunTemplate.<ProcessContext>when(FeeProcesses::creditMayPay,
@@ -386,8 +388,12 @@ public final class FeeProcesses {
                 String.class));
         // F-M6 (§9.6): a postpaid fee of a month whose invoice is out already (a settlement run late) goes on the
         // invoice of the month it is charged in; the invoice is issued under the same wallet lock, so they never cross.
-        String period = FeeRules.POSTPAID.equals(billingMode) && first(ctx, MONTH_INVOICE) != null
-            ? FeeRules.period(ctx.opTime(), zone) : input.period();
+        // F-M15 b: if that month's is out too (a wind-up invoices the current month), the month after it.
+        java.util.Set<String> invoiced = FeeGate.list(ctx, MONTH_INVOICE).stream()
+            .map(invoice -> String.valueOf((Object) invoice.get("period")))
+            .collect(java.util.stream.Collectors.toSet());
+        String period = FeeRules.POSTPAID.equals(billingMode)
+            ? FeeRules.chargePeriod(input.period(), FeeRules.period(ctx.opTime(), zone), invoiced) : input.period();
         Map<String, Object> values = new LinkedHashMap<>();
         values.put("sponsorId", input.sponsorId());
         values.put("operatorId", operatorOf(ctx));

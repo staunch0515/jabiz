@@ -169,6 +169,59 @@ class MoneyCloseIT extends MoneyCloseItSupport {
     }
 
     @Test
+    void aPostpaidFeeChargedAfterTheCurrentMonthIsInvoicedGoesOnTheNextMonth() {
+        // Fable's re-review (the special question): the wind-up invoices the current month; a postpaid fee charged in
+        // it afterwards must not land on that month (whose invoice is out: a receivable never invoiced) but on the next.
+        String sponsor = newSponsor(unique("s-fm15b-late-fee"));
+        billing(sponsor, "POSTPAID", 50_000);
+        manualFee(sponsor, 300);
+        invoicePeriod(sponsor, clock.instant());
+        String current = currentPeriod();
+        assertThat(query("SELECT period FROM qb_fee_invoice WHERE sponsor_id = ?", sponsor)).singleElement()
+            .satisfies(row -> assertThat(row).containsEntry("period", current));
+
+        Object late = manualFee(sponsor, 200);
+        String next = java.time.YearMonth.parse(current).plusMonths(1).toString();
+        assertThat(query("SELECT period FROM qb_fee_charge_version WHERE charge_id = CAST(? AS uuid)", String.valueOf(late)))
+            .first().satisfies(row -> assertThat(row).containsEntry("period", next));
+    }
+
+    @Test
+    void aFeeChargedInTheMonthAfterTheWindUpIsInvoicedByTheNextRunAndReconciledUntilThen() {
+        // Fable's re-review (special question, M4): wound up (the current month invoiced), then a postpaid fee in the
+        // same month. It goes on the next month; the reconciliation counts it as owed, the daily job takes the closure
+        // again and the next run invoices it. (Registered without the real erasure, so a fee can still be charged.)
+        String sponsor = newSponsor(unique("s-fm15b-after"));
+        billing(sponsor, "POSTPAID", 50_000);
+        manualFee(sponsor, 300);
+        spentLot(sponsor);
+        assertThat(((MoneyClose.RegisterOutput) systemRun(MoneyClose.REGISTER, Map.of("userId", sponsor,
+            "erasedAt", clock.instant().toString()))).registered()).isTrue();
+        // The registration's event winds it up (delivered now, so the fee's own delivery below runs nothing more).
+        deliverEvents();
+        assertThat(closure(sponsor)).containsEntry("status", QbSponsorClosures.CLOSED);
+        BigDecimal firstOwed = money(query("SELECT total FROM qb_fee_invoice WHERE sponsor_id = ?", sponsor).getFirst()
+            .get("total"));
+        assertThat(due()).doesNotContain(sponsor);
+
+        Object late = manualFee(sponsor, 200);
+        BigDecimal lateTotal = money(query("SELECT total FROM qb_fee_charge_version WHERE charge_id = CAST(? AS uuid)",
+            String.valueOf(late)).getFirst().get("total"));
+        // Owed: the invoice's and the fee not invoiced yet (one code); the daily job takes it again.
+        assertThat(erasedOwed(sponsor)).isEqualByComparingTo(firstOwed.add(lateTotal));
+        assertThat(due()).contains(sponsor);
+
+        MoneyClose.CloseOutput again = close(sponsor);
+        assertThat(again.invoicesIssued()).isEqualTo(1);
+        assertThat(query("SELECT * FROM qb_fee_invoice WHERE sponsor_id = ? ORDER BY period", sponsor)).hasSize(2)
+            .last().satisfies(row -> assertThat(money(row.get("total"))).isEqualByComparingTo(lateTotal));
+        assertThat(items(MoneyClose.UNINVOICED_TEMPLATE, com.jabiz.runtime.test.TestTokens.bearer(tokens,
+            "fm15b-job", "qb.fee.system"), Map.of("limit", 100, "params", Map.of("sponsorId", sponsor)))).isEmpty();
+        assertThat(erasedOwed(sponsor)).isEqualByComparingTo(firstOwed.add(lateTotal));
+        assertThat(due()).doesNotContain(sponsor);
+    }
+
+    @Test
     void aWindUpDoneWithFeesOwedKeepsItsReasonWhenALaterRunStopsAndIsTakenAgain() {
         // Review M1: done with fees owed, cash arrives later; a run the switch stops keeps FEE_OWED and the daily job
         // still takes it.
@@ -588,6 +641,16 @@ class MoneyCloseIT extends MoneyCloseItSupport {
         assertThat(query("SELECT status, reminders_sent FROM qb_fee_invoice WHERE invoice_id = ?", invoiceId)
             .getFirst()).containsEntry("status", QbFees.OPEN);
         assertThat(openTasks(QbFees.overdueTaskSource(invoiceId))).isEmpty();
+    }
+
+    /** What ERASED_FEE_OWED reports for the sponsor now (null when nothing). */
+    private BigDecimal erasedOwed(String sponsor) {
+        clock.set(clock.instant().plus(Duration.ofMinutes(1)));
+        var output = (com.jabiz.quizbuks.wallet.Reconciliation.ReconcileOutput) systemRun("QB_RECONCILE_RUN",
+            Map.of("scheduledTime", clock.instant().toString()));
+        return query("SELECT actual FROM qb_recon_item_version WHERE run_id = ? AND check_code = 'ERASED_FEE_OWED' "
+            + "AND party_id = ?", UUID.fromString(output.runId()), sponsor).stream()
+            .map(row -> money(row.get("actual"))).findFirst().orElse(null);
     }
 
     /** Finance's list of wind-ups, filtered as the page does, at the clock's time. */

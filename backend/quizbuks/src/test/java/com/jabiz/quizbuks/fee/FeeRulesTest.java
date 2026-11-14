@@ -59,4 +59,18 @@ class FeeRulesTest {
         assertThat(new FeeRules.Standing("POSTPAID", null, new BigDecimal("1"), false).blocked()).isTrue();
         assertThat(new FeeRules.Standing("POSTPAID", null, null, false).blocked()).isFalse();
     }
+
+    @Test
+    void aPostpaidFeeNeverGoesOnAMonthWhoseInvoiceIsOut() {
+        // Its own month, when not invoiced.
+        assertThat(FeeRules.chargePeriod("2026-10", "2026-11", java.util.Set.of())).isEqualTo("2026-10");
+        assertThat(FeeRules.chargePeriod("2026-10", "2026-11", java.util.Set.of("2026-11"))).isEqualTo("2026-10");
+        // F-M6: its month invoiced, the month it is charged in.
+        assertThat(FeeRules.chargePeriod("2026-10", "2026-11", java.util.Set.of("2026-10"))).isEqualTo("2026-11");
+        // F-M15 b: that one invoiced too (a wind-up invoices the current month), the next.
+        assertThat(FeeRules.chargePeriod("2026-10", "2026-11", java.util.Set.of("2026-10", "2026-11")))
+            .isEqualTo("2026-12");
+        assertThat(FeeRules.chargePeriod("2026-11", "2026-11", java.util.Set.of("2026-11"))).isEqualTo("2026-12");
+        assertThat(FeeRules.chargePeriod("2026-12", "2026-12", java.util.Set.of("2026-12"))).isEqualTo("2027-01");
+    }
 }
