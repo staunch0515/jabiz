@@ -1,6 +1,6 @@
-# F-M9 发起方的 AI 额度与 AI 费：实施计划（S2，2026-11-12，草稿，已按审查与总控的决定修订（§12），待总控批准）
+# F-M9 发起方的 AI 额度与 AI 费：实施计划（S2，2026-11-12 起草；**已完成** 2026-11-15）
 
-状态：已批准实施（总控 2026-11-13）。b2-1（后端：`qb.operator.sponsor-ai`、`qb.admin.ai-fees`、`qb.admin.ai-jobs` 的费用列、V132、平台承担的提醒 `QB_AI_ABSORBED_CHECK`）见 #717；页面与其余文档在 b2-2（运营商管理系统的发起方详情“AI…”只读小窗、`/qb/ai` 的“AI 费”一节与作业表的收费方式 / 运营商列、operations.md §7.56 的页面说明、运营商帮助底稿；当月取浏览器的日本月份，见 F-M12 的已记取舍）。
+状态：**已完成**（2026-11-15，全部合入 `1.3/quizbuks`）。各段的 PR 与后续项见 §13。原状态：已批准实施（总控 2026-11-13）。b2-1（后端：`qb.operator.sponsor-ai`、`qb.admin.ai-fees`、`qb.admin.ai-jobs` 的费用列、V132、平台承担的提醒 `QB_AI_ABSORBED_CHECK`）见 #717；页面与其余文档在 b2-2（运营商管理系统的发起方详情“AI…”只读小窗、`/qb/ai` 的“AI 费”一节与作业表的收费方式 / 运营商列、operations.md §7.56 的页面说明、运营商帮助底稿；当月取浏览器的日本月份，见 F-M12 的已记取舍）。
 
 规格 `docs/quizbuks/first-launch-spec.md` F-M9（规则、参数、运营闭合、验收）；上下文是 F-M1、F-M5、F-M6 已合入的"账户 + 预付款 + 记费"，以及 F-C7（官网生成）、F-C10（帮助 AI）。格式照 `F-M.md` §8、§9。分支 `1.3/quizbuks-FM9-ai-credit`；分三个 PR：**a-1 后端**（数据、计价、购买、请求时的预留与作业结束时的结算；`qb.ai.fee.enabled` 仍关着），**a-2 后端**（退回、到期、月度记费、核对与月报、运营商分成的 AI 种类），**b 页面**（发起方 AI 额度页与各 AI 面板、总部 AI 页、帮助、`operations.md`）。迁移号 **V124**（总控 2026-11-13 更正：基线最大为 V122，V123 是 S3 的 #689，须先于本项合并），只在 a-1，开 PR 前再与总控确认。
 
@@ -291,3 +291,30 @@
 - **本次计划修订中新发现、需总控留意的两点**：(1) 月度记费的取项改为按批给出多项（每项最多 200 个作业），以满足语句预算的上限，月度任务本身仍是每月 1 日一次；(2) `sourceKey` 去掉发起方编号，因为发起方编号最长 128 字符，加上月与运营商会超过费用表 `sourceKey` 的 100 字符上限。
 
 删除的功能：无
+
+## 13 完成情况与后续项（2026-11-15）
+
+**各段与 PR**（都已合入 `1.3/quizbuks`）：
+
+| 段 | 内容 | PR | 迁移 |
+|---|---|---|---|
+| a-1 | 数据、计价（`AiFeeRules`）、购买 `QB_AI_CREDIT_BUY`、请求时的预留、作业结束时的结算（至多到预留，超出为平台承担） | #692 | V124、V127 |
+| a-2a | 退回 `QB_AI_CREDIT_RETURN`、到期 `qb.ai-credit-expire`、月度记费 `qb.ai-fee-monthly`、月报五类、AI 种类的运营商结算 | #699 | — |
+| a-2b | 每日核对五项（`AI_CREDIT`、`AI_FEE_MONTH`、`AI_FEE_UNBILLED`、`AI_FEE_RESERVED`、`AI_CREDIT_EXPIRED_HELD`）、两个时限参数、启动检查、开关改为生效（首次上线为关） | #702 | V130 |
+| b1 | 发起方的 AI 额度页 `/sponsor/money/ai`、四个报价流程、额度一览 `QB_AI_CREDIT_STANDING`、首页"AI 额度不足"、帮助、`operations.md` §7.56、e2e `ai-credit.spec` | #707 | — |
+| b2-1 | 运营商的 `qb.operator.sponsor-ai`、总部的 `qb.admin.ai-fees` 与 `qb.admin.ai-jobs` 的费用列、平台承担的月度提醒 `QB_AI_ABSORBED_CHECK`（参数 `qb.ai.fee.absorbed-alert-yen`）（S3） | #717 | V132 |
+| b2-2 | 运营商"发起方"页的"AI…"只读小窗、`/qb/ai` 的"AI 费"一节（`qb.admin.finance.read`）与作业表的收费方式 / 运营商列、运营商帮助（S3） | #720 | — |
+| c | 转进 AI 额度的赠送照常提醒到期（缺陷修复，提醒邮件写明其中多少在 AI 额度中）、AI 费贷项凭证的测试、进度表 | #718 | — |
+
+**计划中的项，核对代码后的结果**：
+- §8 F-M7 第 4 条"对 AI 费开贷项凭证不出错"的测试：**已补**（#718，`AiReconcileIT.aCreditNoteOnAnAiFeeGivesBackToTheAccountAndLeavesNoDifference`：退到平台费账户，AI 额度不变，核对无差异）。
+- §7"到期提醒复用 F-M2 的赠送到期提醒（实现时确认取项含 AI 额度中的部分）"：确认时发现**不含**，已在 #718 修复（`qb.system.fee-credit-remind-due`、`QB_FEE_CREDIT_REMIND`）。
+- §8 提示级核对 `AI_FEE_ABSORBED`：**不做**（总控 2026-11-14）。逐作业的核对要每天读作业表、需要另一个部分索引；"哪些作业、是否过多"由 b2 的总部报表 `qb.admin.ai-fees` 与月度提醒 `QB_AI_ABSORBED_CHECK` 回答（`operations.md` §7.55"提示"、§7.56"平台承担"）。§8 中这一条与 §6 的参数说明保留作记录，以本节为准。
+- §8"对后续项的约束"中 F-M15 的一条：F-M15c（#714）已关闭注销发起方的 AI 预付款并处理进行中的作业，上线清单 3.8 有对应的实测项。
+
+**后续项（未做）**：
+1. **硬拦截**（#702 审查 M2，§12 待办）：AI 收费开着而官网生成的三个预留参数（`qb.ai.fee.site-profile.calls` / `.pages` / `.output-tokens`）未设或不可用时，现在只有启动警告（`FirstLaunchSwitchesCheck`）。改为拒绝发布 `qb.ai.fee.enabled = true` 的受控变更，或启动失败；总控 2026-11-14 定为上线前再决定。
+2. **F-M13**：账单 PDF 中 AI 费的分列（§8 对后续项的约束）。
+3. **F-M12**：AI 种类是否进运营商分成基数，由 `qb.operator.share.kinds` 决定（缺省不含），上线前由财务确认（上线清单 3.8"AI 费的分成"）。
+4. **上线前定数**（上线清单 3.8）：官网生成的三个预留参数（staging 的 P95）、加价与汇率、可选的最低购买额与"额度不足"提示阈值。
+

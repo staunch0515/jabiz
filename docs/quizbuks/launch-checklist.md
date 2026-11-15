@@ -34,7 +34,7 @@
 ### 1.1 开发与验收（F-F14，规格"上线准备与闭环验收"）
 
 - [ ] **开发完成**：规格 `first-launch-spec.md` 的 F-F1 至 F-F14、F-S1 至 F-S15、F-C1 至 F-C11、F-M1 至 F-M15 都已合并到 `1.3/quizbuks`，CI 绿；平台的 P0–P8 与之后的平台阶段已合入 `1.3/platform` 并同步过来（进度表 `first-launch-progress.md` 每行为"已合并"或"完成"）
-      谁：开发确认，需求方知悉；在哪里：进度表 `first-launch-progress.md`，GitHub 上 `1.3/quizbuks` 的 CI；怎么确认：进度表每行为"已合并"或"完成"（2026-11-14 时 F-M8、F-M9、F-M14、F-M15 仍有未合并的部分），CI 最近一次为绿
+      谁：开发确认，需求方知悉；在哪里：进度表 `first-launch-progress.md`，GitHub 上 `1.3/quizbuks` 的 CI；怎么确认：进度表每行为"已合并"或"完成"（2026-11-14 时 F-M8、F-M14、F-M15 仍有未合并的部分；F-M9 已于 2026-11-15 全部合并），CI 最近一次为绿
       确认人： ／ 日期： ／ 依据：
 - [ ] **F-F12 闭环 e2e** 在 CI 中连续通过；需求方在测试系统中亲手走通六步（`launch-loop-walkthrough.md`），发现的问题已修或已记入下一期
       谁：开发（CI）、需求方（亲手走六步）；在哪里：CI；测试系统，照 `launch-loop-walkthrough.md`；怎么确认：CI 中闭环 e2e 连续为绿；走查记录中六步都通过，问题已修或已记入下一期
@@ -357,7 +357,7 @@
 | 3.5 | AI `qb.ai.enabled`、AI 问题解答 `qb.help.enabled` | AI 说明已发布（1.2）；使用手册已发布；密钥与支出上限 | 对外开放之前（首次上线即开） |
 | 3.6 | 自动付款 `qb.fee.auto-pay.enabled` | 条款一句（1.2）；先通知发起方；邮件、任务、阈值；staging 演练 | 首次上线时关着；之后手动打开 |
 | 3.7 | 注销收尾 `qb.erasure.close.enabled` | F-M13 已合并（满足）；排在 3.6 之后；1.2 的三项法务确认 | 时点由财务确认 |
-| 3.8 | AI 费 `qb.ai.fee.enabled`、官网生成 `qb.ai.site-profile.enabled` | F-M9 合并；3.1（或财务确认）；F-M15c 合并；P95 预留；3.5 已开 | 首次上线为关，按 3.8 的顺序打开 |
+| 3.8 | AI 费 `qb.ai.fee.enabled`、官网生成 `qb.ai.site-profile.enabled` | F-M9 合并（已完成，2026-11-15）；3.1（或财务确认）；F-M15c 合并；P95 预留；3.5 已开 | 首次上线为关，按 3.8 的顺序打开 |
 
 ### 3.1 运营商分成的设置
 
@@ -484,6 +484,9 @@
       确认人： ／ 日期： ／ 依据：
 - [ ] **AI 额度的最低购买额与"额度不足"提示**（F-M9b，总控 2026-11-14）：上线前决定是否设置 `qb.ai.credit.min-purchase`（最低购买额，未设即不限）与 `qb.ai.credit.low-amount`（可用低于它、且近 `qb.ai.credit.low-recent-days`（未设为 30）天内有过收费的 AI 请求时，发起方首页与 AI 额度页提示"AI 额度不足"；**未设即永远不提示**）。两者都是可选的受控参数，`QB_SETUP` 不建立
       谁：需求方定数，一位管理员提出、另一位发布；在哪里：受控变更；怎么确认：决定写在"依据"（不设也写明），要设的已发布
+      确认人： ／ 日期： ／ 依据：
+- [ ] **平台承担的月度提醒的阈值**（F-M9 b2-1，`operations.md` §7.56"平台承担"）：`qb.ai.fee.absorbed-alert-yen`（整数日元，缺省 1000/月，0 即不提醒）由 `QB_SETUP` 提出、随其他提案一起发布；财务确认这个值或改成别的值。某月平台承担的合计超过它时，每日任务 `qb.ai-absorbed-check` 给持 `qb.reconcile` 的人开一条待办，处理在 `/qb/ai` 的"AI 费"一节
+      谁：财务确认值，管理员发布（普通参数，`PARAM_SET`）；在哪里：`QB_SETUP` 的提案或平台管理系统的参数页；怎么确认：参数为确认的值（写在"依据"），不改就记"沿用 1000"
       确认人： ／ 日期： ／ 依据：
 - [ ] **官网生成的上线前实测**（新增：§7.46"上线前必须做"）：`qb.ai.site-profile.enabled` 保持关闭，直到（1）在 staging 用一个真实网站测一次耗时（平台对一次外部调用封顶 2 分钟、没有流式；超过时需要平台支持流式或降低页数、输出上限，配置 `quizbuks.ai.site-profile.request-timeout`）；（2）核对输入 Token 是否按轮累计、预留是否够，不够就提高预留。结果记在 `plans/impl/F-C7.md`「待核实」
       谁：开发或运维；在哪里：测试系统；`plans/impl/F-C7.md`；怎么确认：「待核实」中两项都有结果；之后两个开关（`qb.ai.fee.enabled`、`qb.ai.site-profile.enabled`）一起发布，卡片中 `aifee` 两行"一致"
