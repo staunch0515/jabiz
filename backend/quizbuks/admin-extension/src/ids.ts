@@ -188,6 +188,8 @@ export const TEMPLATE = {
   /** AI generation (Q8a; `qb.admin.ai.read`): usage by sponsor and month, the jobs, the parameters in force. */
   aiUsage: 'qb.admin.ai-usage',
   aiJobs: 'qb.admin.ai-jobs',
+  /** F-M9 b2: the AI fees by month, sponsor and operator (finance; `qb.admin.finance.read`). */
+  aiFees: 'qb.admin.ai-fees',
   aiSettings: 'qb.admin.ai-settings',
   /** Every announcement and sponsor's notice with its statistics (Q7c; `qb.admin.content.write`). */
   broadcasts: 'qb.admin.broadcasts',
@@ -202,6 +204,8 @@ export const TEMPLATE = {
   /** Q48a, an operator's own pages (`qb.operator.use`): the totals and the sponsors, never a taker's profile. */
   operatorOverview: 'qb.operator.overview',
   operatorSponsors: 'qb.operator.sponsors',
+  /** F-M9 b2: one of the operator's sponsors' AI credit and the month's AI fee charged under the operator. */
+  operatorSponsorAi: 'qb.operator.sponsor-ai',
   /** Q87b: how the operator's sponsors pay the platform's fees. */
   operatorBilling: 'qb.operator.sponsor-billing',
   /** F-M14b: the latest daily reconciliation's notes about the operator's own sponsors. */
