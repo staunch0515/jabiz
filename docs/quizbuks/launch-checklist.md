@@ -34,7 +34,7 @@
 ### 1.1 开发与验收（F-F14，规格"上线准备与闭环验收"）
 
 - [ ] **开发完成**：规格 `first-launch-spec.md` 的 F-F1 至 F-F14、F-S1 至 F-S15、F-C1 至 F-C11、F-M1 至 F-M15 都已合并到 `1.3/quizbuks`，CI 绿；平台的 P0–P8 与之后的平台阶段已合入 `1.3/platform` 并同步过来（进度表 `first-launch-progress.md` 每行为"已合并"或"完成"）
-      谁：开发确认，需求方知悉；在哪里：进度表 `first-launch-progress.md`，GitHub 上 `1.3/quizbuks` 的 CI；怎么确认：进度表每行为"已合并"或"完成"（2026-11-14 时 F-M8、F-M9、F-M14、F-M15 仍有未合并的部分），CI 最近一次为绿
+      谁：开发确认，需求方知悉；在哪里：进度表 `first-launch-progress.md`，GitHub 上 `1.3/quizbuks` 的 CI；怎么确认：进度表每行为"已合并"或"完成"（2026-11-14 时 F-M8、F-M14、F-M15 仍有未合并的部分；F-M9 已于 2026-11-15 全部合并），CI 最近一次为绿
       确认人： ／ 日期： ／ 依据：
 - [ ] **F-F12 闭环 e2e** 在 CI 中连续通过；需求方在测试系统中亲手走通六步（`launch-loop-walkthrough.md`），发现的问题已修或已记入下一期
       谁：开发（CI）、需求方（亲手走六步）；在哪里：CI；测试系统，照 `launch-loop-walkthrough.md`；怎么确认：CI 中闭环 e2e 连续为绿；走查记录中六步都通过，问题已修或已记入下一期
@@ -357,7 +357,7 @@
 | 3.5 | AI `qb.ai.enabled`、AI 问题解答 `qb.help.enabled` | AI 说明已发布（1.2）；使用手册已发布；密钥与支出上限 | 对外开放之前（首次上线即开） |
 | 3.6 | 自动付款 `qb.fee.auto-pay.enabled` | 条款一句（1.2）；先通知发起方；邮件、任务、阈值；staging 演练 | 首次上线时关着；之后手动打开 |
 | 3.7 | 注销收尾 `qb.erasure.close.enabled` | F-M13 已合并（满足）；排在 3.6 之后；1.2 的三项法务确认 | 时点由财务确认 |
-| 3.8 | AI 费 `qb.ai.fee.enabled`、官网生成 `qb.ai.site-profile.enabled` | F-M9 合并；3.1（或财务确认）；F-M15c 合并；P95 预留；3.5 已开 | 首次上线为关，按 3.8 的顺序打开 |
+| 3.8 | AI 费 `qb.ai.fee.enabled`、官网生成 `qb.ai.site-profile.enabled` | F-M9 合并（已完成，2026-11-15）；3.1（或财务确认）；F-M15c 合并；P95 预留；3.5 已开 | 首次上线为关，按 3.8 的顺序打开 |
 
 ### 3.1 运营商分成的设置
 
