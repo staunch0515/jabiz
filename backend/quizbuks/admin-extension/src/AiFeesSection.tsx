@@ -78,41 +78,45 @@ function AiFees() {
     const right = 'text-right tabular-nums'
     body = (
       <div className="overflow-x-auto" tabIndex={0} role="region" aria-label={t('ai.fees.table')}>
-        <Table data-testid="ai-fees">
-          <TableHeader>
-            <TableRow>
-              <TableHead>{t('ai.month')}</TableHead>
-              <TableHead>{t('ai.sponsor')}</TableHead>
-              <TableHead>{t('ai.fees.operator')}</TableHead>
-              <TableHead className="text-right">{t('ai.jobs')}</TableHead>
-              <TableHead className="text-right">{t('ai.fees.costUsd')}</TableHead>
-              <TableHead className="text-right">{t('ai.fees.feeYen')}</TableHead>
-              <TableHead className="text-right">{t('ai.fees.absorbedYen')}</TableHead>
-              <TableHead className="text-right">{t('ai.fees.unrecordedUsd')}</TableHead>
-              <TableHead className="text-right">{t('ai.fees.absorbedTotalYen')}</TableHead>
-              <TableHead className="text-right">{t('ai.fees.unbilledYen')}</TableHead>
-              {showCredit && <TableHead className="text-right">{t('ai.fees.aiCredit')}</TableHead>}
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {fees.data.map((row) => (
-              <TableRow key={`${row.month}:${row.sponsorId}:${row.operatorId ?? ''}`} data-testid="ai-fee-row"
-                data-sponsor={row.sponsorId}>
-                <TableCell>{row.month}</TableCell>
-                <TableCell>{row.company ?? row.sponsorId}</TableCell>
-                <TableCell>{row.operatorName ?? row.operatorId ?? t('ai.fees.platform')}</TableCell>
-                <TableCell className={right}>{n(row.jobs)}</TableCell>
-                <TableCell className={right}>{row.costUsd}</TableCell>
-                <TableCell className={right}>{money(row.feeYen)}</TableCell>
-                <TableCell className={right}>{money(row.absorbedYen)}</TableCell>
-                <TableCell className={right}>{row.unrecordedUsd}</TableCell>
-                <TableCell className={right} data-testid="ai-fee-absorbed-total">{money(row.absorbedTotalYen)}</TableCell>
-                <TableCell className={right}>{money(row.unbilledYen)}</TableCell>
-                {showCredit && <TableCell className={right} data-testid="ai-fee-credit">{money(row.aiCredit)}</TableCell>}
+        {/* Only this region scrolls and takes the keyboard's focus (axe scrollable-region-focusable): the inner box is
+            as wide as the table, so the platform Table's own container never scrolls (as ReportsPage's Monthly). */}
+        <div className="w-max min-w-full">
+          <Table aria-label={t('ai.fees.table')} data-testid="ai-fees">
+            <TableHeader>
+              <TableRow>
+                <TableHead>{t('ai.month')}</TableHead>
+                <TableHead>{t('ai.sponsor')}</TableHead>
+                <TableHead>{t('ai.fees.operator')}</TableHead>
+                <TableHead className="text-right">{t('ai.jobs')}</TableHead>
+                <TableHead className="text-right">{t('ai.fees.costUsd')}</TableHead>
+                <TableHead className="text-right">{t('ai.fees.feeYen')}</TableHead>
+                <TableHead className="text-right">{t('ai.fees.absorbedYen')}</TableHead>
+                <TableHead className="text-right">{t('ai.fees.unrecordedUsd')}</TableHead>
+                <TableHead className="text-right">{t('ai.fees.absorbedTotalYen')}</TableHead>
+                <TableHead className="text-right">{t('ai.fees.unbilledYen')}</TableHead>
+                {showCredit && <TableHead className="text-right">{t('ai.fees.aiCredit')}</TableHead>}
               </TableRow>
-            ))}
-          </TableBody>
-        </Table>
+            </TableHeader>
+            <TableBody>
+              {fees.data.map((row) => (
+                <TableRow key={`${row.month}:${row.sponsorId}:${row.operatorId ?? ''}`} data-testid="ai-fee-row"
+                  data-sponsor={row.sponsorId}>
+                  <TableCell>{row.month}</TableCell>
+                  <TableCell>{row.company ?? row.sponsorId}</TableCell>
+                  <TableCell>{row.operatorName ?? row.operatorId ?? t('ai.fees.platform')}</TableCell>
+                  <TableCell className={right}>{n(row.jobs)}</TableCell>
+                  <TableCell className={right}>{row.costUsd}</TableCell>
+                  <TableCell className={right}>{money(row.feeYen)}</TableCell>
+                  <TableCell className={right}>{money(row.absorbedYen)}</TableCell>
+                  <TableCell className={right}>{row.unrecordedUsd}</TableCell>
+                  <TableCell className={right} data-testid="ai-fee-absorbed-total">{money(row.absorbedTotalYen)}</TableCell>
+                  <TableCell className={right}>{money(row.unbilledYen)}</TableCell>
+                  {showCredit && <TableCell className={right} data-testid="ai-fee-credit">{money(row.aiCredit)}</TableCell>}
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </div>
       </div>
     )
   }

@@ -187,55 +187,59 @@ export default function AiPage() {
   else {
     jobsBody = (
       <div className="overflow-x-auto" tabIndex={0} role="region" aria-label={t('ai.recentTable')}>
-        <Table data-testid="ai-jobs">
-          <TableHeader>
-            <TableRow>
-              <TableHead>{t('ai.requestedAt')}</TableHead>
-              <TableHead>{t('ai.sponsor')}</TableHead>
-              <TableHead>{t('ai.status')}</TableHead>
-              <TableHead>{t('ai.model')}</TableHead>
-              <TableHead>{t('ai.servedModel')}</TableHead>
-              <TableHead className="text-right">{t('ai.attempts')}</TableHead>
-              <TableHead className="text-right">{t('ai.inputTokens')}</TableHead>
-              <TableHead className="text-right">{t('ai.outputTokens')}</TableHead>
-              <TableHead>{t('ai.feeMode')}</TableHead>
-              <TableHead>{t('ai.feeOperator')}</TableHead>
-              <TableHead>{t('ai.failure')}</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {jobs.data.map((row) => (
-              <TableRow key={row.aiJobId} data-testid="ai-job-row" data-status={row.status}>
-                <TableCell className="whitespace-nowrap">{new Date(row.requestedAt).toLocaleString(i18n.language)}</TableCell>
-                <TableCell><UserName id={row.sponsorId} /></TableCell>
-                <TableCell>
-                  {/* The kind (Q8b) under the status, so that the table keeps its width. */}
-                  <span className="text-muted-foreground block text-xs" data-testid="ai-job-kind">
-                    {t(`ai.kinds.${row.kind}`, { defaultValue: row.kind })}</span>
-                  <Badge variant={row.status === 'FAILED' ? 'destructive' : 'outline'}>
-                    {t(`ai.statuses.${row.status}`, { defaultValue: row.status })}
-                  </Badge>
-                </TableCell>
-                <TableCell><code className="text-xs">{row.model}</code></TableCell>
-                <TableCell>
-                  {row.servedModel && row.servedModel !== row.model
-                    ? <Badge variant="warning"><code className="text-xs">{row.servedModel}</code></Badge>
-                    : <code className="text-xs">{row.servedModel ?? ''}</code>}
-                </TableCell>
-                <TableCell className="text-right tabular-nums">{n(row.attempts)}</TableCell>
-                <TableCell className="text-right tabular-nums">{n(row.inputTokens)}</TableCell>
-                <TableCell className="text-right tabular-nums">{n(row.outputTokens)}</TableCell>
-                <TableCell data-testid="ai-job-fee-mode">
-                  {row.feeMode ? t(`ai.feeModes.${row.feeMode}`, { defaultValue: row.feeMode }) : ''}
-                </TableCell>
-                <TableCell data-testid="ai-job-fee-operator">{row.feeOperatorName ?? ''}</TableCell>
-                <TableCell className="text-xs">
-                  {row.failureCode && <><code>{row.failureCode}</code> {row.failureMessage}</>}
-                </TableCell>
+        {/* Only this region scrolls and takes the keyboard's focus (axe scrollable-region-focusable): the inner box is
+            as wide as the table, so the platform Table's own container never scrolls (as ReportsPage's Monthly). */}
+        <div className="w-max min-w-full">
+          <Table aria-label={t('ai.recentTable')} data-testid="ai-jobs">
+            <TableHeader>
+              <TableRow>
+                <TableHead>{t('ai.requestedAt')}</TableHead>
+                <TableHead>{t('ai.sponsor')}</TableHead>
+                <TableHead>{t('ai.status')}</TableHead>
+                <TableHead>{t('ai.model')}</TableHead>
+                <TableHead>{t('ai.servedModel')}</TableHead>
+                <TableHead className="text-right">{t('ai.attempts')}</TableHead>
+                <TableHead className="text-right">{t('ai.inputTokens')}</TableHead>
+                <TableHead className="text-right">{t('ai.outputTokens')}</TableHead>
+                <TableHead>{t('ai.feeMode')}</TableHead>
+                <TableHead>{t('ai.feeOperator')}</TableHead>
+                <TableHead>{t('ai.failure')}</TableHead>
               </TableRow>
-            ))}
-          </TableBody>
-        </Table>
+            </TableHeader>
+            <TableBody>
+              {jobs.data.map((row) => (
+                <TableRow key={row.aiJobId} data-testid="ai-job-row" data-status={row.status}>
+                  <TableCell className="whitespace-nowrap">{new Date(row.requestedAt).toLocaleString(i18n.language)}</TableCell>
+                  <TableCell><UserName id={row.sponsorId} /></TableCell>
+                  <TableCell>
+                    {/* The kind (Q8b) under the status, so that the table keeps its width. */}
+                    <span className="text-muted-foreground block text-xs" data-testid="ai-job-kind">
+                      {t(`ai.kinds.${row.kind}`, { defaultValue: row.kind })}</span>
+                    <Badge variant={row.status === 'FAILED' ? 'destructive' : 'outline'}>
+                      {t(`ai.statuses.${row.status}`, { defaultValue: row.status })}
+                    </Badge>
+                  </TableCell>
+                  <TableCell><code className="text-xs">{row.model}</code></TableCell>
+                  <TableCell>
+                    {row.servedModel && row.servedModel !== row.model
+                      ? <Badge variant="warning"><code className="text-xs">{row.servedModel}</code></Badge>
+                      : <code className="text-xs">{row.servedModel ?? ''}</code>}
+                  </TableCell>
+                  <TableCell className="text-right tabular-nums">{n(row.attempts)}</TableCell>
+                  <TableCell className="text-right tabular-nums">{n(row.inputTokens)}</TableCell>
+                  <TableCell className="text-right tabular-nums">{n(row.outputTokens)}</TableCell>
+                  <TableCell data-testid="ai-job-fee-mode">
+                    {row.feeMode ? t(`ai.feeModes.${row.feeMode}`, { defaultValue: row.feeMode }) : ''}
+                  </TableCell>
+                  <TableCell data-testid="ai-job-fee-operator">{row.feeOperatorName ?? ''}</TableCell>
+                  <TableCell className="text-xs">
+                    {row.failureCode && <><code>{row.failureCode}</code> {row.failureMessage}</>}
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </div>
       </div>
     )
   }
