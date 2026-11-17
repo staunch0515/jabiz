@@ -209,6 +209,8 @@ FROM pg_stat_statements ORDER BY total_exec_time DESC LIMIT 20;
 
 ## 3. 首次启动
 
+**首发按两账号的做法初始化**（需求方 2026-11-17）：需求方本人用两个账号（超级管理员与负责人）完成初始化与日常运营，步骤与分工见 `two-account-setup.md`。本节下面的多人步骤保留，作为以后有了第二个人时的做法。
+
 1. 准备 §1 的全部变量（`QB_STRIPE_PLACEHOLDERS=false`）、HTTPS 的反向代理（`JABIZ_TRUSTED_PROXIES`）、邮件。先以**测试模式**启动（§4 之前），确认 `docker compose … logs app` 中没有 `Platform check failed`。
 2. 以 `JABIZ_BOOTSTRAP_ADMIN_USER` 登录 `/admin/`，在"安全设置"中**开启两步验证**（TOTP），保存恢复码。随后从环境中删去 `JABIZ_BOOTSTRAP_ADMIN_USER` 与 `JABIZ_BOOTSTRAP_ADMIN_PASSWORD` 并设 `QB_BOOTSTRAP_ADMIN_DONE=true`（密码与这一行都没有时镜像的入口脚本拒绝启动；共用服务器上的步骤见 `deploy/quizbuks/DEPLOY.md`）。
 3. 执行 `QB_SETUP`（流程页面；要求二次验证）：建角色、账本科目、国家、业务参数，并把受控参数与审批规则作为**提案**提出。
