@@ -217,7 +217,8 @@
 - [ ] **全部管理员都有二次验证**；管理员角色设了"要求二次验证"；没有共用账号；首个管理员的 `JABIZ_BOOTSTRAP_ADMIN_*` 已从环境中删去
       谁：超级管理员（角色设置），运维（删变量）；在哪里：平台管理系统的用户与角色页、"安全设置"；`.env`（`launch-day-platform-steps.md` 2.3、2.5、4.1）；怎么确认：每个管理员账号显示已绑定二次验证；`.env` 中没有这两个变量
       确认人： ／ 日期： ／ 依据：
-- [ ] **至少两位超级管理员**（`QB_ADMIN_SUPER`，平台 16u，D51）在职、各自二次验证，按 `operations.md` §3 第 4–5 步的顺序建立（`QB_SETUP` 与职责分离规则的发布在第二位之前）；建立期已结束（`sec_protected_grants_armed` 有一行），试过一次由一位申请、另一位审批的角色分配；`JABIZ_SECURITY_PROTECTEDGRANTS_ENABLED` 未设
+- [ ] **首发按两账号的做法有意不满足**（`two-account-setup.md`，需求方 2026-11-17；见本页末"带着未完成项上线的决定"）：首发只有一位超级管理员（账号 A），建立期不结束，三条职责分离规则保持待发布；`launch-day-check.sh` 的"至少两位超级管理员""建立期已结束"两项 FAIL 是预期的。以后有了第二个人时按下面原来的要求做：
+  **至少两位超级管理员**（`QB_ADMIN_SUPER`，平台 16u，D51）在职、各自二次验证，按 `operations.md` §3 第 4–5 步的顺序建立（`QB_SETUP` 与职责分离规则的发布在第二位之前）；建立期已结束（`sec_protected_grants_armed` 有一行），试过一次由一位申请、另一位审批的角色分配；`JABIZ_SECURITY_PROTECTEDGRANTS_ENABLED` 未设
       谁：首个管理员与两位超级管理员；运维（查表与 `.env`）；在哪里：平台管理系统「用户与角色」与"待办"；数据库表 `sec_protected_grants_armed`；怎么确认：表中有一行；一次申请经另一位批准后生效；`.env` 中没有该变量
       确认人： ／ 日期： ／ 依据：
 - [ ] **测试开关**：`operations.md` §1.4 的测试开关一个都没设；`SPRING_PROFILES_ACTIVE` 不含 `dev`；`JABIZ_SECURITY_MFA_ADMINISTRATION` 未设；`QB_STRIPE_PLACEHOLDERS=false`
@@ -309,7 +310,7 @@
 - [ ] **曝光计数**（F-S13，`operations.md` §7.31）：`QB_SETUP` 已建五个 `qb.exposure.*` 参数，内容管理员有 `qb.admin.exposure.read` / `.monitor`、运营商有 `qb.admin.exposure.read`；"定时任务"页中 `qb.exposure-ends`（每分钟）与 `qb.exposure-check`（每天）在跑；帮助"共享视频的曝光"（`docs/quizbuks/help/exposure.md`）已由内容管理员发布为学者与发起方的 FAQ
       谁：内容管理员；在哪里：平台管理系统"定时任务"页与 FAQ；怎么确认：两个任务有最近的成功运行；FAQ 中有这一组
       确认人： ／ 日期： ／ 依据：
-- [ ] **总部的运营商有两位能审核的成员**（直营发起方的发布由另一位成员审核，F-S1）；每个运营商恰好一个直营发起方，每日核对 `qb.operator-check` 没有 `NO_DEFAULT_OPERATOR`、`DIRECT_SPONSOR`、`FEW_REVIEWERS`（`operations.md` §7.13）
+- [ ] **总部的运营商有两位能审核的成员**（直营发起方的发布由另一位成员审核，F-S1；首发按两账号的做法即账号 A 与账号 B）；每个运营商恰好一个直营发起方，每日核对 `qb.operator-check` 没有 `NO_DEFAULT_OPERATOR`、`DIRECT_SPONSOR`、`FEW_REVIEWERS`（`operations.md` §7.13）
       谁：超级管理员（建成员、分配 `QB_OPERATOR`，另一位超级管理员审批）；在哪里：平台管理系统「运营商」与「用户与角色」；怎么确认：每日核对与平台管理系统首页没有这三项
       确认人： ／ 日期： ／ 依据：
 - [ ] **平台图第一个节点的发布**（官方账号，即平台运营商的直营发起方）三语已发布（与本节招商网站"试试看"一项同时确认）
@@ -544,6 +545,6 @@
 
 ## 带着未完成项上线的决定
 
-（无）
+- **两账号的做法**（需求方 2026-11-17 决定，`two-account-setup.md`）：首发只有需求方一人，用两个账号。因此有意不满足 2.3 的"至少两位超级管理员"与"建立期已结束"（`launch-day-check.sh` 这两项 FAIL 是预期的），三条职责分离规则保持待发布（WARN 是预期的）；钱的审批由同一人的两个账号完成，只是形式上的四眼，转账与提现首发关着。有了第二个人时按 `two-account-setup.md` 末节与 `operations.md` §3 分开。
 
 已按决定处理、不在清单中的事项：**样板间**——`operations.md` §7.49 写明样板只在测试系统（需求方 2026-11-12），正式系统从空开始、不导入样板，所以本页不列这一项。
