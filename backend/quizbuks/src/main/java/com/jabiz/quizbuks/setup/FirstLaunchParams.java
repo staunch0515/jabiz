@@ -4,13 +4,16 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.function.Function;
+import java.util.function.Predicate;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 /**
  * The parameters a first launch's configuration may set (F-LAUNCH, docs/quizbuks/plans/impl/F-LAUNCH.md section 4, H4).
  * Pure data, read by the first launch's handler when it checks the configuration and lists what may be set:
  * <ul>
- *   <li>{@link #SETTABLE}: neither money nor an amount; the configured value takes effect;</li>
+ *   <li>{@link #SETTABLE}: neither money nor an amount; the configured value takes effect, if its
+ *       {@link #VALUE_RULES rule} allows it;</li>
  *   <li>a money switch of {@link FirstLaunchSwitches} is {@link Verdict#FIXED} at its first launch's value
  *       ({@link #fixedValue}): the configuration cannot change it, money parameters change only by four eyes;</li>
  *   <li>an amount (a price, a limit in Kudos or yen, a rate) is {@link Verdict#AMOUNT}: refused;</li>
@@ -20,19 +23,37 @@ import java.util.stream.Collectors;
  */
 public final class FirstLaunchParams {
 
-    /** What the first launch's configuration may do with a parameter. */
-    public enum Verdict { SETTABLE, FIXED, AMOUNT, NOT_SETTABLE }
+    /**
+     * What the first launch's configuration may do with a parameter; {@link #VALUE_REFUSED} only for a settable key
+     * whose {@link #VALUE_RULES rule} refuses the configured value.
+     */
+    public enum Verdict { SETTABLE, VALUE_REFUSED, FIXED, AMOUNT, NOT_SETTABLE }
 
     /** The keys the configuration may set, with the configured value taking effect. */
-    public static final List<String> SETTABLE = List.of(
-        // The review of a sponsor's onboarding (the first launch's own sponsors are approved by the run itself).
-        QbParams.REVIEW_SPONSOR_AUTO,
-        // AI quiz generation's daily requests per sponsor and how long its candidates are kept.
-        QbParams.AI_SPONSOR_DAILY_JOBS,
-        QbParams.AI_EXPIRE_DAYS,
-        // The oldest app version still allowed, and the support address shown to users.
-        QbParams.APP_MIN_VERSION,
-        QbParams.SUPPORT_EMAIL);
+    public static final List<String> SETTABLE = Stream.of(List.of(
+            // The review of a sponsor's onboarding (the first launch's own sponsors are approved by the run itself).
+            QbParams.REVIEW_SPONSOR_AUTO,
+            // AI quiz generation's daily requests per sponsor and how long its candidates are kept.
+            QbParams.AI_SPONSOR_DAILY_JOBS,
+            QbParams.AI_EXPIRE_DAYS,
+            // The oldest app version still allowed, and the support address shown to users.
+            QbParams.APP_MIN_VERSION,
+            QbParams.SUPPORT_EMAIL,
+            // How far ahead a new legal text may be announced.
+            QbParams.LEGAL_MAX_ANNOUNCE_DAYS,
+            // The methods every sponsor may publish with: offline redemption only at the launch (VALUE_RULES).
+            QbParams.REWARD_DEFAULT_METHODS),
+        // The receipts' issuer and the accounting system's account codes: the requester's facts, no money moves.
+        QbParams.ISSUER, QbParams.JOURNAL_ACCOUNTS)
+        .flatMap(List::stream).toList();
+
+    /**
+     * Rules on the configured value of a settable key; a key without one takes any value of its kind. The first launch
+     * uses offline redemption only (plan section 4), so the default reward methods are none or {@code OFFLINE_REDEEM}.
+     */
+    public static final Map<String, Predicate<String>> VALUE_RULES = Map.of(
+        QbParams.REWARD_DEFAULT_METHODS, value -> value == null || value.isBlank()
+            || "OFFLINE_REDEEM".equals(value.strip()));
 
     private static final Map<String, QbParams.Param> PARAMS = QbParams.ALL.stream()
         .collect(Collectors.toUnmodifiableMap(QbParams.Param::key, Function.identity()));
@@ -46,11 +67,23 @@ public final class FirstLaunchParams {
         if (param != null && amount(param)) {
             return Verdict.AMOUNT;
         }
+        if (param != null && SETTABLE.contains(key)) {
+            return Verdict.SETTABLE;
+        }
         Optional<FirstLaunchSwitches.Row> row = FirstLaunchSwitches.row(key);
         if (row.isPresent()) {
             return row.get().status() == FirstLaunchSwitches.Status.MANUAL ? Verdict.NOT_SETTABLE : Verdict.FIXED;
         }
-        return param != null && SETTABLE.contains(key) ? Verdict.SETTABLE : Verdict.NOT_SETTABLE;
+        return Verdict.NOT_SETTABLE;
+    }
+
+    /** What the configuration may do with the parameter {@code key} set to {@code value} (text, as configured). */
+    public static Verdict verdict(String key, String value) {
+        Verdict verdict = verdict(key);
+        if (verdict == Verdict.SETTABLE && VALUE_RULES.containsKey(key) && !VALUE_RULES.get(key).test(value)) {
+            return Verdict.VALUE_REFUSED;
+        }
+        return verdict;
     }
 
     /**
