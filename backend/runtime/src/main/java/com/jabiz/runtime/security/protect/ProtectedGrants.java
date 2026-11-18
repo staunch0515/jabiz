@@ -102,10 +102,12 @@ public class ProtectedGrants {
      */
     /**
      * The chain of ownership of a user's credentials ({@code CredentialChain}); {@code addressAsCreated}: the address is
-     * the one entered when the account was created, changed by nobody since (decision D63).
+     * the one entered when the account was created, changed by nobody since (decision D63); {@code correctable}: the
+     * first launch may still correct it (never used, changed by nobody else; decision D83).
      */
     public record Credentials(boolean own, String setBy, Instant setAt, String summary, List<String> history,
-        String email, String address, boolean addressChangedByOther, boolean clean, boolean addressAsCreated) {
+        String email, String address, boolean addressChangedByOther, boolean clean, boolean addressAsCreated,
+        boolean correctable) {
         public Credentials {
             history = List.copyOf(history);
         }
@@ -572,7 +574,7 @@ public class ProtectedGrants {
                 CredentialChain.Judgement judged = CredentialChain.judge(user.toString(), events);
                 return new Credentials(judged.own(), judged.setBy(), judged.setAt(), judged.summary(),
                     judged.history(), judged.email(), judged.address(), judged.addressChangedByOther(),
-                    judged.clean(), judged.addressAsCreated());
+                    judged.clean(), judged.addressAsCreated(), judged.correctable());
             });
     }
 

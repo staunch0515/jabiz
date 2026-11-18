@@ -59,6 +59,14 @@ final class CredentialChain {
     /** Processes in which a user enrols their own second factor. */
     static final Set<String> SELF_MFA = Set.of("SEC_MFA_ENROLL_BEGIN", "SEC_MFA_ENROLL_CONFIRM");
 
+    /**
+     * The first launch's correction of the address of an account its run created (decision D83): counted as entered at
+     * creation only when the system makes it before the account was ever used.
+     */
+    static final String FIRST_LAUNCH_EMAIL_REVISE = "FIRST_LAUNCH_EMAIL_REVISE";
+    /** The actor of platform processes. */
+    private static final String SYSTEM = com.jabiz.context.RequestContext.SYSTEM_ACTOR;
+
     enum Source { USER, IDENTITY, MFA }
 
     /**
@@ -100,9 +108,12 @@ final class CredentialChain {
      *                              created
      * @param addressAsCreated      whether there is an address and it is the one entered when the account was created,
      *                              never changed since by anyone (decision D63: where an invitation may go)
+     * @param correctable           whether the first launch may correct the address (decision D83): there is one,
+     *                              the account never had a password, a link, a second factor or a proven address, and
+     *                              nobody but the first launch's correction changed the address
      */
     record Judgement(boolean own, String setBy, Instant setAt, String summary, List<String> history, String email,
-        String address, boolean clean, boolean addressChangedByOther, boolean addressAsCreated) {
+        String address, boolean clean, boolean addressChangedByOther, boolean addressAsCreated, boolean correctable) {
         Judgement {
             history = List.copyOf(history);
         }
@@ -162,6 +173,8 @@ final class CredentialChain {
         private Instant addressProvenAt;
         private boolean addressChangedByOther;
         private boolean addressChanged;
+        /** Whether a password, a link, a second factor or a proven address ever existed (decision D83). */
+        private boolean used;
 
         Walk(String user) {
             this.user = user;
@@ -207,7 +220,13 @@ final class CredentialChain {
                     changes.add("address " + newEmail);
                 }
             } else {
-                if (!Objects.equals(lower(newEmail), lower(email))) {
+                if (!Objects.equals(lower(newEmail), lower(email)) && newEmail != null && correction(event)) {
+                    // Decision D83: as if entered at creation; the earlier address's links no longer hold.
+                    address = State.UNPROVEN;
+                    addressHow = "corrected by the first launch at " + event.at();
+                    addressProvenAt = null;
+                    changes.add("address corrected to " + newEmail);
+                } else if (!Objects.equals(lower(newEmail), lower(email))) {
                     address = newEmail == null ? State.NONE : byUser(event) && wasClean ? State.OWN : State.FOREIGN;
                     addressHow = newEmail == null ? null
                         : (byUser(event) ? "set by the user" : "changed by " + who(event)) + " at " + event.at();
@@ -248,6 +267,7 @@ final class CredentialChain {
             }
             hash = event.passwordHash();
             email = newEmail;
+            used |= hash != null || addressProvenAt != null;
             verified = newEmail != null && newEmail.equalsIgnoreCase(String.valueOf(event.verifiedEmail()));
             if (!changes.isEmpty()) {
                 line(event, String.join(", ", changes));
@@ -261,12 +281,28 @@ final class CredentialChain {
             }
         }
 
+        /**
+         * Whether {@code event} is the first launch's correction of an address nobody could have used yet: by the
+         * system, in {@value #FIRST_LAUNCH_EMAIL_REVISE}, on an account that never had a password, a link, a second
+         * factor or a proven address, and whose address nobody else changed (decision D83).
+         */
+        private boolean correction(Event event) {
+            return FIRST_LAUNCH_EMAIL_REVISE.equals(event.process()) && SYSTEM.equals(event.actorId())
+                && unused() && event.passwordHash() == null;
+        }
+
+        /** Never used, and its address changed by nobody but the first launch's correction (decision D83). */
+        private boolean unused() {
+            return !used && !disordered && !verified && !addressChanged && hash == null;
+        }
+
         private void passwordSet(Event event) {
             passwordBy = who(event);
             passwordAt = event.at();
         }
 
         private void link(Event event) {
+            used = true;
             if (!links.containsKey(event.key()) && !event.deleted()) {
                 boolean own = event.process() != null && (PROVIDER_SIGN_UP.contains(event.process())
                     || SELF_IDENTITY.contains(event.process()) && byUser(event) && clean());
@@ -281,6 +317,7 @@ final class CredentialChain {
         }
 
         private void factor(Event event) {
+            used = true;
             if (event.deleted()) {
                 factorStates.remove(event.key());
                 if (factors.remove(event.key()) != null) {
@@ -327,7 +364,8 @@ final class CredentialChain {
             String described = email == null ? "no address" : email + " (" + addressHow
                 + (addressProvenAt == null ? ", not proven by mail" : ", proven by mail at " + addressProvenAt) + ")";
             return new Judgement(own, own ? null : foreignBy, own ? null : foreignAt, summary, history, email,
-                described, clean(), addressChangedByOther, email != null && !addressChanged);
+                described, clean(), addressChangedByOther, email != null && !addressChanged,
+                email != null && unused());
         }
     }
 
