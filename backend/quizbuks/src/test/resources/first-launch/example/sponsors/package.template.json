@@ -1,0 +1,47 @@
+{
+  "format": "quizbuks.sponsor-package",
+  "version": 2,
+  "exportedAt": "2026-11-18T00:00:00Z",
+  "profile": {
+    "format": "quizbuks-profile", "schema": 1, "languages": ["en"],
+    "basics": { "contactName": "__CONTACT__", "company": "__COMPANY__", "intro": { "en": "Our own quizzes." }, "avatar": "avatar" },
+    "page": { "handle": "__HANDLE__", "headline": { "en": "Quizzes from __COMPANY__" }, "website": null, "cover": "cover" },
+    "products": [],
+    "files": {
+      "avatar": { "type": "image/jpeg", "size": __SIZE__, "data": "__JPEG__" },
+      "cover": { "type": "image/jpeg", "size": __SIZE__, "data": "__JPEG__" }
+    }
+  },
+  "trees": [
+    { "key": "spring", "name": { "en": "Spring" }, "description": null, "nodes": [
+      { "key": "basics", "name": { "en": "Basics" }, "description": null, "condition": { "op": "ALL", "items": [{ "passed": true }] } },
+      { "key": "advanced", "name": { "en": "Advanced" }, "description": null,
+        "condition": { "op": "ALL", "items": [{ "node": "basics", "beforeAnswer": true }, { "passed": true }] } } ] }
+  ],
+  "quizzes": [
+    { "key": "spring", "versions": [
+      { "key": "v1", "label": "v1", "topics": [], "customTopics": [], "file": {
+        "format": "quizbuks.quiz", "formatVersion": 3, "exportedAt": "2026-11-18T00:00:00Z",
+        "quiz": { "kind": "QUIZ", "title": "Spring flowers", "intro": null, "timeLimitSec": null, "cover": null, "language": "en" },
+        "materials": [],
+        "questions": [
+          { "stem": "When do cherries blossom in Tokyo?", "image": null, "points": 1, "selection": null,
+            "options": [ { "text": "February", "image": null, "correct": false }, { "text": "Late March", "image": null, "correct": true } ] },
+          { "stem": "Which flower is this?", "image": "img1", "points": 1, "selection": null,
+            "options": [ { "text": "Plum", "image": null, "correct": false }, { "text": "Cherry", "image": null, "correct": true } ] },
+          { "stem": "Is a tulip a spring flower?", "image": null, "points": 1, "selection": null,
+            "options": [ { "text": "Yes", "image": null, "correct": true }, { "text": "No", "image": null, "correct": false } ] } ],
+        "files": { "img1": { "name": "flower.jpg", "type": "image/jpeg", "size": __SIZE__, "data": "__JPEG__" } } } } ],
+      "current": null, "topics": [], "customTopics": [] }
+  ],
+  "publications": [
+    { "quiz": "spring", "version": "v1",
+      "settings": { "format": "quizbuks.publication-settings", "version": 1, "name": "Spring quiz", "fullScore": 3,
+        "durationDays": 30, "timeLimitSec": 300, "passScore": 2, "budgetCap": null, "maxWinners": 100,
+        "tiers": [ { "fromScore": 0, "toScore": 3, "reward": 0 } ], "rewardMethod": "OFFLINE_REDEEM",
+        "redeemDescription": "At the till.", "audience": "PUBLIC", "regions": ["GLOBAL"], "languages": [],
+        "translations": {}, "conditions": [] },
+      "node": { "tree": "spring", "node": "basics", "name": { "en": "Basics" } },
+      "topics": null, "sharedVideo": null }
+  ]
+}

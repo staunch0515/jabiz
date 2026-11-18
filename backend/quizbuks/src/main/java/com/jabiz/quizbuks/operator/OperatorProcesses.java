@@ -190,7 +190,23 @@ public final class OperatorProcesses {
                     ctx -> byKey("userId", newLead(ctx)), LEAD_ASSIGNMENT),
                 QueryEntities.query(QbOperators.defaultDataset(QbOperators.OPERATOR), ctx -> EntityQuery.builder()
                     .where(new QueryPredicate.Eq("defaultForNew", true)).limit(2).build(), DEFAULTS)))
+            // F-LAUNCH (plan section 5.1): the first launch makes an operator as the system, its lead an account the
+            // run made and has not invited yet; the platform checks the run (any other system call fails here).
+            .step("A first launch's lead", CallProcess.<ProcessContext>when(OperatorProcesses::firstLaunchLead,
+                com.jabiz.quizbuks.firstlaunch.QbFirstLaunchProcesses.LEAD, 1,
+                ctx -> new com.jabiz.quizbuks.firstlaunch.QbFirstLaunchProcesses.LeadInput(newLead(ctx)),
+                FIRST_LAUNCH_LEAD))
             .compute("Save", (metadata, ctx) -> save(ctx, ctx.get(INPUT, SaveInput.class))));
+    }
+
+    /** Where the save keeps that the first launch vouched for its lead (F-LAUNCH). */
+    static final String FIRST_LAUNCH_LEAD = "firstLaunchLead";
+
+    /** A new operator made by the system whose lead has not verified the address: only the first launch does so. */
+    static boolean firstLaunchLead(ProcessContext ctx) {
+        EntityInstance lead = OperatorChecks.first(ctx, LEAD_USER);
+        return com.jabiz.context.RequestContext.SYSTEM_ACTOR.equals(ctx.request().actorId()) && target(ctx) == null
+            && lead != null && !verified(lead);
     }
 
     /**
@@ -244,7 +260,8 @@ public final class OperatorProcesses {
                 if (lead == null) {
                     throw new EntityNotFoundException(SecurityEntities.USER + " " + newLead(ctx) + " not found");
                 }
-                checkNewMember(ctx, "leadUserId", lead, OperatorChecks.first(ctx, LEAD_PLACE), null, false);
+                checkNewMember(ctx, "leadUserId", lead, OperatorChecks.first(ctx, LEAD_PLACE), null, false,
+                    Boolean.TRUE.equals(ctx.contains(FIRST_LAUNCH_LEAD) ? ctx.get(FIRST_LAUNCH_LEAD) : null));
                 checkDirectSponsor(ctx, "leadUserId", OperatorChecks.first(ctx, LEAD_ASSIGNMENT));
             }
         }
@@ -453,6 +470,12 @@ public final class OperatorProcesses {
      */
     static void checkNewMember(ProcessContext ctx, String field, EntityInstance user, EntityInstance place,
         List<EntityInstance> members, boolean ownSponsor) {
+        checkNewMember(ctx, field, user, place, members, ownSponsor, false);
+    }
+
+    /** @param unverifiedLead the first launch vouched for the person: the address is verified by the invitation */
+    static void checkNewMember(ProcessContext ctx, String field, EntityInstance user, EntityInstance place,
+        List<EntityInstance> members, boolean ownSponsor, boolean unverifiedLead) {
         if (place != null) {
             ctx.reject(new Violation(field, OperatorCodes.MEMBER_ELSEWHERE, "The person is a member of another "
                 + "operator", Map.of()));
@@ -461,7 +484,7 @@ public final class OperatorProcesses {
             ctx.reject(new Violation(field, OperatorCodes.MEMBER_IS_SPONSOR, "The person runs a sponsor account",
                 Map.of()));
         }
-        if (!verified(user)) {
+        if (!verified(user) && !unverifiedLead) {
             ctx.reject(new Violation(field, OperatorCodes.MEMBER_UNVERIFIED, "The person's e-mail address is not "
                 + "verified", Map.of()));
         }
