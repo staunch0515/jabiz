@@ -5660,8 +5660,10 @@ QuizBuks 的 #545、#546、#547 用了 43.5–45 分钟，#545 到点被取消�
 | 17zz23c-1 | 账号：平台步骤 `FirstLaunchAccountSteps`（`waiting-role`、`account:#n`，代号不进 `op_process`）、待命角色 `FIRST_LAUNCH_PENDING` 与 `WaitingRoleWriteCheck`（`FIRST_LAUNCH_ROLE_RESERVED`）、V68 `sys_first_launch_account`；校验入口接受待命角色、邮件开启 |
 | 17zz23c-2 | 等人阶段：任务 `jabiz.first-launch`（`FIRST_LAUNCH_ADVANCE`：邀请与再邀请、授予、管理员最后且须指纹确认、撤下待命角色、`DONE` / `EXPIRED`、报告 `FIRST_LAUNCH_REPORT`） |
 | 17zz23c-3 | 改邮箱的补救（D83）：`FIRST_LAUNCH_EMAIL_REVISE`、`CredentialChain` 的窄例外、`ConfigShape`、`FirstLaunchRevisions`、`REVISED` |
-| 17zz23c-5 | 抹除：`ErasurePurger` 也清除用户邮件（如邀请）的审计记录中的地址与参数（原来遗漏，与首发无关的已有缺口，由首发账号的全库搜索发现） |
 | 17zz23c-4 | 测试：`GrantPlanTest`、`EmailRevisionTest`、`ConfigShapeTest`、`CredentialChainTest`、`FirstLaunchAccountsIT`、`FirstLaunchWaitingIT`、`FirstLaunchExpiryIT`；文档：设计 23 §8、D83、10 §15.14、指南、`CLAUDE.md` |
+| 17zz23c-5 | 抹除：`ErasurePurger` 也清除用户邮件（如邀请）的审计记录中的地址与参数（原来遗漏，与首发无关的已有缺口，由首发账号的全库搜索发现） |
+| 17zz23d-1 | 文件步骤：core `FirstLaunchStep.file`、`FileSource`（策略、相对路径、取出字节、名称），`FirstLaunchHandler.filePolicies()`；文件步骤必须代行；runtime `FirstLaunchFiles`（声明的策略，经 `FileUploadService.storeGenerated` 存储后在 `FIRST_LAUNCH_STEP` 之下以子流程 `FIRST_LAUNCH_FILE_REGISTER` 登记为该账号的上传：行锁、内容阶段、代行条件，登记失败删除对象；输出文件编号），配置目录的文件按启动时的摘要读取（新增、改写即拒绝），运行器先于代行流程的检查处理文件步骤，启动校验与试运行一次报全文件步骤的问题；启动检查 `FIRST_LAUNCH` 要求策略存在、不空白；架构测试 |
+| 17zz23d-2 | 测试 `FirstLaunchFilesIT`：从包中取出的图片以代行存储（上传者为该账号、重新编码、文件名不进记录）；带 EXIF/GPS 的 JPEG 存储后不含 GPS；`privateMetadata()` 策略得随机编号；试运行输出含文件步骤；登记的父流程是 `FIRST_LAUNCH_STEP`；出目录的路径、绝对路径、中途的符号链接、启动后新增或改写的文件、不是图片的内容、超出策略大小、未声明的策略、取出为空、系统身份、非本运行的账号、有会话的账号都被拒且不留下行；内容阶段后被拒。`FirstLaunchConfigReaderTest`（摘要）。`FirstLaunchChecksTest`（不存在的策略）。文档：设计 23 §6、D82 补充、`CLAUDE.md` 文件 |
 ### 线 1.3 的候选（未排期，2026-11-08 总控：首次上线前不做）
 
 | 候选 | 缘由 | 粗估 |
