@@ -283,3 +283,16 @@ FilePolicy.define("qb.content")
   app `RemoteImageFetchIT`（本机的 HTTPS 桩服务 `HttpsStubServer`，测试配置以 `@Primary` 的 `RemoteFetchNetwork` 替换解析器、地址判定与信任的证书：
   成功路径与元数据去除、http 与端口、私网与元数据地址、重定向到私网 / http / 过多、重定向计入其主机的限流、DNS 重绑定、证书主机名、非图片、超大（有无长度）、超时、请求头、权限、按主机限流、
   每人与本实例的同时下载上限（429 / 503）、下载期间不占连接池、观测标签、记录中没有链接、外部作业的下载与登记、示范的商品图）。
+
+## 13. 首发的文件步骤【决策 D82，阶段 17zz23d】
+
+首发配置目录中的文件（如发起方包中 base64 的图片）由首发的文件步骤（`FirstLaunchStep.file`，必须代行一个本运行建立的账号）存入，是上传之外第三个进入流水线的入口；细节见设计 23 §6。
+
+| 入口 | 谁用 | 登记 |
+|---|---|---|
+| `FirstLaunchStep.file(键, FileSource(策略, 相对路径, 取出字节, 名称)).asAccount(代号)` | 应用的首发处理器（`FirstLaunchHandler`，策略须在 `filePolicies()` 中） | 先经 `FileUploadService.storeGenerated` 存储，再在 `FIRST_LAUNCH_STEP` 之下以子流程 `FIRST_LAUNCH_FILE_REGISTER`（`subProcessOnly()`）登记为该账号的上传；登记失败删除对象 |
+
+- **来源**：只读启动时记下摘要的配置目录中的文件（不经符号链接、新增或改写即拒绝），至多 `jabiz.first-launch.max-file-bytes`。
+- **流水线**：与上传相同（类型按内容判定、图片重新编码去掉元数据、策略的类型与 `maxBytes`，`maxBytes` 作用于取出后的字节；`privateMetadata()` 的策略照旧用随机编号）。
+- **权限**：代替上传权限的是处理器声明的策略与代行的条件（本运行建立、从未有过凭据、运行仍在内容阶段），由登记子流程按流程谱系检查；文件名不进 `input_summary`。
+- 只有平台的首发包使用 `FirstLaunchFiles`；`FileUploadService` 只由 `runtime.file`、`runtime.external` 与 `runtime.firstlaunch` 使用（架构测试）。

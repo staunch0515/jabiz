@@ -95,6 +95,7 @@
 - `sys_first_launch_event`：`CONTENT_DONE`、`DONE`、`FAILED`、`EXPIRED`、`REVISED`。
   - 当前状态是最新一条非 `REVISED` 的事件；没有事件即 `RUNNING`。
   - 状态机由 `FIRST_LAUNCH_RECORD` 在锁住运行记录后检查：`RUNNING` → `CONTENT_DONE` 或 `FAILED`；`CONTENT_DONE` → `DONE`、`EXPIRED` 或 `REVISED`；结束后不再有事件。
+  - `REVISED` 的 `detail` 只记用户编号与配置中的位置（如 `accounts[2]`），不记配置代号：代号即登录名，属个人信息。V67 的表注释写"以配置代号称呼账号"，以本节为准（已合入的迁移不改）。
 - 两张表都不存邮箱与姓名，只存哈希、代号与用户编号。
 
 ## 5. 扩展点

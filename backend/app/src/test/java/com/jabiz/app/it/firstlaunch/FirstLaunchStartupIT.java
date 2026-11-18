@@ -118,6 +118,60 @@ class FirstLaunchStartupIT extends PostgresIntegrationTest {
     }
 
     @Test
+    void theFileStepsProblemsAreReportedWithTheSettingsAtOnce() {
+        String config = FirstLaunchIT.configFile("""
+            version: 1
+            site:
+              language: en
+            allowedEmailDomains: [example.co.jp]
+            accounts:
+              - key: A
+                email: a@example.co.jp
+                name: A
+                roles: [ADMIN]
+                report: true
+            """);
+        FirstLaunchHandler stores = new FirstLaunchHandler() {
+            @Override
+            public String name() {
+                return "files";
+            }
+
+            @Override
+            public List<com.jabiz.firstlaunch.FirstLaunchProblem> validate(com.jabiz.firstlaunch.FirstLaunchConfig c) {
+                return List.of();
+            }
+
+            @Override
+            public List<com.jabiz.firstlaunch.FirstLaunchStep> plan(com.jabiz.firstlaunch.FirstLaunchConfig c) {
+                var source = new com.jabiz.firstlaunch.FirstLaunchStep.FileSource("it.tiny", "first-launch.yml", null,
+                    "file");
+                return List.of(
+                    com.jabiz.firstlaunch.FirstLaunchStep.file("early", source).asAccount("A"),
+                    com.jabiz.firstlaunch.FirstLaunchStep.file("nobody", source).asAccount("Z"),
+                    com.jabiz.firstlaunch.FirstLaunchStep.run(
+                        com.jabiz.firstlaunch.FirstLaunchStep.accountStepKey("A"), "SEC_USER_CREATE", r -> null));
+            }
+        };
+        ObjectProvider<FirstLaunchHandler> one = new org.springframework.beans.factory.support.StaticListableBeanFactory(
+            java.util.Map.of("files", stores)).getBeanProvider(FirstLaunchHandler.class);
+        ObjectProvider<FirstLaunchExit> exit = new org.springframework.beans.factory.support.StaticListableBeanFactory(
+            java.util.Map.of("exit", (FirstLaunchExit) exits::add)).getBeanProvider(FirstLaunchExit.class);
+        ObjectProvider<FirstLaunchPlatformSteps> none = new org.springframework.beans.factory.support
+            .StaticListableBeanFactory(java.util.Map.of()).getBeanProvider(FirstLaunchPlatformSteps.class);
+        MockEnvironment environment = new MockEnvironment().withProperty("jabiz.first-launch.config", config)
+            .withProperty("jabiz.first-launch.dry-run", "true")
+            .withProperty("jabiz.security.bootstrap-admin.user-name", "root");
+
+        assertThatThrownBy(() -> new FirstLaunchRunner(environment, runs, new FirstLaunchGate(), processes, one, none,
+            messages, clockBean, exit, json, powers, files).afterSingletonsInstantiated())
+            .isInstanceOf(FirstLaunchRunner.FirstLaunchFailedException.class)
+            .hasMessageContaining("step early (first-launch.yml) | stores a file as A before the account is made")
+            .hasMessageContaining("step nobody (first-launch.yml) | stores a file as Z, which is not an account")
+            .hasMessageContaining("JABIZ_BOOTSTRAP_ADMIN_USER");
+    }
+
+    @Test
     void protectedGrantsAlwaysOnLeaveNoSetupWindowForTheFirstLaunch() {
         MockEnvironment environment = new MockEnvironment()
             .withProperty("jabiz.first-launch.config", FirstLaunchIT.configFile("version: 1\n"))
