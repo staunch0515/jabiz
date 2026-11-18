@@ -204,7 +204,8 @@ class FirstLaunchIT extends PostgresIntegrationTest {
             context.getBean(com.jabiz.i18n.MessageCatalog.class), context.getBean(java.time.Clock.class),
             context.getBeanProvider(FirstLaunchExit.class),
             context.getBean(tools.jackson.databind.json.JsonMapper.class),
-            context.getBean(com.jabiz.runtime.firstlaunch.FirstLaunchPowers.class)).afterSingletonsInstantiated();
+            context.getBean(com.jabiz.runtime.firstlaunch.FirstLaunchPowers.class),
+            context.getBean(com.jabiz.runtime.firstlaunch.FirstLaunchFiles.class)).afterSingletonsInstantiated();
         assertThat(other.isOpen()).isFalse();
     }
 

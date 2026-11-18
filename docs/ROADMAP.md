@@ -5657,6 +5657,8 @@ QuizBuks 的 #545、#546、#547 用了 43.5–45 分钟，#545 到点被取消�
 | 17zz23b-5 | 文档：决策 D82、设计 23 §6、04 §9.1、10、18 §3.5、`CLAUDE.md` 第 4 节"审批与职责分离" |
 | 17zz23b-6 | 审查修正：三项能力按 `op_process` 血缘判断（顶层是本运行的 `FIRST_LAUNCH_STEP`），不再看请求编号；`RequestContextWebFilter` 替换客户端给出的 `first-launch…` 请求编号；参数初值发布只限受控参数与审批规则、提议人须是系统；"从未有过凭据"含会话与成功的登录；启动检查 `FIRST_LAUNCH`；`FirstLaunchActing` 与架构测试；过时的运行由另一实例先记失败时照样启动失败 |
 | 17zz23b-7 | 测试：`FirstLaunchPowersIT` 的探查改为真实的步骤（伪造的请求编号、账号调用发布、带限额的级、本人有了密码后不再代行）；`FirstLaunchFailureIT`（失败后不再有步骤）；`FirstLaunchStartupIT`（与 `.always` 互斥）；`FirstLaunchStaleIT`（超时的运行由下一次启动记为失败，运行中的实例随之退出）；`RequestContextWebFilterTest` |
+| 17zz23d-1 | 文件步骤：core `FirstLaunchStep.file`、`FileSource`（策略、相对路径、取出字节、名称），`FirstLaunchHandler.filePolicies()`；runtime `FirstLaunchFiles`（内容阶段、声明的策略、代行条件，经 `FileUploadService.storeGenerated` 登记为该账号的上传，输出文件编号），运行器先于代行流程的检查处理文件步骤；启动检查 `FIRST_LAUNCH` 要求策略存在；架构测试 |
+| 17zz23d-2 | 测试 `FirstLaunchFilesIT`：从包中取出的图片以代行存储（上传者为该账号、重新编码、文件名不进记录）；出目录的路径、符号链接、不是图片的内容、超出策略大小、未声明的策略、非本运行的账号都被拒；内容阶段后被拒。`FirstLaunchChecksTest`（不存在的策略）。文档：设计 23 §6、D82 补充、`CLAUDE.md` 文件 |
 ### 线 1.3 的候选（未排期，2026-11-08 总控：首次上线前不做）
 
 | 候选 | 缘由 | 粗估 |

@@ -76,6 +76,9 @@ class ArchitectureTest {
         noClasses().that().resideOutsideOfPackage("com.jabiz.runtime.firstlaunch")
             .should().dependOnClassesThat().haveFullyQualifiedName("com.jabiz.runtime.firstlaunch.FirstLaunchActing")
             .check(CLASSES);
+        noClasses().that().resideOutsideOfPackage("com.jabiz.runtime.firstlaunch")
+            .should().dependOnClassesThat().haveFullyQualifiedName("com.jabiz.runtime.firstlaunch.FirstLaunchFiles")
+            .check(CLASSES);
     }
 
     @Test

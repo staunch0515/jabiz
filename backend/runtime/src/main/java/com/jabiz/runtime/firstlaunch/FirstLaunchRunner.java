@@ -66,6 +66,7 @@ public class FirstLaunchRunner implements SmartInitializingSingleton, Applicatio
     private final ObjectProvider<FirstLaunchExit> exits;
     private final JsonMapper json;
     private final FirstLaunchPowers powers;
+    private final FirstLaunchFiles files;
 
     private volatile Mode mode = Mode.NONE;
     private volatile FirstLaunchConfig config;
@@ -74,7 +75,7 @@ public class FirstLaunchRunner implements SmartInitializingSingleton, Applicatio
     public FirstLaunchRunner(Environment environment, FirstLaunchRuns runs, FirstLaunchGate gate,
         ProcessExecutor processes, ObjectProvider<FirstLaunchHandler> handlers,
         ObjectProvider<FirstLaunchPlatformSteps> platformSteps, MessageCatalog messages, Clock clock,
-        ObjectProvider<FirstLaunchExit> exits, JsonMapper json, FirstLaunchPowers powers) {
+        ObjectProvider<FirstLaunchExit> exits, JsonMapper json, FirstLaunchPowers powers, FirstLaunchFiles files) {
         this.settings = FirstLaunchSettings.of(environment);
         this.environment = environment;
         this.runs = runs;
@@ -87,6 +88,7 @@ public class FirstLaunchRunner implements SmartInitializingSingleton, Applicatio
         this.exits = exits;
         this.json = json;
         this.powers = powers;
+        this.files = files;
     }
 
     /** What this start does; for tests. */
@@ -302,6 +304,13 @@ public class FirstLaunchRunner implements SmartInitializingSingleton, Applicatio
 
     /** Runs one step: once, or again and again while it waits. Returns its output. */
     private Object run(UUID runId, FirstLaunchStep step, Results results, Instant deadline) {
+        if (step.file() != null) {
+            // A file step (D82): stored as the account, or the system, through the upload pipeline.
+            String actor = step.asAccount() == null ? null : results.userId(step.asAccount());
+            RequestContext request = actor == null ? RequestContext.system(locale, requestId(runId, step))
+                : FirstLaunchActing.as(actor, locale, requestId(runId, step));
+            return files.store(runId, config, step, actor, request).block();
+        }
         if (step.asAccount() != null && !powers.actingProcesses().contains(step.process())) {
             throw new IllegalStateException("Step " + step.key() + " runs " + step.process() + " as account "
                 + step.asAccount() + ", but the application's handler does not name it among its acting processes");
