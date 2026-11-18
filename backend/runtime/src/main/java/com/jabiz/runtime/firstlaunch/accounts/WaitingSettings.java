@@ -3,6 +3,7 @@ package com.jabiz.runtime.firstlaunch.accounts;
 import com.jabiz.firstlaunch.FirstLaunchConfig;
 import com.jabiz.runtime.firstlaunch.FirstLaunchConfigReader;
 import com.jabiz.runtime.firstlaunch.FirstLaunchSettings;
+import org.springframework.beans.factory.SmartInitializingSingleton;
 import org.springframework.core.env.Environment;
 import org.springframework.stereotype.Component;
 
@@ -25,9 +26,10 @@ import java.util.stream.Collectors;
  * </ul>
  */
 @Component
-public class WaitingSettings {
+public class WaitingSettings implements SmartInitializingSingleton {
 
     private final Environment environment;
+    private volatile Optional<FirstLaunchConfig> config = Optional.empty();
 
     public WaitingSettings(Environment environment) {
         this.environment = environment;
@@ -48,8 +50,18 @@ public class WaitingSettings {
             .map(text -> text.toLowerCase(java.util.Locale.ROOT)).collect(Collectors.toUnmodifiableSet());
     }
 
-    /** The configuration this instance was started with, when there is one and it reads without problems. */
+    /** Reads the configuration once, at startup: it is read from files, which the request path does not. */
+    @Override
+    public void afterSingletonsInstantiated() {
+        config = read();
+    }
+
+    /** The configuration this instance was started with, when there is one and it read without problems. */
     public Optional<FirstLaunchConfig> config() {
+        return config;
+    }
+
+    private Optional<FirstLaunchConfig> read() {
         FirstLaunchSettings settings = new FirstLaunchSettings(
             environment.getProperty(FirstLaunchSettings.CONFIG, ""), false,
             environment.getProperty("jabiz.first-launch.content-timeout", Duration.class, Duration.ofMinutes(10)),

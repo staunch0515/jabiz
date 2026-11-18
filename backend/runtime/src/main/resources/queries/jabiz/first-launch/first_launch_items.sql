@@ -22,7 +22,7 @@ FROM (
                WHEN 1 THEN 'a' || replace(a.{{FirstLaunchAccount.userId}}::text, '-', '')
                ELSE 'end' END AS itemKey,
            p.phase * 1000000 + a.{{FirstLaunchAccount.position}} AS ordering,
-           p.phase AS phase, a.{{FirstLaunchAccount.position}} AS position
+           p.phase AS phase, a.{{FirstLaunchAccount.position}} AS pos
     FROM {{FirstLaunchAccount}} a
     CROSS JOIN (SELECT 0 AS phase UNION ALL SELECT 1 UNION ALL SELECT 2) p
     WHERE EXISTS (SELECT 1 FROM {{FirstLaunchEvent}} e
@@ -32,4 +32,4 @@ FROM (
                       WHERE e.{{FirstLaunchEvent.runId}} = a.{{FirstLaunchAccount.runId}}
                         AND e.{{FirstLaunchEvent.kind}} IN ('DONE', 'EXPIRED', 'FAILED'))
 ) i
-WHERE i.phase < 2 OR i.position = 0
+WHERE i.phase < 2 OR i.pos = 0
