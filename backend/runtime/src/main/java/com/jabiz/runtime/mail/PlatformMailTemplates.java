@@ -29,7 +29,10 @@ public class PlatformMailTemplates {
     public static final String DOCUMENT_MAIL = "jabiz.document-mail";
 
     /** The names, which the startup check accepts in the platform's namespace. */
-    public static final Set<String> NAMES = Set.of(TASK_NOTIFICATION, DOCUMENT_MAIL);
+    /** The first launch's report ({@code FirstLaunchWaiting.REPORT_TEMPLATE}; named here to keep the packages apart). */
+    public static final String FIRST_LAUNCH_REPORT = "jabiz.first-launch.report";
+
+    public static final Set<String> NAMES = Set.of(TASK_NOTIFICATION, DOCUMENT_MAIL, FIRST_LAUNCH_REPORT);
 
     public static final MailTemplate TASK_NOTIFICATION_MAIL = MailTemplate.define(TASK_NOTIFICATION, t -> t
         .category(MailCategory.TRANSACTIONAL).param("title", "taskUrl")

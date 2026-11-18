@@ -20,6 +20,7 @@ class CredentialChainTest {
     private static final String USER = "0190a1b2-0000-7000-8000-000000000001";
     private static final String ADMIN = "0190a1b2-0000-7000-8000-0000000000aa";
     private static final String ANONYMOUS = "anonymous";
+    private static final String SYSTEM = "system";
 
     private final List<Event> events = new ArrayList<>();
     private long seq;
@@ -275,5 +276,76 @@ class CredentialChainTest {
             .contains("changes left out").endsWith(history.getLast());
         assertThat(AssessProtectedChange.keepEnds(history.subList(0, 3), 2000))
             .isEqualTo(String.join("; ", history.subList(0, 3)));
+    }
+    /**
+     * Decision D82: the first launch's run corrects the address of an account it created before anyone could use it
+     * (no password, link or second factor ever, address never proven); the invitation then goes to the corrected
+     * address as if entered at creation. Anything else - another actor, a process of another name, an account with a
+     * credential or a proven address - is an ordinary change by someone else.
+     */
+    @Test
+    void theCorrectionIsTheFirstLaunchsProcess() {
+        assertThat(CredentialChain.FIRST_LAUNCH_EMAIL_REVISE)
+            .isEqualTo(com.jabiz.runtime.firstlaunch.accounts.FirstLaunchAccountProcesses.EMAIL_REVISE);
+    }
+
+    @Test
+    void theFirstLaunchCorrectsAnUnusedAccountsAddressAsIfEnteredAtCreation() {
+        user(SYSTEM, "SEC_USER_CREATE", null, "wrong@example.com", null);
+        user(SYSTEM, CredentialChain.FIRST_LAUNCH_EMAIL_REVISE, null, "right@example.com", null);
+        Judgement judged = judged();
+        assertThat(judged.addressAsCreated()).isTrue();
+        assertThat(judged.correctable()).as("may be corrected again").isTrue();
+        assertThat(judged.addressChangedByOther()).isFalse();
+        assertThat(judged.address()).startsWith("right@example.com (corrected by the first launch");
+        user(ANONYMOUS, "SPONSOR_INVITATION_ACCEPT", "h1", "right@example.com", "right@example.com");
+        assertThat(judged().own()).isTrue();
+
+        // Not by the system: an ordinary change by someone else.
+        events.clear();
+        user(SYSTEM, "SEC_USER_CREATE", null, "wrong@example.com", null);
+        user(ADMIN, CredentialChain.FIRST_LAUNCH_EMAIL_REVISE, null, "right@example.com", null);
+        assertThat(judged().addressAsCreated()).isFalse();
+        assertThat(judged().addressChangedByOther()).isTrue();
+
+        // A second factor was ever enrolled (even removed since): the account was used.
+        events.clear();
+        user(SYSTEM, "SEC_USER_CREATE", null, "wrong@example.com", null);
+        factor("m1", USER, "SEC_MFA_ENROLL_BEGIN", false);
+        factor("m1", USER, "SEC_MFA_DISABLE", true);
+        assertThat(judged().correctable()).isFalse();
+        user(SYSTEM, CredentialChain.FIRST_LAUNCH_EMAIL_REVISE, null, "right@example.com", null);
+        assertThat(judged().addressAsCreated()).isFalse();
+
+        // A password was ever set (even removed since).
+        events.clear();
+        user(SYSTEM, "SEC_USER_CREATE", "h1", "wrong@example.com", null);
+        user(SYSTEM, "SEC_USER_UPDATE", null, "wrong@example.com", null);
+        user(SYSTEM, CredentialChain.FIRST_LAUNCH_EMAIL_REVISE, null, "right@example.com", null);
+        assertThat(judged().addressAsCreated()).isFalse();
+
+        // The address was proven once.
+        events.clear();
+        user(SYSTEM, "SEC_USER_CREATE", null, "wrong@example.com", null);
+        user(ANONYMOUS, "SPONSOR_EMAIL_VERIFY", null, "wrong@example.com", "wrong@example.com");
+        user(SYSTEM, CredentialChain.FIRST_LAUNCH_EMAIL_REVISE, null, "right@example.com", null);
+        assertThat(judged().addressAsCreated()).isFalse();
+
+        // Someone else changed the address before: the correction does not undo that.
+        events.clear();
+        user(SYSTEM, "SEC_USER_CREATE", null, "wrong@example.com", null);
+        assertThat(judged().correctable()).isTrue();
+        user(ADMIN, "SEC_USER_UPDATE", null, "admin@example.com", null);
+        assertThat(judged().correctable()).isFalse();
+        user(SYSTEM, CredentialChain.FIRST_LAUNCH_EMAIL_REVISE, null, "right@example.com", null);
+        assertThat(judged().addressAsCreated()).isFalse();
+
+        // A link to an identity provider was ever made.
+        events.clear();
+        user(SYSTEM, "SEC_USER_CREATE", null, "wrong@example.com", null);
+        link("k1", ADMIN, "SEC_USER_IDENTITY_LINK", false);
+        link("k1", ADMIN, "SEC_IDENTITY_UNLINK_SELF", true);
+        user(SYSTEM, CredentialChain.FIRST_LAUNCH_EMAIL_REVISE, null, "right@example.com", null);
+        assertThat(judged().addressAsCreated()).isFalse();
     }
 }
