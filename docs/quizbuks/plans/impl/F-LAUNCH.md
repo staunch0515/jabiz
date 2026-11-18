@@ -858,7 +858,8 @@ Q1、Q2（与平台并行）────────┘
   - `PackageJson`：按 JavaScript 的写法计请求的字节（`JSON.stringify` 的数字与转义、孤立的代理项、`trim` 的空白），按字节切分因此两边一致。
 - **页面只拆了一处**：`package.ts` 的 `stepInput` 拆成纯函数 `inputOfStep` 与上传两部分，行为不变。
 - **对照**（第 9 节第 16 项）：
-  - 输入 `quizbuks-web/sponsor/src/profile/package-plan-cases.json` 由 `PackagePlanCasesWriterTest` 从 `PackageFixtures` 写出（`PACKAGE_PLAN_CASES_WRITE=1`，平时不运行）：13 例，含大题库的多步清空、按字节切、放不进任何请求的题与资料、超过上限的 Quiz、孤立的发布、未共享的视频、已提交过图的账户（按节点键、再按名称绑定）、只导入资料、第 1 版、三种读错，以及数字与转义。两个大样例只写一次（`packages`，用例以 `packageRef` 引用）。
+  - 输入 `quizbuks-web/sponsor/src/profile/package-plan-cases.json` 由 `PackagePlanCasesWriterTest` 从 `PackageFixtures` 写出（`PACKAGE_PLAN_CASES_WRITE=1`，平时不运行）：14 例，含大题库的多步清空、按字节切、放不进任何请求的题与资料、超过上限的 Quiz、孤立的发布、未共享的视频、已提交过图的账户（按节点键、再按名称绑定）、只导入资料、第 1 版、三种读错、数字与转义，以及 JavaScript 自己的读法（数字样的键先列、任意长的题号、`.` 匹配 U+0085、空键不算、名称是数字）。Java 读包时先把对象的键排成 JavaScript 的顺序（`PackageJson.jsOrdered`）。两个大样例只写一次（`packages`，用例以 `packageRef` 引用）。
   - 期望 `package-plan-expected.json` 由页面的代码写出（`PACKAGE_PLAN_CASES_UPDATE=1 pnpm vitest run package.plan.cases`），页面是参照；Java 的 `PackagePlanCasesTest` 与页面的 `package.plan.cases.test.ts` 都与它比较。摘要：每一步的种类、键与各字段，文档为题数、字节数与摘要（键排序后的 JSON 的 SHA-256），每一步的输入（发布的写全、其他为摘要，前面步骤的结果以步骤键命名）。
   - `quizbuks` 的 `test` 任务把两个文件声明为输入，改了即重跑。
+- **已知的页面问题（未改）**：版本的键为空字符串时，页面把它当作当前内容，两个内容步骤的键相同（`quiz:q1:c:content`），导入记录会把第二个当作已做而跳过。Java 照页面做（样例覆盖），首发的校验（Q3）应拒绝空的键；是否让页面的 `readPackage` 把空键报为格式问题，另行决定。
 - **改动的规则**：改 `package.ts`、`content/bank.ts` 的切分、`publishing/settings.ts` 的 `parseSettings` / `formOfSettings` 或 `publishing/api.ts` 的 `inputOf` 时，同一个 PR 里改对应的 Java，重写期望并让两边都通过；包或 Quiz 文件的新字段若影响切分或输入，先在 `PackagePlanCasesWriterTest` 加一例。

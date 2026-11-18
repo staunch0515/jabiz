@@ -13,6 +13,7 @@ import java.util.Map;
 import java.util.Set;
 
 import static com.jabiz.quizbuks.sponsorpackage.PackageJson.isObject;
+import static com.jabiz.quizbuks.sponsorpackage.PackageJson.map;
 import static com.jabiz.quizbuks.sponsorpackage.PackageJson.object;
 
 /**
@@ -28,6 +29,9 @@ public final class PackageStepInputs {
     /** The latest time JavaScript's {@code Date} holds (ms either side of the epoch). */
     private static final long MAX_DATE_MS = 8_640_000_000_000_000L;
     private static final DateTimeFormatter ISO = DateTimeFormatter.ofPattern("uuuu-MM-dd'T'HH:mm:ss.SSS'Z'")
+        .withZone(ZoneOffset.UTC);
+    /** The rest of a time after a six-digit year. */
+    private static final DateTimeFormatter AFTER_YEAR = DateTimeFormatter.ofPattern("-MM-dd'T'HH:mm:ss.SSS'Z'")
         .withZone(ZoneOffset.UTC);
 
     private PackageStepInputs() {}
@@ -160,15 +164,7 @@ public final class PackageStepInputs {
         if (year >= 0 && year <= 9999) {
             return ISO.format(instant);
         }
-        String rest = DateTimeFormatter.ofPattern("-MM-dd'T'HH:mm:ss.SSS'Z'").withZone(ZoneOffset.UTC).format(instant);
-        return (year < 0 ? "-" : "+") + String.format("%06d", Math.abs(year)) + rest;
+        return (year < 0 ? "-" : "+") + String.format("%06d", Math.abs(year)) + AFTER_YEAR.format(instant);
     }
 
-    private static Map<String, Object> map(Object... pairs) {
-        Map<String, Object> map = new LinkedHashMap<>();
-        for (int i = 0; i < pairs.length; i += 2) {
-            map.put((String) pairs[i], pairs[i + 1]);
-        }
-        return map;
-    }
 }

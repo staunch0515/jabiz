@@ -7,6 +7,7 @@ import java.util.Map;
 
 import static com.jabiz.quizbuks.sponsorpackage.PackageJson.isInteger;
 import static com.jabiz.quizbuks.sponsorpackage.PackageJson.isObject;
+import static com.jabiz.quizbuks.sponsorpackage.PackageJson.map;
 import static com.jabiz.quizbuks.sponsorpackage.PackageJson.object;
 
 /**
@@ -256,11 +257,4 @@ public final class PublicationSettingsFile {
         return value instanceof String text && values.contains(text) ? text : otherwise;
     }
 
-    private static Map<String, Object> map(Object... pairs) {
-        Map<String, Object> map = new LinkedHashMap<>();
-        for (int i = 0; i < pairs.length; i += 2) {
-            map.put((String) pairs[i], pairs[i + 1]);
-        }
-        return map;
-    }
 }

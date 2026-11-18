@@ -60,6 +60,8 @@ class PackagePlanCasesWriterTest {
             oversized(), context("FULL", 10, 9_000, 1000, fresh(1))));
         cases.add(testCase("numbers and escapes as JSON writes them, cut by bytes", escapes(),
             context("FULL", 4, 1_500, 1000, fresh(1))));
+        cases.add(testCase("what the page reads by JavaScript's rules: keys that are numbers, long and odd question keys, "
+            + "empty keys, a name that is a number", edges(), context("FULL", 2, 0, 1000, fresh(1))));
         Map<String, Object> out = new LinkedHashMap<>();
         out.put("about", "F-LAUNCH Q1: packages the page's planImport and the server's PackagePlan both plan. Written by "
             + "PackagePlanCasesWriterTest; the expected plans are in package-plan-expected.json.");
@@ -255,6 +257,53 @@ class PackagePlanCasesWriterTest {
             map("no", 11, "product", "p3"), map("no", "x"))));
         return pkg(2, null, List.of(), List.of(map("key", "heavy", "versions", List.of(), "current", file)),
             List.of());
+    }
+
+    /**
+     * What JavaScript reads otherwise than a plain Java map would: objects iterate their number-like keys first ("2"
+     * before "10"), a question key's digits read as a double whatever their length, its "." takes U+0085, an empty key
+     * names nothing, and a map's name may be any value.
+     */
+    private static Map<String, Object> edges() {
+        Map<String, Object> file = quizFile("Edges", 5);
+        @SuppressWarnings("unchecked")
+        List<Object> questions = (List<Object>) file.get("questions");
+        for (int i = 0; i < questions.size(); i++) {
+            @SuppressWarnings("unchecked")
+            Map<String, Object> q = new LinkedHashMap<>((Map<String, Object>) questions.get(i));
+            q.put("image", i % 2 == 0 ? "10" : "2");
+            questions.set(i, q);
+        }
+        Map<String, Object> files = new LinkedHashMap<>();
+        files.put("img", map("type", "image/png", "data", "AAAA"));
+        files.put("10", map("type", "image/png", "data", "BBBB"));
+        files.put("2", map("type", "image/png", "data", "CCCC"));
+        file.put("files", files);
+        // The heading names two files: the page meets "2" (a number-like key) before "img", whatever the order written.
+        @SuppressWarnings("unchecked")
+        Map<String, Object> heading = new LinkedHashMap<>((Map<String, Object>) file.get("quiz"));
+        Map<String, Object> extra = new LinkedHashMap<>();
+        extra.put("b", "img");
+        extra.put("1", "2");
+        heading.put("extra", extra);
+        file.put("quiz", heading);
+        Map<String, Object> texts = new LinkedHashMap<>();
+        texts.put("title", "端");
+        texts.put("q4.stem", "四");
+        texts.put("q123456789012345678901234.stem", "long");
+        texts.put("q3.\u0085stem", "odd");
+        texts.put("q01.stem", "zero-led");
+        texts.put("q1.stem", "一");
+        file.put("translations", map("ja", map("texts", texts, "images", map("q5.image", "img"), "hashes", map())));
+        Map<String, Object> current = new LinkedHashMap<>(file);
+        current.put("quiz", map("kind", "QUIZ", "title", "Edges now", "language", "en"));
+        Map<String, Object> second = new LinkedHashMap<>(coffeeTree());
+        second.put("key", "t-two");
+        second.put("name", map("en", 7, "ja", "七"));
+        return pkg(2, null, List.of(coffeeTree(), second), List.of(map("key", "qe", "versions",
+            List.of(map("key", "", "label", "blank", "file", file)), "current", current)), List.of(
+                map("quiz", "", "version", "", "settings", settings("Empty names"), "sharedVideo", ""),
+                map("quiz", "qe", "version", "", "settings", settings("On the current"))));
     }
 
     /** Numbers and strings whose JSON differs between writers (the request's bytes count them as JavaScript does). */

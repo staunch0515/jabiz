@@ -23,11 +23,16 @@ import static com.jabiz.quizbuks.sponsorpackage.PackageJson.object;
  */
 public final class QuizFileCut {
 
+    // The documents given are in JavaScript's key order (PackagePlan.read gives them so: PackageJson.jsOrdered).
+
     /** The rows one step that clears a content takes at most (the server's {@code ContentLimits.CLEAR_ROWS_TECH}). */
     public static final int CLEAR_ROWS = 2000;
 
-    /** A translation key of a question ({@code q12.stem}, {@code q12.o3.image}): its number and the rest. */
-    private static final Pattern QUESTION_KEY = Pattern.compile("^q(\\d+)\\.(.+)$");
+    /**
+     * A translation key of a question ({@code q12.stem}, {@code q12.o3.image}): its number and the rest. JavaScript's
+     * {@code .} is spelled out: Java's also stops at U+0085.
+     */
+    private static final Pattern QUESTION_KEY = Pattern.compile("^q([0-9]+)\\.([^\n\r\u2028\u2029]+)$");
 
     private QuizFileCut() {}
 
@@ -102,9 +107,10 @@ public final class QuizFileCut {
             if (!match.matches()) {
                 return;
             }
-            long n = Long.parseLong(match.group(1));
-            if (n > from && n <= (long) from + count) {
-                out.put("q" + (n - from) + "." + match.group(2), value);
+            // As the page's Number(...): any length of digits reads (as the nearest double).
+            double n = Double.parseDouble(match.group(1));
+            if (n > from && n <= (double) from + count) {
+                out.put("q" + PackageJson.number(n - from) + "." + match.group(2), value);
             }
         });
         return out;
@@ -253,7 +259,7 @@ public final class QuizFileCut {
         Map<String, Object> kept = new LinkedHashMap<>();
         object(entries).forEach((key, value) -> {
             Matcher match = QUESTION_KEY.matcher(key);
-            if (!match.matches() || Long.parseLong(match.group(1)) <= size) {
+            if (!match.matches() || Double.parseDouble(match.group(1)) <= size) {
                 kept.put(key, value);
             }
         });

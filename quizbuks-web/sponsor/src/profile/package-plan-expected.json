@@ -3708,6 +3708,262 @@
           ]
         }
       }
+    },
+    {
+      "name": "what the page reads by JavaScript's rules: keys that are numbers, long and odd question keys, empty keys, a name that is a number",
+      "summary": {
+        "plan": {
+          "mode": "FULL",
+          "batchSize": 2,
+          "batchBytes": 0,
+          "makes": {
+            "profile": false,
+            "trees": 1,
+            "quizzes": 1,
+            "versions": 0,
+            "publications": 2
+          },
+          "sameTitles": [],
+          "treesSkipped": [
+            7
+          ],
+          "treesKept": false,
+          "unbound": [],
+          "videosAgain": [],
+          "tooLarge": [],
+          "oversized": [],
+          "orphans": [],
+          "steps": [
+            {
+              "kind": "tree",
+              "key": "tree:1",
+              "treeKey": "t-src",
+              "tree": "ddeab33e22609e95c1b254e1408eca90ee9a1e6add247dfc95adea80819a7c09",
+              "input": "396ee7bbeeee1bd1a3d0fae130f2975433396f84dc75d693374532bf917df177"
+            },
+            {
+              "kind": "content",
+              "key": "quiz:q1:c:content",
+              "quiz": "qe",
+              "label": "blank",
+              "title": "Edges now",
+              "check": "qe:",
+              "into": null,
+              "topics": [],
+              "customTopics": [],
+              "clears": 0,
+              "document": {
+                "questions": 2,
+                "bytes": 743,
+                "digest": "5657110242bf160748c82db2a4825bab5d697103b4f9d1447cfaceeda116174e"
+              },
+              "input": "fc4411d023ec1f5f860edc952bbc35111099ca55c9857f9d202756698379cb2d"
+            },
+            {
+              "kind": "batch",
+              "key": "quiz:q1:c:batch:2",
+              "quiz": "qe",
+              "label": "blank",
+              "title": "Edges now",
+              "check": "qe:",
+              "batch": 2,
+              "batches": 3,
+              "quizStep": "quiz:q1:c:content",
+              "clears": 0,
+              "document": {
+                "questions": 2,
+                "bytes": 713,
+                "digest": "a6ad93f2af756d5a3f20a291e5fdaa3751e0142b5f87460ae2265040d628d64c"
+              },
+              "input": "619228e62eb53ad1e2f0561923a7e746c74e9e952b285c8e11c02a14273c1121"
+            },
+            {
+              "kind": "batch",
+              "key": "quiz:q1:c:batch:3",
+              "quiz": "qe",
+              "label": "blank",
+              "title": "Edges now",
+              "check": "qe:",
+              "batch": 3,
+              "batches": 3,
+              "quizStep": "quiz:q1:c:content",
+              "clears": 0,
+              "document": {
+                "questions": 1,
+                "bytes": 545,
+                "digest": "cf280d15760ba61a6acb7c99da023ced60dfaf315fe03aae9991c11d6cafe739"
+              },
+              "input": "a62cbe36fc18c52dd33614746234c6a12b9d95668d3bca24c417ab492590acba"
+            },
+            {
+              "kind": "clear",
+              "key": "quiz:q1:c:clear:1",
+              "quiz": "qe",
+              "label": "",
+              "title": "Edges now",
+              "clear": 1,
+              "clears": 1,
+              "quizStep": "quiz:q1:c:content",
+              "content": "quiz:q1:c:content",
+              "input": "c7316aab93aabb30f6e2bb43bf1367fa134a24700866acdb744754b297fbb05a"
+            },
+            {
+              "kind": "content",
+              "key": "quiz:q1:c:content",
+              "quiz": "qe",
+              "label": "",
+              "title": "Edges now",
+              "check": "qe:current",
+              "into": "quiz:q1:c:content",
+              "topics": [],
+              "customTopics": [],
+              "clears": 1,
+              "document": {
+                "questions": 2,
+                "bytes": 673,
+                "digest": "b6fb8cd4974570afd72923b28867d12246706da70d00d3e34350f144cd254896"
+              },
+              "input": "f4933d9ca8b9048bfb6030cb67632d86801f42f1e6220fb5ba60330e40275ebe"
+            },
+            {
+              "kind": "batch",
+              "key": "quiz:q1:c:batch:2",
+              "quiz": "qe",
+              "label": "",
+              "title": "Edges now",
+              "check": "qe:current",
+              "batch": 2,
+              "batches": 3,
+              "quizStep": "quiz:q1:c:content",
+              "clears": 1,
+              "document": {
+                "questions": 2,
+                "bytes": 656,
+                "digest": "27d25e73a7d6be0984639f8d866020859af8ec142f5813ab6ffe83d0e765e5ca"
+              },
+              "input": "26ed8fe58138656fc7d7a82b8e894238cac3faa3872a90b940e6ba323e249cd6"
+            },
+            {
+              "kind": "batch",
+              "key": "quiz:q1:c:batch:3",
+              "quiz": "qe",
+              "label": "",
+              "title": "Edges now",
+              "check": "qe:current",
+              "batch": 3,
+              "batches": 3,
+              "quizStep": "quiz:q1:c:content",
+              "clears": 1,
+              "document": {
+                "questions": 1,
+                "bytes": 488,
+                "digest": "e88540ca9a1618a422bffd10da134004e9b1c1205130bfd1e65ed8cb4355a07d"
+              },
+              "input": "5db3f7d9fd1badcd181355d5f4a0aa973264bf550fcb31cc426f4b042c274772"
+            },
+            {
+              "kind": "publication",
+              "key": "publication:1",
+              "index": 0,
+              "name": "Empty names",
+              "quizStep": null,
+              "versionStep": null,
+              "node": null,
+              "publication": "293f90b9315ba5b1a5cd6b1b4726b2b5f75d338b3cc2625e847f607561e2d5d9",
+              "input": {
+                "publication": {
+                  "save": {
+                    "publicationId": null,
+                    "versionId": null,
+                    "name": "Empty names",
+                    "cover": null,
+                    "regions": [
+                      "GLOBAL"
+                    ],
+                    "startAt": "2026-12-01T00:00:00.000Z",
+                    "endAt": "2026-12-08T00:00:00.000Z",
+                    "timeLimitSec": null,
+                    "passScore": 2,
+                    "pickCount": null,
+                    "entryFee": 0,
+                    "budgetCap": 1000,
+                    "maxWinners": 10,
+                    "exposureRequested": null,
+                    "tiers": [
+                      {
+                        "tierId": null,
+                        "fromScore": 0,
+                        "toScore": 3,
+                        "reward": 10
+                      }
+                    ],
+                    "baseRevision": null,
+                    "rewardMethod": "PLATFORM",
+                    "redeemDescription": null,
+                    "audience": "PUBLIC",
+                    "referral": null,
+                    "treeId": null,
+                    "treeNodeId": null
+                  },
+                  "criteria": null,
+                  "topics": null,
+                  "sharedVideoId": null
+                }
+              }
+            },
+            {
+              "kind": "publication",
+              "key": "publication:2",
+              "index": 1,
+              "name": "On the current",
+              "quizStep": "quiz:q1:c:content",
+              "versionStep": null,
+              "node": null,
+              "publication": "4edaf1298f5919a0ab398fe363c45a3dbbb0a9526ceb52c4460797deb8b596c7",
+              "input": {
+                "publication": {
+                  "save": {
+                    "publicationId": null,
+                    "versionId": null,
+                    "name": "On the current",
+                    "cover": null,
+                    "regions": [
+                      "GLOBAL"
+                    ],
+                    "startAt": "2026-12-01T00:00:00.000Z",
+                    "endAt": "2026-12-08T00:00:00.000Z",
+                    "timeLimitSec": null,
+                    "passScore": 2,
+                    "pickCount": null,
+                    "entryFee": 0,
+                    "budgetCap": 1000,
+                    "maxWinners": 10,
+                    "exposureRequested": null,
+                    "tiers": [
+                      {
+                        "tierId": null,
+                        "fromScore": 0,
+                        "toScore": 3,
+                        "reward": 10
+                      }
+                    ],
+                    "baseRevision": null,
+                    "rewardMethod": "PLATFORM",
+                    "redeemDescription": null,
+                    "audience": "PUBLIC",
+                    "referral": null,
+                    "treeId": null,
+                    "treeNodeId": null
+                  },
+                  "criteria": null,
+                  "topics": null,
+                  "sharedVideoId": null
+                }
+              }
+            }
+          ]
+        }
+      }
     }
   ]
 }

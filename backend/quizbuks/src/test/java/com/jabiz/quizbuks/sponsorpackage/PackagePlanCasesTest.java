@@ -19,6 +19,7 @@ import java.util.Set;
 import java.util.stream.Stream;
 
 import static com.jabiz.quizbuks.sponsorpackage.PackageJson.array;
+import static com.jabiz.quizbuks.sponsorpackage.PackageJson.map;
 import static com.jabiz.quizbuks.sponsorpackage.PackageJson.object;
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -213,11 +214,4 @@ class PackagePlanCasesTest {
         };
     }
 
-    private static Map<String, Object> map(Object... pairs) {
-        Map<String, Object> map = new LinkedHashMap<>();
-        for (int i = 0; i < pairs.length; i += 2) {
-            map.put((String) pairs[i], pairs[i + 1]);
-        }
-        return map;
-    }
 }

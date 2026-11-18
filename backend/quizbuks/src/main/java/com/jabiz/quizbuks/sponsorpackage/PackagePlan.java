@@ -82,7 +82,8 @@ public final class PackagePlan {
      * by the server's own processes before anything is imported). A version 1 package reads as one without maps,
      * nodes, topics or shared videos.
      */
-    public static Read read(Object value) {
+    public static Read read(Object json) {
+        Object value = PackageJson.jsOrdered(json);
         if (!isObject(value) || !FORMAT.equals(object(value).get("format"))
             || !isInteger(object(value).get("version")) || ((Number) object(value).get("version")).doubleValue() < 1) {
             return new Read(null, Problem.NOT_PACKAGE, List.of());
@@ -332,7 +333,8 @@ public final class PackagePlan {
      * The steps and what the check page says of them.
      *
      * @param sameTitles quizzes of the package whose title the account has already
-     * @param treesSkipped maps not imported (over the account's limit)
+     * @param treesSkipped maps not imported (over the account's limit), by their first name as written (a string in a
+     *     well-formed package), else their key
      * @param treesKept maps not imported because the account has one submitted
      * @param unbound publications bound in the package that the import leaves unbound, by name
      * @param videosAgain publications whose shared video this environment does not share: chosen again
@@ -341,7 +343,7 @@ public final class PackagePlan {
      * @param orphans publications naming a quiz or version the package lacks (not imported)
      */
     public record Planned(Mode mode, int batchSize, long batchBytes, List<Step> steps, Makes makes,
-        List<String> sameTitles, List<String> treesSkipped, boolean treesKept, List<String> unbound,
+        List<String> sameTitles, List<Object> treesSkipped, boolean treesKept, List<String> unbound,
         List<String> videosAgain, List<String> tooLarge, List<Oversized> oversized, List<String> orphans) {}
 
     /**
@@ -361,7 +363,7 @@ public final class PackagePlan {
         int versions = 0;
         int publications = 0;
         List<String> sameTitles = new ArrayList<>();
-        List<String> treesSkipped = new ArrayList<>();
+        List<Object> treesSkipped = new ArrayList<>();
         boolean treesKept = false;
         List<String> unbound = new ArrayList<>();
         List<String> videosAgain = new ArrayList<>();
@@ -421,7 +423,7 @@ public final class PackagePlan {
             quizzes++;
             for (int c = 0; c < contents.size(); c++) {
                 Contents content = contents.get(c);
-                String part = content.versionKey() != null ? "v:" + content.versionKey() : "c";
+                String part = truthy(content.versionKey()) ? "v:" + content.versionKey() : "c";
                 String base = "quiz:" + quizKey + ":" + part;
                 String check = quiz.key() + ":" + (content.versionKey() != null ? content.versionKey() : "current");
                 String contentKey = base + ":content";
@@ -443,7 +445,7 @@ public final class PackagePlan {
                     steps.add(new Step.Batch(base + ":batch:" + (b + 2), quiz.key(), content.label(), title, check,
                         b + 2, cut.batches().size() + 1, cut.batches().get(b), first, clears));
                 }
-                if (content.versionKey() != null) {
+                if (truthy(content.versionKey())) {
                     String versionKey = base + ":version";
                     versionSteps.put(content.versionKey(), versionKey);
                     steps.add(new Step.Version(versionKey, quiz.key(), content.label(), title, content.versionKey(),
@@ -456,10 +458,11 @@ public final class PackagePlan {
         for (int i = 0; i < document.publications().size(); i++) {
             Publication publication = document.publications().get(i);
             String name = publication.name();
-            String quizStep = publication.quiz() != null ? firstSteps.get(publication.quiz()) : null;
-            String versionStep = publication.version() != null ? versionSteps.get(publication.version()) : null;
-            if ((publication.quiz() != null && quizStep == null)
-                || (publication.version() != null && versionStep == null)) {
+            // The page's truthiness: an empty key names nothing.
+            String quizStep = truthy(publication.quiz()) ? firstSteps.get(publication.quiz()) : null;
+            String versionStep = truthy(publication.version()) ? versionSteps.get(publication.version()) : null;
+            if ((truthy(publication.quiz()) && quizStep == null)
+                || (truthy(publication.version()) && versionStep == null)) {
                 orphans.add(name);
                 continue;
             }
@@ -484,7 +487,7 @@ public final class PackagePlan {
                     unbound.add(name);
                 }
             }
-            if (publication.sharedVideo() != null && !context.sharedVideos().contains(publication.sharedVideo())) {
+            if (truthy(publication.sharedVideo()) && !context.sharedVideos().contains(publication.sharedVideo())) {
                 videosAgain.add(name);
             }
             steps.add(new Step.PublicationStep("publication:" + (i + 1), i, name, publication, quizStep, versionStep,
@@ -501,10 +504,10 @@ public final class PackagePlan {
         List<String> customTopics) {}
 
     /** The first name a texts object gives ({@code Object.values(name).find(Boolean)}), else {@code otherwise}. */
-    private static String firstName(Map<String, Object> name, String otherwise) {
+    private static Object firstName(Map<String, Object> name, String otherwise) {
         for (Object value : name.values()) {
             if (truthy(value)) {
-                return String.valueOf(value);
+                return value;
             }
         }
         return otherwise;

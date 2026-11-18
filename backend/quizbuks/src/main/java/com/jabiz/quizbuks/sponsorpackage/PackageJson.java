@@ -95,6 +95,53 @@ public final class PackageJson {
             || c == 0xFEFF;
     }
 
+    /**
+     * The value with every object's keys in JavaScript's order: the array indices ({@code "0"}, {@code "12"}: canonical
+     * whole numbers below 2^32 - 1) ascending first, then the others as written. The page iterates a package's
+     * objects in this order ({@code Object.entries}, {@code Object.values}), so the plan reads them so too.
+     */
+    public static Object jsOrdered(Object value) {
+        if (value instanceof Map<?, ?> map) {
+            Map<String, Object> out = new LinkedHashMap<>();
+            for (String key : jsKeys(map.keySet())) {
+                out.put(key, jsOrdered(map.get(key)));
+            }
+            return out;
+        }
+        if (value instanceof List<?> list) {
+            List<Object> out = new ArrayList<>(list.size());
+            list.forEach(item -> out.add(jsOrdered(item)));
+            return out;
+        }
+        return value;
+    }
+
+    /** The keys in JavaScript's order (see {@link #jsOrdered}). */
+    static List<String> jsKeys(Iterable<?> keys) {
+        List<String> indices = new ArrayList<>();
+        List<String> others = new ArrayList<>();
+        for (Object key : keys) {
+            String text = String.valueOf(key);
+            (arrayIndex(text) ? indices : others).add(text);
+        }
+        indices.sort((a, b) -> Long.compare(Long.parseLong(a), Long.parseLong(b)));
+        indices.addAll(others);
+        return indices;
+    }
+
+    private static boolean arrayIndex(String key) {
+        return key.matches("0|[1-9][0-9]{0,9}") && Long.parseLong(key) < 4_294_967_295L;
+    }
+
+    /** A JSON object of the pairs given, in their order. */
+    public static Map<String, Object> map(Object... pairs) {
+        Map<String, Object> map = new LinkedHashMap<>();
+        for (int i = 0; i < pairs.length; i += 2) {
+            map.put((String) pairs[i], pairs[i + 1]);
+        }
+        return map;
+    }
+
     /** A copy of a JSON object, its keys in their order. */
     public static Map<String, Object> copy(Map<String, Object> value) {
         return new LinkedHashMap<>(value);
@@ -140,7 +187,8 @@ public final class PackageJson {
     }
 
     /**
-     * A digest of the value with every object's keys sorted (UTF-16 order, as JavaScript's sort): two sides that make
+     * A digest of the value with every object's keys sorted (UTF-16 order, as JavaScript's sort; written back into an
+     * object, so the array indices come first, ascending, as {@link #jsOrdered}): two sides that make
      * the same content in another key order give the same digest. The comparison tests of the plan use it.
      */
     public static String digest(Object value) {
@@ -171,11 +219,12 @@ public final class PackageJson {
             case String s -> quote(s, out);
             case Number n -> out.append(number(n));
             case Map<?, ?> map -> {
-                List<String> keys = new ArrayList<>();
-                map.keySet().forEach(key -> keys.add(String.valueOf(key)));
+                List<String> written = new ArrayList<>();
+                map.keySet().forEach(key -> written.add(String.valueOf(key)));
                 if (sorted) {
-                    keys.sort(String::compareTo);
+                    written.sort(String::compareTo);
                 }
+                List<String> keys = sorted ? jsKeys(written) : written;
                 out.append('{');
                 boolean first = true;
                 for (String key : keys) {
