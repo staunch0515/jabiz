@@ -468,6 +468,11 @@ public final class PlatformErrorCodes {
      * param {@code retryAfter} (seconds).
      */
     public static final String AUTH_BUSY = "AUTH_BUSY";
+    /**
+     * 503: the first launch is putting the content in place and the application does not serve yet
+     * (docs/design/23-first-launch.md section 3); param {@code retryAfter} (seconds).
+     */
+    public static final String FIRST_LAUNCH_IN_PROGRESS = "FIRST_LAUNCH_IN_PROGRESS";
 
     public static final List<String> ALL = List.of(
         UNKNOWN_FIELD, INVALID_VALUE, REQUIRED, RULE_EVALUATION_FAILED, REFERENCE_NOT_FOUND, ID_MISMATCH,
@@ -513,7 +518,7 @@ public final class PlatformErrorCodes {
         FILE_FETCH_NOT_HTTPS, FILE_FETCH_LINK_INVALID, FILE_FETCH_ADDRESS_NOT_PUBLIC, FILE_FETCH_TOO_MANY_REDIRECTS,
         FILE_FETCH_TOO_LARGE, FILE_FETCH_NOT_IMAGE, FILE_FETCH_TIMEOUT, FILE_FETCH_FAILED,
         INBOUND_REJECTED, JOB_RUN_NOT_SCHEDULED, JOB_RUN_NOT_DUE, JOB_RUN_TOO_OLD, JOB_BUSY,
-        RATE_LIMITED, PROCESS_BUSY, AUTH_BUSY);
+        RATE_LIMITED, PROCESS_BUSY, AUTH_BUSY, FIRST_LAUNCH_IN_PROGRESS);
 
     private PlatformErrorCodes() {}
 }

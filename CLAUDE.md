@@ -143,6 +143,9 @@ jabiz 是一个**元数据驱动的业务应用平台**：开发者声明实体�
   不设标记；需要立即撤下时在流程的提交后步骤 `FileAccess.invalidate(...)`。公开读取不写操作记录。
   匿名访客的浏览与点击只经公开计数器（`PublicCounter` Bean，键来自公开视图的白名单字段，`owner(字段)` 记下键的所有人供应用按读者限定，所有人是用户账号时加 `ownerIsUser()`，删除账号时计数随之删除；前端 `countPublic`；`POST /api/public/counters/{计数器}/{键}`，
   每访客每天一次、只在内存中去重、按日聚合到 `sys_public_counter_day`，15 §10、决策 D65），不自写匿名写入的接口或逐次记录访问。
+- **首发配置**（见 23 与 17zz23）：全新系统（从未有过用户）的初始化只经 `JABIZ_FIRST_LAUNCH_CONFIG` 与应用的 `FirstLaunchHandler`（core，同步：校验与步骤计划；步骤是现有流程，由平台以 `FIRST_LAUNCH_STEP` 逐个运行，请求编号 `first-launch-<运行>-<步骤>`），
+  不另写启动时初始化数据的代码；首发配置不含秘密，与引导管理员（`JABIZ_BOOTSTRAP_ADMIN_USER`）、`protected-grants.always` 互斥；内容阶段完成之前对外 503 `FIRST_LAUNCH_IN_PROGRESS`；
+  内容阶段出错即记录并退出，不续做：修改后清空数据库与文件目录重来。
 - **启动即失败**：元数据、数据视图、流程、SQL 模板、表结构的不一致，必须在启动时一次性全部报告，而不是等到请求触发。
   新的检查实现 `PlatformCheck`（返回问题列表，不抛异常），启动与 `platformCheck` 共用。
 - **单据**（见 22 与决策 D30）：发票、确认书这类单据用 `DocumentLayout` Bean 声明（区块显示普通 SQL 模板的列，模板不写 `timeSlice`），
@@ -255,6 +258,7 @@ Gradle 9（wrapper）多模块工程，根目录为 `backend/`（模块：`core`
   启动时 Flyway 先迁移平台脚本 `db/jabiz`、再迁移业务脚本 `db/migration`）→ `frontend/` 下 `pnpm install && pnpm dev`（5173，`/api` 代理到 8080）。
   开发用操作人请求头：`--args='--spring.profiles.active=dev'`（见 01 §5）。非 dev 启动需要 `JABIZ_JWT_SECRET`、`JABIZ_INTEGRITY_KEY` 与 `JABIZ_MFA_KEY`（都是 Base64，≥32 字节，
   如 `openssl rand -base64 48`），示范应用另需外部服务 `demo-ai` 的密钥 `JABIZ_DEMO_AI_KEY`（任意值；D38）；首个管理员用 `JABIZ_BOOTSTRAP_ADMIN_USER` / `JABIZ_BOOTSTRAP_ADMIN_PASSWORD` 创建（见 10 §7）；
+  首发配置 `JABIZ_FIRST_LAUNCH_CONFIG`（只在从未有过用户的库上执行一次，试运行加 `JABIZ_FIRST_LAUNCH_DRY_RUN=true`；见 `docs/guide/first-launch.md`）；
   上传文件的存储目录 `JABIZ_FILES_LOCAL_ROOT`（非 dev 必须设置，dev 默认 `backend/app/build/jabiz-files`；见 14 §6）
 - 集成测试调用 HTTP API：`dev` profile 下用 `X-Jabiz-*` 请求头；非 dev 下用 `TestTokens.bearer(jwtService, actor, permissions…)` 签发真实令牌
   （测试配置 `config/application.properties` 提供固定测试密钥与 BCrypt 强度 4）
