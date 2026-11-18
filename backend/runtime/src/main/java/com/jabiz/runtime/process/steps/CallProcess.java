@@ -6,6 +6,8 @@ import com.jabiz.process.StepSpec;
 import com.jabiz.runtime.process.ProcessExecutor;
 import com.jabiz.runtime.process.ProcessRegistry;
 import com.jabiz.runtime.process.StepHandler;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
@@ -21,6 +23,13 @@ import java.util.function.Predicate;
  * {@code process_seq_id} with {@code parent_seq_id} pointing at the caller, the caller's operation time. A failing
  * sub-process fails the caller, and everything is rolled back. The call graph must be acyclic (startup check).
  * {@link #forEach} calls the process once per input of a list the caller computes, one after another.
+ *
+ * <p>The sub-process reads what is stored. What the caller registered in {@code ctx.changes()} and has not committed
+ * is stored only when the caller ends or at its {@code SaveChanges}, so the sub-process does not see it (the engine's
+ * held writes are another matter: they are written before every read of their tables, decision D46). A caller whose
+ * sub-process has to judge or read what the caller just registered commits first with {@code SaveChanges.now()} or
+ * {@code SaveChanges.when(...)}. A call with changes pending is logged at DEBUG, to find such a call when its
+ * sub-process answers from the old state.
  */
 @Component
 public class CallProcess<C extends ProcessContext> implements StepHandler<CallProcess.Metadata<C>, C>,
@@ -84,6 +93,8 @@ public class CallProcess<C extends ProcessContext> implements StepHandler<CallPr
         return StepSpec.of(CallProcess.class, new Metadata<>(processName, null, input, outputKey));
     }
 
+    private static final Logger log = LoggerFactory.getLogger(CallProcess.class);
+
     private final ProcessRegistry registry;
     private final ProcessExecutor executor;
 
@@ -107,6 +118,11 @@ public class CallProcess<C extends ProcessContext> implements StepHandler<CallPr
             }
             ProcessDefinition<?, ?, ?> target = resolve(registry, metadata).orElseThrow(
                 () -> new IllegalStateException("Unknown process " + metadata.target()));
+            if (!ctx.changes().isEmpty()) {
+                log.debug("Calling {} with {} changes of the caller registered and not committed: the sub-process"
+                    + " does not see them (commit first with SaveChanges to make it)", metadata.target(),
+                    ctx.changes().pending().size());
+            }
             if (metadata.each()) {
                 Object inputs = metadata.input().apply(ctx);
                 if (!(inputs instanceof List<?> list)) {

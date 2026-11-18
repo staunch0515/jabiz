@@ -5635,7 +5635,6 @@ QuizBuks 的 #545、#546、#547 用了 43.5–45 分钟，#545 到点被取消�
 
 **17zz22 状态**：进行中。
 
-
 ### 17zz23 首发配置：一个配置文件，启动即完成首发初始化（2026-11-18，QuizBuks F-LAUNCH）
 
 **缘由**：全新系统的初始化原来要两位管理员按步骤操作，需求方要求"不要页面，必须更简单"。计划与审查见 QuizBuks 应用分支的 `docs/quizbuks/plans/impl/F-LAUNCH.md`（需求方已确认）。设计 23。分三个 PR：17zz23a（运行器）、17zz23b（内容阶段的三项能力与 D82）、17zz23c（账号与等人阶段）。
@@ -5665,6 +5664,21 @@ QuizBuks 的 #545、#546、#547 用了 43.5–45 分钟，#545 到点被取消�
 | 17zz23d-1 | 文件步骤：core `FirstLaunchStep.file`、`FileSource`（策略、相对路径、取出字节、名称），`FirstLaunchHandler.filePolicies()`；文件步骤必须代行；runtime `FirstLaunchFiles`（声明的策略，经 `FileUploadService.storeGenerated` 存储后在 `FIRST_LAUNCH_STEP` 之下以子流程 `FIRST_LAUNCH_FILE_REGISTER` 登记为该账号的上传：行锁、内容阶段、代行条件，登记失败删除对象；输出文件编号），配置目录的文件按启动时的摘要读取（新增、改写即拒绝），运行器先于代行流程的检查处理文件步骤，启动校验与试运行一次报全文件步骤的问题；启动检查 `FIRST_LAUNCH` 要求策略存在、不空白；架构测试 |
 | 17zz23d-2 | 测试 `FirstLaunchFilesIT`：从包中取出的图片以代行存储（上传者为该账号、重新编码、文件名不进记录）；带 EXIF/GPS 的 JPEG 存储后不含 GPS；`privateMetadata()` 策略得随机编号；试运行输出含文件步骤；登记的父流程是 `FIRST_LAUNCH_STEP`；出目录的路径、绝对路径、中途的符号链接、启动后新增或改写的文件、不是图片的内容、超出策略大小、未声明的策略、取出为空、系统身份、非本运行的账号、有会话的账号都被拒且不留下行；内容阶段后被拒。`FirstLaunchConfigReaderTest`（摘要）。`FirstLaunchChecksTest`（不存在的策略）。文档：设计 23 §6、D82 补充、`CLAUDE.md` 文件 |
 | 17zz23c2-1 | 账号就绪后的应用步骤：`FirstLaunchHandler.whenAccountReady`、`accountReadyProcesses()` 与启动检查、选项 `r…`、`FIRST_LAUNCH_ACCOUNT_READY`、V69 `sys_first_launch_ready`（每步一次）、失败不影响他人并列入报告；测试 `FirstLaunchReadyChecksTest`、`FirstLaunchReadyIT`；设计 23 §9 |
+
+### 17zz24 子流程只读已存储的状态：写明并留痕（2026-11-18，QuizBuks S6 报告）
+
+**缘由**：流程先 `ctx.changes().update` 用户的邮箱、再以 `CallProcess` 调用 `SEC_USER_INVITE`，邀请检查并寄到**旧地址**。查明不是 D46"读之前写出"的漏洞：`AddressVerifiable`（`ProtectedGrants.credentials`）与收件人解析都经 `StorageEngine.select`，引擎的缓冲写入在读其表之前一律先写出；原因是 `ctx.changes()` 登记的变更要到流程结束或 `SaveChanges` 才提交，`CallProcess` 不替父流程提交，子流程读到的是已存储的状态。总控决定不改行为（改了会动 D11 的语义与所有子流程调用点的语句数），写明并留痕。
+
+| # | 内容 |
+|---|---|
+| 17zz24-1 | 测试 `CallProcessSeesOnlyCommittedChangesIT`（真实 PostgreSQL）：父流程先 `SaveChanges` 再调 `SEC_USER_INVITE`，子流程看得到新地址（邀请被拒 `INVITATION_ADDRESS_CHANGED`）；不 `SaveChanges`，邀请寄给旧地址、新地址在父流程结束时才存储 |
+| 17zz24-2 | `CallProcess`：带着未提交变更调用子流程时记 DEBUG 日志（不刷 WARN）；Javadoc 写明 |
+| 17zz24-3 | 文档：设计 06 §2.1（`SaveChanges` 一行）与 §5（父流程登记、尚未提交的变更对子流程不可见） |
+
+**验收**：`CallProcessSeesOnlyCommittedChangesIT` 绿；`StatementBudgetIT` 不受影响（只加日志）。
+
+**17zz24 状态**：草稿 PR 待合并。
+
 ### 线 1.3 的候选（未排期，2026-11-08 总控：首次上线前不做）
 
 | 候选 | 缘由 | 粗估 |
