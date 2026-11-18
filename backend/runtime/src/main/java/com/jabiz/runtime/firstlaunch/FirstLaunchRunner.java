@@ -177,7 +177,6 @@ public class FirstLaunchRunner implements SmartInitializingSingleton, Applicatio
     /** Validates, failing the startup with every problem at once. */
     private void requireValid(FirstLaunchConfigReader.Read read) {
         List<FirstLaunchProblem> problems = new ArrayList<>(read.problems());
-        problems.addAll(exclusions());
         List<FirstLaunchHandler> found = handlers.orderedStream().toList();
         if (found.size() > 1) {
             problems.add(new FirstLaunchProblem("(application)", "has " + found.size() + " first-launch handlers",
@@ -187,9 +186,12 @@ public class FirstLaunchRunner implements SmartInitializingSingleton, Applicatio
             platformSteps.orderedStream().forEach(steps -> problems.addAll(steps.validate(read.config())));
             found.forEach(handler -> problems.addAll(handler.validate(read.config())));
         }
+        // The steps are planned only from a valid configuration (FirstLaunchHandler#plan); the settings excluded
+        // with the first launch do not change the plan, so their problems are reported with the steps' at once.
         if (problems.isEmpty()) {
             problems.addAll(fileStepProblems(read.config()));
         }
+        problems.addAll(exclusions());
         if (!problems.isEmpty()) {
             StringBuilder report = new StringBuilder(text("first-launch.problems", Map.of("count", problems.size())));
             problems.forEach(problem -> report.append(System.lineSeparator()).append("  ").append(problem.format()));
@@ -201,7 +203,9 @@ public class FirstLaunchRunner implements SmartInitializingSingleton, Applicatio
     /** Every file step's problems, found before anything is written: its account, its policy, its file. */
     private List<FirstLaunchProblem> fileStepProblems(FirstLaunchConfig config) {
         List<FirstLaunchProblem> problems = new ArrayList<>();
+        java.util.Set<String> made = new java.util.HashSet<>();
         for (FirstLaunchStep step : plan(config)) {
+            made.add(step.key());
             FirstLaunchStep.FileSource source = step.file();
             if (source == null) {
                 continue;
@@ -210,6 +214,15 @@ public class FirstLaunchRunner implements SmartInitializingSingleton, Applicatio
             if (step.asAccount() == null) {
                 problems.add(new FirstLaunchProblem(at, "stores a file as no account",
                     "a file step stores the file as the account whose content uses it"));
+            } else if (config.account(step.asAccount()).isEmpty()) {
+                problems.add(new FirstLaunchProblem(at, "stores a file as " + step.asAccount()
+                    + ", which is not an account of the configuration", "fix the application's handler"));
+            } else if (!made.contains(FirstLaunchStep.accountStepKeyAt(config.accounts().indexOf(
+                config.account(step.asAccount()).orElseThrow())))
+                && !made.contains(FirstLaunchStep.accountStepKey(step.asAccount()))) {
+                // The platform's step is keyed by the account's place; an application's own by its key.
+                problems.add(new FirstLaunchProblem(at, "stores a file as " + step.asAccount()
+                    + " before the account is made", "fix the application's handler"));
             }
             if (!files.policies().contains(source.policy())) {
                 problems.add(new FirstLaunchProblem(at, "uses the file policy " + source.policy()

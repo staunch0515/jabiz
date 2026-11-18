@@ -132,7 +132,7 @@ jabiz 是一个**元数据驱动的业务应用平台**：开发者声明实体�
 - **文件**（见 14 与决策 D18）：上传只经 `/api/files?policy=…`（首发配置的文件步骤除外：以代行的账号经同一流水线存储配置目录中的文件，D82、23 §6；另一个入口只有外部作业的文件输出，走同一流水线、以请求人登记，14 §11、D50），类型按内容判定、图片一律重新编码（去掉 EXIF/GPS）；
   `privateMetadata()` 策略的文件编号是随机的 UUIDv4（主键约定的例外，D48），其余为 UUIDv7；
   字段用 `f.kind(FileKind.of("策略"))` 引用文件（列 `uuid`，不加外键），策略（`FilePolicy` Bean）必须声明上传与读取权限；原名与上传者不应让其他读者看到的策略声明 `privateMetadata()`（只有上传者与 `file.read` 看得到，下载名为中性名，14 §5.1、决策 D47）。
-  `sys_file` 是可删除的普通表，只经 `FILE_REGISTER` / `FILE_DELETE` / `FILE_PURGE_ORPHANS` 写入；业务流程删除文件前先清空引用并
+  `sys_file` 是可删除的普通表，只经 `FILE_REGISTER`（上传与 `/api/files/fetch` 的链接图片都经它）/ `FIRST_LAUNCH_FILE_REGISTER`（首发的文件步骤，23 §6）/ `FILE_DELETE` / `FILE_PURGE_ORPHANS` 写入；业务流程删除文件前先清空引用并
   `SaveChanges.now`，再 `CallProcess.of("FILE_DELETE", …)`。文件名不进 `input_summary`；`FileStore` 返回 `Mono`/`Flux`，不对业务开放。
   服务器生成、交给外部的文件（银行付款文件、申报文件）不进 `sys_file`：业务流程以子流程 `CallProcess.of("FILE_ARCHIVE", …)` 原样保存到只追加的 `sys_generated_file`
   （声明读取所需的权限），下载只经 `GET /api/generated-files/{id}`（记入 `sys_reveal_record`）；不自建存档表（14 §10、决策 D31）。

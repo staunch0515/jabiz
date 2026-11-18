@@ -81,6 +81,18 @@ class ArchitectureTest {
             .check(CLASSES);
     }
 
+    /**
+     * Files reach storage through the upload pipeline's entries alone: uploads and fetched links (runtime.file),
+     * external jobs' outputs (runtime.external) and the first launch's file steps (runtime.firstlaunch).
+     */
+    @Test
+    void onlyThePlatformsEntriesStoreFiles() {
+        noClasses().that().resideOutsideOfPackages("com.jabiz.runtime.file..", "com.jabiz.runtime.external..",
+                "com.jabiz.runtime.firstlaunch..")
+            .should().dependOnClassesThat().haveFullyQualifiedName("com.jabiz.runtime.file.FileUploadService")
+            .check(CLASSES);
+    }
+
     @Test
     void runtimeContainsNoBusinessConcepts() {
         noClasses().that().resideInAPackage(RUNTIME)

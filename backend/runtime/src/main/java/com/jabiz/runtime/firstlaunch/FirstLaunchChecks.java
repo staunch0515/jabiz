@@ -52,7 +52,10 @@ public class FirstLaunchChecks implements PlatformCheck {
             String where = "FirstLaunchHandler " + handler.name();
             for (String name : handler.actingProcesses()) {
                 Optional<ProcessDefinition<?, ?, ?>> process = registry.findLatest(name);
-                if (process.isEmpty()) {
+                if (name.startsWith("FIRST_LAUNCH_")) {
+                    problems.add(CheckProblem.error(CATEGORY, where, "acting process " + name + " is the first"
+                        + " launch's own: a step runs it as the system or the platform does"));
+                } else if (process.isEmpty()) {
                     problems.add(CheckProblem.error(CATEGORY, where, "acting process " + name + " does not exist"));
                 } else if (process.get().access() != ProcessAccess.OPEN
                     && process.get().access() != ProcessAccess.SUB_PROCESS_ONLY) {
