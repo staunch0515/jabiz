@@ -523,19 +523,4 @@ public final class PackagePlan {
         }
         return false;
     }
-
-    /** The keys of the steps, in order (for logs and reports). */
-    public static List<String> keys(Planned planned) {
-        List<String> keys = new ArrayList<>();
-        planned.steps().forEach(step -> keys.add(step.key()));
-        return keys;
-    }
-
-    static Map<String, Object> mapOf(Object... pairs) {
-        Map<String, Object> map = new LinkedHashMap<>();
-        for (int i = 0; i < pairs.length; i += 2) {
-            map.put((String) pairs[i], pairs[i + 1]);
-        }
-        return map;
-    }
 }
