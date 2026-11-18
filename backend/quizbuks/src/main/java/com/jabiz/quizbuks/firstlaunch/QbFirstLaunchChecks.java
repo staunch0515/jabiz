@@ -53,9 +53,10 @@ final class QbFirstLaunchChecks {
         List<Problem> problems = new ArrayList<>();
         Set<String> accounts = new HashSet<>();
         config.accounts().forEach(account -> accounts.add(account.key()));
+        shapes(config.document(), problems);
         operators(sections, accounts, problems);
         sponsors(sections, packages, launch, problems);
-        params(sections, problems);
+        params(sections, config.allowedEmailDomains(), problems);
         return problems;
     }
 
@@ -65,7 +66,7 @@ final class QbFirstLaunchChecks {
             return;
         }
         Set<String> keys = new HashSet<>();
-        Set<String> leads = new HashSet<>();
+        Set<String> placed = new HashSet<>();
         int defaults = 0;
         for (QbFirstLaunchConfig.Operator operator : sections.operators()) {
             String at = "operators[" + operator.index() + "]";
@@ -80,15 +81,16 @@ final class QbFirstLaunchChecks {
             }
             if (operator.lead() == null || !accounts.contains(operator.lead())) {
                 problems.add(new Problem(at + ".lead", "account", Map.of("key", String.valueOf(operator.lead()))));
-            } else if (!leads.add(operator.lead())) {
-                problems.add(new Problem(at + ".lead", "leadTwice", Map.of("key", operator.lead())));
+            } else if (!placed.add(operator.lead())) {
+                problems.add(new Problem(at + ".lead", "accountTwice", Map.of("key", operator.lead())));
             }
             for (int i = 0; i < operator.members().size(); i++) {
                 String member = operator.members().get(i);
                 if (!accounts.contains(member)) {
                     problems.add(new Problem(at + ".members[" + i + "]", "account", Map.of("key", member)));
-                } else if (member.equals(operator.lead())) {
-                    problems.add(new Problem(at + ".members[" + i + "]", "memberIsLead", Map.of("key", member)));
+                } else if (!placed.add(member)) {
+                    // A person belongs to one operator only (QB_OPERATOR_MEMBER_ADD refuses MEMBER_ELSEWHERE).
+                    problems.add(new Problem(at + ".members[" + i + "]", "accountTwice", Map.of("key", member)));
                 }
             }
             long sponsors = sections.sponsors().stream().filter(s -> Objects.equals(s.operator(), operator.key()))
@@ -251,11 +253,11 @@ final class QbFirstLaunchChecks {
         }
     }
 
-    private static void params(QbFirstLaunchConfig sections, List<Problem> problems) {
+    private static void params(QbFirstLaunchConfig sections, List<String> domains, List<Problem> problems) {
         sections.params().forEach((key, value) -> {
             String at = "params." + key;
             if (value == null || value instanceof Map<?, ?> || value instanceof List<?>) {
-                problems.add(new Problem(at, "paramValue", null));
+                problems.add(new Problem(at, "paramValue", Map.of("reason", "")));
                 return;
             }
             FirstLaunchParams.Verdict verdict = FirstLaunchParams.verdict(key, String.valueOf(value));
@@ -268,11 +270,88 @@ final class QbFirstLaunchChecks {
                 }, Map.of("key", key)));
                 return;
             }
-            Object kind = param(key).valueKind().get("type");
-            if ("bool".equals(kind) != (value instanceof Boolean)) {
-                problems.add(new Problem(at, "paramValue", null));
+            // The same check of kind and range as the proposal makes (ParamKinds), before anything is written.
+            Map<String, Object> kind = param(key).valueKind();
+            if ("bool".equals(kind.get("type")) != (value instanceof Boolean)) {
+                problems.add(new Problem(at, "paramValue", Map.of("reason", String.valueOf(kind.get("type")))));
+                return;
+            }
+            try {
+                com.jabiz.param.ParamKinds.canonical(com.jabiz.param.ParamKinds.parse(kind),
+                    value instanceof Boolean ? value : String.valueOf(value));
+            } catch (IllegalArgumentException e) {
+                problems.add(new Problem(at, "paramValue", Map.of("reason", String.valueOf(e.getMessage()))));
+                return;
+            }
+            if (QbParams.SUPPORT_EMAIL.equals(key) && !underDomains(String.valueOf(value), domains)) {
+                problems.add(new Problem(at, "supportEmail", Map.of("domains", String.join(", ", domains))));
             }
         });
+    }
+
+    private static boolean underDomains(String address, List<String> domains) {
+        int at = address.lastIndexOf('@');
+        String domain = at < 0 ? "" : address.substring(at + 1).strip().toLowerCase(java.util.Locale.ROOT);
+        return domains.stream().map(d -> d.strip().toLowerCase(java.util.Locale.ROOT))
+            .anyMatch(d -> domain.equals(d) || domain.endsWith("." + d));
+    }
+
+    /** The keys each section may hold (S3: a misspelt key is refused rather than ignored). */
+    private static final Set<String> OPERATOR_KEYS = Set.of("key", "name", "default", "lead", "members");
+    private static final Set<String> SPONSOR_KEYS = Set.of("operator", "package", "rewardMethods", "publications");
+    private static final Set<String> PUBLICATION_KEYS = Set.of("rewardMethod", "redeemDescription", "startAt",
+        "endAt");
+
+    /** The sections' shapes: lists and maps where they belong, and no key the first launch does not read. */
+    private static void shapes(Map<String, Object> document, List<Problem> problems) {
+        Object operators = document.get("operators");
+        Object sponsors = document.get("sponsors");
+        Object params = document.get("params");
+        if (operators != null && !(operators instanceof List<?>)) {
+            problems.add(new Problem("operators", "shape", Map.of("shape", "list")));
+        }
+        if (sponsors != null && !(sponsors instanceof List<?>)) {
+            problems.add(new Problem("sponsors", "shape", Map.of("shape", "list")));
+        }
+        if (params != null && !(params instanceof Map<?, ?>)) {
+            problems.add(new Problem("params", "shape", Map.of("shape", "map")));
+        }
+        keys("operators", operators, OPERATOR_KEYS, problems);
+        keys("sponsors", sponsors, SPONSOR_KEYS, problems);
+        List<Object> written = QbFirstLaunchConfig.list(sponsors);
+        for (int i = 0; i < written.size(); i++) {
+            if (!(written.get(i) instanceof Map<?, ?> sponsor)) {
+                continue;
+            }
+            Object publications = sponsor.get("publications");
+            String at = "sponsors[" + i + "].publications";
+            if (publications != null && !(publications instanceof Map<?, ?>)) {
+                problems.add(new Problem(at, "shape", Map.of("shape", "map")));
+                continue;
+            }
+            QbFirstLaunchConfig.map(publications).forEach((name, extra) -> {
+                if (!(extra instanceof Map<?, ?> fields)) {
+                    problems.add(new Problem(at + "." + name, "shape", Map.of("shape", "map")));
+                    return;
+                }
+                fields.keySet().stream().map(String::valueOf).filter(key -> !PUBLICATION_KEYS.contains(key))
+                    .forEach(key -> problems.add(new Problem(at + "." + name + "." + key, "unknownKey",
+                        Map.of("key", key))));
+            });
+        }
+    }
+
+    private static void keys(String section, Object value, Set<String> allowed, List<Problem> problems) {
+        List<Object> items = QbFirstLaunchConfig.list(value);
+        for (int i = 0; i < items.size(); i++) {
+            String at = section + "[" + i + "]";
+            if (!(items.get(i) instanceof Map<?, ?> item)) {
+                problems.add(new Problem(at, "shape", Map.of("shape", "map")));
+                continue;
+            }
+            item.keySet().stream().map(String::valueOf).filter(key -> !allowed.contains(key))
+                .forEach(key -> problems.add(new Problem(at + "." + key, "unknownKey", Map.of("key", key))));
+        }
     }
 
     static QbParams.Param param(String key) {

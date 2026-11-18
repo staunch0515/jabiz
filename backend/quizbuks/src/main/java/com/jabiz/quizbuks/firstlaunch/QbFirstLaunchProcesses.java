@@ -1,6 +1,5 @@
 package com.jabiz.quizbuks.firstlaunch;
 
-import com.jabiz.context.RequestContext;
 import com.jabiz.runtime.EntityInstance;
 import com.jabiz.process.ProcessContext;
 import com.jabiz.process.ProcessDefinition;
@@ -83,6 +82,15 @@ public final class QbFirstLaunchProcesses {
      */
     public record MemberInput(@NotBlank String leadUserId, @NotBlank String userId) {}
 
+    /** A value the first launch may not give the parameter (its checks refuse it first). */
+    public static final String PARAM_REFUSED = "QB_FIRST_LAUNCH_PARAM_REFUSED";
+
+    /** The subjects of the reviews the first launch asks for: only these it approves. */
+    static final List<String> SUBJECTS = List.of(com.jabiz.quizbuks.page.SponsorPageApprovals.SUBJECT,
+        com.jabiz.quizbuks.tree.TreeApprovals.SUBJECT, com.jabiz.quizbuks.publishing.PublicationApprovals.SUBJECT);
+    /** The most requests one approval step decides; more fails the step rather than leaving some. */
+    static final int MAX_REQUESTS = 500;
+
     static final String INPUT = "input";
     static final String WITHDRAWN = "withdrawn";
     static final String PROPOSED = "proposed";
@@ -114,6 +122,19 @@ public final class QbFirstLaunchProcesses {
                 .internal()
                 .contextFactory(QbFirstLaunchProcesses::start)
                 .outputMapper(ctx -> ctx.get(PUBLISHED, ControlChanges.ChangeOutput.class))
+                .compute("Only a value the first launch may set", (metadata, ctx) -> {
+                    // The handler's checks found it allowed; the process holds to the same rule whoever plans it.
+                    ParamInput input = input(ctx);
+                    boolean settable = com.jabiz.quizbuks.setup.FirstLaunchParams.verdict(input.key(),
+                        String.valueOf(input.value())) == com.jabiz.quizbuks.setup.FirstLaunchParams.Verdict.SETTABLE;
+                    boolean fixed = com.jabiz.quizbuks.setup.FirstLaunchSwitches.row(input.key())
+                        .filter(com.jabiz.quizbuks.setup.FirstLaunchSwitches.Row::takesEffectAtLaunch)
+                        .filter(row -> java.util.Objects.equals(row.value(), input.value())).isPresent();
+                    if (!settable && !fixed) {
+                        ctx.reject(new com.jabiz.entity.Violation("value", PARAM_REFUSED, "The first launch does not "
+                            + "set " + input.key() + " to this value", Map.of("key", input.key())));
+                    }
+                })
                 .step("Withdraw the setup's proposal", CallProcess.<ProcessContext>of(ControlChanges.WITHDRAW, 1,
                     ctx -> new ControlChanges.ChangeInput(input(ctx).withdraw()), WITHDRAWN))
                 .step("Propose the value", CallProcess.<ProcessContext>of(ControlChanges.PROPOSE, 1, ctx -> {
@@ -139,8 +160,16 @@ public final class QbFirstLaunchProcesses {
             .contextFactory(QbFirstLaunchProcesses::start)
             .outputMapper(ctx -> new ApproveOutput(pending(ctx)))
             .step("Load the pending requests", QueryEntities.<ProcessContext>of(ApprovalEntities.REQUEST_DATASET,
-                ctx -> EntityQuery.builder().where(new QueryPredicate.Eq("status", ApprovalEntities.PENDING))
-                    .limit(500).build(), PENDING))
+                ctx -> EntityQuery.builder().where(new QueryPredicate.And(List.of(
+                    new QueryPredicate.Eq("status", ApprovalEntities.PENDING),
+                    new QueryPredicate.In("subject", new ArrayList<Object>(SUBJECTS)))))
+                    .limit(MAX_REQUESTS + 1).build(), PENDING))
+            .compute("Not more than one step decides", (metadata, ctx) -> {
+                if (list(ctx, PENDING).size() > MAX_REQUESTS) {
+                    throw new IllegalStateException("More than " + MAX_REQUESTS + " reviews are pending: the first "
+                        + "launch decides at most that many at once");
+                }
+            })
             .step("Approve each", CallProcess.<ProcessContext>forEach(ApprovalProcesses.FIRST_LAUNCH_DECIDE, 1,
                 ctx -> pending(ctx).stream()
                     .map(id -> new ApprovalProcesses.FirstLaunchDecideInput(UUID.fromString(id))).toList(),
@@ -158,7 +187,8 @@ public final class QbFirstLaunchProcesses {
                 QueryEntities.query(QbTrees.defaultDataset(QbTrees.VERSION), ctx -> EntityQuery.builder()
                     .where(new QueryPredicate.And(List.of(
                         new QueryPredicate.In("treeId", new ArrayList<>(ready(ctx).treeIds())),
-                        new QueryPredicate.Eq("status", QbTrees.ACTIVE)))).limit(1000).build(), TREE_VERSIONS),
+                        new QueryPredicate.In("status", List.of(QbTrees.ACTIVE, QbTrees.REJECTED))))).limit(1000)
+                    .build(), TREE_VERSIONS),
                 QueryEntities.query(QbSponsorPages.DEFAULT_DATASET, ctx -> EntityQuery.builder()
                     .where(new QueryPredicate.In("userId", new ArrayList<>(ready(ctx).pageUsers()))).limit(1000)
                     .build(), PAGES),
@@ -193,13 +223,6 @@ public final class QbFirstLaunchProcesses {
                 .subProcessOnly()
                 .contextFactory(QbFirstLaunchProcesses::start)
                 .outputMapper(ctx -> ctx.get(ADDED, com.jabiz.quizbuks.operator.OperatorProcesses.MemberOutput.class))
-                .compute("Only the first launch", (metadata, ctx) -> {
-                    // A second line behind the hook's own: the platform runs it as the system only.
-                    if (!system(ctx)) {
-                        throw new com.jabiz.runtime.PermissionDeniedException(QbPermissions.OPERATORS_WRITE,
-                            "Only the first launch adds its configured members");
-                    }
-                })
                 .step("Load the lead's operator", QueryEntities.<ProcessContext>of(
                     com.jabiz.quizbuks.operator.QbOperators.defaultDataset(
                         com.jabiz.quizbuks.operator.QbOperators.OPERATOR),
@@ -233,20 +256,33 @@ public final class QbFirstLaunchProcesses {
         return list(ctx, PENDING).stream().map(row -> String.valueOf((Object) row.get("requestId"))).toList();
     }
 
+    /** Pages and publications that did not get through: the run fails at once rather than waiting out its time. */
+    static void refused(ProcessContext ctx) {
+        List<String> refused = new ArrayList<>();
+        list(ctx, TREE_VERSIONS).stream().filter(row -> QbTrees.REJECTED.equals(row.get("status")))
+            .forEach(row -> refused.add("graph " + row.get("treeId")));
+        list(ctx, PAGES).stream().filter(row -> QbSponsorPages.REJECTED.equals(row.get("status")))
+            .forEach(row -> refused.add("page of " + row.get("userId")));
+        list(ctx, PUBLICATIONS).stream()
+            .filter(row -> !IN_EFFECT.contains(String.valueOf((Object) row.get("status")))
+                && !PublicationStatus.PENDING_REVIEW.equals(row.get("status")))
+            .forEach(row -> refused.add("publication " + row.id() + " (" + row.get("status") + ")"));
+        if (!refused.isEmpty()) {
+            throw new IllegalStateException("Not put into effect after its review: " + String.join(", ", refused));
+        }
+    }
+
     static Boolean isReady(ProcessContext ctx) {
+        refused(ctx);
         ReadyInput input = ready(ctx);
         Set<String> trees = new java.util.HashSet<>();
-        list(ctx, TREE_VERSIONS).forEach(row -> trees.add(String.valueOf((Object) row.get("treeId"))));
+        list(ctx, TREE_VERSIONS).stream().filter(row -> QbTrees.ACTIVE.equals(row.get("status")))
+            .forEach(row -> trees.add(String.valueOf((Object) row.get("treeId"))));
         long pages = list(ctx, PAGES).stream()
             .filter(row -> QbSponsorPages.PUBLISHED.equals(row.get("status"))).count();
         long publications = list(ctx, PUBLICATIONS).stream()
             .filter(row -> IN_EFFECT.contains(String.valueOf((Object) row.get("status")))).count();
         return trees.containsAll(input.treeIds()) && pages >= input.pageUsers().size()
             && publications >= input.publicationIds().size();
-    }
-
-    /** Whether a save of an operator runs as the system (only the first launch's step does). */
-    static boolean system(ProcessContext ctx) {
-        return RequestContext.SYSTEM_ACTOR.equals(ctx.request().actorId());
     }
 }

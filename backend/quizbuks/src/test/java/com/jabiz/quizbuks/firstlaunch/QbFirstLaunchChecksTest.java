@@ -25,6 +25,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  * the example's package passes them; the controls the run publishes are the money switches that take effect, the
  * settable parameters and the approval rules, never an amount or a switch that waits for a decision.
  */
+@SuppressWarnings("unchecked")
 class QbFirstLaunchChecksTest {
 
     private static final JsonMapper JSON = JsonMapper.builder().build();
@@ -122,7 +123,7 @@ class QbFirstLaunchChecksTest {
 
         List<QbFirstLaunchChecks.Problem> problems = check(document);
 
-        assertThat(codes(problems)).contains("operatorName", "account", "operatorKey", "memberIsLead", "leadTwice",
+        assertThat(codes(problems)).contains("operatorName", "account", "operatorKey", "accountTwice",
             "operatorSponsor", "operatorDefault", "rewardMethods", "rewardMethod", "running", "sponsorOperator",
             "packageMissing", "paramFixed", "paramRefused", "paramNotSettable", "paramValue");
         assertThat(problems).anySatisfy(problem -> {
@@ -132,6 +133,57 @@ class QbFirstLaunchChecksTest {
         });
         assertThat(problems).anySatisfy(problem -> assertThat(problem.location())
             .isEqualTo("sponsors[0].publications.Spring quiz.rewardMethod"));
+    }
+
+    @Test
+    void anAccountBelongsToOneOperatorOnly() {
+        Map<String, Object> document = new LinkedHashMap<>(valid());
+        document.put("operators", List.of(
+            Map.of("key", "tokyo", "name", "Tokyo", "default", true, "lead", "B", "members", List.of("A")),
+            Map.of("key", "kansai", "name", "Kansai", "lead", "C", "members", List.of("B"))));
+        assertThat(check(document)).anySatisfy(problem -> {
+            assertThat(problem.code()).isEqualTo("accountTwice");
+            assertThat(problem.location()).isEqualTo("operators[1].members[0]");
+        });
+    }
+
+    @Test
+    void parameterValuesAreCheckedAsTheProposalChecksThem() {
+        Map<String, Object> document = new LinkedHashMap<>(valid());
+        Map<String, Object> params = new LinkedHashMap<>();
+        params.put(QbParams.AI_SPONSOR_DAILY_JOBS, "lots");
+        params.put(QbParams.SUPPORT_EMAIL, "help@elsewhere.example");
+        document.put("params", params);
+        List<QbFirstLaunchChecks.Problem> problems = check(document);
+        assertThat(problems).anySatisfy(problem -> {
+            assertThat(problem.code()).isEqualTo("paramValue");
+            assertThat(problem.location()).isEqualTo("params." + QbParams.AI_SPONSOR_DAILY_JOBS);
+        });
+        assertThat(codes(problems)).contains("supportEmail");
+        params.put(QbParams.SUPPORT_EMAIL, "help@example.co.jp");
+        params.put(QbParams.AI_SPONSOR_DAILY_JOBS, 5);
+        assertThat(check(document)).isEmpty();
+    }
+
+    @Test
+    void misspeltKeysAndWrongShapesAreRefused() {
+        Map<String, Object> document = new LinkedHashMap<>(valid());
+        List<Object> operators = new ArrayList<>((List<?>) document.get("operators"));
+        Map<String, Object> tokyo = new LinkedHashMap<>((Map<String, Object>) operators.get(0));
+        tokyo.put("membres", List.of());
+        operators.set(0, tokyo);
+        document.put("operators", operators);
+        List<Object> sponsors = new ArrayList<>((List<?>) document.get("sponsors"));
+        sponsors.set(1, Map.of("operator", "kansai", "package", "sponsors/kansai/package.json", "rewardMethods",
+            List.of("OFFLINE_REDEEM"), "publications", Map.of("Spring quiz", Map.of("rewardMethod",
+                "OFFLINE_REDEEM", "redeemDescription", "x", "startAt", "launch", "endAt", "2026-12-31T23:59+09:00",
+                "endsAt", "2027-01-01T00:00+09:00"))));
+        document.put("sponsors", sponsors);
+        document.put("params", List.of("qb.ai.sponsor.daily-jobs"));
+        List<QbFirstLaunchChecks.Problem> problems = check(document);
+        assertThat(problems).extracting(QbFirstLaunchChecks.Problem::location).contains("operators[0].membres",
+            "sponsors[1].publications.Spring quiz.endsAt", "params");
+        assertThat(codes(problems)).contains("unknownKey", "shape");
     }
 
     @Test

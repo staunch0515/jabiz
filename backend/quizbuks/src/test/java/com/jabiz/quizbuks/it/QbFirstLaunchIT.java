@@ -54,7 +54,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 class QbFirstLaunchIT extends PostgresIntegrationTest {
 
     static final List<Integer> EXITS = new CopyOnWriteArrayList<>();
-    private static Path directory;
+    static Path directory;
 
     @TestConfiguration
     static class Exits {
@@ -66,11 +66,11 @@ class QbFirstLaunchIT extends PostgresIntegrationTest {
 
     @DynamicPropertySource
     static void firstLaunch(DynamicPropertyRegistry registry) {
-        registry.add("jabiz.first-launch.config", QbFirstLaunchIT::example);
+        registry.add("jabiz.first-launch.config", () -> example("kansai-direct"));
     }
 
     /** The example written out, its packages made from the template with a real image. */
-    static String example() {
+    static String example(String kansaiHandle) {
         try {
             directory = Files.createTempDirectory("qb-first-launch");
             Files.createDirectories(directory.resolve("sponsors/tokyo"));
@@ -84,7 +84,7 @@ class QbFirstLaunchIT extends PostgresIntegrationTest {
                 .replace("__HANDLE__", "tokyo-direct").replace("__COMPANY__", "Tokyo Direct")
                 .replace("__CONTACT__", "Misaki Tanaka"));
             Files.writeString(directory.resolve("sponsors/kansai/package.json"), template
-                .replace("__HANDLE__", "kansai-direct").replace("__COMPANY__", "Kansai Direct")
+                .replace("__HANDLE__", kansaiHandle).replace("__COMPANY__", "Kansai Direct")
                 .replace("__CONTACT__", "Ken Yamada"));
             return directory.resolve("first-launch.yml").toString();
         } catch (IOException e) {
@@ -123,6 +123,12 @@ class QbFirstLaunchIT extends PostgresIntegrationTest {
 
     @Autowired
     FirstLaunchRuns runs;
+
+    @Autowired
+    com.jabiz.runtime.process.ProcessExecutor executor;
+
+    @Autowired
+    com.jabiz.runtime.process.ProcessRegistry registry;
 
     private static final RequestContext SYSTEM = RequestContext.system(Locale.ENGLISH, "it");
 
@@ -197,11 +203,47 @@ class QbFirstLaunchIT extends PostgresIntegrationTest {
         assertThat(String.valueOf(param("qb.kudos.buy.enabled"))).contains("false");
         assertThat(param("qb.ai.enabled")).isNull();
 
-        // Every approval the run asked for was decided by the first launch, level by level.
-        assertThat(query("SELECT DISTINCT approver_id FROM sys_approval_decision"))
-            .extracting(row -> String.valueOf(row.get("approver_id"))).allMatch(id -> id.startsWith("first-launch:"));
+        // Every approval the run asked for was decided by the first launch, level by level, bound to its content.
+        List<Map<String, Object>> requests = latest("sys_approval_request_version", "request_id", "true");
+        assertThat(requests).isNotEmpty().allSatisfy(request -> {
+            assertThat(request.get("status")).isEqualTo("APPROVED");
+            assertThat(String.valueOf(request.get("content_hash"))).hasSize(64);
+        });
+        List<Map<String, Object>> decisions = query("SELECT request_id, approver_id FROM sys_approval_decision");
+        assertThat(decisions).hasSizeGreaterThanOrEqualTo(requests.size())
+            .allSatisfy(row -> assertThat(String.valueOf(row.get("approver_id"))).startsWith("first-launch:"));
+        assertThat(decisions).extracting(row -> String.valueOf(row.get("request_id"))).containsAll(
+            requests.stream().map(row -> String.valueOf(row.get("request_id"))).toList());
 
-        // Nothing moved money (plan section 4).
+        // The approval rules were published; the separation of duties stays a proposal for people (D82).
+        List<Map<String, Object>> changes = latest("sys_control_change_version", "change_id", "true");
+        assertThat(changes).filteredOn(row -> "SysApprovalRule".equals(row.get("target_entity")))
+            .hasSize(com.jabiz.quizbuks.setup.QbApprovalRules.ALL.size())
+            .allSatisfy(row -> assertThat(row.get("status")).isEqualTo("PUBLISHED"));
+        assertThat(changes).filteredOn(row -> "SysSodRule".equals(row.get("target_entity")))
+            .hasSize(com.jabiz.quizbuks.setup.QbSodRules.ALL.size())
+            .allSatisfy(row -> assertThat(row.get("status")).isEqualTo("PROPOSED"));
+        // Publications are reviewed: the switch is in effect at its declared value (no automatic approval).
+        assertThat(String.valueOf(param("qb.review.publication.auto"))).contains("false");
+
+        // Nothing moved money or was held for it (plan section 4).
         assertThat(query("SELECT 1 FROM ledger_transaction_version")).isEmpty();
+        assertThat(query("SELECT 1 FROM ledger_entry_version")).isEmpty();
+        assertThat(query("SELECT 1 FROM qb_prepayment")).isEmpty();
+        assertThat(query("SELECT 1 FROM qb_wallet WHERE balance <> 0 OR pending_amount <> 0 OR pending_out <> 0"))
+            .isEmpty();
+
+        // Once the content phase is done, no system call makes an operator with a lead who has not verified.
+        String unverified = userOf("a.suzuki@example.co.jp");
+        @SuppressWarnings("unchecked")
+        var save = (com.jabiz.process.ProcessDefinition<Object, Object, com.jabiz.process.ProcessContext>)
+            registry.findLatest(com.jabiz.quizbuks.operator.OperatorProcesses.SAVE).orElseThrow();
+        long operatorsBefore = query("SELECT 1 FROM qb_operator").size();
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> executor.execute(save,
+                new com.jabiz.quizbuks.operator.OperatorProcesses.SaveInput(null, "Late", "A", "a@example.co.jp",
+                    null, null, null, "ja", unverified, null))
+                .contextWrite(view -> RequestContexts.put(view, SYSTEM)).block())
+            .isInstanceOf(com.jabiz.runtime.PermissionDeniedException.class);
+        assertThat(query("SELECT 1 FROM qb_operator")).hasSize((int) operatorsBefore);
     }
 }
