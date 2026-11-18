@@ -33,6 +33,11 @@ import { downloadLink, exportProfile, uploadProfileImages, type ImportPlan, type
  * pages read); the import plans its steps here and runs each through the server's import record
  * (`QB_PACKAGE_IMPORT_START` / `_STEP`), which runs the pages' own processes in the same transaction as its record: a
  * step done is never done again, so an import stopped half-way goes on where it stopped.
+ *
+ * F-LAUNCH Q1: the server plans packages too (first launch): `readPackage`, `planImport`, `firstBatch`, `partsOf`,
+ * `planContent`, `usedFiles` and `inputOfStep` have their Java in `com.jabiz.quizbuks.sponsorpackage` (PackagePlan,
+ * QuizFileCut, PackageStepInputs). Both plan the shared cases (package-plan-cases.json) and must give the expected
+ * plans (package-plan-expected.json, written from this code): a change to one is made to the other in the same PR.
  */
 
 export const PACKAGE_FORMAT = 'quizbuks.sponsor-package'

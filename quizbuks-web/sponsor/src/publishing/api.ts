@@ -1125,6 +1125,9 @@ export type FormErrors = Record<string, 'wholeNumber' | 'required'>
 /**
  * The input of `QB_PUBLICATION_SAVE` for the form, or what is typed wrong. Only the form's own shapes are checked
  * here (whole numbers, a tier's three values); the server checks everything else and lists it as problems.
+ * F-LAUNCH Q1: a package's draft (`formOfSettings` + this) is made on the server by
+ * `sponsorpackage.PublicationSettingsFile.saveInput`: a change to what is sent here is made there too (the package
+ * plan's shared cases compare the two).
  */
 export function inputOf(form: PublicationForm, publicationId: string | null, baseRevision: number | null):
   { input: SaveInput; errors?: undefined } | { input?: undefined; errors: FormErrors } {

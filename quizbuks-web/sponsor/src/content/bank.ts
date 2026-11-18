@@ -63,7 +63,11 @@ export function leftOutOf(document: Doc): { materials: number; products: boolean
   return { materials: own + translated, products: isObject(document.products) }
 }
 
-/** The bytes a document takes in a request (as the server's limit counts them: its JSON, files without their data). */
+/**
+ * The bytes a document takes in a request (as the server's limit counts them: its JSON, files without their data).
+ * F-LAUNCH Q1: `bytesOf`, `batchOf`, `planBatches` and `splitQuestions` have their Java in the server's
+ * `sponsorpackage.QuizFileCut` / `PackageJson` (the package plan's shared cases compare them): change both together.
+ */
 export const bytesOf = (document: Doc): number => encoder.encode(JSON.stringify(withoutData(document))).length
 
 /** The batch holding the questions `from .. to - 1` (0-based) of the file: see {@link splitQuestions}. */
