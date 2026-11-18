@@ -328,7 +328,10 @@ public class FirstLaunchRunner implements SmartInitializingSingleton, Applicatio
         }
     }
 
-    /** {@code first-launch-<run>-<step>}: every operation of the first launch is told apart by it (section 6). */
+    /**
+     * {@code first-launch-<run>-<step>}: labels every operation of the first launch in the record (section 6). Only a
+     * label: the first launch's powers go by the operation's lineage, never by this id.
+     */
     static String requestId(UUID runId, FirstLaunchStep step) {
         return "first-launch-" + runId + "-" + step.key();
     }

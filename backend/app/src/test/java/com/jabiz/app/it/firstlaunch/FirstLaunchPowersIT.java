@@ -65,6 +65,8 @@ class FirstLaunchPowersIT extends PostgresIntegrationTest {
 
     static final String RATE = "it.first-launch.rate";
     static final String OTHER = "it.first-launch.other";
+    static final String THIRD = "it.first-launch.third";
+    static final String LATE = "it.first-launch.late";
     static final String RULE = "FL-PAY";
     static final String LIMITED = "FL-LIMITED";
     static final CountDownLatch RELEASE = new CountDownLatch(1);
@@ -99,7 +101,7 @@ class FirstLaunchPowersIT extends PostgresIntegrationTest {
 
         @Bean
         ControlledParams firstLaunchItControlled() {
-            return ControlledParams.of(RATE, OTHER);
+            return ControlledParams.of(RATE, OTHER, THIRD, LATE);
         }
 
         @Bean
@@ -160,12 +162,12 @@ class FirstLaunchPowersIT extends PostgresIntegrationTest {
 
                 @Override
                 public Set<String> publishableControlKeys() {
-                    return Set.of(RATE, RULE, LIMITED);
+                    return Set.of(RATE, RULE, LIMITED, THIRD, LATE);
                 }
 
                 @Override
                 public Set<String> actingProcesses() {
-                    return Set.of(ItApprovalFixtures.PAY.name(), "FL_IT_RELAY_PUBLISH");
+                    return Set.of(ItApprovalFixtures.PAY.name(), "FL_IT_RELAY_PUBLISH", ControlChanges.PROPOSE);
                 }
 
                 @Override
@@ -189,6 +191,12 @@ class FirstLaunchPowersIT extends PostgresIntegrationTest {
                         FirstLaunchStep.run("other", ControlChanges.PROPOSE, results -> param(OTHER, "0.1000")),
                         FirstLaunchStep.run(FirstLaunchStep.accountStepKey("payer"), "SEC_USER_CREATE", results ->
                             new UserProcesses.CreateUserInput("fl-payer", "Payer", null, null, true, null, null,
+                                false)),
+                        FirstLaunchStep.run(FirstLaunchStep.accountStepKey("sessioned"), "SEC_USER_CREATE", results ->
+                            new UserProcesses.CreateUserInput("fl-sessioned", null, null, null, true, null, null,
+                                false)),
+                        FirstLaunchStep.run(FirstLaunchStep.accountStepKey("signed"), "SEC_USER_CREATE", results ->
+                            new UserProcesses.CreateUserInput("fl-signed", null, null, null, true, null, null,
                                 false)),
                         FirstLaunchStep.run("pay", ItApprovalFixtures.PAY.name(), results ->
                             new ItApprovalFixtures.PayInput("fl-pay-1", new BigDecimal("10"), "first-launch",
@@ -269,7 +277,11 @@ class FirstLaunchPowersIT extends PostgresIntegrationTest {
     }
 
     private String payer() {
-        return String.valueOf(query("SELECT DISTINCT user_id FROM sec_user_version WHERE user_name = 'fl-payer'")
+        return user("fl-payer");
+    }
+
+    private static String user(String name) {
+        return String.valueOf(query("SELECT DISTINCT user_id FROM sec_user_version WHERE user_name = ?", name)
             .getFirst().get("user_id"));
     }
 
@@ -327,6 +339,44 @@ class FirstLaunchPowersIT extends PostgresIntegrationTest {
                 ((ItApprovalFixtures.PayOutput) paid).requestId()))))
             .hasMessageContaining("approves no amount");
 
+        // Only parameters and approval rules: an approver limit is people's to publish, even one the run proposed.
+        Object limit = step(null, ControlChanges.PROPOSE, new ControlChanges.ProposeInput(ApprovalEntities.LIMIT, null,
+            false, Map.of("userId", payer, "subject", ItApprovalFixtures.SUBJECT, "maxValue", 100), null, "limit"));
+        assertThatThrownBy(() -> step(null, ControlChanges.FIRST_LAUNCH_PUBLISH,
+            new ControlChanges.ChangeInput(UUID.fromString(changeId(limit)))))
+            .hasMessageContaining("publishes no " + ApprovalEntities.LIMIT);
+        // Only what the system proposed: a change an account proposed under a step is not published.
+        Object byAccount = step(payer, ControlChanges.PROPOSE, param(THIRD, "0.3000"));
+        assertThatThrownBy(() -> step(null, ControlChanges.FIRST_LAUNCH_PUBLISH,
+            new ControlChanges.ChangeInput(UUID.fromString(changeId(byAccount)))))
+            .hasMessageContaining("only what the system proposed");
+        // Only what the run proposed: the system's proposal outside the run (a job, say) is not published.
+        Object outsideProposal = processes.execute(ControlChanges.propose(context().getBean(
+                com.jabiz.runtime.approval.ControlTargets.class)), param(LATE, "0.4000"))
+            .contextWrite(view -> RequestContexts.put(view, RequestContext.system(Locale.ENGLISH, "it-job"))).block();
+        assertThatThrownBy(() -> step(null, ControlChanges.FIRST_LAUNCH_PUBLISH,
+            new ControlChanges.ChangeInput(UUID.fromString(changeId(outsideProposal)))))
+            .hasMessageContaining("was not made by this first launch");
+
+        // A session, or a successful sign-in (an e-mail link signs in without a password), is a credential too.
+        long seq = (Long) query("SELECT max(process_seq_id) AS seq FROM op_process").getFirst().get("seq");
+        String sessioned = user("fl-sessioned");
+        execute("INSERT INTO sec_refresh_token (token_hash, family_id, user_id, issued_at, expires_at)"
+            + " VALUES (?, ?, ?::uuid, now(), now() + interval '1 day')", "a".repeat(64), UUID.randomUUID(), sessioned);
+        assertThatThrownBy(() -> step(sessioned, ItApprovalFixtures.PAY.name(),
+            new ItApprovalFixtures.PayInput("sessioned-1", BigDecimal.ONE, "first-launch", null, null)))
+            .hasMessageContaining("has a credential of its own");
+        String signed = user("fl-signed");
+        UUID record = UUID.randomUUID();
+        execute("INSERT INTO entity_registry (entity_id, entity_type, created_seq_id) VALUES (?, 'SecLoginRecord', ?)",
+            record, seq);
+        execute("INSERT INTO sec_login_record_version (login_record_id, version_no, effect_start_time, created_time,"
+            + " process_seq_id, user_id, user_name, attempt_no, outcome, failure_count, attempt_time)"
+            + " VALUES (?, 1, now(), now(), ?, ?::uuid, 'fl-signed', 1, 'SUCCESS', 0, now())", record, seq, signed);
+        assertThatThrownBy(() -> step(signed, ItApprovalFixtures.PAY.name(),
+            new ItApprovalFixtures.PayInput("signed-1", BigDecimal.ONE, "first-launch", null, null)))
+            .hasMessageContaining("has a credential of its own");
+
         // Once the person has a credential of their own, the first launch no longer acts as them.
         processes.execute(UserProcesses.SET_PASSWORD, new UserProcesses.SetPasswordInput(payer,
                 "a password of their own 1"))
@@ -348,7 +398,8 @@ class FirstLaunchPowersIT extends PostgresIntegrationTest {
         // The initial values took effect, published by the first launch; the control it may not publish did not.
         assertThat(query("SELECT target_key, status, published_by FROM sys_control_change_version v"
             + " WHERE version_no = (SELECT max(version_no) FROM sys_control_change_version w"
-            + " WHERE w.change_id = v.change_id) ORDER BY target_key"))
+            + " WHERE w.change_id = v.change_id) AND target_key IN (?, ?, ?, ?) ORDER BY target_key",
+            LIMITED, RULE, OTHER, RATE))
             .extracting(row -> row.get("target_key") + "=" + row.get("status") + "/" + row.get("published_by"))
             .containsExactly(LIMITED + "=PUBLISHED/first-launch", RULE + "=PUBLISHED/first-launch",
                 OTHER + "=PROPOSED/null", RATE + "=PUBLISHED/first-launch");

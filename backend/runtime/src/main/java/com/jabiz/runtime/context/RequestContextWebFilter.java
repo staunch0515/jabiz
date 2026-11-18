@@ -75,7 +75,8 @@ public class RequestContextWebFilter implements WebFilter {
 
     private static String requestId(ServerHttpRequest request) {
         String supplied = request.getHeaders().getFirst(REQUEST_ID_HEADER);
-        // The first launch's steps are told apart by their request id (decision D82): a client never supplies one.
+        // The first launch's steps are labelled by their request id (decision D82); its powers are judged by the
+        // operation's lineage, but a client still never supplies such a label, which would confuse the record.
         if (supplied != null && VALID_REQUEST_ID.matcher(supplied).matches()
             && !supplied.toLowerCase(java.util.Locale.ROOT).startsWith(RESERVED_REQUEST_ID_PREFIX)) {
             return supplied;
