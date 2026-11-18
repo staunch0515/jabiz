@@ -3,7 +3,17 @@ import { readFileSync, writeFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { bytesOf } from '../content/bank'
-import { planImport, readPackage, type ImportPlanned, type PlanContext, type PlannedStep } from './package'
+import {
+  inputOfStep,
+  planImport,
+  readPackage,
+  usedFiles,
+  type ImportPlanned,
+  type PlanContext,
+  type PlannedStep,
+  type SponsorPackageDocument,
+  type StepUploads,
+} from './package'
 
 /*
  * F-LAUNCH Q1 (plan test item 16): the server's PackagePlan (Java) plans every package as this page does. Both sides
@@ -12,8 +22,11 @@ import { planImport, readPackage, type ImportPlanned, type PlanContext, type Pla
  * reference: `PACKAGE_PLAN_CASES_UPDATE=1 pnpm vitest run package.plan.cases` rewrites the expected file after a
  * change to the plan; then PackagePlanCasesTest must pass as it is, or the Java is changed to match.
  *
- * The summary has to be made the same way in Java (PackagePlanCases.summary): a document is its question count, its
- * bytes in a request and a digest (SHA-256 of its JSON with the keys sorted); every other part is written out.
+ * The summary has to be made the same way in Java (PackagePlanCasesTest): a document is its question count, its
+ * bytes in a request and a digest (SHA-256 of its JSON with the keys sorted); every other part is written out. Each
+ * step's input (`inputOfStep`) is made with what the earlier steps would have given (ids named after their steps), the
+ * files to upload as the list of their keys, and one start time: a publication's input written out, the others' a
+ * digest.
  */
 
 const CASES = resolve(__dirname, 'package-plan-cases.json')
@@ -46,6 +59,40 @@ function documentSummary(document: Record<string, unknown>): Json {
     bytes: bytesOf(document),
     digest: digest(document),
   }
+}
+
+/** A publication's start in the cases (the page takes the next hour). */
+const START_AT = '2026-12-01T00:00:00.000Z'
+
+/** What a step would have given the later ones: ids named after it. */
+function resultOf(step: PlannedStep): Record<string, unknown> {
+  switch (step.kind) {
+    case 'tree':
+      return { treeId: `tree:${step.key}`,
+        nodeIds: Object.fromEntries(step.tree.nodes.map((n) => [n.key, `node:${step.key}/${n.key}`])) }
+    case 'content':
+      return { quizId: `quiz:${step.key}` }
+    case 'version':
+      return { versionId: `version:${step.key}` }
+    default:
+      return { done: step.key }
+  }
+}
+
+/** The uploads a step would have: the files' keys it uses, a token for the profile's images. */
+function uploadsOf(step: PlannedStep): StepUploads {
+  if (step.kind === 'content' || step.kind === 'batch') return { files: [...usedFiles(step.document)] }
+  if (step.kind === 'profile') return { files: 'profile-images', mailPassword: null }
+  return {}
+}
+
+function inputsOf(planned: ImportPlanned, document: SponsorPackageDocument, sharedVideos: ReadonlySet<string>): Json[] {
+  const results: Record<string, Record<string, unknown>> = {}
+  return planned.steps.map((step) => {
+    const input = inputOfStep(step, document, results, sharedVideos, START_AT, uploadsOf(step))
+    results[step.key] = resultOf(step)
+    return (step.kind === 'publication' ? JSON.parse(JSON.stringify(input)) : digest(input)) as Json
+  })
 }
 
 function stepSummary(step: PlannedStep): Json {
@@ -97,7 +144,7 @@ function stepSummary(step: PlannedStep): Json {
   }
 }
 
-function planSummary(planned: ImportPlanned): Json {
+function planSummary(planned: ImportPlanned, inputs: Json[]): Json {
   return {
     mode: planned.mode,
     batchSize: planned.batchSize,
@@ -111,7 +158,7 @@ function planSummary(planned: ImportPlanned): Json {
     tooLarge: planned.tooLarge,
     oversized: planned.oversized,
     orphans: planned.orphans,
-    steps: planned.steps.map(stepSummary),
+    steps: planned.steps.map((step, i) => ({ ...(stepSummary(step) as Record<string, Json>), input: inputs[i] })),
   }
 }
 
@@ -120,7 +167,8 @@ function summaryOf(planCase: PlanCase, packages: Record<string, unknown>): Json 
   const read = readPackage(value)
   if ('problem' in read) return { problem: read.problem, places: read.places ?? [] }
   const context: PlanContext = { ...planCase.context, sharedVideos: new Set(planCase.context.sharedVideos) }
-  return { plan: planSummary(planImport(read.document, context)) }
+  const planned = planImport(read.document, context)
+  return { plan: planSummary(planned, inputsOf(planned, read.document, context.sharedVideos)) }
 }
 
 describe('the package plan on the shared cases', () => {

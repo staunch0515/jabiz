@@ -46,6 +46,33 @@ public final class QuizFileCut {
         return isObject(file.get("quiz")) && object(file.get("quiz")).get("title") instanceof String title ? title : "";
     }
 
+    /**
+     * The keys of the file's {@code files} its other parts name (any string equal to a key, at any depth), in the
+     * order met: the files a content's request uploads (the page's {@code usedFiles}).
+     */
+    public static Set<String> usedFiles(Map<String, Object> document) {
+        Map<String, Object> files = isObject(document.get("files")) ? object(document.get("files")) : Map.of();
+        Set<String> used = new LinkedHashSet<>();
+        document.forEach((key, value) -> {
+            if (!"files".equals(key)) {
+                walk(value, files, used);
+            }
+        });
+        return used;
+    }
+
+    private static void walk(Object value, Map<String, Object> files, Set<String> used) {
+        if (value instanceof String text) {
+            if (files.containsKey(text)) {
+                used.add(text);
+            }
+        } else if (value instanceof List<?> list) {
+            list.forEach(item -> walk(item, files, used));
+        } else if (isObject(value)) {
+            object(value).values().forEach(item -> walk(item, files, used));
+        }
+    }
+
     /** The keys of a question's file fields (its image, its options' images). */
     private static List<String> fileKeysOf(Object question) {
         List<String> keys = new ArrayList<>();

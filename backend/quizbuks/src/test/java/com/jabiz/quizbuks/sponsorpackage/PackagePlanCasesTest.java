@@ -9,11 +9,13 @@ import tools.jackson.databind.json.JsonMapper;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.stream.Stream;
 
 import static com.jabiz.quizbuks.sponsorpackage.PackageJson.array;
@@ -75,7 +77,52 @@ class PackagePlanCasesTest {
                 case SHAPE -> "shape";
             }, "places", read.places() == null ? List.of() : read.places());
         }
-        return map("plan", planSummary(PackagePlan.plan(read.document(), contextOf(object(planCase.get("context"))))));
+        PackagePlan.Context context = contextOf(object(planCase.get("context")));
+        PackagePlan.Planned planned = PackagePlan.plan(read.document(), context);
+        return map("plan", planSummary(planned, inputsOf(planned, read.document(), context.sharedVideos())));
+    }
+
+    /** A publication's start in the cases (the page takes the next hour). */
+    private static final Instant START_AT = Instant.parse("2026-12-01T00:00:00Z");
+
+    /** Each step's input, with what the earlier steps would have given: a publication's written out, the others' a digest. */
+    private static List<Object> inputsOf(PackagePlan.Planned planned, PackagePlan.Document document,
+        Set<String> sharedVideos) {
+        Map<String, Map<String, Object>> results = new LinkedHashMap<>();
+        List<Object> inputs = new ArrayList<>();
+        for (Step step : planned.steps()) {
+            Map<String, Object> input = PackageStepInputs.inputOf(step, document, results, sharedVideos, START_AT,
+                uploadsOf(step));
+            results.put(step.key(), resultOf(step));
+            inputs.add(step instanceof Step.PublicationStep ? input : PackageJson.digest(input));
+        }
+        return inputs;
+    }
+
+    /** What a step would have given the later ones: ids named after it. */
+    private static Map<String, Object> resultOf(Step step) {
+        return switch (step) {
+            case Step.TreeStep s -> {
+                Map<String, Object> nodeIds = new LinkedHashMap<>();
+                s.tree().nodes().forEach(n -> nodeIds.put(n.key(), "node:" + s.key() + "/" + n.key()));
+                yield map("treeId", "tree:" + s.key(), "nodeIds", nodeIds);
+            }
+            case Step.Content s -> map("quizId", "quiz:" + s.key());
+            case Step.Version s -> map("versionId", "version:" + s.key());
+            default -> map("done", step.key());
+        };
+    }
+
+    /** The uploads a step would have: the files' keys it uses, a token for the profile's images. */
+    private static PackageStepInputs.Uploads uploadsOf(Step step) {
+        return switch (step) {
+            case Step.Content s -> new PackageStepInputs.Uploads(new ArrayList<>(QuizFileCut.usedFiles(s.document())),
+                null);
+            case Step.Batch s -> new PackageStepInputs.Uploads(new ArrayList<>(QuizFileCut.usedFiles(s.document())),
+                null);
+            case Step.Profile s -> new PackageStepInputs.Uploads("profile-images", null);
+            default -> PackageStepInputs.Uploads.NONE;
+        };
     }
 
     private static PackagePlan.Context contextOf(Map<String, Object> c) {
@@ -98,11 +145,16 @@ class PackagePlanCasesTest {
             titles, ownNodes, videos);
     }
 
-    private static Object planSummary(PackagePlan.Planned p) {
+    private static Object planSummary(PackagePlan.Planned p, List<Object> inputs) {
         List<Object> oversized = new ArrayList<>();
         p.oversized().forEach(o -> oversized.add(map("title", o.title(), "question", o.question())));
         List<Object> steps = new ArrayList<>();
-        p.steps().forEach(step -> steps.add(stepSummary(step)));
+        for (int i = 0; i < p.steps().size(); i++) {
+            @SuppressWarnings("unchecked")
+            Map<String, Object> summary = (Map<String, Object>) stepSummary(p.steps().get(i));
+            summary.put("input", inputs.get(i));
+            steps.add(summary);
+        }
         PackagePlan.Makes m = p.makes();
         return map("mode", p.mode().name(), "batchSize", p.batchSize(), "batchBytes", p.batchBytes(),
             "makes", map("profile", m.profile(), "trees", m.trees(), "quizzes", m.quizzes(), "versions", m.versions(),
