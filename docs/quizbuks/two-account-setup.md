@@ -22,7 +22,7 @@
 **1. 首个管理员：设置与提案**
 - 用首个管理员登录平台管理系统 `/admin/`，在"安全设置"中绑二次验证。
 - 在流程页执行 `QB_SETUP`：建角色、科目、国家、参数，提出受控参数与审批规则的提案。
-- 建议在首个管理员停用之前，一并以 `CONTROL_CHANGE_PROPOSE` 提出（`operations.md` §3 第 6 步；以后也可以由账号 A 提出，同样由账号 B 发布）：
+- 建议在首个管理员停用之前，一并以 `CONTROL_CHANGE_PROPOSE` 提出（`operations.md` §3 第 6 步；以后也可以由账号 A 提出，同样由账号 B 发布）（各参数怎么填见 `param-samples.md`）：
   - 收据开具方 `qb.issuer.name`、`qb.issuer.address`、`qb.issuer.registration-no`；
   - 上线清单 2.2 列出的全部科目映射 `qb.journal.account.*`；
   - 按业务定下的金额，如 `qb.reward.max-per-attempt`。
