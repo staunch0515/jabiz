@@ -11,7 +11,7 @@ import java.util.UUID;
 
 /**
  * The only change the first launch takes from its configuration once the content phase is done (plan F-LAUNCH section
- * 6.3; decision D82): the corrected address of an account that has not accepted its invitation. Any other difference -
+ * 6.3; decision D83): the corrected address of an account that has not accepted its invitation. Any other difference -
  * an accepted account's address, an account added or removed, anything else in the configuration - refuses all of it:
  * the rest is done through the administration as usual. Pure.
  */

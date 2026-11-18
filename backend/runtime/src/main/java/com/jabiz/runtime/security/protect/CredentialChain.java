@@ -60,7 +60,7 @@ final class CredentialChain {
     static final Set<String> SELF_MFA = Set.of("SEC_MFA_ENROLL_BEGIN", "SEC_MFA_ENROLL_CONFIRM");
 
     /**
-     * The first launch's correction of the address of an account its run created (decision D82): counted as entered at
+     * The first launch's correction of the address of an account its run created (decision D83): counted as entered at
      * creation only when the system makes it before the account was ever used.
      */
     static final String FIRST_LAUNCH_EMAIL_REVISE = "FIRST_LAUNCH_EMAIL_REVISE";
@@ -173,7 +173,7 @@ final class CredentialChain {
         private Instant addressProvenAt;
         private boolean addressChangedByOther;
         private boolean addressChanged;
-        /** Whether a password, a link, a second factor or a proven address ever existed (decision D82). */
+        /** Whether a password, a link, a second factor or a proven address ever existed (decision D83). */
         private boolean used;
 
         Walk(String user) {
@@ -221,7 +221,7 @@ final class CredentialChain {
                 }
             } else {
                 if (!Objects.equals(lower(newEmail), lower(email)) && newEmail != null && correction(event)) {
-                    // Decision D82: as if entered at creation; the earlier address's links no longer hold.
+                    // Decision D83: as if entered at creation; the earlier address's links no longer hold.
                     address = State.UNPROVEN;
                     addressHow = "corrected by the first launch at " + event.at();
                     addressProvenAt = null;
