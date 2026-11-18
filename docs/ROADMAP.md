@@ -5650,6 +5650,11 @@ QuizBuks 的 #545、#546、#547 用了 43.5–45 分钟，#545 到点被取消�
 | 17zz23a-6 | 平台各部分的扩展点 `FirstLaunchPlatformSteps`（17zz23c 的账号接在这里）、`FirstLaunchRuns` |
 | 17zz23a-7 | 测试：core `FirstLaunchTypesTest`；runtime `FirstLaunchConfigReaderTest`；`FirstLaunchIT`（503、等待的步骤、步骤间的输出、至多一次运行、内容阶段结束后不再有步骤与失败、只追加）、`FirstLaunchFailureIT`（失败的记录、退出码、之后的启动失败）、`FirstLaunchStartupIT`（已有用户不执行、全部问题一次报告、试运行不写、核对模式） |
 | 17zz23a-8 | 文档：设计 23、指南 `first-launch.md`、`CLAUDE.md` |
+| 17zz23b-1 | 决策 D82：首发配置的内容阶段对 D23、D40 的窄例外（参数初值发布、首发审批、首发代行），`CONTENT_DONE` 后永久关闭 |
+| 17zz23b-2 | runtime `FirstLaunchPowers`（是本运行的步骤、仍在内容阶段、对象是本运行做的、从未有过凭据的账号）、步骤 `FirstLaunchCheck`；core `FirstLaunchHandler.publishableControlKeys()`（原 `settableParams`）、`actingProcesses()` |
+| 17zz23b-3 | `CONTROL_CHANGE_FIRST_LAUNCH_PUBLISH`（`subProcessOnly()`，发布人 `first-launch`）、`APPROVAL_FIRST_LAUNCH_DECIDE`（`subProcessOnly()`，每级一条决定 `first-launch:<级>`，理由为配置哈希，带限额的级拒绝，照常发 `jabiz.approval.approved`）；运行器与 `FIRST_LAUNCH_STEP` 的代行（`asAccount`） |
+| 17zz23b-4 | 测试 `FirstLaunchPowersIT`：内容阶段中发布审批规则与参数、以本运行建的账号送审、两级审批由首发批准并发出事件；未列出的目标键、非本运行的请求与提议、非步骤的请求编号、陌生的用户、未列出的代行流程都被拒；内容阶段后三项能力都被拒 |
+| 17zz23b-5 | 文档：决策 D82、设计 23 §6、04 §9.1、10、18 §3.5、`CLAUDE.md` 第 4 节"审批与职责分离" |
 ### 线 1.3 的候选（未排期，2026-11-08 总控：首次上线前不做）
 
 | 候选 | 缘由 | 粗估 |

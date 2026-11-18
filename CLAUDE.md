@@ -54,7 +54,7 @@ jabiz 是一个**元数据驱动的业务应用平台**：开发者声明实体�
   业务单据号（不能缺号、不能重复）只经 `NumberSequence` Bean 与流程步骤 `AssignNumber` 取得（18 §2、决策 D23），不自己计数。
 - **审批与职责分离**（见 18 §3–§4 与决策 D23）：需要审批的单据声明 `ApprovalSubject` Bean，流程中用 `RequireApproval` 取得结论（批准绑定内容哈希），
   以订阅 `jabiz.approval.approved` / `rejected` 继续；不自己写审批状态机或"准备人不能审批"之类的检查。审批对象的显示名写在消息 `approval.subject.<名>`，`ApprovalCase.reference(…)` 给出人认得的单据标识（待办标题用它，18 §5.2）。审批规则、限额、职责分离规则与受控的业务参数（`ControlledParams` Bean，04 §9.1、决策 D40）只经
-  `CONTROL_CHANGE_PROPOSE` / `CONTROL_CHANGE_PUBLISH`（四眼）修改。
+  `CONTROL_CHANGE_PROPOSE` / `CONTROL_CHANGE_PUBLISH`（四眼）修改。唯一的例外是首发配置的内容阶段（决策 D82：`CONTROL_CHANGE_FIRST_LAUNCH_PUBLISH`、`APPROVAL_FIRST_LAUNCH_DECIDE`，只对本运行做的、应用列出的对象），业务代码不调用它们之外的途径。
   授予受保护的权限（`jabiz.security.protected-grants.permissions`，缺省含 `*`、改权限、审批、记账、改参数与补跑定时任务（`job.run`）的权限）、对其持有人重设密码 / 二次验证 / 关联外部账号，
   须另一位管理员审批（10 §16、决策 D48）：只经 `SEC_USER_ROLE_ASSIGN`、`SEC_ROLE_PERMISSION_ADD`、`SEC_USER_IDENTITY_LINK`、`SEC_USER_SET_PASSWORD`、`SEC_MFA_RESET`、`SEC_USER_EMAIL_SET`（持有人的邮箱），
   平台在 `VersionAppender` 中拒绝其他途径；不在业务流程中自己授予这类权限；建立期（首个管理员之外不足两位 `*` 管理员）内当即生效，之后首个管理员永久退出受保护的操作。
