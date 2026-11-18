@@ -5635,6 +5635,21 @@ QuizBuks 的 #545、#546、#547 用了 43.5–45 分钟，#545 到点被取消�
 
 **17zz22 状态**：进行中。
 
+
+### 17zz23 首发配置：一个配置文件，启动即完成首发初始化（2026-11-18，QuizBuks F-LAUNCH）
+
+**缘由**：全新系统的初始化原来要两位管理员按步骤操作，需求方要求"不要页面，必须更简单"。计划与审查见 QuizBuks 应用分支的 `docs/quizbuks/plans/impl/F-LAUNCH.md`（需求方已确认）。设计 23。分三个 PR：17zz23a（运行器）、17zz23b（内容阶段的三项能力与 D82）、17zz23c（账号与等人阶段）。
+
+| # | 内容 |
+|---|---|
+| 17zz23a-1 | core `com.jabiz.firstlaunch`：`FirstLaunchHandler`（应用的扩展点）、`FirstLaunchConfig`、`FirstLaunchAccount`、`FirstLaunchStep`、`FirstLaunchResults`、`FirstLaunchProblem` |
+| 17zz23a-2 | runtime `FirstLaunchConfigReader`：主文件（YAML）、配置哈希（目录中每个文件）、平台的段与问题（版本、域名白名单、账号、秘密形状的键、符号链接与大小）；`FirstLaunchConfig.Files` 只读目录之内 |
+| 17zz23a-3 | runtime `FirstLaunchRunner`：启动时的判断（没有配置、核对模式、试运行、已有用户、运行中、失败、内容完成、已结束）、整份校验即启动失败（含与引导管理员、`.always` 互斥）、应用就绪后在后台执行内容阶段、失败即记录并退出、另一实例运行时等待与过时判断 |
+| 17zz23a-4 | 流程 `FIRST_LAUNCH_START`、`FIRST_LAUNCH_RECORD`（`internal()`）、`FIRST_LAUNCH_STEP`（`entryOnly()`，步骤以子流程运行，请求编号 `first-launch-<运行>-<步骤键>`）；迁移 V67：`sys_first_launch_run`（单例）、`sys_first_launch_event`（状态机） |
+| 17zz23a-5 | 就绪门 `FirstLaunchGate` / `FirstLaunchGateWebFilter`：内容阶段中 503 `FIRST_LAUNCH_IN_PROGRESS` + `Retry-After`；错误码与三种语言的日志文字 |
+| 17zz23a-6 | 平台各部分的扩展点 `FirstLaunchPlatformSteps`（17zz23c 的账号接在这里）、`FirstLaunchRuns` |
+| 17zz23a-7 | 测试：core `FirstLaunchTypesTest`；runtime `FirstLaunchConfigReaderTest`；`FirstLaunchIT`（503、等待的步骤、步骤间的输出、至多一次运行、内容阶段结束后不再有步骤与失败、只追加）、`FirstLaunchFailureIT`（失败的记录、退出码、之后的启动失败）、`FirstLaunchStartupIT`（已有用户不执行、全部问题一次报告、试运行不写、核对模式） |
+| 17zz23a-8 | 文档：设计 23、指南 `first-launch.md`、`CLAUDE.md` |
 ### 线 1.3 的候选（未排期，2026-11-08 总控：首次上线前不做）
 
 | 候选 | 缘由 | 粗估 |
