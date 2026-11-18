@@ -240,8 +240,9 @@ public class FirstLaunchRunner implements SmartInitializingSingleton, Applicatio
     }
 
     /**
-     * How the log and the run's record name a configuration's account: by its place ({@code #n}), never by its key,
-     * which is the user's name (personal data recorded nowhere by the run).
+     * How the log and the run's record name an account: a configuration's account by its place ({@code #n}), never by
+     * its key, which is the user's name (personal data recorded nowhere by the run); an account the application's own
+     * step made by the key the application gave its step.
      */
     static String accountLabel(FirstLaunchConfig config, String accountKey) {
         for (int i = 0; i < config.accounts().size(); i++) {
@@ -249,7 +250,7 @@ public class FirstLaunchRunner implements SmartInitializingSingleton, Applicatio
                 return "#" + (i + 1);
             }
         }
-        return "(not in the configuration)";
+        return accountKey;
     }
 
     /** The plan: the platform's steps, then the handler's. */
@@ -503,7 +504,7 @@ public class FirstLaunchRunner implements SmartInitializingSingleton, Applicatio
         /** How messages name an account: by its place, never by its key (the user's name). */
         String label(String accountKey) {
             int position = accountKeys.indexOf(accountKey);
-            return position < 0 ? "(not in the configuration)" : "#" + (position + 1);
+            return position < 0 ? accountKey : "#" + (position + 1);
         }
 
         @Override
