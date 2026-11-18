@@ -36,10 +36,13 @@ public class LoadWaitingState<C extends ProcessContext> implements StepHandler<L
      * @param armed      whether the setup window of protected grants has ended
      * @param invitable  the users an invitation may go to: their address is the one entered at creation or corrected
      *                   by the first launch (decision D63, D83)
+     * @param readyDone  the keys of the application's steps that ran, by user (section 9)
+     * @param readyFailed the users whose ready item failed last (its steps are tried again)
      */
     public record State(FirstLaunchRun run, List<FirstLaunchAccountStore.Recorded> accounts,
         Map<UUID, FirstLaunchAccountStore.Facts> facts, Map<String, FirstLaunchAccountStore.Role> roles,
-        Set<String> adminRoles, boolean armed, Set<UUID> invitable) {}
+        Set<String> adminRoles, boolean armed, Set<UUID> invitable, Map<UUID, Set<String>> readyDone,
+        Set<UUID> readyFailed) {}
 
     public static <C extends ProcessContext> StepSpec<Metadata, C> of() {
         return StepSpec.of(LoadWaitingState.class, new Metadata(false));
@@ -79,13 +82,16 @@ public class LoadWaitingState<C extends ProcessContext> implements StepHandler<L
                     .concatMap(user -> grants.credentials(user)
                         .filter(ProtectedGrants.Credentials::addressAsCreated).map(credentials -> user))
                     .collect(java.util.stream.Collectors.toUnmodifiableSet());
+                Mono<Set<UUID>> failed = store.failedItems(FirstLaunchWaiting.JOB).map(items -> items.stream()
+                    .map(item -> ReadySteps.fromHex(item.substring(1)))
+                    .collect(java.util.stream.Collectors.toUnmodifiableSet()));
                 return Mono.zip(store.facts(users, ctx.opTime()), store.roles(codes, ctx.opTime()),
-                        grants.armedOnRecord(), invitable)
+                        grants.armedOnRecord(), invitable, store.readyDone(run.runId()), failed)
                     .flatMap(read -> store.rolesHolding(read.getT2().values().stream()
                                 .map(FirstLaunchAccountStore.Role::roleId).toList(),
                             grants.settings().administratorPermissions(), ctx.opTime())
                         .doOnNext(admins -> ctx.put(STATE, new State(run, accounts, read.getT1(), read.getT2(),
-                            admins, read.getT3(), read.getT4())))
+                            admins, read.getT3(), read.getT4(), read.getT5(), read.getT6())))
                         .then());
             });
         });

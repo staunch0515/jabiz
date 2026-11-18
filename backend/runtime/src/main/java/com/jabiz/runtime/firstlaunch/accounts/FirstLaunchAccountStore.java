@@ -120,6 +120,46 @@ public class FirstLaunchAccountStore {
         return engine().insert(TABLE, row);
     }
 
+    /** The keys of the application's steps that ran for the user once it was ready (section 9). */
+    public Mono<Set<String>> readyDone(UUID runId, UUID userId) {
+        return engine().select("SELECT step_key FROM sys_first_launch_ready WHERE run_id = :run AND user_id = :user",
+                Map.of("run", BoundValue.of(runId), "user", BoundValue.of(userId)))
+            .map(row -> Rows.string(row.get("step_key"))).collectList().map(Set::copyOf);
+    }
+
+    /** The keys of the application's steps that ran, by user, for every account of the run. */
+    public Mono<Map<UUID, Set<String>>> readyDone(UUID runId) {
+        return engine().select("SELECT user_id, step_key FROM sys_first_launch_ready WHERE run_id = :run",
+                Map.of("run", BoundValue.of(runId)))
+            .collectMultimap(row -> Rows.uuid(row.get("user_id")), row -> Rows.string(row.get("step_key")))
+            .map(found -> {
+                Map<UUID, Set<String>> done = new HashMap<>();
+                found.forEach((user, keys) -> done.put(user, Set.copyOf(keys)));
+                return Map.copyOf(done);
+            });
+    }
+
+    /** Records that a step ran, in the step's transaction. */
+    Mono<Void> recordReady(UUID runId, UUID userId, String stepKey, long processSeqId) {
+        Map<String, Object> row = new LinkedHashMap<>();
+        row.put("run_id", runId);
+        row.put("user_id", userId);
+        row.put("step_key", stepKey);
+        row.put("process_seq_id", processSeqId);
+        return engine().insert("sys_first_launch_ready", row);
+    }
+
+    /**
+     * The ready items ({@code r} and the user id's hex digits) of the job whose latest outcome failed: their steps are
+     * listed in the report until they succeed.
+     */
+    public Mono<Set<String>> failedItems(String jobName) {
+        return engine().select("SELECT f.item_key FROM (SELECT DISTINCT ON (item_key) item_key, kind FROM"
+                + " sys_job_item_failure WHERE job_name = :job AND item_key LIKE 'r%' ORDER BY item_key, entry_no DESC) f"
+                + " WHERE f.kind = 'FAILED'", Map.of("job", BoundValue.of(jobName)))
+            .map(row -> Rows.string(row.get("item_key"))).collectList().map(Set::copyOf);
+    }
+
     /** The run's accounts, in the configuration's order. */
     public Mono<List<Recorded>> accounts(UUID runId) {
         return engine().select("SELECT run_id, user_id, position, roles, report FROM " + TABLE

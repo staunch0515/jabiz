@@ -97,7 +97,8 @@ public final class GrantPlan {
             return !enabled || acceptedAt == null && !invitable;
         }
 
-        boolean anyApplied() {
+        /** Whether a configured role is in effect: the account is ready for the application's steps. */
+        public boolean anyApplied() {
             return roles.stream().anyMatch(role -> state(role.code()) == RoleState.APPLIED);
         }
 

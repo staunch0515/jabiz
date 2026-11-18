@@ -45,6 +45,22 @@ public interface FirstLaunchHandler {
     }
 
     /**
+     * The steps to run for the configuration's account {@code account} once it is ready in the waiting phase - once a
+     * configured role of it is in effect, so its user accepted the invitation (the address is proven) and bound a second
+     * factor (docs/design/23-first-launch.md section 9), such as adding it to what it is to be a member of. Empty by
+     * default.
+     *
+     * <p>Only {@link FirstLaunchStep#run} steps, each running a process of {@link #actingProcesses()}, as the system;
+     * keys unique within the account. {@code results} gives only {@link FirstLaunchResults#userId}: the content phase's
+     * outputs are not kept. Each step runs once per account (recorded); a failure is retried by the job and, until it
+     * succeeds, listed in the report.
+     */
+    default List<FirstLaunchStep> whenAccountReady(FirstLaunchConfig config, FirstLaunchAccount account,
+        FirstLaunchResults results) {
+        return List.of();
+    }
+
+    /**
      * What is left for people once the first launch is done, one sentence each, in {@code config.language()}: listed
      * by the report (section 8). Empty by default.
      */

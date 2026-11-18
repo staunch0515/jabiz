@@ -125,7 +125,7 @@ public class FirstLaunchWaiting {
     }
 
     static ProcessDefinition<AdvanceInput, AdvanceOutput, ProcessContext> advance(WaitingSettings settings,
-        MessageCatalog messages, ObjectProvider<FirstLaunchHandler> handlers, Throttle throttle) {
+        MessageCatalog messages, ObjectProvider<FirstLaunchHandler> handlers, Throttle throttle, ReadySteps ready) {
         return ProcessDefinition.define(FirstLaunchAccountProcesses.ADVANCE, 1, AdvanceInput.class,
             AdvanceOutput.class, ProcessContext.class, pb -> pb
                 .description("One item of the first launch's waiting phase: an account's invitations and grants, its"
@@ -142,9 +142,13 @@ public class FirstLaunchWaiting {
                     return new AdvanceOutput(String.valueOf(ctx.get(ITEM)), round.assign().size(),
                         round.invite().size(), round.withdrawFrom() != null, round.end());
                 })
+                // The application's steps for a ready account, in a sub-process whose steps are its children.
+                .step("Run the application's steps", CallProcess.when(ctx -> isReadyItem(ctx),
+                    FirstLaunchAccountProcesses.ACCOUNT_READY, 1,
+                    ctx -> new ReadyInput(ReadySteps.fromHex(String.valueOf(ctx.get(ITEM)).substring(1))), null))
                 .step("Load the state", LoadWaitingState.of())
                 .compute("Plan the round", (metadata, ctx) -> ctx.put(ROUND,
-                    plan(ctx, settings, messages, handlers, throttle)))
+                    plan(ctx, settings, messages, handlers, throttle, ready)))
                 .step("Load the waiting role's assignment", QueryEntities.of(SecurityEntities.USER_ROLE_DATASET,
                     ctx -> Rbac.all(waitingAssignment(ctx), "userRoleId"), ASSIGNMENTS))
                 .step("Load the waiting role", QueryEntities.of(SecurityEntities.ROLE_DATASET,
@@ -174,8 +178,32 @@ public class FirstLaunchWaiting {
                     null)));
     }
 
+    /** @param userId the ready account's user */
+    public record ReadyInput(@NotNull UUID userId) {}
+
+    /** @param ran how many of the application's steps ran now */
+    public record ReadyOutput(String userId, int ran) {}
+
+    static ProcessDefinition<ReadyInput, ReadyOutput, ProcessContext> ready() {
+        return ProcessDefinition.define(FirstLaunchAccountProcesses.ACCOUNT_READY, 1, ReadyInput.class,
+            ReadyOutput.class, ProcessContext.class, pb -> pb
+                .description("Runs the application's steps for a first launch account once it is ready, each once;"
+                    + " run by the job jabiz.first-launch only.")
+                .permissions(FirstLaunchProcesses.PERMISSION)
+                .internal()
+                .contextFactory((start, input) -> {
+                    ProcessContext ctx = new ProcessContext(start);
+                    ctx.put(RunReadySteps.USER, input.userId());
+                    return ctx;
+                })
+                .outputMapper(ctx -> new ReadyOutput(String.valueOf(ctx.get(RunReadySteps.USER)),
+                    (Integer) ctx.get(RunReadySteps.RAN)))
+                .step("Load the state", LoadWaitingState.of())
+                .step("Run the application's steps", RunReadySteps.of()));
+    }
+
     static ProcessDefinition<ReportInput, ReportOutput, ProcessContext> report(WaitingSettings settings,
-        MessageCatalog messages, ObjectProvider<FirstLaunchHandler> handlers) {
+        MessageCatalog messages, ObjectProvider<FirstLaunchHandler> handlers, ReadySteps ready) {
         return ProcessDefinition.define(REPORT_PROCESS_NAME, 1, ReportInput.class, ReportOutput.class,
             ProcessContext.class, pb -> pb
                 .description("Mails the first launch's report to a report account; run by the first launch only.")
@@ -196,19 +224,37 @@ public class FirstLaunchWaiting {
                     Locale locale = facts == null || facts.locale() == null ? Locale.ENGLISH
                         : Locale.forLanguageTag(facts.locale());
                     ctx.put("summary", WaitingReport.summary(input.kind(), state, accounts(state),
-                        remaining(settings, handlers), messages, locale));
+                        remaining(settings, handlers, ready, state, messages, locale), messages, locale));
                 })
                 .step("Mail the report", SendMail.of(REPORT_MAIL,
                     ctx -> MailRecipient.user(ctx.get("input", ReportInput.class).userId()),
                     Map.of("summary", ctx -> ctx.get("summary")))));
     }
 
-    /** What the application leaves for people ({@link FirstLaunchHandler#remaining}), from the startup's configuration. */
-    static List<String> remaining(WaitingSettings settings, ObjectProvider<FirstLaunchHandler> handlers) {
+    /**
+     * What is left for people beyond the grants: the application's steps for accounts that did not run (section 9),
+     * then {@link FirstLaunchHandler#remaining}, from the startup's configuration.
+     */
+    static List<String> remaining(WaitingSettings settings, ObjectProvider<FirstLaunchHandler> handlers,
+        ReadySteps ready, LoadWaitingState.State state, MessageCatalog messages, Locale locale) {
         List<String> remaining = new ArrayList<>();
+        for (FirstLaunchAccountStore.Recorded recorded : state.accounts()) {
+            List<String> notRun = ready.notRun(state, recorded);
+            if (!notRun.isEmpty()) {
+                remaining.add(messages.find("first-launch.report.ready-not-run", locale)
+                    .orElse("{key} (user {user}): the application's steps did not run: {steps}")
+                    .replace("{key}", recorded.label()).replace("{user}", recorded.userId().toString())
+                    .replace("{steps}", String.join(", ", notRun)));
+            }
+        }
         settings.config().ifPresent(found -> handlers.orderedStream().forEach(handler -> remaining.addAll(
             handler.remaining(found))));
         return List.copyOf(remaining);
+    }
+
+    /** Whether the item is a ready account's: {@code r} and the user id's 32 hex digits. */
+    static boolean isReadyItem(ProcessContext ctx) {
+        return String.valueOf(ctx.get(ITEM)).startsWith("r");
     }
 
     static Round round(ProcessContext ctx) {
@@ -257,7 +303,7 @@ public class FirstLaunchWaiting {
 
     /** What this item does now. */
     static Round plan(ProcessContext ctx, WaitingSettings settings, MessageCatalog messages,
-        ObjectProvider<FirstLaunchHandler> handlers, Throttle throttle) {
+        ObjectProvider<FirstLaunchHandler> handlers, Throttle throttle, ReadySteps ready) {
         if (!ctx.contains(LoadWaitingState.STATE)) {
             return Round.NOTHING;
         }
@@ -269,7 +315,10 @@ public class FirstLaunchWaiting {
         List<Action> actions = GrantPlan.next(runId, accounts, settings.confirmed(), now, settings.remindAfter());
         String reason = REASON + state.run().configHash();
         if (END.equals(item)) {
-            return end(state, accounts, now, settings, messages, handlers, throttle);
+            return end(state, accounts, now, settings, messages, handlers, throttle, ready);
+        }
+        if (item.startsWith("r")) {
+            return Round.NOTHING;
         }
         // A user id has 36 characters; the administrator's item is "x" (no hex digit) and its 32 hex digits.
         boolean administrators = item.startsWith("x");
@@ -334,10 +383,14 @@ public class FirstLaunchWaiting {
     /** The end item: the run ends, or the hourly line of what it waits for. */
     private static Round end(LoadWaitingState.State state, List<GrantPlan.Account> accounts, Instant now,
         WaitingSettings settings, MessageCatalog messages, ObjectProvider<FirstLaunchHandler> handlers,
-        Throttle throttle) {
+        Throttle throttle, ReadySteps ready) {
         boolean expired = GrantPlan.expired(state.run().stateTime(), settings.deadline(), now);
-        // An account whose user was deleted meanwhile is nobody's to wait for.
-        boolean complete = GrantPlan.complete(accounts);
+        // An account whose user was deleted meanwhile is nobody's to wait for; the application's steps of a ready
+        // account are, until they ran or failed.
+        boolean stepsDone = state.accounts().stream().allMatch(recorded -> ready.waitingFor(state, recorded,
+            accounts.stream().filter(account -> account.userId().equals(recorded.userId())).findFirst()
+                .orElse(null)).isEmpty());
+        boolean complete = GrantPlan.complete(accounts) && stepsDone;
         if (!expired && !complete) {
             if (throttle.due("waiting", now)) {
                 GrantPlan.unfinished(accounts).forEach(account -> log.info("First launch: waiting for account {}"
@@ -354,8 +407,8 @@ public class FirstLaunchWaiting {
                 reports.add(new ReportInput(recorded.userId(), kind));
             }
         }
-        String summary = WaitingReport.summary(kind, state, accounts, remaining(settings, handlers), messages,
-            Locale.ENGLISH);
+        String summary = WaitingReport.summary(kind, state, accounts, remaining(settings, handlers, ready, state,
+            messages, Locale.ENGLISH), messages, Locale.ENGLISH);
         if ("DONE".equals(kind)) {
             log.info(summary);
         } else {
@@ -379,14 +432,19 @@ public class FirstLaunchWaiting {
 
     @Bean
     ProcessDefinition<AdvanceInput, AdvanceOutput, ProcessContext> firstLaunchAdvanceProcess(WaitingSettings settings,
-        MessageCatalog messages, ObjectProvider<FirstLaunchHandler> handlers, Throttle throttle) {
-        return advance(settings, messages, handlers, throttle);
+        MessageCatalog messages, ObjectProvider<FirstLaunchHandler> handlers, Throttle throttle, ReadySteps ready) {
+        return advance(settings, messages, handlers, throttle, ready);
+    }
+
+    @Bean
+    ProcessDefinition<ReadyInput, ReadyOutput, ProcessContext> firstLaunchAccountReadyProcess() {
+        return ready();
     }
 
     @Bean
     ProcessDefinition<ReportInput, ReportOutput, ProcessContext> firstLaunchReportProcess(WaitingSettings settings,
-        MessageCatalog messages, ObjectProvider<FirstLaunchHandler> handlers) {
-        return report(settings, messages, handlers);
+        MessageCatalog messages, ObjectProvider<FirstLaunchHandler> handlers, ReadySteps ready) {
+        return report(settings, messages, handlers, ready);
     }
 
     @Bean
