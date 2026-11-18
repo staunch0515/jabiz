@@ -78,7 +78,8 @@ class FirstLaunchChecksTest {
             process("OPEN_ONE", pb -> { }),
             process("SUB_ONE", pb -> pb.subProcessOnly()),
             process("INTERNAL_ONE", pb -> pb.internal()),
-            process("ENTRY_ONE", pb -> pb.entryOnly()));
+            process("ENTRY_ONE", pb -> pb.entryOnly()),
+            process("FIRST_LAUNCH_OWN", pb -> pb.subProcessOnly()));
         Map<String, Object> named = new LinkedHashMap<>();
         definitions.forEach(definition -> named.put(definition.name(), definition));
         ObjectProvider beans = new StaticListableBeanFactory(named).getBeanProvider(ProcessDefinition.class);
@@ -87,7 +88,8 @@ class FirstLaunchChecksTest {
 
     @Test
     void actingProcessesExistAndAreOpenOrSubProcessesOnly() {
-        FirstLaunchHandler app = handler("app", Set.of("OPEN_ONE", "SUB_ONE", "INTERNAL_ONE", "ENTRY_ONE", "MISSING"),
+        FirstLaunchHandler app = handler("app", Set.of("OPEN_ONE", "SUB_ONE", "INTERNAL_ONE", "ENTRY_ONE", "MISSING",
+            "FIRST_LAUNCH_OWN"),
             Set.of("qb.key", " "));
         // (file policies below)
 
@@ -99,6 +101,8 @@ class FirstLaunchChecksTest {
             "acting process INTERNAL_ONE is INTERNAL: a step runs open or sub-process-only processes as an account",
             "acting process ENTRY_ONE is ENTRY_ONLY: a step runs open or sub-process-only processes as an account",
             "acting process MISSING does not exist",
+            "acting process FIRST_LAUNCH_OWN is the first launch's own: a step runs it as the system or the platform"
+                + " does",
             "a publishable control has no key");
     }
 
