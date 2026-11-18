@@ -38,6 +38,11 @@ public class ControlChanges {
     public static final String PROPOSE = "CONTROL_CHANGE_PROPOSE";
     public static final String PUBLISH = "CONTROL_CHANGE_PUBLISH";
     public static final String WITHDRAW = "CONTROL_CHANGE_WITHDRAW";
+    /**
+     * Publishes, as the first launch, a change the same run proposed (decision D82): a sub-process of the first
+     * launch's content phase only.
+     */
+    public static final String FIRST_LAUNCH_PUBLISH = "CONTROL_CHANGE_FIRST_LAUNCH_PUBLISH";
 
     /** Actions of a change. */
     public static final String UPSERT = "UPSERT";
@@ -98,7 +103,31 @@ public class ControlChanges {
                 .step("Load the change", LoadEntity.by(ApprovalEntities.CONTROL_CHANGE_DATASET, CHANGE_ID, CHANGE))
                 .step("Load the target", LoadControlTarget.of(ctx -> recorded(ctx.get(CHANGE, EntityInstance.class)),
                     REQUEST, TARGET))
-                .compute("Publish", (metadata, ctx) -> publish(ctx, targets)));
+                .compute("Publish", (metadata, ctx) -> publish(ctx, targets, false)));
+    }
+
+    /**
+     * {@value #FIRST_LAUNCH_PUBLISH}: the initial value of a control, from the deployment's first-launch
+     * configuration, takes effect without a second person (decision D82). Only as the system, in a step of a first
+     * launch whose content phase goes on, for a change that run proposed and a target key the application declared
+     * ({@link com.jabiz.runtime.firstlaunch.FirstLaunchCheck}); the publisher is recorded as {@code first-launch}.
+     */
+    public static ProcessDefinition<ChangeInput, ChangeOutput, ProcessContext> firstLaunchPublish(
+        ControlTargets targets) {
+        return ProcessDefinition.define(FIRST_LAUNCH_PUBLISH, 1, ChangeInput.class, ChangeOutput.class,
+            ProcessContext.class, pb -> pb
+                .description("Publishes the initial value of a control that the first launch proposed (D82).")
+                .permissions(ApprovalPermissions.CONTROL_PUBLISH)
+                .subProcessOnly()
+                .contextFactory(ControlChanges::start)
+                .outputMapper(ctx -> ctx.get(OUTPUT, ChangeOutput.class))
+                .step("Load the change", LoadEntity.by(ApprovalEntities.CONTROL_CHANGE_DATASET, CHANGE_ID, CHANGE))
+                .step("Check the first launch's power", com.jabiz.runtime.firstlaunch.FirstLaunchCheck.of(
+                    "sys_control_change_version", "change_id", ctx -> ctx.get(CHANGE_ID),
+                    ctx -> ctx.get(CHANGE, EntityInstance.class).get("targetKey")))
+                .step("Load the target", LoadControlTarget.of(ctx -> recorded(ctx.get(CHANGE, EntityInstance.class)),
+                    REQUEST, TARGET))
+                .compute("Publish", (metadata, ctx) -> publish(ctx, targets, true)));
     }
 
     public static ProcessDefinition<ChangeInput, ChangeOutput, ProcessContext> withdraw() {
@@ -168,7 +197,7 @@ public class ControlChanges {
         ctx.put(OUTPUT, new ChangeOutput(String.valueOf(id), ApprovalEntities.PROPOSED, proposal.targetId()));
     }
 
-    private static void publish(ProcessContext ctx, ControlTargets targets) {
+    private static void publish(ProcessContext ctx, ControlTargets targets, boolean firstLaunch) {
         EntityInstance change = ctx.get(CHANGE, EntityInstance.class);
         String changeId = String.valueOf(change.id());
         if (!ApprovalEntities.PROPOSED.equals(change.get("status"))) {
@@ -176,7 +205,8 @@ public class ControlChanges {
                 "Change " + changeId + " is " + change.get("status") + ", not proposed", Map.of("change", changeId)));
             return;
         }
-        if (ctx.request().actorId().equals(change.get("proposedBy"))) {
+        // The first launch's publication stands in for the second person (decision D82; checked by its own step).
+        if (!firstLaunch && ctx.request().actorId().equals(change.get("proposedBy"))) {
             ctx.reject(new Violation(CHANGE_ID, PlatformErrorCodes.CONTROL_SAME_PERSON,
                 "The proposer of change " + changeId + " cannot publish it", Map.of("change", changeId)));
             return;
@@ -194,7 +224,8 @@ public class ControlChanges {
         }
         Map<String, Object> published = new LinkedHashMap<>();
         published.put("status", ApprovalEntities.PUBLISHED);
-        published.put("publishedBy", ctx.request().actorId());
+        published.put("publishedBy", firstLaunch ? com.jabiz.runtime.firstlaunch.FirstLaunchPowers.ACTOR
+            : ctx.request().actorId());
         ctx.changes().update(ApprovalEntities.CONTROL_CHANGE, change.id(), change.version(), published);
         ctx.put(OUTPUT, new ChangeOutput(changeId, ApprovalEntities.PUBLISHED, String.valueOf(targetId)));
     }
@@ -230,6 +261,12 @@ public class ControlChanges {
     @Bean
     ProcessDefinition<ChangeInput, ChangeOutput, ProcessContext> controlChangePublishProcess(ControlTargets targets) {
         return publish(targets);
+    }
+
+    @Bean
+    ProcessDefinition<ChangeInput, ChangeOutput, ProcessContext> controlChangeFirstLaunchPublishProcess(
+        ControlTargets targets) {
+        return firstLaunchPublish(targets);
     }
 
     @Bean

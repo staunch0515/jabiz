@@ -131,6 +131,9 @@ class FirstLaunchFailureIT extends PostgresIntegrationTest {
     @Autowired
     JsonMapper json;
 
+    @Autowired
+    com.jabiz.runtime.firstlaunch.FirstLaunchPowers powers;
+
     @Test
     void aFailedStepEndsTheRunAndEveryLaterStartFails() {
         long end = System.nanoTime() + Duration.ofSeconds(30).toNanos();
@@ -152,7 +155,7 @@ class FirstLaunchFailureIT extends PostgresIntegrationTest {
 
         // The next start (a new runner on the same database) refuses to start and says what to do.
         FirstLaunchRunner restart = new FirstLaunchRunner(environment, runs, new FirstLaunchGate(), processes,
-            handlers, platformSteps, messages, clockBean, exits, json);
+            handlers, platformSteps, messages, clockBean, exits, json, powers);
         assertThatThrownBy(restart::afterSingletonsInstantiated)
             .isInstanceOf(FirstLaunchRunner.FirstLaunchFailedException.class)
             .hasMessageContaining("broken")

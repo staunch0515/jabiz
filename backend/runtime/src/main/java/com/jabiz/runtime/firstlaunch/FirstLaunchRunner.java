@@ -65,6 +65,7 @@ public class FirstLaunchRunner implements SmartInitializingSingleton, Applicatio
     private final Environment environment;
     private final ObjectProvider<FirstLaunchExit> exits;
     private final JsonMapper json;
+    private final FirstLaunchPowers powers;
 
     private volatile Mode mode = Mode.NONE;
     private volatile FirstLaunchConfig config;
@@ -73,7 +74,7 @@ public class FirstLaunchRunner implements SmartInitializingSingleton, Applicatio
     public FirstLaunchRunner(Environment environment, FirstLaunchRuns runs, FirstLaunchGate gate,
         ProcessExecutor processes, ObjectProvider<FirstLaunchHandler> handlers,
         ObjectProvider<FirstLaunchPlatformSteps> platformSteps, MessageCatalog messages, Clock clock,
-        ObjectProvider<FirstLaunchExit> exits, JsonMapper json) {
+        ObjectProvider<FirstLaunchExit> exits, JsonMapper json, FirstLaunchPowers powers) {
         this.settings = FirstLaunchSettings.of(environment);
         this.environment = environment;
         this.runs = runs;
@@ -85,6 +86,7 @@ public class FirstLaunchRunner implements SmartInitializingSingleton, Applicatio
         this.clock = clock;
         this.exits = exits;
         this.json = json;
+        this.powers = powers;
     }
 
     /** What this start does; for tests. */
@@ -281,14 +283,17 @@ public class FirstLaunchRunner implements SmartInitializingSingleton, Applicatio
 
     /** Runs one step: once, or again and again while it waits. Returns its output. */
     private Object run(UUID runId, FirstLaunchStep step, Results results, Instant deadline) {
-        if (step.asAccount() != null) {
-            // Acting as an account comes with the content phase's powers (decision D82, 17zz23b).
-            throw new IllegalStateException("Step " + step.key() + " runs as account " + step.asAccount()
-                + ", which this version of the platform does not do yet");
+        if (step.asAccount() != null && !powers.actingProcesses().contains(step.process())) {
+            throw new IllegalStateException("Step " + step.key() + " runs " + step.process() + " as account "
+                + step.asAccount() + ", but the application's handler does not name it among its acting processes");
         }
         while (true) {
             Object input = step.input().apply(results);
-            RequestContext system = RequestContext.system(locale, requestId(runId, step));
+            // As the system, or acting as the account (decision D82): no roles, no permissions, no session.
+            RequestContext system = step.asAccount() == null
+                ? RequestContext.system(locale, requestId(runId, step))
+                : new RequestContext(results.userId(step.asAccount()), null, locale, requestId(runId, step), Set.of(),
+                    Set.of());
             FirstLaunchProcesses.StepOutput output = processes.executeAtEntry(FirstLaunchProcesses.STEP_PROCESS,
                     new FirstLaunchProcesses.StepInput(runId.toString(), step.key(), step.process(), input))
                 .contextWrite(view -> RequestContexts.put(view, system))
