@@ -17,7 +17,6 @@ import com.jabiz.runtime.firstlaunch.FirstLaunchFiles;
 import com.jabiz.runtime.firstlaunch.FirstLaunchGate;
 import com.jabiz.runtime.firstlaunch.FirstLaunchRun;
 import com.jabiz.runtime.firstlaunch.FirstLaunchRuns;
-import com.jabiz.runtime.security.UserProcesses;
 import com.jabiz.runtime.test.PostgresIntegrationTest;
 import org.junit.jupiter.api.MethodOrderer;
 import org.junit.jupiter.api.Order;
@@ -59,8 +58,9 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  * a file too large for the policy, an undeclared policy, an account the run did not create, and any file step once
  * the content phase is over are refused.
  */
-@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.MOCK,
-    properties = "jabiz.first-launch.await-interval=50ms")
+@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.MOCK, properties = {
+    "jabiz.first-launch.await-interval=50ms", "jabiz.mail.enabled=true", "jabiz.mail.from=jabiz@example.com",
+    "jabiz.mail.base-url=https://app.example.com", "spring.mail.host=localhost", "spring.mail.port=3043"})
 @Import({FirstLaunchFilesIT.Handler.class, ItFileFixtures.class})
 @TestMethodOrder(MethodOrderer.OrderAnnotation.class)
 class FirstLaunchFilesIT extends PostgresIntegrationTest {
@@ -205,8 +205,6 @@ class FirstLaunchFilesIT extends PostgresIntegrationTest {
                 @Override
                 public List<FirstLaunchStep> plan(FirstLaunchConfig config) {
                     return List.of(
-                        FirstLaunchStep.run(FirstLaunchStep.accountStepKey("owner"), "SEC_USER_CREATE", results ->
-                            new UserProcesses.CreateUserInput("fl-owner", null, null, null, true, null, null, false)),
                         FirstLaunchStep.file("img1", new FirstLaunchStep.FileSource(CommerceFiles.IMAGE,
                             "sponsors/hq/package.json", fromPackage("img1"), "picture")).asAccount("owner"),
                         FirstLaunchStep.await("hold", "FL_IT_HOLD_FILES", results -> new Ask()));
@@ -235,7 +233,7 @@ class FirstLaunchFilesIT extends PostgresIntegrationTest {
     }
 
     private String owner() {
-        return String.valueOf(query("SELECT DISTINCT user_id FROM sec_user_version WHERE user_name = 'fl-owner'")
+        return String.valueOf(query("SELECT DISTINCT user_id FROM sec_user_version WHERE email = 'owner@example.co.jp'")
             .getFirst().get("user_id"));
     }
 

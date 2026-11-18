@@ -217,7 +217,10 @@ public class FirstLaunchRunner implements SmartInitializingSingleton, Applicatio
             } else if (config.account(step.asAccount()).isEmpty()) {
                 problems.add(new FirstLaunchProblem(at, "stores a file as " + step.asAccount()
                     + ", which is not an account of the configuration", "fix the application's handler"));
-            } else if (!made.contains(FirstLaunchStep.accountStepKey(step.asAccount()))) {
+            } else if (!made.contains(FirstLaunchStep.accountStepKeyAt(config.accounts().indexOf(
+                config.account(step.asAccount()).orElseThrow())))
+                && !made.contains(FirstLaunchStep.accountStepKey(step.asAccount()))) {
+                // The platform's step is keyed by the account's place; an application's own by its key.
                 problems.add(new FirstLaunchProblem(at, "stores a file as " + step.asAccount()
                     + " before the account is made", "fix the application's handler"));
             }
@@ -294,7 +297,8 @@ public class FirstLaunchRunner implements SmartInitializingSingleton, Applicatio
         UUID runId = UUID.fromString(started.runId());
         log.info(text("first-launch.started", Map.of("run", runId, "hash", config.hash())));
         Map<String, Object> outputs = new LinkedHashMap<>();
-        Results results = new Results(outputs);
+        Results results = new Results(outputs, config.accounts().stream()
+            .map(com.jabiz.firstlaunch.FirstLaunchAccount::key).toList());
         Instant deadline = clock.instant().plus(settings.contentTimeout());
         FirstLaunchStep current = null;
         try {
@@ -488,11 +492,23 @@ public class FirstLaunchRunner implements SmartInitializingSingleton, Applicatio
     }
 
     /** The results so far of the content phase. */
-    private record Results(Map<String, Object> outputs) implements FirstLaunchResults {
+    /**
+     * @param accountKeys the configuration's account keys, in order: {@code account:<key>} reads the output of the step
+     *                    keyed by the account's place ({@link FirstLaunchStep#accountStepKeyAt}), so that no key - a
+     *                    user name - is recorded with the operations
+     */
+    private record Results(Map<String, Object> outputs, List<String> accountKeys) implements FirstLaunchResults {
 
         @Override
         public Optional<Object> output(String stepKey) {
-            return Optional.ofNullable(outputs.get(stepKey));
+            Object found = outputs.get(stepKey);
+            if (found == null && stepKey.startsWith("account:") && !stepKey.startsWith("account:#")) {
+                int position = accountKeys.indexOf(stepKey.substring("account:".length()));
+                if (position >= 0) {
+                    found = outputs.get(FirstLaunchStep.accountStepKeyAt(position));
+                }
+            }
+            return Optional.ofNullable(found);
         }
 
         @Override
