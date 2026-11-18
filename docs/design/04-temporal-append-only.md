@@ -295,6 +295,8 @@ WHERE NOT v.is_deleted AND <范围条件> AND <查询条件>
 `delete: true` 加 `effectiveTime` 取消预定值；由他人以 `CONTROL_CHANGE_PUBLISH` 发布后才写入（普通的参数版本，历史与审计照常）。
 发布的那一次写入带平台生成的许可（绑定键与发布操作），守卫只放行它，而不看流程名。是否受控只在代码中，运行时不能解除。
 
+首发配置的内容阶段是唯一的例外（决策 D82，设计 23 §6）：应用列出的受控参数的初值由 `CONTROL_CHANGE_FIRST_LAUNCH_PUBLISH` 以 `first-launch` 发布，部署渠道算作第二个人；内容阶段结束后不再可用。
+
 ## 10. 归档与个人信息
 
 - 数据增长：按 `created_time` 分区；冷分区归档到只读存储。

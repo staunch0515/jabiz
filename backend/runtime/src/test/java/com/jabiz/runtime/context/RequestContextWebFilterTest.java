@@ -60,6 +60,15 @@ class RequestContextWebFilterTest {
     }
 
     @Test
+    void aClientNeverGivesTheFirstLaunchsRequestIds() {
+        run(MockServerHttpRequest.get("/").header("X-Request-Id", "first-launch-0198-a"));
+        assertThat(seen.get().requestId()).matches("[0-9a-f-]{36}");
+
+        run(MockServerHttpRequest.get("/").header("X-Request-Id", "First-Launch-x"));
+        assertThat(seen.get().requestId()).matches("[0-9a-f-]{36}");
+    }
+
+    @Test
     void acceptLanguagePicksTheBestSupportedLanguage() {
         run(MockServerHttpRequest.get("/").header("Accept-Language", "ja-JP,en;q=0.5"));
         assertThat(seen.get().locale()).isEqualTo(Locale.JAPANESE);

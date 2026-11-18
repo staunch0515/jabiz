@@ -5635,6 +5635,30 @@ QuizBuks 的 #545、#546、#547 用了 43.5–45 分钟，#545 到点被取消�
 
 **17zz22 状态**：进行中。
 
+### 17zz23 首发配置：一个配置文件，启动即完成首发初始化（2026-11-18，QuizBuks F-LAUNCH）
+
+**缘由**：全新系统的初始化原来要两位管理员按步骤操作，需求方要求"不要页面，必须更简单"。计划与审查见 QuizBuks 应用分支的 `docs/quizbuks/plans/impl/F-LAUNCH.md`（需求方已确认）。设计 23。分三个 PR：17zz23a（运行器）、17zz23b（内容阶段的三项能力与 D82）、17zz23c（账号与等人阶段）。
+
+| # | 内容 |
+|---|---|
+| 17zz23a-1 | core `com.jabiz.firstlaunch`：`FirstLaunchHandler`（应用的扩展点）、`FirstLaunchConfig`、`FirstLaunchAccount`、`FirstLaunchStep`、`FirstLaunchResults`、`FirstLaunchProblem` |
+| 17zz23a-2 | runtime `FirstLaunchConfigReader`：主文件（YAML）、配置哈希（目录中每个文件）、平台的段与问题（版本、域名白名单、账号、秘密形状的键、符号链接与大小）；`FirstLaunchConfig.Files` 只读目录之内 |
+| 17zz23a-3 | runtime `FirstLaunchRunner`：启动时的判断（没有配置、核对模式、试运行、已有用户、运行中、失败、内容完成、已结束）、整份校验即启动失败（含与引导管理员、`.always` 互斥）、应用就绪后在后台执行内容阶段、失败即记录并退出、另一实例运行时等待与过时判断 |
+| 17zz23a-4 | 流程 `FIRST_LAUNCH_START`、`FIRST_LAUNCH_RECORD`（`internal()`）、`FIRST_LAUNCH_STEP`（`entryOnly()`，步骤以子流程运行，请求编号 `first-launch-<运行>-<步骤键>`）；迁移 V67：`sys_first_launch_run`（单例）、`sys_first_launch_event`（状态机） |
+| 17zz23a-5 | 就绪门 `FirstLaunchGate` / `FirstLaunchGateWebFilter`：内容阶段中 503 `FIRST_LAUNCH_IN_PROGRESS` + `Retry-After`；错误码与三种语言的日志文字 |
+| 17zz23a-6 | 平台各部分的扩展点 `FirstLaunchPlatformSteps`（17zz23c 的账号接在这里）、`FirstLaunchRuns` |
+| 17zz23a-7 | 测试：core `FirstLaunchTypesTest`；runtime `FirstLaunchConfigReaderTest`；`FirstLaunchIT`（503、等待的步骤、步骤间的输出、至多一次运行、内容阶段结束后不再有步骤与失败、只追加）、`FirstLaunchFailureIT`（失败的记录、退出码、之后的启动失败）、`FirstLaunchStartupIT`（已有用户不执行、全部问题一次报告、试运行不写、核对模式） |
+| 17zz23a-8 | 文档：设计 23、指南 `first-launch.md`、`CLAUDE.md` |
+| 17zz23b-1 | 决策 D82：首发配置的内容阶段对 D23、D40 的窄例外（参数初值发布、首发审批、首发代行），`CONTENT_DONE` 后永久关闭 |
+| 17zz23b-2 | runtime `FirstLaunchPowers`（是本运行的步骤、仍在内容阶段、对象是本运行做的、从未有过凭据的账号）、步骤 `FirstLaunchCheck`；core `FirstLaunchHandler.publishableControlKeys()`（原 `settableParams`）、`actingProcesses()` |
+| 17zz23b-3 | `CONTROL_CHANGE_FIRST_LAUNCH_PUBLISH`（`subProcessOnly()`，发布人 `first-launch`）、`APPROVAL_FIRST_LAUNCH_DECIDE`（`subProcessOnly()`，每级一条决定 `first-launch:<级>`，理由为配置哈希，带限额的级拒绝，照常发 `jabiz.approval.approved`）；运行器与 `FIRST_LAUNCH_STEP` 的代行（`asAccount`） |
+| 17zz23b-4 | 测试 `FirstLaunchPowersIT`：内容阶段中发布审批规则与参数、以本运行建的账号送审、两级审批由首发批准并发出事件；未列出的目标键、非本运行的请求与提议、非步骤的请求编号、陌生的用户、未列出的代行流程都被拒；内容阶段后三项能力都被拒 |
+| 17zz23b-5 | 文档：决策 D82、设计 23 §6、04 §9.1、10、18 §3.5、`CLAUDE.md` 第 4 节"审批与职责分离" |
+| 17zz23b-6 | 审查修正：三项能力按 `op_process` 血缘判断（顶层是本运行的 `FIRST_LAUNCH_STEP`），不再看请求编号；`RequestContextWebFilter` 替换客户端给出的 `first-launch…` 请求编号；参数初值发布只限受控参数与审批规则、提议人须是系统；"从未有过凭据"含会话与成功的登录；启动检查 `FIRST_LAUNCH`；`FirstLaunchActing` 与架构测试；过时的运行由另一实例先记失败时照样启动失败 |
+| 17zz23b-7 | 测试：`FirstLaunchPowersIT` 的探查改为真实的步骤（伪造的请求编号、账号调用发布、带限额的级、本人有了密码后不再代行）；`FirstLaunchFailureIT`（失败后不再有步骤）；`FirstLaunchStartupIT`（与 `.always` 互斥）；`FirstLaunchStaleIT`（超时的运行由下一次启动记为失败，运行中的实例随之退出）；`RequestContextWebFilterTest` |
+| 17zz23d-1 | 文件步骤：core `FirstLaunchStep.file`、`FileSource`（策略、相对路径、取出字节、名称），`FirstLaunchHandler.filePolicies()`；文件步骤必须代行；runtime `FirstLaunchFiles`（声明的策略，经 `FileUploadService.storeGenerated` 存储后在 `FIRST_LAUNCH_STEP` 之下以子流程 `FIRST_LAUNCH_FILE_REGISTER` 登记为该账号的上传：行锁、内容阶段、代行条件，登记失败删除对象；输出文件编号），配置目录的文件按启动时的摘要读取（新增、改写即拒绝），运行器先于代行流程的检查处理文件步骤，启动校验与试运行一次报全文件步骤的问题；启动检查 `FIRST_LAUNCH` 要求策略存在、不空白；架构测试 |
+| 17zz23d-2 | 测试 `FirstLaunchFilesIT`：从包中取出的图片以代行存储（上传者为该账号、重新编码、文件名不进记录）；带 EXIF/GPS 的 JPEG 存储后不含 GPS；`privateMetadata()` 策略得随机编号；试运行输出含文件步骤；登记的父流程是 `FIRST_LAUNCH_STEP`；出目录的路径、绝对路径、中途的符号链接、启动后新增或改写的文件、不是图片的内容、超出策略大小、未声明的策略、取出为空、系统身份、非本运行的账号、有会话的账号都被拒且不留下行；内容阶段后被拒。`FirstLaunchConfigReaderTest`（摘要）。`FirstLaunchChecksTest`（不存在的策略）。文档：设计 23 §6、D82 补充、`CLAUDE.md` 文件 |
+
 ### 17zz24 子流程只读已存储的状态：写明并留痕（2026-11-18，QuizBuks S6 报告）
 
 **缘由**：流程先 `ctx.changes().update` 用户的邮箱、再以 `CallProcess` 调用 `SEC_USER_INVITE`，邀请检查并寄到**旧地址**。查明不是 D46"读之前写出"的漏洞：`AddressVerifiable`（`ProtectedGrants.credentials`）与收件人解析都经 `StorageEngine.select`，引擎的缓冲写入在读其表之前一律先写出；原因是 `ctx.changes()` 登记的变更要到流程结束或 `SaveChanges` 才提交，`CallProcess` 不替父流程提交，子流程读到的是已存储的状态。总控决定不改行为（改了会动 D11 的语义与所有子流程调用点的语句数），写明并留痕。

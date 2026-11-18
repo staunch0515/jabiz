@@ -70,6 +70,17 @@ class ArchitectureTest {
             .check(CLASSES);
     }
 
+    /** Acting as an account is the first launch's alone (decision D82). */
+    @Test
+    void onlyTheFirstLaunchActsAsAnAccount() {
+        noClasses().that().resideOutsideOfPackage("com.jabiz.runtime.firstlaunch")
+            .should().dependOnClassesThat().haveFullyQualifiedName("com.jabiz.runtime.firstlaunch.FirstLaunchActing")
+            .check(CLASSES);
+        noClasses().that().resideOutsideOfPackage("com.jabiz.runtime.firstlaunch")
+            .should().dependOnClassesThat().haveFullyQualifiedName("com.jabiz.runtime.firstlaunch.FirstLaunchFiles")
+            .check(CLASSES);
+    }
+
     @Test
     void runtimeContainsNoBusinessConcepts() {
         noClasses().that().resideInAPackage(RUNTIME)
