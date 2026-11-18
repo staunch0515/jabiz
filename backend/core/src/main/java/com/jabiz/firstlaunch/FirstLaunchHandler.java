@@ -50,7 +50,7 @@ public interface FirstLaunchHandler {
      * factor (docs/design/23-first-launch.md section 9), such as adding it to what it is to be a member of. Empty by
      * default.
      *
-     * <p>Only {@link FirstLaunchStep#run} steps, each running a process of {@link #actingProcesses()}, as the system;
+     * <p>Only {@link FirstLaunchStep#run} steps, each running a process of {@link #accountReadyProcesses()}, as the system;
      * keys unique within the account. {@code results} gives only {@link FirstLaunchResults#userId}: the content phase's
      * outputs are not kept. Each step runs once per account (recorded); a failure is retried by the job and, until it
      * succeeds, listed in the report.
@@ -58,6 +58,15 @@ public interface FirstLaunchHandler {
     default List<FirstLaunchStep> whenAccountReady(FirstLaunchConfig config, FirstLaunchAccount account,
         FirstLaunchResults results) {
         return List.of();
+    }
+
+    /**
+     * The processes the steps of {@link #whenAccountReady} may run: sub-process-only or internal ones, not the
+     * platform's ({@code FIRST_LAUNCH_}), none of {@link #actingProcesses()} (startup check {@code FIRST_LAUNCH}).
+     * Empty by default.
+     */
+    default Set<String> accountReadyProcesses() {
+        return Set.of();
     }
 
     /**

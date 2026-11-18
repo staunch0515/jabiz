@@ -19,25 +19,34 @@ import java.util.UUID;
  * The application's steps for an account once it is ready in the waiting phase
  * ({@link FirstLaunchHandler#whenAccountReady}; docs/design/23-first-launch.md section 9): asked of the handler with
  * the configuration this instance started with, and checked - {@code run} steps only, processes of
- * {@link FirstLaunchHandler#actingProcesses()} only, keys unique. Pure but for the configuration read at startup.
+ * {@link FirstLaunchHandler#accountReadyProcesses()} only, keys unique. Pure but for the configuration read at startup.
  */
 @Component
 public class ReadySteps {
 
     /** What the handler gives for an account: the steps, or why none can be had. */
-    public record Plan(List<FirstLaunchStep> steps, FirstLaunchResults results, String problem) {
+    /**
+     * @param configMissing the configuration is not there: the steps cannot be had, now or later (reported, not
+     *                      waited for)
+     */
+    public record Plan(List<FirstLaunchStep> steps, FirstLaunchResults results, String problem,
+        boolean configMissing) {
         public Plan {
             steps = List.copyOf(steps);
         }
 
         static Plan none() {
-            return new Plan(List.of(), null, null);
+            return new Plan(List.of(), null, null, false);
         }
 
         static Plan problem(String problem) {
-            return new Plan(List.of(), null, problem);
+            return new Plan(List.of(), null, problem, false);
         }
     }
+
+    /** The problem when the configuration is not there. */
+    static final String CONFIG_MISSING = "the first-launch configuration is not there (or does not read): the"
+        + " application's steps for a ready account cannot run; put it back and restart";
 
     private final WaitingSettings settings;
     private final ObjectProvider<FirstLaunchHandler> handlers;
@@ -55,8 +64,8 @@ public class ReadySteps {
         }
         Optional<FirstLaunchConfig> config = settings.config();
         if (config.isEmpty()) {
-            return Plan.problem("the first-launch configuration is not there (or does not read): the application's"
-                + " steps for a ready account cannot be had");
+            return handler.get().accountReadyProcesses().isEmpty() ? Plan.none()
+                : new Plan(List.of(), null, CONFIG_MISSING, true);
         }
         List<FirstLaunchAccount> accounts = config.get().accounts();
         if (recorded.position() >= accounts.size()) {
@@ -65,7 +74,7 @@ public class ReadySteps {
         FirstLaunchResults results = results(state, accounts);
         List<FirstLaunchStep> steps = handler.get().whenAccountReady(config.get(), accounts.get(recorded.position()),
             results);
-        Set<String> acting = handler.get().actingProcesses();
+        Set<String> allowed = handler.get().accountReadyProcesses();
         Set<String> keys = new HashSet<>();
         List<String> problems = new ArrayList<>();
         for (FirstLaunchStep step : steps) {
@@ -75,22 +84,23 @@ public class ReadySteps {
             if (step.asAccount() != null || step.await()) {
                 problems.add("step " + step.key() + " acts as an account or waits; only run steps are allowed here");
             }
-            if (!acting.contains(step.process())) {
+            if (!allowed.contains(step.process())) {
                 problems.add("step " + step.key() + " runs " + step.process() + ", which is not among the handler's"
-                    + " actingProcesses()");
+                    + " accountReadyProcesses()");
             }
         }
-        return problems.isEmpty() ? new Plan(steps, results, null) : Plan.problem(String.join("; ", problems));
+        return problems.isEmpty() ? new Plan(steps, results, null, false) : Plan.problem(String.join("; ", problems));
     }
 
     /**
      * The keys of the application's steps for the run's account that have not run and are still to be waited for: the
-     * account is ready, the step has not run, and its item has not failed (a failure is left to people, and listed).
+     * account is ready, the step has not run, its item has not failed, and the configuration is there (a failure or a
+     * missing configuration is left to people, and listed).
      */
     public List<String> waitingFor(LoadWaitingState.State state, FirstLaunchAccountStore.Recorded recorded,
         GrantPlan.Account account) {
         if (account == null || account.leftToPeople() || !account.anyApplied()
-            || state.readyFailed().contains(recorded.userId())) {
+            || state.readyFailed().contains(recorded.userId()) || of(state, recorded).configMissing()) {
             return List.of();
         }
         return notRun(state, recorded);

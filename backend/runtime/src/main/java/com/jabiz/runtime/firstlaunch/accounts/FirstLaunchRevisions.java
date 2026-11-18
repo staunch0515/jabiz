@@ -48,10 +48,12 @@ public class FirstLaunchRevisions implements ApplicationListener<ApplicationRead
     private final JsonMapper json;
     private final Environment environment;
     private final Clock clock;
+    private final org.springframework.beans.factory.ObjectProvider<com.jabiz.firstlaunch.FirstLaunchHandler> handlers;
 
     public FirstLaunchRevisions(WaitingSettings settings, FirstLaunchRuns runs, FirstLaunchAccountStore store,
         ConfigShape shape, ProcessExecutor processes,
-        JsonMapper json, Environment environment, Clock clock) {
+        JsonMapper json, Environment environment, Clock clock,
+        org.springframework.beans.factory.ObjectProvider<com.jabiz.firstlaunch.FirstLaunchHandler> handlers) {
         this.settings = settings;
         this.runs = runs;
         this.store = store;
@@ -60,12 +62,16 @@ public class FirstLaunchRevisions implements ApplicationListener<ApplicationRead
         this.json = json;
         this.environment = environment;
         this.clock = clock;
+        this.handlers = handlers;
     }
 
     @Override
     public void onApplicationEvent(ApplicationReadyEvent event) {
-        if (environment.getProperty("jabiz.ops.verify-restore.enabled", Boolean.class, false)
-            || settings.config().isEmpty()) {
+        if (environment.getProperty("jabiz.ops.verify-restore.enabled", Boolean.class, false)) {
+            return;
+        }
+        if (settings.config().isEmpty()) {
+            Schedulers.boundedElastic().schedule(this::warnWithoutConfig);
             return;
         }
         Schedulers.boundedElastic().schedule(() -> {
@@ -143,6 +149,25 @@ public class FirstLaunchRevisions implements ApplicationListener<ApplicationRead
             run.runId().toString(), "REVISED", null, null, null, config.hash(), json.writeValueAsString(detail))),
             "first-launch-" + run.runId() + "-revised").block();
         return List.copyOf(keys);
+    }
+
+    /**
+     * A run still waits but the configuration is gone (or does not read): the application's steps for ready accounts
+     * cannot run (section 9). Said at every start, and listed in the run's report.
+     */
+    private void warnWithoutConfig() {
+        try {
+            boolean waiting = asSystem(runs.current()).block()
+                .map(run -> run.state() == FirstLaunchRun.State.CONTENT_DONE).orElse(false);
+            if (waiting && handlers.orderedStream().anyMatch(handler -> !handler.accountReadyProcesses().isEmpty())) {
+                log.warn("First launch: the run still waits for its accounts, but the first-launch configuration"
+                    + " (JABIZ_FIRST_LAUNCH_CONFIG) is not there or does not read: the application's steps for ready"
+                    + " accounts cannot run. Put the configuration back and restart; until then they are listed as"
+                    + " left for people in the report.");
+            }
+        } catch (RuntimeException e) {
+            log.error("First launch: reading the run failed", e);
+        }
     }
 
     /** The hash of the configuration last applied: the latest revision's, or the run's. */

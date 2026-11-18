@@ -67,6 +67,10 @@ public class RunReadySteps<C extends ProcessContext> implements StepHandler<RunR
                 return Mono.empty();
             }
             ReadySteps.Plan plan = steps.of(state, recorded);
+            if (plan.configMissing()) {
+                // Reported by the startup and the run's report; failing every minute would change nothing.
+                return Mono.empty();
+            }
             if (plan.problem() != null) {
                 return Mono.error(new IllegalStateException("First launch: account " + recorded.label() + " (user "
                     + user + "): " + plan.problem()));

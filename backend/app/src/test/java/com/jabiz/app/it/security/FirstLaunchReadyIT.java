@@ -148,7 +148,7 @@ class FirstLaunchReadyIT extends SignUpItSupport {
                 }
 
                 @Override
-                public Set<String> actingProcesses() {
+                public Set<String> accountReadyProcesses() {
                     return Set.of("FL_READY_IT_JOIN");
                 }
 

@@ -5661,7 +5661,7 @@ QuizBuks 的 #545、#546、#547 用了 43.5–45 分钟，#545 到点被取消�
 | 17zz23c-2 | 等人阶段：任务 `jabiz.first-launch`（`FIRST_LAUNCH_ADVANCE`：邀请与再邀请、授予、管理员最后且须指纹确认、撤下待命角色、`DONE` / `EXPIRED`、报告 `FIRST_LAUNCH_REPORT`） |
 | 17zz23c-3 | 改邮箱的补救（D83）：`FIRST_LAUNCH_EMAIL_REVISE`、`CredentialChain` 的窄例外、`ConfigShape`、`FirstLaunchRevisions`、`REVISED` |
 | 17zz23c-4 | 测试：`GrantPlanTest`、`EmailRevisionTest`、`ConfigShapeTest`、`CredentialChainTest`、`FirstLaunchAccountsIT`、`FirstLaunchWaitingIT`、`FirstLaunchExpiryIT`；文档：设计 23 §8、D83、10 §15.14、指南、`CLAUDE.md` |
-| 17zz23c2-1 | 账号就绪后的应用步骤：`FirstLaunchHandler.whenAccountReady`、选项 `r…`、`FIRST_LAUNCH_ACCOUNT_READY`、V69 `sys_first_launch_ready`（每步一次）、失败不影响他人并列入报告；测试 `FirstLaunchReadyIT`；设计 23 §9 |
+| 17zz23c2-1 | 账号就绪后的应用步骤：`FirstLaunchHandler.whenAccountReady`、`accountReadyProcesses()` 与启动检查、选项 `r…`、`FIRST_LAUNCH_ACCOUNT_READY`、V69 `sys_first_launch_ready`（每步一次）、失败不影响他人并列入报告；测试 `FirstLaunchReadyChecksTest`、`FirstLaunchReadyIT`；设计 23 §9 |
 ### 线 1.3 的候选（未排期，2026-11-08 总控：首次上线前不做）
 
 | 候选 | 缘由 | 粗估 |
