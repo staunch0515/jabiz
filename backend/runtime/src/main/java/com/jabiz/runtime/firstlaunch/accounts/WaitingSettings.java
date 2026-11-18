@@ -28,6 +28,8 @@ import java.util.stream.Collectors;
 @Component
 public class WaitingSettings implements SmartInitializingSingleton {
 
+    private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(WaitingSettings.class);
+
     private final Environment environment;
     private volatile Optional<FirstLaunchConfig> config = Optional.empty();
 
@@ -73,6 +75,16 @@ public class WaitingSettings implements SmartInitializingSingleton {
             return Optional.empty();
         }
         FirstLaunchConfigReader.Read read = new FirstLaunchConfigReader(settings).read();
-        return read.problems().isEmpty() ? Optional.of(read.config()) : Optional.empty();
+        if (!read.problems().isEmpty()) {
+            // The runner reports them only on a database without users; in the waiting phase nothing else would.
+            StringBuilder report = new StringBuilder("First launch: the configuration has " + read.problems().size()
+                + " problem(s); the waiting phase does not apply it (no address correction, no remaining items in"
+                + " the report):");
+            read.problems().forEach(problem -> report.append(System.lineSeparator()).append("  ")
+                .append(problem.format()));
+            log.warn(report.toString());
+            return Optional.empty();
+        }
+        return Optional.of(read.config());
     }
 }

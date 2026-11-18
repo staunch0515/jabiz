@@ -2,14 +2,11 @@ package com.jabiz.runtime.firstlaunch.accounts;
 
 import com.jabiz.context.RequestContext;
 import com.jabiz.firstlaunch.FirstLaunchConfig;
-import com.jabiz.process.ProcessContext;
-import com.jabiz.process.ProcessDefinition;
 import com.jabiz.runtime.context.RequestContexts;
 import com.jabiz.runtime.firstlaunch.FirstLaunchProcesses;
 import com.jabiz.runtime.firstlaunch.FirstLaunchRun;
 import com.jabiz.runtime.firstlaunch.FirstLaunchRuns;
 import com.jabiz.runtime.process.ProcessExecutor;
-import com.jabiz.runtime.security.InvitationProcesses;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.context.event.ApplicationReadyEvent;
@@ -34,8 +31,8 @@ import java.util.UUID;
  * The one change the first launch takes from its configuration once the content phase is done (decision D83; plan
  * F-LAUNCH section 6.3): at a start in the waiting phase, when the configuration differs from the one the run
  * recorded only in the addresses of accounts that have not accepted their invitation, those accounts get the corrected
- * address ({@code FIRST_LAUNCH_EMAIL_REVISE}) and an invitation there ({@code SEC_USER_INVITE}, in a transaction of its
- * own), and the run records {@code REVISED} with both hashes and the accounts' keys. Any other difference does nothing
+ * address ({@code FIRST_LAUNCH_EMAIL_REVISE}; the job {@code jabiz.first-launch} then invites the corrected address,
+ * which was never invited: invitations count per address), and the run records {@code REVISED} with both hashes and the accounts' keys. Any other difference does nothing
  * but warn: the rest is done in the administration as usual.
  */
 @Component
@@ -48,22 +45,18 @@ public class FirstLaunchRevisions implements ApplicationListener<ApplicationRead
     private final FirstLaunchAccountStore store;
     private final ConfigShape shape;
     private final ProcessExecutor processes;
-    private final ProcessDefinition<InvitationProcesses.InviteInput, InvitationProcesses.InviteOutput, ProcessContext>
-        invite;
     private final JsonMapper json;
     private final Environment environment;
     private final Clock clock;
 
     public FirstLaunchRevisions(WaitingSettings settings, FirstLaunchRuns runs, FirstLaunchAccountStore store,
         ConfigShape shape, ProcessExecutor processes,
-        ProcessDefinition<InvitationProcesses.InviteInput, InvitationProcesses.InviteOutput, ProcessContext> invite,
         JsonMapper json, Environment environment, Clock clock) {
         this.settings = settings;
         this.runs = runs;
         this.store = store;
         this.shape = shape;
         this.processes = processes;
-        this.invite = invite;
         this.json = json;
         this.environment = environment;
         this.clock = clock;
@@ -129,11 +122,9 @@ public class FirstLaunchRevisions implements ApplicationListener<ApplicationRead
             String requestId = "first-launch-" + run.runId() + "-revise-" + revision.key();
             asSystem(processes.execute(FirstLaunchAccountProcesses.REVISE_PROCESS,
                 new FirstLaunchAccountProcesses.ReviseInput(revision.userId(), revision.email())), requestId).block();
-            asSystem(processes.execute(invite, new InvitationProcesses.InviteInput(revision.userId(),
-                InvitationProcesses.DEFAULT_ENTRY)), requestId + "-invite").block();
             keys.add(revision.key());
-            log.warn("First launch: account {} now has the address of the configuration; invited there again, the"
-                + " earlier invitation no longer works", revision.key());
+            log.warn("First launch: account {} now has the address of the configuration; the job jabiz.first-launch"
+                + " invites it there within a minute, the earlier invitation no longer works", revision.key());
         }
         Map<String, Object> detail = new LinkedHashMap<>();
         detail.put("previousHash", applied);

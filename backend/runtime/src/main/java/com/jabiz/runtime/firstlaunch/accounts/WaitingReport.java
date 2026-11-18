@@ -14,6 +14,8 @@ import java.util.Map;
  */
 final class WaitingReport {
 
+    private static final java.util.regex.Pattern PLACEHOLDER = java.util.regex.Pattern.compile("\\{([a-zA-Z]+)}");
+
     private WaitingReport() {}
 
     static String summary(String kind, LoadWaitingState.State state, List<GrantPlan.Account> accounts,
@@ -83,10 +85,15 @@ final class WaitingReport {
     }
 
     private static String text(MessageCatalog messages, Locale locale, String key, Map<String, String> params) {
-        String template = messages.find(key, locale).orElse(key);
-        for (Map.Entry<String, String> param : params.entrySet()) {
-            template = template.replace("{" + param.getKey() + "}", param.getValue());
+        // One pass: a value holding "{name}" (a display name) is not replaced again.
+        java.util.regex.Matcher matcher = PLACEHOLDER.matcher(messages.find(key, locale).orElse(key));
+        StringBuilder text = new StringBuilder();
+        while (matcher.find()) {
+            String value = params.get(matcher.group(1));
+            matcher.appendReplacement(text, java.util.regex.Matcher.quoteReplacement(value == null ? matcher.group()
+                : value));
         }
-        return template;
+        matcher.appendTail(text);
+        return text.toString();
     }
 }

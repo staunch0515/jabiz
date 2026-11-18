@@ -297,6 +297,8 @@ class FirstLaunchWaitingIT extends SignUpItSupport {
         configFile(config(A, B));
         assertThat(revisions.revise(onDisk())).containsExactly("B");
         deliver();
+        assertThat(to(B)).as("the job invites the corrected address").isEmpty();
+        advance();
         assertThat(to(B)).hasSize(1);
         assertThat(refusal(anonymous("/api/auth/invitation/confirm", Map.of("token", wrongLink, "password", OWN)),
             422)).isEqualTo("TOKEN_INVALID");
@@ -304,7 +306,7 @@ class FirstLaunchWaitingIT extends SignUpItSupport {
         assertThat(revisions.revise(onDisk())).as("applied already").isEmpty();
         assertThat(revised()).isEqualTo(1);
         advance();
-        assertThat(to(B)).as("not invited again by the job").hasSize(1);
+        assertThat(to(B)).as("invited once").hasSize(1);
         // Anything else that differs: nothing is applied.
         configFile(config(A, B).replace("Bob Staff", "Robert Staff").replace(B, "fl-b2@example.com"));
         assertThat(revisions.revise(onDisk())).isEmpty();
@@ -331,6 +333,18 @@ class FirstLaunchWaitingIT extends SignUpItSupport {
             + " ON o.process_seq_id = v.process_seq_id WHERE v.user_id = ?::uuid AND o.process_name ="
             + " 'SEC_USER_ROLE_ASSIGN'", userId(B))).singleElement()
             .satisfies(row -> assertThat(row).containsEntry("actor_id", "system"));
+
+        // A role the administrators take away again is theirs: the first launch does not give it again.
+        String staff = String.valueOf(query("SELECT user_role_id::text AS id FROM sec_user_role_version v JOIN"
+            + " sec_role_version r ON r.role_id = v.role_id WHERE v.user_id = ?::uuid AND r.role_code = 'IT_STAFF'"
+            + " LIMIT 1", userId(B)).getFirst().get("id"));
+        Map<String, Object> assignment = get("/api/datasets/" + SecurityEntities.USER_ROLE_DATASET + "/entities/"
+            + staff, admin()).expectStatus().isOk().expectBody(MAP).returnResult().getResponseBody();
+        post("/api/datasets/" + SecurityEntities.USER_ROLE_DATASET + "/commit", admin(), Map.of("changes",
+            List.of(Map.of("action", "DELETE", "id", staff, "version", assignment.get("version")))))
+            .expectStatus().isOk();
+        advance();
+        assertThat(rolesOf(userId(B))).isEmpty();
 
         // The administrator: the ordinary role at once, the administrator's only after the operator's confirmation.
         acceptAndBind(A);
@@ -360,7 +374,7 @@ class FirstLaunchWaitingIT extends SignUpItSupport {
         assertThat(to(A).getLast().getSubject()).isEqualTo("First launch report");
         assertThat(text(to(A).getLast())).contains("regular operation").contains("IT_SUPER APPLIED")
             .contains("Publish the legal texts.").contains("JABIZ_FIRST_LAUNCH_");
-        assertThat(to(B)).hasSize(1);
+        assertThat(text(to(A).getLast())).contains("IT_STAFF DECIDED");
         Map<String, Object> done = query("SELECT detail::text AS detail FROM sys_first_launch_event WHERE kind ="
             + " 'DONE'").getFirst();
         assertThat(String.valueOf(done.get("detail"))).contains("\"IT_SUPER\": \"APPLIED\"").doesNotContain(A);

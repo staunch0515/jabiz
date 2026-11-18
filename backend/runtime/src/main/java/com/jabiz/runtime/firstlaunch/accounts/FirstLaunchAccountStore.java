@@ -49,14 +49,18 @@ public class FirstLaunchAccountStore {
      * @param mfaConfirmedAt when the current second factor was confirmed; null: none
      * @param roles          the codes of the roles the user holds now
      * @param pendingRoles   the role ids a protected change waiting for approval would give the user
-     * @param firstInvited   when the first invitation was recorded; null: never
-     * @param invitations    how many invitations were recorded
+     * @param decidedRoles   the role ids the user was ever assigned, or a protected change for which was decided -
+     *                       whatever the administrators did with them since is theirs
+     * @param firstInvited   when the first invitation to the current address was recorded; null: never
+     * @param invitations    how many invitations to the current address were recorded
      */
     public record Facts(UUID userId, String email, String displayName, String locale, Instant acceptedAt,
-        Instant mfaConfirmedAt, Set<String> roles, Set<UUID> pendingRoles, Instant firstInvited, int invitations) {
+        Instant mfaConfirmedAt, Set<String> roles, Set<UUID> pendingRoles, Set<UUID> decidedRoles,
+        Instant firstInvited, int invitations) {
         public Facts {
             roles = Set.copyOf(roles);
             pendingRoles = Set.copyOf(pendingRoles);
+            decidedRoles = Set.copyOf(decidedRoles);
         }
     }
 
@@ -169,23 +173,32 @@ public class FirstLaunchAccountStore {
             + " AND effect_start_time <= :now ORDER BY user_role_id, effect_start_time DESC, version_no DESC) a"
             + " JOIN (SELECT DISTINCT ON (role_id) role_id, role_code FROM sec_role_version ORDER BY role_id,"
             + " version_no DESC) r ON r.role_id = a.role_id WHERE NOT a.is_deleted", params).collectList();
-        Mono<List<Map<String, Object>>> pending = engine().select("SELECT c.user_id, c.role_id FROM (SELECT DISTINCT"
-            + " ON (change_id) user_id, role_id, kind, status, is_deleted FROM sec_protected_change_version WHERE"
-            + " user_id = ANY(:texts) ORDER BY change_id, version_no DESC) c WHERE NOT c.is_deleted AND c.kind = :kind"
-            + " AND c.status = 'PENDING'", Map.of("texts", BoundValue.of(userIds.stream().map(UUID::toString)
+        Mono<List<Map<String, Object>>> changes = engine().select("SELECT c.user_id, c.role_id, c.status FROM (SELECT"
+            + " DISTINCT ON (change_id) user_id, role_id, kind, status, is_deleted FROM sec_protected_change_version"
+            + " WHERE user_id = ANY(:texts) ORDER BY change_id, version_no DESC) c WHERE NOT c.is_deleted"
+            + " AND c.kind = :kind", Map.of("texts", BoundValue.of(userIds.stream().map(UUID::toString)
                 .toArray(String[]::new)), "kind", BoundValue.of(ProtectedChangeEntities.USER_ROLE))).collectList();
-        Mono<List<Map<String, Object>>> invitations = engine().select("SELECT user_id, min(created_time) AS first,"
-            + " count(*) AS invitations FROM sys_mail_message WHERE template = :template AND user_id = ANY(:users)"
-            + " GROUP BY user_id", Map.of("users", params.get("users"), "template",
+        // To the current address only: a corrected address is invited anew, and reminded on its own time.
+        Mono<List<Map<String, Object>>> invitations = engine().select("SELECT m.user_id, min(m.created_time) AS first,"
+            + " count(*) AS invitations FROM sys_mail_message m JOIN (SELECT DISTINCT ON (user_id) user_id, email FROM"
+            + " sec_user_version WHERE user_id = ANY(:users) ORDER BY user_id, version_no DESC) u ON u.user_id ="
+            + " m.user_id AND lower(u.email) = lower(m.address) WHERE m.template = :template AND m.user_id ="
+            + " ANY(:users) GROUP BY m.user_id", Map.of("users", params.get("users"), "template",
                 BoundValue.of(INVITATION_TEMPLATE))).collectList();
-        return Mono.zip(users, factors, roles, pending, invitations).map(found -> {
+        Mono<List<Map<String, Object>>> ever = engine().select("SELECT DISTINCT user_id, role_id FROM"
+            + " sec_user_role_version WHERE user_id = ANY(:users)", Map.of("users", params.get("users"))).collectList();
+        return Mono.zip(users, factors, roles, changes, invitations, ever).map(found -> {
             Map<UUID, Instant> mfa = new HashMap<>();
             found.getT2().forEach(row -> mfa.put(Rows.uuid(row.get("user_id")), Rows.instant(row.get("confirmed"))));
             Map<UUID, List<String>> held = new HashMap<>();
             found.getT3().forEach(row -> held.computeIfAbsent(Rows.uuid(row.get("user_id")), id -> new ArrayList<>())
                 .add(Rows.string(row.get("role_code"))));
             Map<UUID, List<UUID>> waiting = new HashMap<>();
-            found.getT4().forEach(row -> waiting.computeIfAbsent(Rows.uuid(row.get("user_id")),
+            Map<UUID, List<UUID>> decided = new HashMap<>();
+            found.getT4().forEach(row -> ("PENDING".equals(Rows.string(row.get("status"))) ? waiting : decided)
+                .computeIfAbsent(Rows.uuid(row.get("user_id")), id -> new ArrayList<>())
+                .add(Rows.uuid(row.get("role_id"))));
+            found.getT6().forEach(row -> decided.computeIfAbsent(Rows.uuid(row.get("user_id")),
                 id -> new ArrayList<>()).add(Rows.uuid(row.get("role_id"))));
             Map<UUID, Map<String, Object>> invited = new HashMap<>();
             found.getT5().forEach(row -> invited.put(Rows.uuid(row.get("user_id")), row));
@@ -200,6 +213,7 @@ public class FirstLaunchAccountStore {
                     Rows.string(row.get("locale")), accepted ? Rows.instant(row.get("email_verified_at")) : null,
                     mfa.get(user), Set.copyOf(held.getOrDefault(user, List.of())),
                     Set.copyOf(waiting.getOrDefault(user, List.of())),
+                    Set.copyOf(decided.getOrDefault(user, List.of())),
                     invitation == null ? null : Rows.instant(invitation.get("first")),
                     invitation == null ? 0 : Rows.longValue(invitation.get("invitations")).intValue()));
             }

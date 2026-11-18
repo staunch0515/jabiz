@@ -74,13 +74,13 @@ public class FirstLaunchWaiting {
     static final String ITEMS = "jabiz.first_launch_items";
     public static final String REPORT_PROCESS_NAME = "FIRST_LAUNCH_REPORT";
     /** The report mail: {@code summary} its one parameter, written in the recipient's language. */
-    public static final String REPORT_TEMPLATE = "jabiz.first-launch.report";
+    public static final String REPORT_TEMPLATE = com.jabiz.runtime.mail.PlatformMailTemplates.FIRST_LAUNCH_REPORT;
     static final String END = "end";
 
     /** The reason recorded with the grants: the first launch, by its configuration's hash. */
     static final String REASON = "First launch configuration ";
 
-    /** @param item the account's user id, {@code a} and the user id without hyphens, or {@value #END} */
+    /** @param item the account's user id (36 characters), {@code a} and its 32 hex digits, or {@value #END} */
     public record AdvanceInput(@NotBlank @Size(max = 36) String item) {}
 
     public record AdvanceOutput(String item, int assigned, int invited, boolean withdrawn, String ended) {}
@@ -219,6 +219,8 @@ public class FirstLaunchWaiting {
                     states.put(code, GrantPlan.RoleState.APPLIED);
                 } else if (role != null && facts.pendingRoles().contains(role.roleId())) {
                     states.put(code, GrantPlan.RoleState.PENDING);
+                } else if (role != null && facts.decidedRoles().contains(role.roleId())) {
+                    states.put(code, GrantPlan.RoleState.DECIDED);
                 }
             }
             accounts.add(new GrantPlan.Account(recorded.key(), recorded.userId(), roles, facts.acceptedAt(),
@@ -244,7 +246,8 @@ public class FirstLaunchWaiting {
         if (END.equals(item)) {
             return end(state, accounts, now, settings, messages, handlers, throttle);
         }
-        boolean administrators = item.startsWith("a");
+        // A user id has 36 characters; the administrator's item is "a" and its 32 hex digits.
+        boolean administrators = item.length() == 33;
         UUID user = administrators ? fromHex(item.substring(1)) : UUID.fromString(item);
         List<ProtectedChangeProcesses.AssignRoleInput> assign = new ArrayList<>();
         List<InvitationProcesses.InviteInput> invite = new ArrayList<>();
@@ -308,7 +311,8 @@ public class FirstLaunchWaiting {
         WaitingSettings settings, MessageCatalog messages, ObjectProvider<FirstLaunchHandler> handlers,
         Throttle throttle) {
         boolean expired = GrantPlan.expired(state.run().stateTime(), settings.deadline(), now);
-        boolean complete = GrantPlan.complete(accounts) && accounts.size() == state.accounts().size();
+        // An account whose user was deleted meanwhile is nobody's to wait for.
+        boolean complete = GrantPlan.complete(accounts);
         if (!expired && !complete) {
             if (throttle.due("waiting", now)) {
                 GrantPlan.unfinished(accounts).forEach(account -> log.info("First launch: waiting for account {}:"

@@ -80,6 +80,16 @@ class GrantPlanTest {
             "QB_ADMIN_SUPER"));
     }
 
+    /** A grant the administrators rejected, or a role they took away again, is theirs: not asked for again. */
+    @Test
+    void aGrantTheAdministratorsDecidedIsNotAskedForAgain() {
+        Instant mfa = INVITED.plusSeconds(120);
+        Account a = account("A", A, List.of(OPERATOR, SUPER), INVITED, mfa,
+            Map.of("QB_OPERATOR", RoleState.APPLIED, "QB_ADMIN_SUPER", RoleState.DECIDED), false);
+        assertThat(next(List.of(a), Set.of(GrantPlan.fingerprint(RUN, A, mfa)))).isEmpty();
+        assertThat(GrantPlan.complete(List.of(a))).isTrue();
+    }
+
     @Test
     void anAdministratorsRoleWaitsForTheOperatorsConfirmationOfTheFingerprint() {
         Instant mfa = INVITED.plusSeconds(120);

@@ -64,8 +64,8 @@ final class CredentialChain {
      * creation only when the system makes it before the account was ever used.
      */
     static final String FIRST_LAUNCH_EMAIL_REVISE = "FIRST_LAUNCH_EMAIL_REVISE";
-    /** The actor of platform processes ({@code RequestContext.SYSTEM_ACTOR}). */
-    private static final String SYSTEM = "system";
+    /** The actor of platform processes. */
+    private static final String SYSTEM = com.jabiz.context.RequestContext.SYSTEM_ACTOR;
 
     enum Source { USER, IDENTITY, MFA }
 

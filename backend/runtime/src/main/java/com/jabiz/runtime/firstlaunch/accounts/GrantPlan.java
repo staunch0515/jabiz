@@ -40,8 +40,12 @@ public final class GrantPlan {
         }
     }
 
-    /** Where a configured role of an account stands. */
-    public enum RoleState { NONE, APPLIED, PENDING }
+    /**
+     * Where a configured role of an account stands: never given ({@code NONE}), in effect, waiting for another
+     * administrator's approval, or decided by the administrators otherwise - a grant they rejected, a role given and
+     * taken away again - which the first launch leaves to them.
+     */
+    public enum RoleState { NONE, APPLIED, PENDING, DECIDED }
 
     /**
      * An account of the run as it is now.
