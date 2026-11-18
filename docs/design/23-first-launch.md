@@ -129,7 +129,9 @@
 | 首发审批 | 系统步骤 `APPROVAL_FIRST_LAUNCH_DECIDE`（`subProcessOnly()`，输入审批请求编号） | 批准其余各级，每级一条决定（`first-launch:<级>`，理由为配置哈希），照常发 `jabiz.approval.approved`；带限额的级拒绝。决定人不是用户编号：显示决定人的地方把 `first-launch:` 开头的当作首发 |
 
 **文件步骤**（17zz23d）：`FirstLaunchStep.file(键, new FileSource(策略, 相对路径, 取出字节, 名称))`，通常加上 `.asAccount(代号)`。
-- **来源**：字节只来自配置的目录，经 `FirstLaunchConfig.Files` 读取：路径规范化后不得出目录、不经符号链接、单个文件有大小上限。处理器的函数只从读到的字节中取出要存的部分（如发起方包中 base64 的图片）。
+- **来源**：字节只来自配置的目录，经 `FirstLaunchConfig.Files` 读取：路径规范化后不得出目录、不经符号链接、单个文件有大小上限。处理器的函数只从读到的字节中取出要存的部分（如发起方包中 base64 的图片）。内存中的字节有两道上限：
+  - 源文件按 `jabiz.first-launch.max-file-bytes` 读取，所以取出的字节不会超过它；
+  - 取出的字节在进入流水线之前，先按策略的大小上限检查（`storeGenerated` 的第一步），超出即 413。
 - **存储**：经平台完整的上传流水线（`FileUploadService.storeGenerated`）：按内容判定类型、图片重新编码并去掉元数据、策略的大小与类型。登记为该账号的上传，所以内容流程"只接受操作人自己上传的文件"照常成立。
 - **步骤的输出**：文件编号。文件名不进 `op_process.input_summary`。
 - **唯一放宽的是上传权限**：首发建立的账号此时还没有任何权限。代替它的是处理器在 `filePolicies()` 中声明的策略（启动检查 `FIRST_LAUNCH` 要求策略存在），加上代行的条件（本运行建立、从未有过凭据、运行仍在内容阶段）。

@@ -24,7 +24,9 @@ import java.util.UUID;
  * are registered as the upload of the step's account, so that content processes, which accept only their actor's own
  * uploads, take them. Nothing is loosened for the first launch but the upload permission, which an account the run
  * created has not yet: in its place stand the handler's declared policies and the conditions of acting (a user the run
- * created with no credential of their own, while the run's content phase goes on). Only the runner uses this class (an
+ * created with no credential of their own, while the run's content phase goes on). The bytes in memory are bounded
+ * twice: the source file is read only up to {@code jabiz.first-launch.max-file-bytes}, and what the handler picks out
+ * of it is held to the policy's size before anything else is done with it (413). Only the runner uses this class (an
  * architecture test).
  */
 @Component
