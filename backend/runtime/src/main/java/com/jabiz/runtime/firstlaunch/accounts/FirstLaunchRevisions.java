@@ -116,16 +116,7 @@ public class FirstLaunchRevisions implements ApplicationListener<ApplicationRead
                     user.acceptedAt() != null));
             }
         }
-        // A place whose user was deleted meanwhile is not compared: there is nobody left to correct.
-        java.util.Set<Integer> gone = new java.util.HashSet<>();
-        accounts.stream().filter(account -> !facts.containsKey(account.userId()))
-            .forEach(account -> gone.add(account.position()));
-        Map<String, String> emails = new LinkedHashMap<>();
-        for (int i = 0; i < config.accounts().size(); i++) {
-            if (!gone.contains(i)) {
-                emails.put("#" + (i + 1), config.accounts().get(i).email());
-            }
-        }
+        Map<String, String> emails = configuredEmails(config, accounts, facts.keySet());
         EmailRevision.Outcome outcome = EmailRevision.compare(recorded, emails, otherDifferences);
         if (!outcome.refusals().isEmpty()) {
             log.warn("First launch: the content phase is done; the configuration (hash {}) is not applied: {}. Only the"
@@ -174,6 +165,24 @@ public class FirstLaunchRevisions implements ApplicationListener<ApplicationRead
         } catch (RuntimeException e) {
             log.error("First launch: reading the run failed", e);
         }
+    }
+
+    /**
+     * The configuration's addresses by place ({@code #1}, ...), leaving out the places whose user was deleted meanwhile:
+     * there is nobody left to correct, and the rest is compared as usual.
+     */
+    static Map<String, String> configuredEmails(FirstLaunchConfig config,
+        List<FirstLaunchAccountStore.Recorded> accounts, java.util.Set<java.util.UUID> users) {
+        java.util.Set<Integer> gone = new java.util.HashSet<>();
+        accounts.stream().filter(account -> !users.contains(account.userId()))
+            .forEach(account -> gone.add(account.position()));
+        Map<String, String> emails = new LinkedHashMap<>();
+        for (int i = 0; i < config.accounts().size(); i++) {
+            if (!gone.contains(i)) {
+                emails.put("#" + (i + 1), config.accounts().get(i).email());
+            }
+        }
+        return emails;
     }
 
     /** The hash of the configuration last applied: the latest revision's, or the run's. */

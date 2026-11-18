@@ -64,6 +64,8 @@ class FirstLaunchReadyIT extends SignUpItSupport {
     static final String OWN = "own horse battery";
     /** What the application's step saw: the actor, and the user ids it was given. */
     static final List<String> JOINED = new CopyOnWriteArrayList<>();
+    /** What the content phase's acting step saw: the actor, and the user id the results gave by key. */
+    static final List<String> ACTED = new CopyOnWriteArrayList<>();
 
     @DynamicPropertySource
     static void firstLaunch(DynamicPropertyRegistry registry) {
@@ -89,6 +91,8 @@ class FirstLaunchReadyIT extends SignUpItSupport {
     public record Roles() {}
 
     public record Join(String member, String lead) {}
+
+    public record Act(String self) {}
 
     @TestConfiguration
     static class Handler {
@@ -130,6 +134,22 @@ class FirstLaunchReadyIT extends SignUpItSupport {
         }
 
         @Bean
+        ProcessDefinition<Act, Boolean, ProcessContext> firstLaunchReadyItAct() {
+            return ProcessDefinition.define("FL_READY_IT_ACT", 1, Act.class, Boolean.class, ProcessContext.class,
+                pb -> pb
+                    .permissions("test.first-launch")
+                    .subProcessOnly()
+                    .contextFactory((start, input) -> {
+                        ProcessContext ctx = new ProcessContext(start);
+                        ctx.put("in", input);
+                        return ctx;
+                    })
+                    .compute("Act", (metadata, ctx) -> ACTED.add(ctx.request().actorId() + " "
+                        + ctx.get("in", Act.class).self()))
+                    .outputMapper(ctx -> true));
+        }
+
+        @Bean
         FirstLaunchHandler firstLaunchReadyItHandler() {
             return new FirstLaunchHandler() {
                 @Override
@@ -144,7 +164,15 @@ class FirstLaunchReadyIT extends SignUpItSupport {
 
                 @Override
                 public List<FirstLaunchStep> plan(FirstLaunchConfig config) {
-                    return List.of(FirstLaunchStep.run("roles", "FL_READY_IT_ROLES", results -> new Roles()));
+                    // The platform keys the account steps by place; the configuration's key still finds them.
+                    return List.of(FirstLaunchStep.run("roles", "FL_READY_IT_ROLES", results -> new Roles()),
+                        FirstLaunchStep.run("act", "FL_READY_IT_ACT",
+                            results -> new Act(results.userId("fl-r-alice"))).asAccount("fl-r-alice"));
+                }
+
+                @Override
+                public Set<String> actingProcesses() {
+                    return Set.of("FL_READY_IT_ACT");
                 }
 
                 @Override
@@ -229,6 +257,11 @@ class FirstLaunchReadyIT extends SignUpItSupport {
             assertThat(System.nanoTime()).isLessThan(end);
             Thread.sleep(50);
         }
+        // In the content phase a step acted as Alice, found by her key though the account's step is keyed by place.
+        assertThat(ACTED).containsExactly(userId(A) + " " + userId(A));
+        assertThat(query("SELECT request_id FROM op_process WHERE request_id LIKE 'first-launch-%'"))
+            .extracting(row -> String.valueOf(row.get("request_id"))).noneMatch(id -> id.contains("fl-r-"))
+            .anyMatch(id -> id.endsWith("-account:#1"));
         assertThat(advance()).isEqualTo(JobRunner.Outcome.SUCCEEDED);
         // Invited, not accepted: not ready, nothing runs.
         assertThat(JOINED).isEmpty();

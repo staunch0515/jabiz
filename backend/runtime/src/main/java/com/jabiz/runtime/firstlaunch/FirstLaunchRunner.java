@@ -239,6 +239,19 @@ public class FirstLaunchRunner implements SmartInitializingSingleton, Applicatio
         return problems;
     }
 
+    /**
+     * How the log and the run's record name a configuration's account: by its place ({@code #n}), never by its key,
+     * which is the user's name (personal data recorded nowhere by the run).
+     */
+    static String accountLabel(FirstLaunchConfig config, String accountKey) {
+        for (int i = 0; i < config.accounts().size(); i++) {
+            if (config.accounts().get(i).key().equals(accountKey)) {
+                return "#" + (i + 1);
+            }
+        }
+        return "(not in the configuration)";
+    }
+
     /** The plan: the platform's steps, then the handler's. */
     List<FirstLaunchStep> plan(FirstLaunchConfig config) {
         List<FirstLaunchStep> steps = new ArrayList<>();
@@ -259,7 +272,7 @@ public class FirstLaunchRunner implements SmartInitializingSingleton, Applicatio
         for (FirstLaunchStep step : plan(config)) {
             report.append(System.lineSeparator()).append("  ").append(text("first-launch.dry-run-step",
                 Map.of("number", number++, "step", step.describe(), "process", step.process(),
-                    "actor", step.asAccount() == null ? "system" : step.asAccount())));
+                    "actor", step.asAccount() == null ? "system" : accountLabel(config, step.asAccount()))));
         }
         log.info(report.toString());
     }
@@ -344,7 +357,8 @@ public class FirstLaunchRunner implements SmartInitializingSingleton, Applicatio
         }
         if (step.asAccount() != null && !powers.actingProcesses().contains(step.process())) {
             throw new IllegalStateException("Step " + step.key() + " runs " + step.process() + " as account "
-                + step.asAccount() + ", but the application's handler does not name it among its acting processes");
+                + accountLabel(config, step.asAccount()) + ", but the application's handler does not name it among its"
+                + " acting processes");
         }
         while (true) {
             Object input = step.input().apply(results);
@@ -486,6 +500,12 @@ public class FirstLaunchRunner implements SmartInitializingSingleton, Applicatio
      */
     private record Results(Map<String, Object> outputs, List<String> accountKeys) implements FirstLaunchResults {
 
+        /** How messages name an account: by its place, never by its key (the user's name). */
+        String label(String accountKey) {
+            int position = accountKeys.indexOf(accountKey);
+            return position < 0 ? "(not in the configuration)" : "#" + (position + 1);
+        }
+
         @Override
         public Optional<Object> output(String stepKey) {
             Object found = outputs.get(stepKey);
@@ -501,7 +521,7 @@ public class FirstLaunchRunner implements SmartInitializingSingleton, Applicatio
         @Override
         public String userId(String accountKey) {
             Object output = output(FirstLaunchStep.accountStepKey(accountKey)).orElseThrow(() ->
-                new IllegalStateException("The account " + accountKey + " has not been created"));
+                new IllegalStateException("The account " + label(accountKey) + " has not been created"));
             if (output instanceof CharSequence id) {
                 return id.toString();
             }
@@ -516,7 +536,7 @@ public class FirstLaunchRunner implements SmartInitializingSingleton, Applicatio
                     }
                 }
             }
-            throw new IllegalStateException("The output of " + FirstLaunchStep.accountStepKey(accountKey)
+            throw new IllegalStateException("The output of the step that creates the account " + label(accountKey)
                 + " names no userId");
         }
     }

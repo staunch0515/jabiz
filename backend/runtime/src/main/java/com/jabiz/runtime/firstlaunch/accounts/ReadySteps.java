@@ -134,7 +134,7 @@ public class ReadySteps {
                             .orElseThrow(() -> new IllegalStateException("No account of the run at place " + position));
                     }
                 }
-                throw new IllegalArgumentException("No account " + accountKey + " in the configuration");
+                throw new IllegalArgumentException("No such account in the configuration");
             }
         };
     }
