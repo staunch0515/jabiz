@@ -111,7 +111,10 @@ class FirstLaunchConfigReaderTest {
         assertThatThrownBy(() -> files.read("../" + outside.getFileName())).hasMessageContaining("leaves");
         assertThatThrownBy(() -> files.read(outside.toString())).hasMessageContaining("Not a relative path");
         assertThatThrownBy(() -> files.read("sponsors/link.json")).hasMessageContaining("symbolic link");
-        assertThatThrownBy(() -> files.read("sponsors/missing.json")).hasMessageContaining("No file");
+        assertThatThrownBy(() -> files.read("sponsors/missing.json")).hasMessageContaining("was not in");
+        // Read as the directory was: a file changed since is refused.
+        write("sponsors/hq/package.json", "{ }");
+        assertThatThrownBy(() -> files.read("sponsors/hq/package.json")).hasMessageContaining("has changed since");
     }
 
     @Test

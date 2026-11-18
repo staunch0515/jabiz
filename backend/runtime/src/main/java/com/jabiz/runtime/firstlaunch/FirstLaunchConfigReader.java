@@ -66,7 +66,8 @@ public final class FirstLaunchConfigReader {
             return new Read(empty(main.getParent()), problems);
         }
         Path directory = main.getParent();
-        String hash = hash(directory, problems);
+        Map<String, String> digests = new java.util.HashMap<>();
+        String hash = hash(directory, problems, digests);
         Map<String, Object> document;
         try {
             document = parse(Files.readAllBytes(main));
@@ -75,7 +76,7 @@ public final class FirstLaunchConfigReader {
         } catch (JacksonException | ClassCastException e) {
             problems.add(new FirstLaunchProblem(main.getFileName().toString(), "not valid YAML: " + e.getMessage(),
                 "fix the file's syntax"));
-            return new Read(empty(directory, hash), problems);
+            return new Read(empty(directory, hash, digests), problems);
         }
         secretKeys(document, "", problems);
         Object version = document.get("version");
@@ -86,7 +87,7 @@ public final class FirstLaunchConfigReader {
         List<String> domains = domains(document.get("allowedEmailDomains"), problems);
         List<FirstLaunchAccount> accounts = accounts(document.get("accounts"), domains, problems);
         return new Read(new FirstLaunchConfig(hash, document, language, domains, accounts,
-            new DirectoryFiles(directory, settings.maxFileBytes())), problems);
+            new DirectoryFiles(directory, settings.maxFileBytes(), digests)), problems);
     }
 
     @SuppressWarnings("unchecked")
@@ -99,12 +100,12 @@ public final class FirstLaunchConfigReader {
     }
 
     private FirstLaunchConfig empty(Path directory) {
-        return empty(directory, "");
+        return empty(directory, "", Map.of());
     }
 
-    private FirstLaunchConfig empty(Path directory, String hash) {
+    private FirstLaunchConfig empty(Path directory, String hash, Map<String, String> digests) {
         return new FirstLaunchConfig(hash, Map.of(), null, List.of(), List.of(),
-            new DirectoryFiles(directory, settings.maxFileBytes()));
+            new DirectoryFiles(directory, settings.maxFileBytes(), digests));
     }
 
     /**
@@ -112,6 +113,11 @@ public final class FirstLaunchConfigReader {
      * and its own SHA-256. Symbolic links and files beyond the limits are problems.
      */
     String hash(Path directory, List<FirstLaunchProblem> problems) {
+        return hash(directory, problems, new java.util.HashMap<>());
+    }
+
+    /** As {@link #hash(Path, List)}, recording each file's own SHA-256 (hex) by relative path in {@code digests}. */
+    String hash(Path directory, List<FirstLaunchProblem> problems, Map<String, String> digests) {
         MessageDigest digest = sha256();
         long total = 0;
         int count = 0;
@@ -135,9 +141,11 @@ public final class FirstLaunchConfigReader {
                         + " bytes (jabiz.first-launch.max-file-bytes)", "make it smaller"));
                     continue;
                 }
+                byte[] own = sha256().digest(Files.readAllBytes(path));
+                digests.put(relative, HexFormat.of().formatHex(own));
                 digest.update(relative.getBytes(StandardCharsets.UTF_8));
                 digest.update((byte) 0);
-                digest.update(sha256().digest(Files.readAllBytes(path)));
+                digest.update(own);
             }
         } catch (IOException e) {
             throw new UncheckedIOException(e);
@@ -285,38 +293,54 @@ public final class FirstLaunchConfigReader {
         return value == null ? null : String.valueOf(value).trim();
     }
 
-    /** The files of the configuration's directory; nothing outside it is read. */
+    /**
+     * The files of the configuration's directory as they were when it was read: nothing outside it, nothing added
+     * since, nothing changed since (each read is checked against the SHA-256 taken then), no symbolic link.
+     */
     static final class DirectoryFiles implements FirstLaunchConfig.Files {
 
         private final Path directory;
         private final long maxBytes;
+        private final Map<String, String> digests;
 
-        DirectoryFiles(Path directory, long maxBytes) {
+        DirectoryFiles(Path directory, long maxBytes, Map<String, String> digests) {
             this.directory = directory;
             this.maxBytes = maxBytes;
+            this.digests = Map.copyOf(digests);
         }
 
         @Override
         public byte[] read(String relativePath) {
             Path path = resolve(relativePath);
-            try {
-                if (!Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS)) {
-                    throw new IllegalArgumentException("No file " + relativePath + " in the configuration's directory");
-                }
-                if (Files.size(path) > maxBytes) {
-                    throw new IllegalArgumentException("The file " + relativePath + " is larger than " + maxBytes
-                        + " bytes (jabiz.first-launch.max-file-bytes)");
-                }
-                return Files.readAllBytes(path);
-            } catch (IOException e) {
-                throw new UncheckedIOException(e);
+            String relative = directory.relativize(path).toString().replace('\\', '/');
+            String expected = digests.get(relative);
+            if (expected == null) {
+                throw new IllegalArgumentException("The file " + relativePath + " was not in the configuration's"
+                    + " directory when it was read");
             }
+            byte[] bytes;
+            try (java.io.InputStream in = Files.newInputStream(path, LinkOption.NOFOLLOW_LINKS)) {
+                bytes = in.readNBytes((int) Math.min(Integer.MAX_VALUE - 8, maxBytes + 1));
+            } catch (IOException e) {
+                throw new IllegalArgumentException("The file " + relativePath + " cannot be read: " + e.getMessage());
+            }
+            if (bytes.length > maxBytes) {
+                throw new IllegalArgumentException("The file " + relativePath + " is larger than " + maxBytes
+                    + " bytes (jabiz.first-launch.max-file-bytes)");
+            }
+            if (!expected.equals(HexFormat.of().formatHex(sha256().digest(bytes)))) {
+                throw new IllegalArgumentException("The file " + relativePath + " has changed since the"
+                    + " configuration was read (its hash is recorded with the run)");
+            }
+            return bytes;
         }
 
         @Override
         public boolean exists(String relativePath) {
             try {
-                return Files.isRegularFile(resolve(relativePath), LinkOption.NOFOLLOW_LINKS);
+                Path path = resolve(relativePath);
+                return digests.containsKey(directory.relativize(path).toString().replace('\\', '/'))
+                    && Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS);
             } catch (IllegalArgumentException e) {
                 return false;
             }

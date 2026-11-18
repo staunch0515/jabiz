@@ -25,10 +25,19 @@ public class FirstLaunchChecks implements PlatformCheck {
 
     private final ObjectProvider<FirstLaunchHandler> handlers;
     private final ProcessRegistry registry;
+    private final java.util.function.Predicate<String> policyExists;
 
-    public FirstLaunchChecks(ObjectProvider<FirstLaunchHandler> handlers, ProcessRegistry registry) {
+    @org.springframework.beans.factory.annotation.Autowired
+    public FirstLaunchChecks(ObjectProvider<FirstLaunchHandler> handlers, ProcessRegistry registry,
+        com.jabiz.runtime.file.FilePolicyRegistry policies) {
+        this(handlers, registry, name -> policies.find(name).isPresent());
+    }
+
+    FirstLaunchChecks(ObjectProvider<FirstLaunchHandler> handlers, ProcessRegistry registry,
+        java.util.function.Predicate<String> policyExists) {
         this.handlers = handlers;
         this.registry = registry;
+        this.policyExists = policyExists;
     }
 
     @Override
@@ -49,6 +58,13 @@ public class FirstLaunchChecks implements PlatformCheck {
                     && process.get().access() != ProcessAccess.SUB_PROCESS_ONLY) {
                     problems.add(CheckProblem.error(CATEGORY, where, "acting process " + name + " is "
                         + process.get().access() + ": a step runs open or sub-process-only processes as an account"));
+                }
+            }
+            for (String policy : handler.filePolicies()) {
+                if (policy == null || policy.isBlank()) {
+                    problems.add(CheckProblem.error(CATEGORY, where, "a file policy has no name"));
+                } else if (!policyExists.test(policy)) {
+                    problems.add(CheckProblem.error(CATEGORY, where, "file policy " + policy + " does not exist"));
                 }
             }
             for (String key : handler.publishableControlKeys()) {
