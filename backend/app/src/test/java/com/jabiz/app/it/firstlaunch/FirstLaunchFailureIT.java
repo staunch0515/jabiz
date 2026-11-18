@@ -159,5 +159,11 @@ class FirstLaunchFailureIT extends PostgresIntegrationTest {
             .hasMessageContaining("清空数据库");
         assertThat(query("SELECT kind FROM sys_first_launch_event")).extracting(row -> row.get("kind"))
             .containsExactly("FAILED");
+        // Without the configuration as well: the record decides, not the settings.
+        FirstLaunchRunner bare = new FirstLaunchRunner(new org.springframework.mock.env.MockEnvironment(), runs,
+            new FirstLaunchGate(), processes, handlers, platformSteps, messages, clockBean, exits, json);
+        assertThatThrownBy(bare::afterSingletonsInstantiated)
+            .isInstanceOf(FirstLaunchRunner.FirstLaunchFailedException.class)
+            .hasMessageContaining("broken");
     }
 }

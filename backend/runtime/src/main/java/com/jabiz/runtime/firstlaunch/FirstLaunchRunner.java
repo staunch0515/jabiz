@@ -94,52 +94,62 @@ public class FirstLaunchRunner implements SmartInitializingSingleton, Applicatio
 
     @Override
     public void afterSingletonsInstantiated() {
-        if (!settings.configured()) {
-            return;
-        }
         if (environment.getProperty("jabiz.ops.verify-restore.enabled", Boolean.class, false)) {
-            log.info(text("first-launch.restore", Map.of()));
+            if (settings.configured()) {
+                log.info(text("first-launch.restore", Map.of()));
+            }
             return;
         }
-        FirstLaunchConfigReader.Read read = new FirstLaunchConfigReader(settings).read();
-        config = read.config();
-        locale = language(config);
-        if (settings.dryRun()) {
+        FirstLaunchConfigReader.Read read = settings.configured() ? new FirstLaunchConfigReader(settings).read() : null;
+        if (read != null) {
+            config = read.config();
+            locale = language(config);
+        }
+        if (read != null && settings.dryRun()) {
             requireValid(read);
             mode = Mode.DRY_RUN;
             gate.close();
             return;
         }
+        // The run's record decides whatever the configuration says: a failed run stops every start, and a run in its
+        // content phase keeps every instance closed, also one started without the configuration.
         Optional<FirstLaunchRun> run = runs.current().contextWrite(this::asSystem).block();
-        if (run.isEmpty()) {
-            long users = runs.usersEver().contextWrite(this::asSystem).block();
-            if (users > 0) {
-                log.warn(text("first-launch.users-exist", Map.of("count", users, "hash", config.hash())));
-                return;
+        if (run.isPresent()) {
+            FirstLaunchRun found = run.get();
+            switch (found.state()) {
+                case RUNNING -> {
+                    if (stale(found)) {
+                        String reason = text("first-launch.stale", Map.of("time", found.startedTime(),
+                            "timeout", settings.contentTimeout()));
+                        record(found.runId(), found.configHash(), "FAILED", null, "STALE", reason, null).block();
+                        throw failed(null, reason);
+                    }
+                    log.info(text("first-launch.waiting-other", Map.of()));
+                    mode = Mode.WAIT_OTHER;
+                    gate.close();
+                }
+                case FAILED -> throw failed(found.failedStep(), found.failedReason());
+                case CONTENT_DONE -> { }
+                case DONE, EXPIRED -> {
+                    if (read != null) {
+                        log.warn(text("first-launch.ended", Map.of("state", found.state(), "time",
+                            found.stateTime(), "hash", config.hash())));
+                    }
+                }
             }
-            requireValid(read);
-            mode = Mode.RUN;
-            gate.close();
             return;
         }
-        FirstLaunchRun found = run.get();
-        switch (found.state()) {
-            case RUNNING -> {
-                if (stale(found)) {
-                    String reason = text("first-launch.stale", Map.of("time", found.startedTime(),
-                        "timeout", settings.contentTimeout()));
-                    record(found.runId(), "FAILED", null, "STALE", reason, null).block();
-                    throw failed(null, reason);
-                }
-                log.info(text("first-launch.waiting-other", Map.of()));
-                mode = Mode.WAIT_OTHER;
-                gate.close();
-            }
-            case FAILED -> throw failed(found.failedStep(), found.failedReason());
-            case CONTENT_DONE -> { }
-            case DONE, EXPIRED -> log.warn(text("first-launch.ended", Map.of("state", found.state(),
-                "time", found.stateTime(), "hash", config.hash())));
+        if (read == null) {
+            return;
         }
+        long users = runs.usersEver().contextWrite(this::asSystem).block();
+        if (users > 0) {
+            log.warn(text("first-launch.users-exist", Map.of("count", users, "hash", config.hash())));
+            return;
+        }
+        requireValid(read);
+        mode = Mode.RUN;
+        gate.close();
     }
 
     @Override
@@ -243,20 +253,24 @@ public class FirstLaunchRunner implements SmartInitializingSingleton, Applicatio
         try {
             for (FirstLaunchStep step : plan(config)) {
                 current = step;
+                if (clock.instant().isAfter(deadline)) {
+                    throw new IllegalStateException("The content phase did not finish within "
+                        + settings.contentTimeout() + " (jabiz.first-launch.content-timeout)");
+                }
                 Object output = run(runId, step, results, deadline);
                 if (output != null) {
                     outputs.put(step.key(), output);
                 }
                 log.info(text("first-launch.step-done", Map.of("step", step.describe())));
             }
-            record(runId, "CONTENT_DONE", null, null, null, contentDoneDetail(results)).block();
+            record(runId, config.hash(), "CONTENT_DONE", null, null, null, contentDoneDetail(results)).block();
         } catch (RuntimeException e) {
             String step = current == null ? null : current.key();
             String reason = reason(e);
             log.error(text("first-launch.failed", Map.of("step", step == null ? "-" : current.describe(),
                 "reason", reason)), e);
             try {
-                record(runId, "FAILED", step, code(e), reason, null).block();
+                record(runId, config.hash(), "FAILED", step, code(e), reason, null).block();
             } catch (RuntimeException recording) {
                 log.error("Could not record the first launch's failure", recording);
             }
@@ -330,7 +344,7 @@ public class FirstLaunchRunner implements SmartInitializingSingleton, Applicatio
                 String reason = text("first-launch.stale", Map.of("time", run.get().startedTime(),
                     "timeout", settings.contentTimeout()));
                 try {
-                    record(run.get().runId(), "FAILED", null, "STALE", reason, null).block();
+                    record(run.get().runId(), run.get().configHash(), "FAILED", null, "STALE", reason, null).block();
                 } catch (RuntimeException e) {
                     log.debug("Another instance recorded the run first", e);
                 }
@@ -347,10 +361,10 @@ public class FirstLaunchRunner implements SmartInitializingSingleton, Applicatio
             && run.startedTime().plus(settings.contentTimeout()).isBefore(clock.instant());
     }
 
-    private Mono<FirstLaunchProcesses.RecordOutput> record(UUID runId, String kind, String step, String code,
-        String reason, String detail) {
+    private Mono<FirstLaunchProcesses.RecordOutput> record(UUID runId, String hash, String kind, String step,
+        String code, String reason, String detail) {
         return processes.execute(FirstLaunchProcesses.RECORD_PROCESS, new FirstLaunchProcesses.RecordInput(
-                runId.toString(), kind, step, code, reason, config.hash(), detail))
+                runId.toString(), kind, step, code, reason, hash, detail))
             .contextWrite(this::asSystem);
     }
 
