@@ -7,6 +7,7 @@ import com.jabiz.runtime.firstlaunch.FirstLaunchRuns;
 import com.jabiz.runtime.process.StepHandler;
 import com.jabiz.runtime.security.protect.ProtectedGrants;
 import org.springframework.stereotype.Component;
+import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
 import java.util.LinkedHashSet;
@@ -26,19 +27,27 @@ public class LoadWaitingState<C extends ProcessContext> implements StepHandler<L
 
     public static final String STATE = "first_launch_waiting";
 
-    public record Metadata() {}
+    /** @param ended whether a run that has ended is read too (its report) */
+    public record Metadata(boolean ended) {}
 
     /**
      * @param roles      the configured roles and the waiting role, by code (a code without a role is missing)
      * @param adminRoles the codes among them that make an administrator
      * @param armed      whether the setup window of protected grants has ended
+     * @param invitable  the users an invitation may go to: their address is the one entered at creation or corrected
+     *                   by the first launch (decision D63, D83)
      */
     public record State(FirstLaunchRun run, List<FirstLaunchAccountStore.Recorded> accounts,
         Map<UUID, FirstLaunchAccountStore.Facts> facts, Map<String, FirstLaunchAccountStore.Role> roles,
-        Set<String> adminRoles, boolean armed) {}
+        Set<String> adminRoles, boolean armed, Set<UUID> invitable) {}
 
     public static <C extends ProcessContext> StepSpec<Metadata, C> of() {
-        return StepSpec.of(LoadWaitingState.class, new Metadata());
+        return StepSpec.of(LoadWaitingState.class, new Metadata(false));
+    }
+
+    /** As {@link #of()}, for a run that has ended as well: its report. */
+    public static <C extends ProcessContext> StepSpec<Metadata, C> ofEnded() {
+        return StepSpec.of(LoadWaitingState.class, new Metadata(true));
     }
 
     private final FirstLaunchRuns runs;
@@ -54,7 +63,10 @@ public class LoadWaitingState<C extends ProcessContext> implements StepHandler<L
     @Override
     public Mono<Void> execute(Metadata metadata, C ctx) {
         return runs.current().flatMap(found -> {
-            if (found.isEmpty() || found.get().state() != FirstLaunchRun.State.CONTENT_DONE) {
+            FirstLaunchRun.State state = found.map(FirstLaunchRun::state).orElse(null);
+            boolean wanted = state == FirstLaunchRun.State.CONTENT_DONE || metadata.ended()
+                && (state == FirstLaunchRun.State.DONE || state == FirstLaunchRun.State.EXPIRED);
+            if (!wanted) {
                 return Mono.empty();
             }
             FirstLaunchRun run = found.get();
@@ -63,13 +75,17 @@ public class LoadWaitingState<C extends ProcessContext> implements StepHandler<L
                 codes.add(WaitingRole.CODE);
                 accounts.forEach(account -> codes.addAll(account.roles()));
                 List<UUID> users = accounts.stream().map(FirstLaunchAccountStore.Recorded::userId).toList();
+                Mono<Set<UUID>> invitable = Flux.fromIterable(users)
+                    .concatMap(user -> grants.credentials(user)
+                        .filter(ProtectedGrants.Credentials::addressAsCreated).map(credentials -> user))
+                    .collect(java.util.stream.Collectors.toUnmodifiableSet());
                 return Mono.zip(store.facts(users, ctx.opTime()), store.roles(codes, ctx.opTime()),
-                        grants.armedOnRecord())
+                        grants.armedOnRecord(), invitable)
                     .flatMap(read -> store.rolesHolding(read.getT2().values().stream()
                                 .map(FirstLaunchAccountStore.Role::roleId).toList(),
                             grants.settings().administratorPermissions(), ctx.opTime())
                         .doOnNext(admins -> ctx.put(STATE, new State(run, accounts, read.getT1(), read.getT2(),
-                            admins, read.getT3())))
+                            admins, read.getT3(), read.getT4())))
                         .then());
             });
         });

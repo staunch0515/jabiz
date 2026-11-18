@@ -25,14 +25,12 @@ final class WaitingReport {
             : "first-launch.report.expired", Map.of()));
         lines.add("");
         for (GrantPlan.Account account : accounts) {
-            FirstLaunchAccountStore.Facts facts = state.facts().get(account.userId());
             List<String> roles = new ArrayList<>();
             for (GrantPlan.Role role : account.roles()) {
                 roles.add(role.code() + " " + account.state(role.code()));
             }
             lines.add(text(messages, locale, "first-launch.report.account", Map.of("key", account.key(),
-                "name", facts == null || facts.displayName() == null ? "" : facts.displayName(),
-                "roles", String.join(", ", roles),
+                "user", account.userId().toString(), "roles", String.join(", ", roles),
                 "accepted", account.acceptedAt() == null ? "-" : account.acceptedAt().toString())));
         }
         lines.add("");
@@ -41,6 +39,14 @@ final class WaitingReport {
         List<String> left = new ArrayList<>();
         GrantPlan.handedOver(accounts).forEach(pending -> left.add(text(messages, locale,
             "first-launch.report.handed-over", Map.of("key", pending.key(), "role", pending.role()))));
+        for (GrantPlan.Account account : accounts) {
+            account.roles().stream().filter(role -> account.state(role.code()) == GrantPlan.RoleState.DECIDED)
+                .forEach(role -> left.add(text(messages, locale, "first-launch.report.decided",
+                    Map.of("key", account.key(), "role", role.code()))));
+        }
+        GrantPlan.leftToPeople(accounts).forEach(account -> left.add(text(messages, locale,
+            "first-launch.report.left-to-people", Map.of("key", account.key(),
+                "user", account.userId().toString()))));
         accounts.stream().filter(account -> account.roles().stream()
                 .noneMatch(role -> account.state(role.code()) == GrantPlan.RoleState.APPLIED))
             .forEach(account -> left.add(text(messages, locale, "first-launch.report.no-role",
@@ -53,13 +59,23 @@ final class WaitingReport {
         return String.join("\n", lines);
     }
 
-    /** What the end records with its event: keys, user ids and role states only. */
-    static String detail(List<GrantPlan.Account> accounts) {
+    /**
+     * What the end records with its event: each account's place, user id and role states only (no key: it is the
+     * user's name). Accounts whose user is gone are listed without roles.
+     */
+    static String detail(List<FirstLaunchAccountStore.Recorded> recorded, List<GrantPlan.Account> accounts) {
+        Map<java.util.UUID, GrantPlan.Account> byUser = new java.util.HashMap<>();
+        accounts.forEach(account -> byUser.put(account.userId(), account));
         StringBuilder json = new StringBuilder("{\"accounts\":[");
-        for (int i = 0; i < accounts.size(); i++) {
-            GrantPlan.Account account = accounts.get(i);
-            json.append(i == 0 ? "" : ",").append("{\"key\":").append(quoted(account.key()))
-                .append(",\"userId\":").append(quoted(account.userId().toString())).append(",\"roles\":{");
+        for (int i = 0; i < recorded.size(); i++) {
+            GrantPlan.Account account = byUser.get(recorded.get(i).userId());
+            json.append(i == 0 ? "" : ",").append("{\"position\":").append(recorded.get(i).position())
+                .append(",\"userId\":").append(quoted(recorded.get(i).userId().toString()));
+            if (account == null) {
+                json.append(",\"gone\":true}");
+                continue;
+            }
+            json.append(",\"enabled\":").append(account.enabled()).append(",\"roles\":{");
             for (int j = 0; j < account.roles().size(); j++) {
                 String code = account.roles().get(j).code();
                 json.append(j == 0 ? "" : ",").append(quoted(code)).append(':')

@@ -281,8 +281,8 @@ class FirstLaunchWaitingIT extends SignUpItSupport {
         assertThat(rolesOf(userId(A))).containsExactly(WaitingRole.CODE);
         deliver();
         assertThat(to(A)).isEmpty();
-        assertThat(query("SELECT account_key FROM sys_first_launch_account ORDER BY position"))
-            .extracting(row -> row.get("account_key")).containsExactly("A", "B");
+        assertThat(query("SELECT user_id::text AS id FROM sys_first_launch_account ORDER BY position"))
+            .extracting(row -> row.get("id")).containsExactly(userId(A), userId(B_WRONG));
 
         // The job invites both, once.
         advance();
@@ -295,7 +295,13 @@ class FirstLaunchWaitingIT extends SignUpItSupport {
         // B's address was mistyped: corrected in the configuration and restarted (decision D83).
         assertThat(revisions.revise(onDisk())).as("nothing changed yet").isEmpty();
         configFile(config(A, B));
-        assertThat(revisions.revise(onDisk())).containsExactly("B");
+        // Two instances starting at once: one corrects, the other finds nothing left to do (or loses the race).
+        FirstLaunchConfig corrected = onDisk();
+        java.util.concurrent.CompletableFuture<Object> one = java.util.concurrent.CompletableFuture.supplyAsync(
+            () -> revisions.revise(corrected)).handle((done, failed) -> failed == null ? done : failed);
+        java.util.concurrent.CompletableFuture<Object> two = java.util.concurrent.CompletableFuture.supplyAsync(
+            () -> revisions.revise(corrected)).handle((done, failed) -> failed == null ? done : failed);
+        assertThat(List.of(one.get(), two.get())).contains(List.of("#2"));
         deliver();
         assertThat(to(B)).as("the job invites the corrected address").isEmpty();
         advance();
@@ -377,7 +383,9 @@ class FirstLaunchWaitingIT extends SignUpItSupport {
         assertThat(text(to(A).getLast())).contains("IT_STAFF DECIDED");
         Map<String, Object> done = query("SELECT detail::text AS detail FROM sys_first_launch_event WHERE kind ="
             + " 'DONE'").getFirst();
-        assertThat(String.valueOf(done.get("detail"))).contains("\"IT_SUPER\": \"APPLIED\"").doesNotContain(A);
+        assertThat(String.valueOf(done.get("detail"))).contains("\"IT_SUPER\": \"APPLIED\"").doesNotContain(A)
+            .doesNotContain("Alice");
+        assertThat(text(to(A).getLast())).doesNotContain("Alice Admin");
 
         // Nothing more to do.
         int before = to(A).size();

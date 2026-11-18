@@ -108,9 +108,12 @@ final class CredentialChain {
      *                              created
      * @param addressAsCreated      whether there is an address and it is the one entered when the account was created,
      *                              never changed since by anyone (decision D63: where an invitation may go)
+     * @param correctable           whether the first launch may correct the address (decision D83): there is one,
+     *                              the account never had a password, a link, a second factor or a proven address, and
+     *                              nobody but the first launch's correction changed the address
      */
     record Judgement(boolean own, String setBy, Instant setAt, String summary, List<String> history, String email,
-        String address, boolean clean, boolean addressChangedByOther, boolean addressAsCreated) {
+        String address, boolean clean, boolean addressChangedByOther, boolean addressAsCreated, boolean correctable) {
         Judgement {
             history = List.copyOf(history);
         }
@@ -281,11 +284,16 @@ final class CredentialChain {
         /**
          * Whether {@code event} is the first launch's correction of an address nobody could have used yet: by the
          * system, in {@value #FIRST_LAUNCH_EMAIL_REVISE}, on an account that never had a password, a link, a second
-         * factor or a proven address (decision D82).
+         * factor or a proven address, and whose address nobody else changed (decision D83).
          */
         private boolean correction(Event event) {
-            return FIRST_LAUNCH_EMAIL_REVISE.equals(event.process()) && SYSTEM.equals(event.actorId()) && !used
-                && !disordered && event.passwordHash() == null && !verified;
+            return FIRST_LAUNCH_EMAIL_REVISE.equals(event.process()) && SYSTEM.equals(event.actorId())
+                && unused() && event.passwordHash() == null;
+        }
+
+        /** Never used, and its address changed by nobody but the first launch's correction (decision D83). */
+        private boolean unused() {
+            return !used && !disordered && !verified && !addressChanged && hash == null;
         }
 
         private void passwordSet(Event event) {
@@ -356,7 +364,8 @@ final class CredentialChain {
             String described = email == null ? "no address" : email + " (" + addressHow
                 + (addressProvenAt == null ? ", not proven by mail" : ", proven by mail at " + addressProvenAt) + ")";
             return new Judgement(own, own ? null : foreignBy, own ? null : foreignAt, summary, history, email,
-                described, clean(), addressChangedByOther, email != null && !addressChanged);
+                described, clean(), addressChangedByOther, email != null && !addressChanged,
+                email != null && unused());
         }
     }
 

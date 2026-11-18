@@ -78,8 +78,6 @@ public class FirstLaunchAccountProcesses {
     static final String USER_ID = "userId";
     static final String USER = "user";
     static final String EMAIL = "email";
-    static final String FACTORS = "factors";
-    static final String LINKS = "links";
 
     public static final ProcessDefinition<RoleInput, RoleOutput, ProcessContext> WAITING_ROLE_PROCESS =
         ProcessDefinition.define(WAITING_ROLE_CREATE, 1, RoleInput.class, RoleOutput.class, ProcessContext.class,
@@ -144,8 +142,8 @@ public class FirstLaunchAccountProcesses {
                 .step("Record the account", FirstLaunchContentPhase.record(ctx -> {
                     NewAccount account = ctx.get(NEW, NewAccount.class);
                     return List.of(new FirstLaunchAccountStore.Recorded((UUID) ctx.get(FirstLaunchContentPhase.RUN_ID),
-                        account.key(), UUID.fromString(String.valueOf(ctx.get(USER_ID))), account.position(),
-                        account.roles(), account.report()));
+                        UUID.fromString(String.valueOf(ctx.get(USER_ID))), account.position(), account.roles(),
+                        account.report()));
                 })));
 
     static EntityQuery waitingRole() {
@@ -155,7 +153,7 @@ public class FirstLaunchAccountProcesses {
     public static final ProcessDefinition<ReviseInput, ReviseOutput, ProcessContext> REVISE_PROCESS =
         ProcessDefinition.define(EMAIL_REVISE, 1, ReviseInput.class, ReviseOutput.class, ProcessContext.class, pb -> pb
             .description("Corrects the address of a first launch account nobody has used yet; run by the first"
-                + " launch only, which invites it there in a transaction of its own.")
+                + " launch only. Its job invites the corrected address in a transaction of its own.")
             .permissions(SecurityPermissions.BOOTSTRAP)
             .internal()
             .contextFactory((start, input) -> {
@@ -167,18 +165,12 @@ public class FirstLaunchAccountProcesses {
             .outputMapper(ctx -> new ReviseOutput(String.valueOf(ctx.get(USER_ID)), "REVISED"))
             .step("Check the account", FirstLaunchContentPhase.waitingAccount(ctx -> (UUID) ctx.get(USER_ID)))
             .step("Load the user", LoadEntity.by(SecurityEntities.USER_DATASET, USER_ID, USER))
-            .step("Load the second factors", QueryEntities.of(SecurityEntities.USER_MFA_DATASET,
-                ctx -> Rbac.all(new QueryPredicate.Eq("userId", ctx.get(USER_ID)), "userMfaId"), FACTORS))
-            .step("Load the links", QueryEntities.of(SecurityEntities.USER_IDENTITY_DATASET,
-                ctx -> Rbac.all(new QueryPredicate.Eq("userId", ctx.get(USER_ID)), "provider"), LINKS))
+            .step("Check the account's history", CorrectableAddress.of(ctx -> (UUID) ctx.get(USER_ID)))
             .compute("Correct the address", (metadata, ctx) -> {
-                EntityInstance user = ctx.get(USER, EntityInstance.class);
-                if (user.get("passwordHash") != null || SecurityEntities.emailVerified(user)
-                    || !((List<?>) ctx.get(FACTORS)).isEmpty() || !((List<?>) ctx.get(LINKS)).isEmpty()) {
-                    ctx.reject(new Violation(USER_ID, PlatformErrorCodes.INVITATION_NOT_NEEDED, "The account was used"
-                        + " already: its address is changed in the administration"));
+                if (ctx.hasViolations()) {
                     return;
                 }
+                EntityInstance user = ctx.get(USER, EntityInstance.class);
                 ctx.changes().update(SecurityEntities.USER, user.id(), user.version(),
                     Map.of("email", ctx.get(EMAIL, String.class)));
             }));

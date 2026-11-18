@@ -295,6 +295,7 @@ class CredentialChainTest {
         user(SYSTEM, CredentialChain.FIRST_LAUNCH_EMAIL_REVISE, null, "right@example.com", null);
         Judgement judged = judged();
         assertThat(judged.addressAsCreated()).isTrue();
+        assertThat(judged.correctable()).as("may be corrected again").isTrue();
         assertThat(judged.addressChangedByOther()).isFalse();
         assertThat(judged.address()).startsWith("right@example.com (corrected by the first launch");
         user(ANONYMOUS, "SPONSOR_INVITATION_ACCEPT", "h1", "right@example.com", "right@example.com");
@@ -312,6 +313,7 @@ class CredentialChainTest {
         user(SYSTEM, "SEC_USER_CREATE", null, "wrong@example.com", null);
         factor("m1", USER, "SEC_MFA_ENROLL_BEGIN", false);
         factor("m1", USER, "SEC_MFA_DISABLE", true);
+        assertThat(judged().correctable()).isFalse();
         user(SYSTEM, CredentialChain.FIRST_LAUNCH_EMAIL_REVISE, null, "right@example.com", null);
         assertThat(judged().addressAsCreated()).isFalse();
 
@@ -326,6 +328,15 @@ class CredentialChainTest {
         events.clear();
         user(SYSTEM, "SEC_USER_CREATE", null, "wrong@example.com", null);
         user(ANONYMOUS, "SPONSOR_EMAIL_VERIFY", null, "wrong@example.com", "wrong@example.com");
+        user(SYSTEM, CredentialChain.FIRST_LAUNCH_EMAIL_REVISE, null, "right@example.com", null);
+        assertThat(judged().addressAsCreated()).isFalse();
+
+        // Someone else changed the address before: the correction does not undo that.
+        events.clear();
+        user(SYSTEM, "SEC_USER_CREATE", null, "wrong@example.com", null);
+        assertThat(judged().correctable()).isTrue();
+        user(ADMIN, "SEC_USER_UPDATE", null, "admin@example.com", null);
+        assertThat(judged().correctable()).isFalse();
         user(SYSTEM, CredentialChain.FIRST_LAUNCH_EMAIL_REVISE, null, "right@example.com", null);
         assertThat(judged().addressAsCreated()).isFalse();
 

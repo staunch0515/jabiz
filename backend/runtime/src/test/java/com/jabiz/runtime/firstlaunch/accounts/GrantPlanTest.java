@@ -131,6 +131,20 @@ class GrantPlanTest {
             new Action.Assign("A", A, "QB_ADMIN_SUPER"));
     }
 
+    /** Decision D82 review M4: a disabled account gets nothing; one whose address someone else changed is not invited. */
+    @Test
+    void aDisabledAccountOrOneWhoseAddressSomeoneElseChangedIsLeftToPeople() {
+        Instant mfa = INVITED.plusSeconds(120);
+        Account disabled = new Account("B", B, List.of(FINANCE), INVITED, mfa, Map.of(), true, INVITED, false,
+            false, true);
+        assertThat(next(List.of(disabled), Set.of())).isEmpty();
+        assertThat(GrantPlan.leftToPeople(List.of(disabled))).extracting(Account::key).containsExactly("B");
+        Account changed = new Account("C", C, List.of(OPERATOR), null, null, Map.of(), true, null, false, true, false);
+        assertThat(next(List.of(changed), Set.of())).isEmpty();
+        assertThat(GrantPlan.leftToPeople(List.of(changed))).extracting(Account::key).containsExactly("C");
+        assertThat(GrantPlan.complete(List.of(disabled, changed))).as("people take them over").isTrue();
+    }
+
     @Test
     void anAccountNeverInvitedIsInvitedFirst() {
         Account fresh = new Account("C", C, List.of(OPERATOR), null, null, Map.of(), true, null, false);

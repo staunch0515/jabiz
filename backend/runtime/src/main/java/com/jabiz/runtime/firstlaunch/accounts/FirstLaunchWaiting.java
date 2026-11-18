@@ -55,13 +55,17 @@ import java.util.concurrent.ConcurrentHashMap;
  *   <li>per account (key: the user id): the invitation ({@code SEC_USER_INVITE}, once, then once more after
  *       {@code remind-after}), the configured roles that do not make an administrator ({@code SEC_USER_ROLE_ASSIGN}),
  *       the waiting role's withdrawal once a configured role is in effect;</li>
- *   <li>per account again (key: {@code a} and the user id): the roles that make an administrator (decision D51) - only
- *       once the operator confirmed the account's fingerprint ({@code jabiz.first-launch.confirm-admins}); until then
- *       the log names the account and the fingerprint (once an hour);</li>
+ *   <li>per account again (key: {@code x} and the user id's 32 hex digits): the roles that make an administrator
+ *       (decision D51) - only once the operator confirmed the account's fingerprint
+ *       ({@code jabiz.first-launch.confirm-admins}); until then the log names the account by its place and user id,
+ *       with the fingerprint (once an hour);</li>
  *   <li>the end (key: {@code end}): once every role is in effect or handed over to the administrators' approval, the
  *       run ends {@code DONE}; past {@code jabiz.first-launch.deadline} it ends {@code EXPIRED}. Either way the waiting
  *       role is disabled for good and the report goes to the report accounts and the log.</li>
  * </ol>
+ * A disabled account, or one whose address someone else changed before it accepted, gets nothing more: it is left to
+ * people and listed in the report. The log, the report and the run's events name accounts by their place in the
+ * configuration and their user id, never by key or name (the key is the user's name: personal data).
  * Not registered when restoring a backup for verification ({@code jabiz.ops.verify-restore.enabled}).
  */
 @Configuration
@@ -80,12 +84,13 @@ public class FirstLaunchWaiting {
     /** The reason recorded with the grants: the first launch, by its configuration's hash. */
     static final String REASON = "First launch configuration ";
 
-    /** @param item the account's user id (36 characters), {@code a} and its 32 hex digits, or {@value #END} */
+    /** @param item the account's user id (36 characters), {@code x} and its 32 hex digits, or {@value #END} */
     public record AdvanceInput(@NotBlank @Size(max = 36) String item) {}
 
     public record AdvanceOutput(String item, int assigned, int invited, boolean withdrawn, String ended) {}
 
-    public record ReportInput(@NotNull UUID userId, @NotBlank String summary) {}
+    /** @param kind how the run ended: {@code DONE} or {@code EXPIRED}; the report is written in the user's language */
+    public record ReportInput(@NotNull UUID userId, @NotBlank String kind) {}
 
     public record ReportOutput(String userId) {}
 
@@ -169,7 +174,8 @@ public class FirstLaunchWaiting {
                     null)));
     }
 
-    static ProcessDefinition<ReportInput, ReportOutput, ProcessContext> report() {
+    static ProcessDefinition<ReportInput, ReportOutput, ProcessContext> report(WaitingSettings settings,
+        MessageCatalog messages, ObjectProvider<FirstLaunchHandler> handlers) {
         return ProcessDefinition.define(REPORT_PROCESS_NAME, 1, ReportInput.class, ReportOutput.class,
             ProcessContext.class, pb -> pb
                 .description("Mails the first launch's report to a report account; run by the first launch only.")
@@ -181,9 +187,28 @@ public class FirstLaunchWaiting {
                     return ctx;
                 })
                 .outputMapper(ctx -> new ReportOutput(String.valueOf(ctx.get("input", ReportInput.class).userId())))
+                // Written here, from the state, not passed in: what the report says stays out of the input summary.
+                .step("Load the state", LoadWaitingState.ofEnded())
+                .compute("Write the report", (metadata, ctx) -> {
+                    ReportInput input = ctx.get("input", ReportInput.class);
+                    LoadWaitingState.State state = ctx.get(LoadWaitingState.STATE, LoadWaitingState.State.class);
+                    FirstLaunchAccountStore.Facts facts = state.facts().get(input.userId());
+                    Locale locale = facts == null || facts.locale() == null ? Locale.ENGLISH
+                        : Locale.forLanguageTag(facts.locale());
+                    ctx.put("summary", WaitingReport.summary(input.kind(), state, accounts(state),
+                        remaining(settings, handlers), messages, locale));
+                })
                 .step("Mail the report", SendMail.of(REPORT_MAIL,
                     ctx -> MailRecipient.user(ctx.get("input", ReportInput.class).userId()),
-                    Map.of("summary", ctx -> ctx.get("input", ReportInput.class).summary()))));
+                    Map.of("summary", ctx -> ctx.get("summary")))));
+    }
+
+    /** What the application leaves for people ({@link FirstLaunchHandler#remaining}), from the startup's configuration. */
+    static List<String> remaining(WaitingSettings settings, ObjectProvider<FirstLaunchHandler> handlers) {
+        List<String> remaining = new ArrayList<>();
+        settings.config().ifPresent(found -> handlers.orderedStream().forEach(handler -> remaining.addAll(
+            handler.remaining(found))));
+        return List.copyOf(remaining);
     }
 
     static Round round(ProcessContext ctx) {
@@ -223,9 +248,9 @@ public class FirstLaunchWaiting {
                     states.put(code, GrantPlan.RoleState.DECIDED);
                 }
             }
-            accounts.add(new GrantPlan.Account(recorded.key(), recorded.userId(), roles, facts.acceptedAt(),
+            accounts.add(new GrantPlan.Account(recorded.label(), recorded.userId(), roles, facts.acceptedAt(),
                 facts.mfaConfirmedAt(), states, facts.roles().contains(WaitingRole.CODE), facts.firstInvited(),
-                facts.invitations() > 1));
+                facts.invitations() > 1, facts.enabled(), state.invitable().contains(recorded.userId())));
         }
         return List.copyOf(accounts);
     }
@@ -246,8 +271,8 @@ public class FirstLaunchWaiting {
         if (END.equals(item)) {
             return end(state, accounts, now, settings, messages, handlers, throttle);
         }
-        // A user id has 36 characters; the administrator's item is "a" and its 32 hex digits.
-        boolean administrators = item.length() == 33;
+        // A user id has 36 characters; the administrator's item is "x" (no hex digit) and its 32 hex digits.
+        boolean administrators = item.startsWith("x");
         UUID user = administrators ? fromHex(item.substring(1)) : UUID.fromString(item);
         List<ProtectedChangeProcesses.AssignRoleInput> assign = new ArrayList<>();
         List<InvitationProcesses.InviteInput> invite = new ArrayList<>();
@@ -264,14 +289,14 @@ public class FirstLaunchWaiting {
                     FirstLaunchAccountStore.Role role = state.roles().get(granted.role());
                     if (role == null) {
                         if (throttle.due("missing:" + granted.role(), now)) {
-                            log.error("First launch: the role {} of account {} does not exist; it cannot be granted",
-                                granted.role(), granted.key());
+                            log.error("First launch: the role {} of account {} (user {}) does not exist; it cannot be"
+                                + " granted", granted.role(), granted.key(), user);
                         }
                         continue;
                     }
                     assign.add(new ProtectedChangeProcesses.AssignRoleInput(user, role.roleId(), null, null, null,
                         reason));
-                    log.info("First launch: granting {} to account {}", granted.role(), granted.key());
+                    log.info("First launch: granting {} to account {} (user {})", granted.role(), granted.key(), user);
                 }
                 case Action.WithdrawWaitingRole withdrawn -> {
                     if (!administrators) {
@@ -281,24 +306,24 @@ public class FirstLaunchWaiting {
                 case Action.Invite invited -> {
                     if (!administrators) {
                         invite.add(new InvitationProcesses.InviteInput(user, InvitationProcesses.DEFAULT_ENTRY));
-                        log.info("First launch: inviting account {}", invited.key());
+                        log.info("First launch: inviting account {} (user {})", invited.key(), user);
                     }
                 }
                 case Action.Remind reminded -> {
                     if (!administrators) {
                         invite.add(new InvitationProcesses.InviteInput(user, InvitationProcesses.DEFAULT_ENTRY));
-                        log.warn("First launch: account {} has not accepted its invitation after {}; invited once"
-                            + " more", reminded.key(), settings.remindAfter());
+                        log.warn("First launch: account {} (user {}) has not accepted its invitation after {};"
+                            + " invited once more", reminded.key(), user, settings.remindAfter());
                     }
                 }
                 case Action.AwaitConfirmation awaiting -> {
                     if (administrators && throttle.due("confirm:" + awaiting.fingerprint(), now)) {
                         FirstLaunchAccountStore.Facts facts = state.facts().get(user);
-                        log.warn("First launch: account {} ({}, {}) accepted its invitation at {} and bound a second"
+                        log.warn("First launch: account {} (user {}) accepted its invitation at {} and bound a second"
                             + " factor at {}. It gets an administrator's role only once the operator has confirmed"
                             + " it with the person: fingerprint {}. Add it to JABIZ_FIRST_LAUNCH_CONFIRM_ADMINS and"
-                            + " restart.", awaiting.key(), facts.displayName(), facts.email(), facts.acceptedAt(),
-                            facts.mfaConfirmedAt(), awaiting.fingerprint());
+                            + " restart.", awaiting.key(), user, facts.acceptedAt(), facts.mfaConfirmedAt(),
+                            awaiting.fingerprint());
                     }
                 }
             }
@@ -315,37 +340,29 @@ public class FirstLaunchWaiting {
         boolean complete = GrantPlan.complete(accounts);
         if (!expired && !complete) {
             if (throttle.due("waiting", now)) {
-                GrantPlan.unfinished(accounts).forEach(account -> log.info("First launch: waiting for account {}:"
-                    + " {}", account.key(), account.acceptedAt() == null ? "has not accepted its invitation (first"
+                GrantPlan.unfinished(accounts).forEach(account -> log.info("First launch: waiting for account {}"
+                    + " (user {}): {}", account.key(), account.userId(), account.acceptedAt() == null ? "has not accepted its invitation (first"
                     + " sent " + account.invitedAt() + ")" : account.mfaConfirmedAt() == null
                     ? "has not bound a second factor" : "roles not given yet"));
             }
             return Round.NOTHING;
         }
         String kind = expired && !complete ? "EXPIRED" : "DONE";
-        List<String> remaining = new ArrayList<>();
-        Optional<com.jabiz.firstlaunch.FirstLaunchConfig> config = settings.config();
-        config.ifPresent(found -> handlers.orderedStream().forEach(handler -> remaining.addAll(
-            handler.remaining(found))));
         List<ReportInput> reports = new ArrayList<>();
-        Locale logLocale = Locale.ENGLISH;
         for (FirstLaunchAccountStore.Recorded recorded : state.accounts()) {
-            FirstLaunchAccountStore.Facts facts = state.facts().get(recorded.userId());
-            if (!recorded.report() || facts == null) {
-                continue;
+            if (recorded.report() && state.facts().containsKey(recorded.userId())) {
+                reports.add(new ReportInput(recorded.userId(), kind));
             }
-            Locale locale = facts.locale() == null ? Locale.ENGLISH : Locale.forLanguageTag(facts.locale());
-            reports.add(new ReportInput(recorded.userId(), WaitingReport.summary(kind, state, accounts, remaining,
-                messages, locale)));
         }
-        String summary = WaitingReport.summary(kind, state, accounts, remaining, messages, logLocale);
+        String summary = WaitingReport.summary(kind, state, accounts, remaining(settings, handlers), messages,
+            Locale.ENGLISH);
         if ("DONE".equals(kind)) {
             log.info(summary);
         } else {
             log.warn(summary);
         }
         return new Round(List.of(), List.of(), null, kind, List.copyOf(reports), state.run(),
-            WaitingReport.detail(accounts));
+            WaitingReport.detail(state.accounts(), accounts));
     }
 
     private static UUID fromHex(String hex) {
@@ -367,8 +384,9 @@ public class FirstLaunchWaiting {
     }
 
     @Bean
-    ProcessDefinition<ReportInput, ReportOutput, ProcessContext> firstLaunchReportProcess() {
-        return report();
+    ProcessDefinition<ReportInput, ReportOutput, ProcessContext> firstLaunchReportProcess(WaitingSettings settings,
+        MessageCatalog messages, ObjectProvider<FirstLaunchHandler> handlers) {
+        return report(settings, messages, handlers);
     }
 
     @Bean

@@ -28,15 +28,14 @@ public class FirstLaunchAccountEntities {
         eb.field("userId", f -> f.physicalColumn("user_id").immutable(true).required(true)
             .asSemanticIdentity("urn:jabiz:entity:platform:first-launch-account"));
         eb.field("runId", f -> f.physicalColumn("run_id").immutable(true).required(true).asText(36));
-        eb.field("accountKey", f -> f.physicalColumn("account_key").immutable(true).required(true).asText(40));
         eb.field("position", f -> f.physicalColumn("position").immutable(true).required(true).asNumeric(9, 0));
         eb.field("roles", f -> f.physicalColumn("roles").immutable(true).required(true).asText(4000));
         eb.field("report", f -> f.physicalColumn("report").immutable(true).required(true).asBool());
         eb.field("processSeqId", f -> f.physicalColumn("process_seq_id").immutable(true).required(true)
             .asNumeric(19, 0));
         eb.listView("default", lv -> lv
-            .columns("accountKey", "userId", "roles", "report")
-            .filters("accountKey", "userId")
+            .columns("position", "userId", "roles", "report")
+            .filters("userId")
             .sorts("position")
             .defaultSort("position", true));
     });

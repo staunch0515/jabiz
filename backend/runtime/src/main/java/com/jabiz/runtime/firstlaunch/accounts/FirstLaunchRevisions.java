@@ -32,7 +32,7 @@ import java.util.UUID;
  * F-LAUNCH section 6.3): at a start in the waiting phase, when the configuration differs from the one the run
  * recorded only in the addresses of accounts that have not accepted their invitation, those accounts get the corrected
  * address ({@code FIRST_LAUNCH_EMAIL_REVISE}; the job {@code jabiz.first-launch} then invites the corrected address,
- * which was never invited: invitations count per address), and the run records {@code REVISED} with both hashes and the accounts' keys. Any other difference does nothing
+ * which was never invited: invitations count per address), and the run records {@code REVISED} with both hashes and the user ids. Any other difference does nothing
  * but warn: the rest is done in the administration as usual.
  */
 @Component
@@ -80,7 +80,8 @@ public class FirstLaunchRevisions implements ApplicationListener<ApplicationRead
     /**
      * Compares {@code config} with the run's and applies the addresses it corrects.
      *
-     * @return the keys of the accounts given a corrected address (empty when nothing was done)
+     * @return the accounts given a corrected address, by place in the configuration ({@code #1}, ...); empty when
+     *         nothing was done
      */
     public List<String> revise(FirstLaunchConfig config) {
         Optional<FirstLaunchRun> found = asSystem(runs.current()).block();
@@ -100,16 +101,19 @@ public class FirstLaunchRevisions implements ApplicationListener<ApplicationRead
         Map<UUID, FirstLaunchAccountStore.Facts> facts = asSystem(store.facts(accounts.stream()
             .map(FirstLaunchAccountStore.Recorded::userId).toList(), clock.instant()))
             .block();
+        // Accounts are matched by their place in the configuration: the shape keeps the order and the keys.
         List<EmailRevision.Recorded> recorded = new ArrayList<>();
         for (FirstLaunchAccountStore.Recorded account : accounts) {
             FirstLaunchAccountStore.Facts user = facts.get(account.userId());
             if (user != null) {
-                recorded.add(new EmailRevision.Recorded(account.key(), account.userId(), user.email(),
+                recorded.add(new EmailRevision.Recorded(account.label(), account.userId(), user.email(),
                     user.acceptedAt() != null));
             }
         }
         Map<String, String> emails = new LinkedHashMap<>();
-        config.accounts().forEach(account -> emails.put(account.key(), account.email()));
+        for (int i = 0; i < config.accounts().size(); i++) {
+            emails.put("#" + (i + 1), config.accounts().get(i).email());
+        }
         EmailRevision.Outcome outcome = EmailRevision.compare(recorded, emails, otherDifferences);
         if (!outcome.refusals().isEmpty()) {
             log.warn("First launch: the content phase is done; the configuration (hash {}) is not applied: {}. Only the"
@@ -117,19 +121,24 @@ public class FirstLaunchRevisions implements ApplicationListener<ApplicationRead
                 + " rest in the administration as usual.", config.hash(), String.join("; ", outcome.refusals()));
             return List.of();
         }
+        if (outcome.revisions().isEmpty()) {
+            // Nothing to correct (another instance did, or only comments differ): nothing to record either.
+            return List.of();
+        }
         List<String> keys = new ArrayList<>();
         for (EmailRevision.Revision revision : outcome.revisions()) {
-            String requestId = "first-launch-" + run.runId() + "-revise-" + revision.key();
+            String requestId = "first-launch-" + run.runId() + "-revise-" + revision.userId();
             asSystem(processes.execute(FirstLaunchAccountProcesses.REVISE_PROCESS,
                 new FirstLaunchAccountProcesses.ReviseInput(revision.userId(), revision.email())), requestId).block();
             keys.add(revision.key());
-            log.warn("First launch: account {} now has the address of the configuration; the job jabiz.first-launch"
-                + " invites it there within a minute, the earlier invitation no longer works", revision.key());
+            log.warn("First launch: account {} (user {}) now has the address of the configuration; the job"
+                + " jabiz.first-launch invites it there within a minute, the earlier invitation no longer works",
+                revision.key(), revision.userId());
         }
         Map<String, Object> detail = new LinkedHashMap<>();
         detail.put("previousHash", applied);
         detail.put("hash", config.hash());
-        detail.put("accounts", keys);
+        detail.put("users", outcome.revisions().stream().map(revision -> revision.userId().toString()).toList());
         asSystem(processes.execute(FirstLaunchProcesses.RECORD_PROCESS, new FirstLaunchProcesses.RecordInput(
             run.runId().toString(), "REVISED", null, null, null, config.hash(), json.writeValueAsString(detail))),
             "first-launch-" + run.runId() + "-revised").block();

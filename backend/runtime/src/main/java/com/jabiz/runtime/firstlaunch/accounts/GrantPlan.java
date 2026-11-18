@@ -58,9 +58,14 @@ public final class GrantPlan {
      * @param holdsWaitingRole whether the account still holds the waiting role
      * @param invitedAt       when the first invitation was sent (null: never)
      * @param reminded        whether the account was invited once more already
+     * @param enabled         whether the user is enabled: a disabled account (someone saw something wrong) gets
+     *                        nothing more and is left to people
+     * @param invitable       whether an invitation may go to its address (decision D63: nobody else changed it); one
+     *                        that may not and has not accepted is left to people
      */
     public record Account(String key, UUID userId, List<Role> roles, Instant acceptedAt, Instant mfaConfirmedAt,
-        Map<String, RoleState> states, boolean holdsWaitingRole, Instant invitedAt, boolean reminded) {
+        Map<String, RoleState> states, boolean holdsWaitingRole, Instant invitedAt, boolean reminded, boolean enabled,
+        boolean invitable) {
         public Account {
             Objects.requireNonNull(key, "key must not be null");
             Objects.requireNonNull(userId, "userId must not be null");
@@ -71,13 +76,25 @@ public final class GrantPlan {
             }
         }
 
+        /** An enabled account whose address may be invited. */
+        public Account(String key, UUID userId, List<Role> roles, Instant acceptedAt, Instant mfaConfirmedAt,
+            Map<String, RoleState> states, boolean holdsWaitingRole, Instant invitedAt, boolean reminded) {
+            this(key, userId, roles, acceptedAt, mfaConfirmedAt, states, holdsWaitingRole, invitedAt, reminded, true,
+                true);
+        }
+
         public RoleState state(String role) {
             return states.getOrDefault(role, RoleState.NONE);
         }
 
-        /** Accepted the invitation and bound a second factor. */
+        /** Enabled, accepted the invitation and bound a second factor. */
         public boolean ready() {
-            return acceptedAt != null && mfaConfirmedAt != null;
+            return enabled && acceptedAt != null && mfaConfirmedAt != null;
+        }
+
+        /** Disabled, or not accepted and not invitable: the first launch does nothing more for it. */
+        public boolean leftToPeople() {
+            return !enabled || acceptedAt == null && !invitable;
         }
 
         boolean anyApplied() {
@@ -89,6 +106,9 @@ public final class GrantPlan {
          * whose roles are all pending keeps the waiting role until the run ends, which disables it.
          */
         boolean settled() {
+            if (leftToPeople()) {
+                return true;
+            }
             return !(holdsWaitingRole && anyApplied()) && roles.stream().allMatch(role -> state(role.code()) != RoleState.NONE);
         }
     }
@@ -127,10 +147,14 @@ public final class GrantPlan {
         List<Action> waiting = new ArrayList<>();
         List<Action> reminders = new ArrayList<>();
         for (Account account : accounts) {
+            if (account.leftToPeople()) {
+                continue;
+            }
             if (!account.ready()) {
                 if (account.acceptedAt() == null && account.invitedAt() == null) {
                     reminders.add(new Action.Invite(account.key(), account.userId()));
-                } else if (account.acceptedAt() == null && !account.reminded() && !now.isBefore(account.invitedAt().plus(remindAfter))) {
+                } else if (account.acceptedAt() == null && !account.reminded()
+                    && !now.isBefore(account.invitedAt().plus(remindAfter))) {
                     reminders.add(new Action.Remind(account.key(), account.userId()));
                 }
                 continue;
@@ -171,6 +195,11 @@ public final class GrantPlan {
     /** The accounts not settled yet, for the report. */
     public static List<Account> unfinished(List<Account> accounts) {
         return accounts.stream().filter(account -> !account.settled()).toList();
+    }
+
+    /** The accounts the first launch leaves to people (disabled, or an address it may not invite), for the report. */
+    public static List<Account> leftToPeople(List<Account> accounts) {
+        return accounts.stream().filter(Account::leftToPeople).toList();
     }
 
     /** The grants handed over to the administrators' approval, for the report. */

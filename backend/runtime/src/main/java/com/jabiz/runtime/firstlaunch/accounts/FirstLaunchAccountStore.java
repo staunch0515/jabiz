@@ -32,10 +32,18 @@ public class FirstLaunchAccountStore {
     /** The template of the invitation's mail (decision D63). */
     static final String INVITATION_TEMPLATE = "jabiz.auth.invitation";
 
-    /** An account of the run as recorded when it was created. */
-    public record Recorded(UUID runId, String key, UUID userId, int position, List<String> roles, boolean report) {
+    /**
+     * An account of the run as recorded when it was created: its user and its place in the configuration's list, never
+     * its key (which is the user's name, personal data erased with the user).
+     */
+    public record Recorded(UUID runId, UUID userId, int position, List<String> roles, boolean report) {
         public Recorded {
             roles = List.copyOf(roles);
+        }
+
+        /** How the log, the report and the run's events name the account: its place in the configuration, from 1. */
+        public String label() {
+            return "#" + (position + 1);
         }
     }
 
@@ -53,10 +61,11 @@ public class FirstLaunchAccountStore {
      *                       whatever the administrators did with them since is theirs
      * @param firstInvited   when the first invitation to the current address was recorded; null: never
      * @param invitations    how many invitations to the current address were recorded
+     * @param enabled        whether the user is enabled
      */
     public record Facts(UUID userId, String email, String displayName, String locale, Instant acceptedAt,
         Instant mfaConfirmedAt, Set<String> roles, Set<UUID> pendingRoles, Set<UUID> decidedRoles,
-        Instant firstInvited, int invitations) {
+        Instant firstInvited, int invitations, boolean enabled) {
         public Facts {
             roles = Set.copyOf(roles);
             pendingRoles = Set.copyOf(pendingRoles);
@@ -103,7 +112,6 @@ public class FirstLaunchAccountStore {
     Mono<Void> record(Recorded account, long processSeqId) {
         Map<String, Object> row = new LinkedHashMap<>();
         row.put("run_id", account.runId());
-        row.put("account_key", account.key());
         row.put("user_id", account.userId());
         row.put("position", account.position());
         row.put("roles", String.join(",", account.roles()));
@@ -114,10 +122,9 @@ public class FirstLaunchAccountStore {
 
     /** The run's accounts, in the configuration's order. */
     public Mono<List<Recorded>> accounts(UUID runId) {
-        return engine().select("SELECT run_id, account_key, user_id, position, roles, report FROM " + TABLE
+        return engine().select("SELECT run_id, user_id, position, roles, report FROM " + TABLE
                 + " WHERE run_id = :run ORDER BY position", Map.of("run", BoundValue.of(runId)))
-            .map(row -> new Recorded(Rows.uuid(row.get("run_id")), Rows.string(row.get("account_key")),
-                Rows.uuid(row.get("user_id")), Rows.intValue(row.get("position")),
+            .map(row -> new Recorded(Rows.uuid(row.get("run_id")), Rows.uuid(row.get("user_id")), Rows.intValue(row.get("position")),
                 Arrays.stream(Rows.string(row.get("roles")).split(",")).filter(code -> !code.isBlank()).toList(),
                 Boolean.TRUE.equals(row.get("report"))))
             .collectList();
@@ -136,17 +143,25 @@ public class FirstLaunchAccountStore {
             .map(Map::copyOf);
     }
 
-    /** The codes among these roles that hold one of {@code permissions} now (an administrator's, decision D51). */
+    /**
+     * The codes among these roles that hold one of {@code permissions} (an administrator's, decision D51) now or in a
+     * version scheduled later - as {@code ProtectedGrants.admins} counts administrators (review L1 of D48).
+     */
     public Mono<Set<String>> rolesHolding(Collection<UUID> roleIds, Set<String> permissions, Instant now) {
         if (roleIds.isEmpty()) {
             return Mono.just(Set.of());
         }
-        return engine().select("SELECT DISTINCT ro.role_code FROM (SELECT DISTINCT ON (role_permission_id) role_id,"
-                + " permission, is_deleted FROM sec_role_permission_version WHERE role_id = ANY(:roles) AND"
-                + " effect_start_time <= :now ORDER BY role_permission_id, effect_start_time DESC, version_no DESC) rp"
-                + " JOIN (SELECT DISTINCT ON (role_id) role_id, role_code FROM sec_role_version WHERE role_id ="
-                + " ANY(:roles) ORDER BY role_id, version_no DESC) ro ON ro.role_id = rp.role_id"
-                + " WHERE NOT rp.is_deleted AND rp.permission = ANY(:permissions)",
+        return engine().select("SELECT DISTINCT ro.role_code FROM (SELECT DISTINCT ON (role_permission_id)"
+                + " role_permission_id, role_id, permission, is_deleted FROM sec_role_permission_version WHERE role_id"
+                + " = ANY(:roles) AND effect_start_time <= :now ORDER BY role_permission_id, effect_start_time DESC,"
+                + " version_no DESC) rp JOIN (SELECT DISTINCT ON (role_id) role_id, role_code FROM sec_role_version"
+                + " WHERE role_id = ANY(:roles) ORDER BY role_id, version_no DESC) ro ON ro.role_id = rp.role_id"
+                + " WHERE rp.permission = ANY(:permissions) AND (NOT rp.is_deleted OR EXISTS (SELECT 1 FROM"
+                + " sec_role_permission_version later WHERE later.role_permission_id = rp.role_permission_id AND"
+                + " later.effect_start_time > :now AND NOT later.is_deleted))"
+                + " UNION SELECT r.role_code FROM sec_role_permission_version v JOIN sec_role_version r ON r.role_id ="
+                + " v.role_id WHERE v.role_id = ANY(:roles) AND v.effect_start_time > :now AND NOT v.is_deleted AND"
+                + " v.permission = ANY(:permissions)",
                 Map.of("roles", BoundValue.of(roleIds.toArray(UUID[]::new)),
                     "permissions", BoundValue.of(permissions.toArray(String[]::new)), "now", BoundValue.of(now)))
             .map(row -> Rows.string(row.get("role_code"))).collectList().map(Set::copyOf);
@@ -160,7 +175,7 @@ public class FirstLaunchAccountStore {
         Map<String, BoundValue> params = Map.of("users", BoundValue.of(userIds.toArray(UUID[]::new)),
             "now", BoundValue.of(now));
         Mono<List<Map<String, Object>>> users = engine().select("SELECT user_id, email, display_name, locale,"
-            + " email_verified_at, verified_email FROM (SELECT DISTINCT ON (user_id) * FROM sec_user_version WHERE"
+            + " email_verified_at, verified_email, enabled FROM (SELECT DISTINCT ON (user_id) * FROM sec_user_version WHERE"
             + " user_id = ANY(:users) AND effect_start_time <= :now ORDER BY user_id, effect_start_time DESC,"
             + " version_no DESC) u WHERE NOT u.is_deleted", params).collectList();
         Mono<List<Map<String, Object>>> factors = engine().select("SELECT user_id, max(confirmed_time) AS confirmed"
@@ -215,7 +230,8 @@ public class FirstLaunchAccountStore {
                     Set.copyOf(waiting.getOrDefault(user, List.of())),
                     Set.copyOf(decided.getOrDefault(user, List.of())),
                     invitation == null ? null : Rows.instant(invitation.get("first")),
-                    invitation == null ? 0 : Rows.longValue(invitation.get("invitations")).intValue()));
+                    invitation == null ? 0 : Rows.longValue(invitation.get("invitations")).intValue(),
+                    Boolean.TRUE.equals(row.get("enabled"))));
             }
             return Map.copyOf(facts);
         });

@@ -105,8 +105,8 @@ class FirstLaunchExpiryIT extends SignUpItSupport {
         assertThat(run().state()).isEqualTo(FirstLaunchRun.State.EXPIRED);
         assertThat(query("SELECT enabled FROM sec_role_version WHERE role_code = ? ORDER BY version_no DESC LIMIT 1",
             WaitingRole.CODE).getFirst()).containsEntry("enabled", false);
-        assertThat(text(to(A).getLast())).contains("deadline has passed").contains("A has no configured role")
-            .contains("B has no configured role");
+        assertThat(text(to(A).getLast())).contains("deadline has passed").contains("#1 has no configured role")
+            .contains("#2 has no configured role");
         // The waiting role is disabled: an account that held only it no longer signs in.
         assertThat(refusal(loginTo(B, "own horse battery", null), 401)).isEqualTo("LOGIN_FAILED");
     }

@@ -95,9 +95,9 @@ class FirstLaunchAccountsIT extends SignUpItSupport {
     @Test
     @Order(1)
     void theAccountsHoldTheWaitingRoleOnlyAndNoPasswordAndAreNotInvitedYet() {
-        assertThat(query("SELECT account_key, roles, report FROM sys_first_launch_account ORDER BY position"))
-            .extracting(row -> row.get("account_key") + " " + row.get("roles") + " " + row.get("report"))
-            .containsExactly("B IT_BACK_OFFICE true", "C CUSTOMER false");
+        assertThat(query("SELECT user_id::text AS id, roles, report FROM sys_first_launch_account ORDER BY position"))
+            .extracting(row -> row.get("id") + " " + row.get("roles") + " " + row.get("report"))
+            .containsExactly(user("B") + " IT_BACK_OFFICE true", user("C") + " CUSTOMER false");
         assertThat(userOf(B)).containsEntry("password_hash", null).containsEntry("verified_email", null);
         assertThat(rolesOf(user("B"))).containsExactly(WaitingRole.CODE);
         assertThat(query("SELECT enabled, require_mfa FROM sec_role_version WHERE role_code = ?", WaitingRole.CODE))
