@@ -1455,3 +1455,11 @@ class CustomerPersonalData implements PersonalDataEraser {
 - **运维**：地址库由部署放到服务器上并按月更新（例如 DB-IP 的 "IP to Country Lite" CSV：`https://db-ip.com/db/download/ip-to-country-lite`，CC BY 4.0，
   须在网站上署名"IP Geolocation by DB-IP"）；替换文件即可（原子替换：先写临时文件再改名），一分钟内生效，日志写"Address database …: N ranges"。
   过旧时启动检查告警；读不懂时保留旧库并记 WARN。应用的运维文档写明下载、更新的步骤与署名的位置。
+
+## 首发配置与账号（17zz23，决策 D82）
+
+在从未有过用户的库上，首发配置（设计 23）以 `FirstLaunchHandler` 的步骤建立账号与内容：
+- 与引导管理员（§7）、`protected-grants.always` 互斥；
+- 内容阶段中，步骤可"代行"本运行建立、从未有过凭据的账号（无角色、无权限、无会话，流程须由应用列出），本人一旦有凭据即不再代行；
+- 账号的角色照常由 `SEC_USER_ROLE_ASSIGN` 授予（17zz23c）。
+

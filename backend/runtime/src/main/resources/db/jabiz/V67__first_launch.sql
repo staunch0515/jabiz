@@ -14,7 +14,9 @@ SELECT jabiz_protect_append_only('sys_first_launch_run');
 
 -- CONTENT_DONE: the content phase is done and the application serves (the first launch's own powers end here for
 -- good); DONE / FAILED / EXPIRED: the run has ended; REVISED: in the waiting phase, an unaccepted account's address
--- was corrected. The current state is the latest event of a terminal or phase kind (by process_seq_id).
+-- was corrected. The current state is the latest event of a terminal or phase kind (by process_seq_id). reason and
+-- reason_code are written for FAILED only (the log's words, never an address); a REVISED event names the account by
+-- its configuration key in detail, never by its address.
 CREATE TABLE sys_first_launch_event (
     event_id       uuid        PRIMARY KEY,
     run_id         uuid        NOT NULL REFERENCES sys_first_launch_run (run_id),
