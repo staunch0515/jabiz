@@ -5650,6 +5650,10 @@ QuizBuks 的 #545、#546、#547 用了 43.5–45 分钟，#545 到点被取消�
 | 17zz23a-6 | 平台各部分的扩展点 `FirstLaunchPlatformSteps`（17zz23c 的账号接在这里）、`FirstLaunchRuns` |
 | 17zz23a-7 | 测试：core `FirstLaunchTypesTest`；runtime `FirstLaunchConfigReaderTest`；`FirstLaunchIT`（503、等待的步骤、步骤间的输出、至多一次运行、内容阶段结束后不再有步骤与失败、只追加）、`FirstLaunchFailureIT`（失败的记录、退出码、之后的启动失败）、`FirstLaunchStartupIT`（已有用户不执行、全部问题一次报告、试运行不写、核对模式） |
 | 17zz23a-8 | 文档：设计 23、指南 `first-launch.md`、`CLAUDE.md` |
+| 17zz23c-1 | 账号：平台步骤 `FirstLaunchAccountSteps`（`waiting-role`、`account:<代号>`）、待命角色 `FIRST_LAUNCH_PENDING` 与 `WaitingRoleWriteCheck`（`FIRST_LAUNCH_ROLE_RESERVED`）、V68 `sys_first_launch_account`；校验入口接受待命角色、邮件开启 |
+| 17zz23c-2 | 等人阶段：任务 `jabiz.first-launch`（`FIRST_LAUNCH_ADVANCE`：邀请与再邀请、授予、管理员最后且须指纹确认、撤下待命角色、`DONE` / `EXPIRED`、报告 `FIRST_LAUNCH_REPORT`） |
+| 17zz23c-3 | 改邮箱的补救（D83）：`FIRST_LAUNCH_EMAIL_REVISE`、`CredentialChain` 的窄例外、`ConfigShape`、`FirstLaunchRevisions`、`REVISED` |
+| 17zz23c-4 | 测试：`GrantPlanTest`、`EmailRevisionTest`、`ConfigShapeTest`、`CredentialChainTest`、`FirstLaunchAccountsIT`、`FirstLaunchWaitingIT`、`FirstLaunchExpiryIT`；文档：设计 23 §8、D83、10 §15.14、指南、`CLAUDE.md` |
 ### 线 1.3 的候选（未排期，2026-11-08 总控：首次上线前不做）
 
 | 候选 | 缘由 | 粗估 |
