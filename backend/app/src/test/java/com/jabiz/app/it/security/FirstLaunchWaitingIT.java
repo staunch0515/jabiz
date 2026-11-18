@@ -14,6 +14,9 @@ import com.jabiz.runtime.context.RequestContexts;
 import com.jabiz.runtime.firstlaunch.FirstLaunchExit;
 import com.jabiz.runtime.firstlaunch.FirstLaunchRun;
 import com.jabiz.runtime.firstlaunch.FirstLaunchRuns;
+import com.jabiz.runtime.firstlaunch.FirstLaunchConfigReader;
+import com.jabiz.runtime.firstlaunch.FirstLaunchSettings;
+import com.jabiz.runtime.firstlaunch.accounts.FirstLaunchRevisions;
 import com.jabiz.runtime.firstlaunch.accounts.FirstLaunchWaiting;
 import com.jabiz.runtime.firstlaunch.accounts.GrantPlan;
 import com.jabiz.runtime.firstlaunch.accounts.WaitingRole;
@@ -65,38 +68,58 @@ class FirstLaunchWaitingIT extends SignUpItSupport {
 
     static final String A = "fl-a@example.com";
     static final String B = "fl-b@example.com";
+    static final String B_WRONG = "fl-b-wrong@example.com";
     static final String OWN = "own horse battery";
     /** What the operator confirmed (JABIZ_FIRST_LAUNCH_CONFIRM_ADMINS), read anew at every use. */
     static final AtomicReference<String> CONFIRMED = new AtomicReference<>("");
 
     @DynamicPropertySource
     static void firstLaunch(DynamicPropertyRegistry registry) {
-        registry.add("jabiz.first-launch.config", () -> configFile("""
+        registry.add("jabiz.first-launch.config", () -> configFile(config(A, B_WRONG)));
+        registry.add("jabiz.first-launch.confirm-admins", CONFIRMED::get);
+    }
+
+    /** The configuration, with the accounts' addresses given. */
+    static String config(String a, String b) {
+        return """
             version: 1
             site:
               language: en
             allowedEmailDomains: [example.com]
             accounts:
               - key: A
-                email: fl-a@example.com
+                email: %s
                 name: Alice Admin
                 language: en
                 roles: [IT_STAFF, IT_SUPER]
                 report: true
               - key: B
-                email: fl-b@example.com
+                email: %s
                 name: Bob Staff
                 roles: [IT_STAFF]
-            """));
-        registry.add("jabiz.first-launch.confirm-admins", CONFIRMED::get);
+            """.formatted(a, b);
+    }
+
+    static Path mainFile;
+
+    /** A configuration file of its own, for another test class. */
+    static String configFileIn(String content) {
+        try {
+            Path main = Files.createTempDirectory("first-launch").resolve("first-launch.yml");
+            Files.writeString(main, content);
+            return main.toString();
+        } catch (IOException e) {
+            throw new UncheckedIOException(e);
+        }
     }
 
     static String configFile(String content) {
         try {
-            Path directory = Files.createTempDirectory("first-launch");
-            Path main = directory.resolve("first-launch.yml");
-            Files.writeString(main, content);
-            return main.toString();
+            if (mainFile == null) {
+                mainFile = Files.createTempDirectory("first-launch").resolve("first-launch.yml");
+            }
+            Files.writeString(mainFile, content);
+            return mainFile.toString();
         } catch (IOException e) {
             throw new UncheckedIOException(e);
         }
@@ -167,6 +190,9 @@ class FirstLaunchWaitingIT extends SignUpItSupport {
     JobRunner jobs;
 
     @Autowired
+    FirstLaunchRevisions revisions;
+
+    @Autowired
     @Qualifier("firstLaunchJob")
     JobDefinition<FirstLaunchWaiting.AdvanceInput> job;
 
@@ -226,6 +252,19 @@ class FirstLaunchWaitingIT extends SignUpItSupport {
             .expectStatus().isOk();
     }
 
+    /** The configuration as it is on disk now. */
+    private static FirstLaunchConfig onDisk() {
+        FirstLaunchConfigReader.Read read = new FirstLaunchConfigReader(new FirstLaunchSettings(mainFile.toString(),
+            false, Duration.ofMinutes(10), Duration.ofSeconds(1), 1 << 20, 1 << 24, 100)).read();
+        assertThat(read.problems()).isEmpty();
+        return read.config();
+    }
+
+    private static long revised() {
+        return (Long) query("SELECT count(*) AS n FROM sys_first_launch_event WHERE kind = 'REVISED'").getFirst()
+            .get("n");
+    }
+
     private static String userId(String email) {
         return String.valueOf(userOf(email).get("user_id"));
     }
@@ -248,9 +287,29 @@ class FirstLaunchWaitingIT extends SignUpItSupport {
         // The job invites both, once.
         advance();
         assertThat(to(A)).hasSize(1);
-        assertThat(to(B)).hasSize(1);
+        assertThat(to(B_WRONG)).hasSize(1);
         advance();
         assertThat(to(A)).hasSize(1);
+        String wrongLink = token(InvitationIT.INVITE_LINK, B_WRONG);
+
+        // B's address was mistyped: corrected in the configuration and restarted (decision D83).
+        assertThat(revisions.revise(onDisk())).as("nothing changed yet").isEmpty();
+        configFile(config(A, B));
+        assertThat(revisions.revise(onDisk())).containsExactly("B");
+        deliver();
+        assertThat(to(B)).hasSize(1);
+        assertThat(refusal(anonymous("/api/auth/invitation/confirm", Map.of("token", wrongLink, "password", OWN)),
+            422)).isEqualTo("TOKEN_INVALID");
+        assertThat(revised()).isEqualTo(1);
+        assertThat(revisions.revise(onDisk())).as("applied already").isEmpty();
+        assertThat(revised()).isEqualTo(1);
+        advance();
+        assertThat(to(B)).as("not invited again by the job").hasSize(1);
+        // Anything else that differs: nothing is applied.
+        configFile(config(A, B).replace("Bob Staff", "Robert Staff").replace(B, "fl-b2@example.com"));
+        assertThat(revisions.revise(onDisk())).isEmpty();
+        assertThat(revised()).isEqualTo(1);
+        configFile(config(A, B));
 
         // Accepting alone gives nothing; with a second factor bound, the ordinary role is given.
         anonymous("/api/auth/invitation/confirm", Map.of("token", token(InvitationIT.INVITE_LINK, B),
@@ -278,6 +337,12 @@ class FirstLaunchWaitingIT extends SignUpItSupport {
         advance();
         assertThat(holds(A, "IT_STAFF")).isTrue();
         assertThat(holds(A, "IT_SUPER")).isFalse();
+        // An accepted account's address is no longer corrected from the configuration.
+        configFile(config("fl-a2@example.com", B));
+        assertThat(revisions.revise(onDisk())).isEmpty();
+        assertThat(userOf(A)).isNotNull();
+        assertThat(revised()).isEqualTo(1);
+        configFile(config(A, B));
         advance();
         assertThat(holds(A, "IT_SUPER")).as("no confirmation yet").isFalse();
         assertThat(run().state()).isEqualTo(FirstLaunchRun.State.CONTENT_DONE);
