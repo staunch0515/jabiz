@@ -57,13 +57,16 @@ class FirstLaunchStartupIT extends PostgresIntegrationTest {
     @Autowired
     com.jabiz.runtime.firstlaunch.FirstLaunchPowers powers;
 
+    @Autowired
+    com.jabiz.runtime.firstlaunch.FirstLaunchFiles files;
+
     private final List<Integer> exits = new CopyOnWriteArrayList<>();
 
     private FirstLaunchRunner runner(MockEnvironment environment, FirstLaunchGate gate) {
         ObjectProvider<FirstLaunchExit> exit = new org.springframework.beans.factory.support.StaticListableBeanFactory(
             java.util.Map.of("exit", (FirstLaunchExit) exits::add)).getBeanProvider(FirstLaunchExit.class);
         return new FirstLaunchRunner(environment, runs, gate, processes, handlers, platformSteps, messages, clockBean,
-            exit, json, powers);
+            exit, json, powers, files);
     }
 
     @Test

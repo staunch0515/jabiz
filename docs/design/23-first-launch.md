@@ -128,4 +128,17 @@
 | 参数初值发布 | 系统步骤先 `CONTROL_CHANGE_PROPOSE`，再 `CONTROL_CHANGE_FIRST_LAUNCH_PUBLISH`（`subProcessOnly()`） | 只限受控参数与审批规则（职责分离规则、审批人限额不行）；提议人须是系统；目标键须在 `publishableControlKeys()` 中；发布人 `first-launch`；不检查 `CONTROL_SAME_PERSON` |
 | 首发审批 | 系统步骤 `APPROVAL_FIRST_LAUNCH_DECIDE`（`subProcessOnly()`，输入审批请求编号） | 批准其余各级，每级一条决定（`first-launch:<级>`，理由为配置哈希），照常发 `jabiz.approval.approved`；带限额的级拒绝。决定人不是用户编号：显示决定人的地方把 `first-launch:` 开头的当作首发 |
 
+**文件步骤**（17zz23d）：`FirstLaunchStep.file(键, new FileSource(策略, 相对路径, 取出字节, 名称)).asAccount(代号)`。文件步骤必须代行（没有账号即启动校验失败）。
+- **来源**：字节只来自配置的目录，经 `FirstLaunchConfig.Files` 读取。读取时：
+  - 路径规范化后不得出目录、不经符号链接（逐段检查，以 `NOFOLLOW_LINKS` 打开）；
+  - 文件须是读取配置时就在目录中的，且内容的 SHA-256 与那时记下的相同：启动后新增或改写的文件一律拒绝；
+  - 最多读 `jabiz.first-launch.max-file-bytes` + 1 个字节，超出即拒绝。
+  处理器的函数只从读到的字节中取出要存的部分（如发起方包中 base64 的图片）；返回 `null` 即该步骤失败。读取与取出在 `boundedElastic` 上进行。
+- **大小的界限**：解码之前只有 `jabiz.first-launch.max-file-bytes`（单个文件）与 `max-total-bytes`（整个目录）；策略的 `maxBytes` 作用于取出（解码）后的字节，在进入流水线之前检查（`storeGenerated` 的第一步），超出即 413。
+- **存储与登记**：先经平台完整的上传流水线（`FileUploadService.storeGenerated`）存储字节：按内容判定类型、图片重新编码并去掉元数据、策略的大小与类型。随后在 `FIRST_LAUNCH_STEP` 之下以子流程 `FIRST_LAUNCH_FILE_REGISTER`（`subProcessOnly()`，复用文件登记）登记为该账号的上传，所以照旧持有运行的行锁、检查内容阶段（按流程的谱系）与代行条件；登记失败即删除已存的对象。内容流程"只接受操作人自己上传的文件"照常成立。
+- **启动校验与试运行**：每个文件步骤的账号、策略已声明、文件存在且不过大，一次报全。
+- **步骤的输出**：文件编号（`privateMetadata()` 策略为随机编号）。文件名不进 `op_process.input_summary`。
+- **唯一放宽的是上传权限**：首发建立的账号此时还没有任何权限。代替它的是处理器在 `filePolicies()` 中声明的策略（启动检查 `FIRST_LAUNCH` 要求策略存在、名称不空白），加上代行的条件（本运行建立、从未有过凭据、运行仍在内容阶段）。
+- 只有运行器使用 `FirstLaunchFiles`（架构测试）。
+
 审批结果由事件投递运行，所以送审之后要用等待的步骤（`FirstLaunchStep.await`）等结果流程完成，再做依赖它的步骤（如知识结构图生效后再送审绑定它的发布）。
