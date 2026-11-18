@@ -5635,6 +5635,20 @@ QuizBuks 的 #545、#546、#547 用了 43.5–45 分钟，#545 到点被取消�
 
 **17zz22 状态**：进行中。
 
+### 17zz24 子流程只读已存储的状态：写明并留痕（2026-11-18，QuizBuks S6 报告）
+
+**缘由**：流程先 `ctx.changes().update` 用户的邮箱、再以 `CallProcess` 调用 `SEC_USER_INVITE`，邀请检查并寄到**旧地址**。查明不是 D46"读之前写出"的漏洞：`AddressVerifiable`（`ProtectedGrants.credentials`）与收件人解析都经 `StorageEngine.select`，引擎的缓冲写入在读其表之前一律先写出；原因是 `ctx.changes()` 登记的变更要到流程结束或 `SaveChanges` 才提交，`CallProcess` 不替父流程提交，子流程读到的是已存储的状态。总控决定不改行为（改了会动 D11 的语义与所有子流程调用点的语句数），写明并留痕。
+
+| # | 内容 |
+|---|---|
+| 17zz24-1 | 测试 `CallProcessSeesOnlyCommittedChangesIT`（真实 PostgreSQL）：父流程先 `SaveChanges` 再调 `SEC_USER_INVITE`，子流程看得到新地址（邀请被拒 `INVITATION_ADDRESS_CHANGED`）；不 `SaveChanges`，邀请寄给旧地址、新地址在父流程结束时才存储 |
+| 17zz24-2 | `CallProcess`：带着未提交变更调用子流程时记 DEBUG 日志（不刷 WARN）；Javadoc 写明 |
+| 17zz24-3 | 文档：设计 06 §2.1（`SaveChanges` 一行）与 §5（父流程登记、尚未提交的变更对子流程不可见） |
+
+**验收**：`CallProcessSeesOnlyCommittedChangesIT` 绿；`StatementBudgetIT` 不受影响（只加日志）。
+
+**17zz24 状态**：草稿 PR 待合并。
+
 ### 线 1.3 的候选（未排期，2026-11-08 总控：首次上线前不做）
 
 | 候选 | 缘由 | 粗估 |
