@@ -337,6 +337,11 @@ public final class PlatformErrorCodes {
      * address entered when it was created, since changing the address is how an account is taken over.
      */
     public static final String INVITATION_ADDRESS_CHANGED = "INVITATION_ADDRESS_CHANGED";
+    /**
+     * 422: the first launch's waiting role ({@code FIRST_LAUNCH_PENDING}, D82) is given, enabled or changed only by the
+     * first launch, and never holds a permission.
+     */
+    public static final String FIRST_LAUNCH_ROLE_RESERVED = "FIRST_LAUNCH_ROLE_RESERVED";
     /** 422: the user is disabled (D63). */
     public static final String INVITATION_USER_DISABLED = "INVITATION_USER_DISABLED";
     /** The second factor code (or recovery code) is wrong, or the account is locked (10 section 9). */
@@ -498,6 +503,7 @@ public final class PlatformErrorCodes {
         MFA_REENROLLMENT_OPEN, MFA_REENROLLMENT_NOT_PENDING, KEY_ROTATION_UNDECLARED_SEALED, CONTROL_CHANGE_INVALID, CONTROL_CHANGE_NOT_PROPOSED, CONTROL_SAME_PERSON, CONTROL_TARGET_CHANGED, SOD_CONFLICT,
         PROTECTED_CHANGE_REQUIRES_APPROVAL, BOOTSTRAP_ADMIN_RETIRED, APPROVAL_TARGET_USER, PROTECTED_CHANGE_NOT_PENDING,
         EMAIL_SET_BY_ANOTHER, INVITATION_NOT_NEEDED, INVITATION_ADDRESS_CHANGED, INVITATION_USER_DISABLED,
+        FIRST_LAUNCH_ROLE_RESERVED,
         MFA_CODE_INVALID, MFA_NOT_ENROLLED, MFA_ALREADY_ENROLLED,
         PASSKEY_DISABLED, PASSKEY_LIMIT, PASSKEY_EXISTS, PASSKEY_INVALID,
         IDEMPOTENCY_KEY_REUSED,
