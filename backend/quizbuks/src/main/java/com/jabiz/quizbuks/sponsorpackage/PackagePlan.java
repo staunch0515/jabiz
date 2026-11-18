@@ -149,8 +149,9 @@ public final class PackagePlan {
                 List<QuizVersion> read = new ArrayList<>();
                 for (int j = 0; j < versions.size(); j++) {
                     Object version1 = versions.get(j);
+                    // An empty key would name the current content (the same step keys): damaged, as on the page.
                     if (!isObject(version1) || !(object(version1).get("key") instanceof String versionKey)
-                        || !isObject(object(version1).get("file"))) {
+                        || versionKey.isEmpty() || !isObject(object(version1).get("file"))) {
                         places.add("quizzes[" + i + "].versions[" + j + "]");
                         continue;
                     }

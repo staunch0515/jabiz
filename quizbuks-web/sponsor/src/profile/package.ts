@@ -423,7 +423,8 @@ export function readPackage(value: unknown):
     }
     const versions: PackageQuizVersion[] = []
     quiz.versions.forEach((version, j) => {
-      if (!isObject(version) || typeof version.key !== 'string' || !isObject(version.file)) {
+      // An empty key would name the current content (its steps would share the current content's keys): damaged.
+      if (!isObject(version) || typeof version.key !== 'string' || version.key === '' || !isObject(version.file)) {
         places.push(`quizzes[${i}].versions[${j}]`)
         return
       }

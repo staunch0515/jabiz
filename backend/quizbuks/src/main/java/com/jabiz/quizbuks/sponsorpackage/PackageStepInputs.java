@@ -49,8 +49,13 @@ public final class PackageStepInputs {
     /**
      * The step's input.
      *
-     * @param results what the earlier steps gave, by step key ({@code quizId}, {@code versionId}, {@code treeId},
-     *     {@code nodeIds} by node key)
+     * @param results what the earlier steps gave, by step key: each step's {@code StepOutput.result} of
+     *     {@code QB_PACKAGE_IMPORT_STEP} (an import gone on with gives the steps done so far in {@code ImportView.done}
+     *     of {@code QB_PACKAGE_IMPORT_START}). The keys read: a {@link Step.Content}'s {@code quizId} (by the later
+     *     contents, clears, batches and versions of its quiz, and its publications), a {@link Step.Version}'s
+     *     {@code versionId} (by the publications on it), a {@link Step.TreeStep}'s {@code treeId} and {@code nodeIds}
+     *     (the node ids by the package's node keys, by the publications bound to its nodes). An earlier step missing
+     *     from it leaves the id null, as on the page; run the steps in the plan's order.
      * @param sharedVideos the package's shared videos this environment shares now (the others are chosen again)
      * @param startAt a publication's start
      */
