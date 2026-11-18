@@ -63,8 +63,7 @@ final class CredentialChain {
      * The first launch's correction of the address of an account its run created (decision D82): counted as entered at
      * creation only when the system makes it before the account was ever used.
      */
-    static final String FIRST_LAUNCH_EMAIL_REVISE =
-        com.jabiz.runtime.firstlaunch.accounts.FirstLaunchAccountProcesses.EMAIL_REVISE;
+    static final String FIRST_LAUNCH_EMAIL_REVISE = "FIRST_LAUNCH_EMAIL_REVISE";
     /** The actor of platform processes ({@code RequestContext.SYSTEM_ACTOR}). */
     private static final String SYSTEM = "system";
 

@@ -284,6 +284,12 @@ class CredentialChainTest {
      * credential or a proven address - is an ordinary change by someone else.
      */
     @Test
+    void theCorrectionIsTheFirstLaunchsProcess() {
+        assertThat(CredentialChain.FIRST_LAUNCH_EMAIL_REVISE)
+            .isEqualTo(com.jabiz.runtime.firstlaunch.accounts.FirstLaunchAccountProcesses.EMAIL_REVISE);
+    }
+
+    @Test
     void theFirstLaunchCorrectsAnUnusedAccountsAddressAsIfEnteredAtCreation() {
         user(SYSTEM, "SEC_USER_CREATE", null, "wrong@example.com", null);
         user(SYSTEM, CredentialChain.FIRST_LAUNCH_EMAIL_REVISE, null, "right@example.com", null);
