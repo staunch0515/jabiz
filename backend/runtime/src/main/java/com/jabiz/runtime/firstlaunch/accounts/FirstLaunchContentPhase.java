@@ -22,18 +22,30 @@ public class FirstLaunchContentPhase<C extends ProcessContext>
     /** The context key of the run's id. */
     public static final String RUN_ID = "first_launch_run_id";
 
-    /** @param record the accounts to record, built on the context (null: only check the phase) */
-    public record Metadata<C>(Function<C, List<FirstLaunchAccountStore.Recorded>> record) {}
+    /**
+     * @param record  the accounts to record, built on the context (null: only check the phase)
+     * @param waiting the user that must be an account of a waiting run (null: check the content phase instead)
+     */
+    public record Metadata<C>(Function<C, List<FirstLaunchAccountStore.Recorded>> record,
+        Function<C, UUID> waiting) {}
 
     /** Checks that a run is in its content phase and puts its id under {@link #RUN_ID}. */
     public static <C extends ProcessContext> StepSpec<Metadata<C>, C> require() {
-        return StepSpec.of(FirstLaunchContentPhase.class, new Metadata<>(null));
+        return StepSpec.of(FirstLaunchContentPhase.class, new Metadata<>(null, null));
     }
 
     /** Records the accounts {@code record} gives, in the run of {@link #RUN_ID}. */
     public static <C extends ProcessContext> StepSpec<Metadata<C>, C> record(
         Function<C, List<FirstLaunchAccountStore.Recorded>> record) {
-        return StepSpec.of(FirstLaunchContentPhase.class, new Metadata<>(record));
+        return StepSpec.of(FirstLaunchContentPhase.class, new Metadata<>(record, null));
+    }
+
+    /**
+     * Refuses unless the user {@code user} gives is an account of a run whose content phase is done and that has not
+     * ended (the waiting phase): the first launch changes only its own accounts, and only then.
+     */
+    public static <C extends ProcessContext> StepSpec<Metadata<C>, C> waitingAccount(Function<C, UUID> user) {
+        return StepSpec.of(FirstLaunchContentPhase.class, new Metadata<>(null, user));
     }
 
     private final FirstLaunchAccountStore store;
@@ -47,6 +59,11 @@ public class FirstLaunchContentPhase<C extends ProcessContext>
         if (metadata.record() != null) {
             return Mono.defer(() -> reactor.core.publisher.Flux.fromIterable(metadata.record().apply(ctx))
                 .concatMap(account -> store.record(account, ctx.processSeqId())).then());
+        }
+        if (metadata.waiting() != null) {
+            return Mono.defer(() -> store.waitingAccount(metadata.waiting().apply(ctx))).flatMap(found -> found
+                ? Mono.empty() : Mono.error(new IllegalStateException("Not an account of a first launch in its"
+                + " waiting phase: the first launch corrects only its own accounts' addresses, and only then")));
         }
         return store.runningRun().flatMap(run -> {
             if (run.isEmpty()) {

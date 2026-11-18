@@ -165,6 +165,7 @@ public class FirstLaunchAccountProcesses {
                 return ctx;
             })
             .outputMapper(ctx -> new ReviseOutput(String.valueOf(ctx.get(USER_ID)), "REVISED"))
+            .step("Check the account", FirstLaunchContentPhase.waitingAccount(ctx -> (UUID) ctx.get(USER_ID)))
             .step("Load the user", LoadEntity.by(SecurityEntities.USER_DATASET, USER_ID, USER))
             .step("Load the second factors", QueryEntities.of(SecurityEntities.USER_MFA_DATASET,
                 ctx -> Rbac.all(new QueryPredicate.Eq("userId", ctx.get(USER_ID)), "userMfaId"), FACTORS))

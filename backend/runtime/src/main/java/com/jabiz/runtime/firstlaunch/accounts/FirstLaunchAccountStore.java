@@ -83,6 +83,19 @@ public class FirstLaunchAccountStore {
             .next().map(row -> Optional.of(Rows.uuid(row.get("run_id")))).defaultIfEmpty(Optional.empty());
     }
 
+    /**
+     * Whether {@code userId} is an account of a run that is waiting: its content phase done ({@code CONTENT_DONE}) and
+     * not ended - judged by the run's record and {@code sys_first_launch_account}, never by request ids.
+     */
+    public Mono<Boolean> waitingAccount(UUID userId) {
+        return engine().select("SELECT 1 AS found FROM " + TABLE + " a WHERE a.user_id = :user"
+                + " AND EXISTS (SELECT 1 FROM sys_first_launch_event e WHERE e.run_id = a.run_id"
+                + " AND e.kind = 'CONTENT_DONE')"
+                + " AND NOT EXISTS (SELECT 1 FROM sys_first_launch_event e WHERE e.run_id = a.run_id"
+                + " AND e.kind IN ('DONE', 'EXPIRED', 'FAILED'))", Map.of("user", BoundValue.of(userId)))
+            .hasElements();
+    }
+
     Mono<Void> record(Recorded account, long processSeqId) {
         Map<String, Object> row = new LinkedHashMap<>();
         row.put("run_id", account.runId());

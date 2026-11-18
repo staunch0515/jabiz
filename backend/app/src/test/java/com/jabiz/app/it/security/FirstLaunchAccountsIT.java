@@ -173,6 +173,15 @@ class FirstLaunchAccountsIT extends SignUpItSupport {
         deliver();
         String wrongLink = token(InvitationIT.INVITE_LINK, C_WRONG);
 
+        // Only in the waiting phase, and only for the run's own accounts.
+        assertThatThrownBy(() -> asSystem(FirstLaunchAccountProcesses.REVISE_PROCESS,
+            new ReviseInput(UUID.fromString(user("C")), C_RIGHT))).hasMessageContaining("waiting phase");
+        String runId = String.valueOf(query("SELECT run_id::text AS id FROM sys_first_launch_run").getFirst().get("id"));
+        asSystem(FirstLaunchProcesses.RECORD_PROCESS, new FirstLaunchProcesses.RecordInput(runId, "CONTENT_DONE", null,
+            null, null, "it-hash", null));
+        String stranger = createUserWithEmail(unique("stranger"), address("stranger"), null);
+        assertThatThrownBy(() -> asSystem(FirstLaunchAccountProcesses.REVISE_PROCESS,
+            new ReviseInput(UUID.fromString(stranger), address("elsewhere")))).hasMessageContaining("waiting phase");
         asSystem(FirstLaunchAccountProcesses.REVISE_PROCESS, new ReviseInput(UUID.fromString(user("C")), C_RIGHT));
         asSystem(invite, new InvitationProcesses.InviteInput(UUID.fromString(user("C")), null));
         deliver();
