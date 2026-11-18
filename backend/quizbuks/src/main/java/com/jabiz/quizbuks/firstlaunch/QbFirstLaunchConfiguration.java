@@ -31,4 +31,10 @@ class QbFirstLaunchConfiguration {
     ProcessDefinition<QbFirstLaunchProcesses.LeadInput, Boolean, ProcessContext> qbFirstLaunchLeadProcess() {
         return QbFirstLaunchProcesses.lead();
     }
+
+    @Bean
+    ProcessDefinition<QbFirstLaunchProcesses.MemberInput, com.jabiz.quizbuks.operator.OperatorProcesses.MemberOutput,
+        ProcessContext> qbFirstLaunchMemberProcess() {
+        return QbFirstLaunchProcesses.member();
+    }
 }

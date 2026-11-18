@@ -48,6 +48,7 @@ public final class QbFirstLaunchProcesses {
     public static final String APPROVE = "QB_FIRST_LAUNCH_APPROVE";
     public static final String READY = "QB_FIRST_LAUNCH_READY";
     public static final String LEAD = "QB_FIRST_LAUNCH_LEAD";
+    public static final String MEMBER = "QB_FIRST_LAUNCH_MEMBER_ADD";
 
     /**
      * @param withdraw    the proposal {@code QB_SETUP} made of the parameter
@@ -75,6 +76,13 @@ public final class QbFirstLaunchProcesses {
 
     public record LeadInput(@NotBlank String userId) {}
 
+    /**
+     * @param leadUserId the operator's lead (its own sponsor): the operator is found by it, not by an id the content
+     *                   phase gave (the waiting phase keeps none)
+     * @param userId     the member to add
+     */
+    public record MemberInput(@NotBlank String leadUserId, @NotBlank String userId) {}
+
     static final String INPUT = "input";
     static final String WITHDRAWN = "withdrawn";
     static final String PROPOSED = "proposed";
@@ -84,6 +92,8 @@ public final class QbFirstLaunchProcesses {
     static final String TREE_VERSIONS = "treeVersions";
     static final String PAGES = "pages";
     static final String PUBLICATIONS = "publications";
+    static final String OPERATOR = "operator";
+    static final String ADDED = "added";
 
     /** Publication states the first launch takes as in effect. */
     static final Set<String> IN_EFFECT = Set.of(PublicationStatus.LIVE, PublicationStatus.SCHEDULED);
@@ -167,6 +177,43 @@ public final class QbFirstLaunchProcesses {
             .outputMapper(ctx -> Boolean.TRUE)
             .step("Check the first launch's power", FirstLaunchCheck.of("sec_user_version", "user_id",
                 ctx -> ctx.get(INPUT, LeadInput.class).userId())));
+    }
+
+    /**
+     * The waiting phase's step for a configured member of an operator (plan section 5.2), once the member's own roles
+     * are applied (the platform's account-ready hook, run as the system): added to the operator its lead leads, with
+     * {@code QB_OPERATOR_MEMBER_ADD}'s own checks (a verified address among them); one already a member is left.
+     */
+    public static ProcessDefinition<MemberInput, com.jabiz.quizbuks.operator.OperatorProcesses.MemberOutput,
+        ProcessContext> member() {
+        return ProcessDefinition.define(MEMBER, 1, MemberInput.class,
+            com.jabiz.quizbuks.operator.OperatorProcesses.MemberOutput.class, ProcessContext.class, pb -> pb
+                .description("First launch: adds a configured member to the operator its lead leads.")
+                .permissions(QbPermissions.OPERATORS_WRITE)
+                .subProcessOnly()
+                .contextFactory(QbFirstLaunchProcesses::start)
+                .outputMapper(ctx -> ctx.get(ADDED, com.jabiz.quizbuks.operator.OperatorProcesses.MemberOutput.class))
+                .compute("Only the first launch", (metadata, ctx) -> {
+                    // A second line behind the hook's own: the platform runs it as the system only.
+                    if (!system(ctx)) {
+                        throw new com.jabiz.runtime.PermissionDeniedException(QbPermissions.OPERATORS_WRITE,
+                            "Only the first launch adds its configured members");
+                    }
+                })
+                .step("Load the lead's operator", QueryEntities.<ProcessContext>of(
+                    com.jabiz.quizbuks.operator.QbOperators.defaultDataset(
+                        com.jabiz.quizbuks.operator.QbOperators.OPERATOR),
+                    ctx -> EntityQuery.builder().where(new QueryPredicate.Eq("directSponsorId",
+                        ctx.get(INPUT, MemberInput.class).leadUserId())).limit(1).build(), OPERATOR))
+                .step("Add the member", CallProcess.<ProcessContext>of(
+                    com.jabiz.quizbuks.operator.OperatorProcesses.MEMBER_ADD, 1, ctx -> {
+                        List<EntityInstance> found = list(ctx, OPERATOR);
+                        if (found.isEmpty()) {
+                            throw new IllegalStateException("No operator is led by the configured lead");
+                        }
+                        return new com.jabiz.quizbuks.operator.OperatorProcesses.MemberInput(
+                            String.valueOf(found.getFirst().id()), ctx.get(INPUT, MemberInput.class).userId(), false);
+                    }, ADDED)));
     }
 
     private static ParamInput input(ProcessContext ctx) {
