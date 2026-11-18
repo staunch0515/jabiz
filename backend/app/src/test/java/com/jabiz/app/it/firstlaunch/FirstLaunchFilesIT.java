@@ -87,6 +87,39 @@ class FirstLaunchFilesIT extends PostgresIntegrationTest {
         }
     }
 
+    /** A JPEG carrying an EXIF segment with a GPS marker, which the pipeline must not keep. */
+    static byte[] jpegWithExif() {
+        BufferedImage image = new BufferedImage(16, 16, BufferedImage.TYPE_INT_RGB);
+        try {
+            ByteArrayOutputStream plain = new ByteArrayOutputStream();
+            ImageIO.write(image, "jpg", plain);
+            byte[] jpeg = plain.toByteArray();
+            byte[] payload = ("Exif\0\0" + GPS_MARKER).getBytes(java.nio.charset.StandardCharsets.ISO_8859_1);
+            ByteArrayOutputStream out = new ByteArrayOutputStream();
+            out.write(jpeg, 0, 2);
+            out.write(0xFF);
+            out.write(0xE1);
+            out.write((payload.length + 2) >> 8);
+            out.write((payload.length + 2) & 0xFF);
+            out.write(payload);
+            out.write(jpeg, 2, jpeg.length - 2);
+            return out.toByteArray();
+        } catch (IOException e) {
+            throw new UncheckedIOException(e);
+        }
+    }
+
+    static final String GPS_MARKER = "GPSLatitude-first-launch-35.6812";
+
+    @org.junit.jupiter.api.AfterAll
+    static void cleanUp() throws IOException {
+        if (directory != null && Files.exists(directory)) {
+            try (var walk = Files.walk(directory)) {
+                walk.sorted(java.util.Comparator.reverseOrder()).forEach(path -> path.toFile().delete());
+            }
+        }
+    }
+
     @DynamicPropertySource
     static void firstLaunch(DynamicPropertyRegistry registry) {
         registry.add("jabiz.first-launch.config", () -> {
@@ -97,7 +130,8 @@ class FirstLaunchFilesIT extends PostgresIntegrationTest {
                 // A package with the image inside, as the sponsor page exports it.
                 Files.writeString(directory.resolve("sponsors/hq/package.json"), "{\"img1\":\""
                     + Base64.getEncoder().encodeToString(png(8)) + "\",\"fake\":\""
-                    + Base64.getEncoder().encodeToString("not an image at all".getBytes()) + "\"}");
+                    + Base64.getEncoder().encodeToString("not an image at all".getBytes()) + "\",\"gps\":\""
+                    + Base64.getEncoder().encodeToString(jpegWithExif()) + "\"}");
                 Files.write(directory.resolve("big.bin"), new byte[70 * 1024]);
                 return directory.resolve("first-launch.yml").toString();
             } catch (IOException e) {
@@ -148,7 +182,7 @@ class FirstLaunchFilesIT extends PostgresIntegrationTest {
 
                 @Override
                 public Set<String> filePolicies() {
-                    return Set.of(CommerceFiles.IMAGE, ItFileFixtures.TINY);
+                    return Set.of(CommerceFiles.IMAGE, ItFileFixtures.TINY, ItFileFixtures.PRIVATE);
                 }
 
                 @Override
@@ -188,11 +222,18 @@ class FirstLaunchFilesIT extends PostgresIntegrationTest {
             .getFirst().get("user_id"));
     }
 
-    private UUID store(String actor, String policy, String path, Function<byte[], byte[]> extract) {
-        FirstLaunchConfig config = new com.jabiz.runtime.firstlaunch.FirstLaunchConfigReader(
+    /** The configuration as read before the test changes the directory (as the runner read it at startup). */
+    static FirstLaunchConfig snapshot;
+
+    static FirstLaunchConfig read() {
+        return new com.jabiz.runtime.firstlaunch.FirstLaunchConfigReader(
             new com.jabiz.runtime.firstlaunch.FirstLaunchSettings(directory.resolve("first-launch.yml").toString(),
                 false, Duration.ofMinutes(10), Duration.ofSeconds(1), 1024 * 1024, 10 * 1024 * 1024, 100))
             .read().config();
+    }
+
+    private UUID store(String actor, String policy, String path, Function<byte[], byte[]> extract) {
+        FirstLaunchConfig config = snapshot;
         RequestContext request = actor == null ? RequestContext.system(Locale.ENGLISH, "first-launch-probe")
             : new RequestContext(actor, null, Locale.ENGLISH, "first-launch-probe", Set.of(), Set.of());
         return files.store(run().runId(), config, FirstLaunchStep.file("probe",
@@ -213,40 +254,101 @@ class FirstLaunchFilesIT extends PostgresIntegrationTest {
         return ((ValidationException) e).violations().stream().map(Violation::ruleCode).toList();
     }
 
+    @Autowired
+    org.springframework.context.ApplicationContext context;
+
     @Test
     @Order(1)
-    void theFileIsTheAccountsUploadAndOnlyTheConfigurationsLimitsHold() throws IOException {
+    @org.junit.jupiter.api.extension.ExtendWith(org.springframework.boot.test.system.OutputCaptureExtension.class)
+    void theFileIsTheAccountsUploadAndOnlyTheConfigurationsLimitsHold(
+        org.springframework.boot.test.system.CapturedOutput output) throws IOException {
         within(Duration.ofSeconds(60), () -> holding || !EXITS.isEmpty());
         assertThat(EXITS).isEmpty();
+        snapshot = read();
         String owner = owner();
+
+        // A dry run lists the file step with the rest.
+        List<Integer> dryExits = new CopyOnWriteArrayList<>();
+        com.jabiz.runtime.firstlaunch.FirstLaunchRunner dry = new com.jabiz.runtime.firstlaunch.FirstLaunchRunner(
+            new org.springframework.mock.env.MockEnvironment()
+                .withProperty("jabiz.first-launch.config", directory.resolve("first-launch.yml").toString())
+                .withProperty("jabiz.first-launch.dry-run", "true"),
+            runs, new FirstLaunchGate(), context.getBean(com.jabiz.runtime.process.ProcessExecutor.class),
+            context.getBeanProvider(FirstLaunchHandler.class),
+            context.getBeanProvider(com.jabiz.runtime.firstlaunch.FirstLaunchPlatformSteps.class),
+            context.getBean(com.jabiz.i18n.MessageCatalog.class), context.getBean(java.time.Clock.class),
+            new org.springframework.beans.factory.support.StaticListableBeanFactory(
+                Map.of("exit", (FirstLaunchExit) dryExits::add)).getBeanProvider(FirstLaunchExit.class),
+            context.getBean(tools.jackson.databind.json.JsonMapper.class),
+            context.getBean(com.jabiz.runtime.firstlaunch.FirstLaunchPowers.class), files);
+        dry.afterSingletonsInstantiated();
+        dry.onApplicationEvent(null);
+        assertThat(dryExits).containsExactly(0);
+        assertThat(output.getOut()).contains("img1 (process (file), as owner)");
 
         // The step's image was stored, re-encoded, as the owner's own upload.
         Map<String, Object> stored = query("SELECT uploaded_by, content_type, policy FROM sys_file").getFirst();
         assertThat(stored).containsEntry("uploaded_by", owner).containsEntry("policy", CommerceFiles.IMAGE);
         assertThat(String.valueOf(stored.get("content_type"))).startsWith("image/");
-        // The file's name stays out of the operation's record.
-        assertThat(query("SELECT input_summary::text AS input FROM op_process WHERE process_name = 'FILE_REGISTER'")
-            .getFirst().get("input").toString()).doesNotContain("picture");
+        // Registered under the run's step, by the first launch's own process; the name stays out of the record.
+        assertThat(query("SELECT p.process_name FROM op_process c JOIN op_process p ON p.process_seq_id ="
+            + " c.parent_seq_id WHERE c.process_name = 'FIRST_LAUNCH_FILE_REGISTER'"))
+            .extracting(row -> row.get("process_name")).containsExactly("FIRST_LAUNCH_STEP");
+        assertThat(query("SELECT input_summary::text AS input FROM op_process"
+            + " WHERE process_name = 'FIRST_LAUNCH_FILE_REGISTER'").getFirst().get("input").toString())
+            .doesNotContain("picture");
+
+        // An image's metadata does not survive the pipeline.
+        store(owner, CommerceFiles.IMAGE, "sponsors/hq/package.json", fromPackage("gps"));
+        try (var walk = Files.walk(filesRoot())) {
+            for (Path file : walk.filter(Files::isRegularFile).toList()) {
+                assertThat(new String(Files.readAllBytes(file), java.nio.charset.StandardCharsets.ISO_8859_1))
+                    .doesNotContain(GPS_MARKER);
+            }
+        }
+        // A policy that keeps its metadata from readers gives a random (version 4) id.
+        assertThat(store(owner, ItFileFixtures.PRIVATE, "sponsors/hq/package.json", fromPackage("gps")).version())
+            .isEqualTo(4);
 
         assertThatThrownBy(() -> store(owner, CommerceFiles.IMAGE, "../outside.png", Function.identity()))
             .hasMessageContaining("leaves");
-        // (A link in the directory at startup stops the start: the configuration's hash refuses it. One made since
-        // is refused when read.)
-        Path outside = Files.createTempFile("outside", ".png");
-        Files.write(outside, png(4));
-        Files.createSymbolicLink(directory.resolve("sponsors/link.png"), outside);
-        assertThatThrownBy(() -> store(owner, CommerceFiles.IMAGE, "sponsors/link.png", Function.identity()))
-            .hasMessageContaining("symbolic link");
+        assertThatThrownBy(() -> store(owner, CommerceFiles.IMAGE, directory.resolve("big.bin").toString(),
+            Function.identity())).hasMessageContaining("Not a relative path");
         assertThatThrownBy(() -> store(owner, CommerceFiles.IMAGE, "sponsors/hq/package.json", fromPackage("fake")))
             .isInstanceOf(ValidationException.class)
             .satisfies(e -> assertThat(codes(e)).containsAnyOf("FILE_TYPE_NOT_ALLOWED", "FILE_INVALID"));
         assertThatThrownBy(() -> store(owner, ItFileFixtures.TINY, "big.bin", Function.identity()))
             .isInstanceOf(com.jabiz.runtime.PayloadTooLargeException.class);
-        assertThatThrownBy(() -> store(owner, "it.private", "sponsors/hq/package.json", fromPackage("img1")))
+        assertThatThrownBy(() -> store(owner, "it.audio", "sponsors/hq/package.json", fromPackage("img1")))
             .hasMessageContaining("does not name");
+        assertThatThrownBy(() -> store(owner, CommerceFiles.IMAGE, "sponsors/hq/package.json", bytes -> null))
+            .hasMessageContaining("picked nothing");
+        assertThatThrownBy(() -> store(null, CommerceFiles.IMAGE, "sponsors/hq/package.json", fromPackage("img1")))
+            .hasMessageContaining("as an account");
         assertThatThrownBy(() -> store(UUID.randomUUID().toString(), CommerceFiles.IMAGE, "sponsors/hq/package.json",
             fromPackage("img1"))).hasMessageContaining("was not made by this first launch");
-        assertThat(query("SELECT count(*) AS files FROM sys_file").getFirst().get("files")).isEqualTo(1L);
+
+        // The directory as it was read: a file changed or added since, or a link made since, is refused.
+        Path outside = Files.createTempDirectory("outside");
+        Files.write(outside.resolve("x.png"), png(4));
+        Files.createSymbolicLink(directory.resolve("sponsors/linked"), outside);
+        assertThatThrownBy(() -> store(owner, CommerceFiles.IMAGE, "sponsors/linked/x.png", Function.identity()))
+            .hasMessageContaining("symbolic link");
+        Files.write(directory.resolve("sponsors/new.png"), png(4));
+        assertThatThrownBy(() -> store(owner, CommerceFiles.IMAGE, "sponsors/new.png", Function.identity()))
+            .hasMessageContaining("was not in the configuration's directory when it was read");
+        Files.write(directory.resolve("big.bin"), new byte[70 * 1024 + 1]);
+        assertThatThrownBy(() -> store(owner, ItFileFixtures.TINY, "big.bin", Function.identity()))
+            .hasMessageContaining("has changed since the configuration was read");
+
+        long before = (Long) query("SELECT count(*) AS files FROM sys_file").getFirst().get("files");
+        // An account with a credential of its own is no longer acted as, for files either.
+        execute("INSERT INTO sec_refresh_token (token_hash, family_id, user_id, issued_at, expires_at)"
+            + " VALUES (?, ?, ?::uuid, now(), now() + interval '1 day')", "b".repeat(64), UUID.randomUUID(), owner);
+        assertThatThrownBy(() -> store(owner, CommerceFiles.IMAGE, "sponsors/hq/package.json", fromPackage("img1")))
+            .hasMessageContaining("has a credential of its own");
+        // Refused registrations leave no row behind (their stored objects are deleted).
+        assertThat(query("SELECT count(*) AS files FROM sys_file").getFirst().get("files")).isEqualTo(before);
     }
 
     @Test

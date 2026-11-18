@@ -61,7 +61,9 @@ public class FirstLaunchChecks implements PlatformCheck {
                 }
             }
             for (String policy : handler.filePolicies()) {
-                if (!policyExists.test(policy)) {
+                if (policy == null || policy.isBlank()) {
+                    problems.add(CheckProblem.error(CATEGORY, where, "a file policy has no name"));
+                } else if (!policyExists.test(policy)) {
                     problems.add(CheckProblem.error(CATEGORY, where, "file policy " + policy + " does not exist"));
                 }
             }

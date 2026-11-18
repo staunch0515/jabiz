@@ -187,12 +187,40 @@ public class FirstLaunchRunner implements SmartInitializingSingleton, Applicatio
             platformSteps.orderedStream().forEach(steps -> problems.addAll(steps.validate(read.config())));
             found.forEach(handler -> problems.addAll(handler.validate(read.config())));
         }
+        if (problems.isEmpty()) {
+            problems.addAll(fileStepProblems(read.config()));
+        }
         if (!problems.isEmpty()) {
             StringBuilder report = new StringBuilder(text("first-launch.problems", Map.of("count", problems.size())));
             problems.forEach(problem -> report.append(System.lineSeparator()).append("  ").append(problem.format()));
             log.error(report.toString());
             throw new FirstLaunchFailedException(report.toString());
         }
+    }
+
+    /** Every file step's problems, found before anything is written: its account, its policy, its file. */
+    private List<FirstLaunchProblem> fileStepProblems(FirstLaunchConfig config) {
+        List<FirstLaunchProblem> problems = new ArrayList<>();
+        for (FirstLaunchStep step : plan(config)) {
+            FirstLaunchStep.FileSource source = step.file();
+            if (source == null) {
+                continue;
+            }
+            String at = "step " + step.key() + " (" + source.path() + ")";
+            if (step.asAccount() == null) {
+                problems.add(new FirstLaunchProblem(at, "stores a file as no account",
+                    "a file step stores the file as the account whose content uses it"));
+            }
+            if (!files.policies().contains(source.policy())) {
+                problems.add(new FirstLaunchProblem(at, "uses the file policy " + source.policy()
+                    + ", which the application does not name", "fix the application's handler"));
+            }
+            if (!config.files().exists(source.path())) {
+                problems.add(new FirstLaunchProblem(at, "names a file that is not in the configuration's directory",
+                    "put the file there, or fix the path"));
+            }
+        }
+        return problems;
     }
 
     /** Settings the first launch cannot work with (section 5). */
@@ -305,11 +333,13 @@ public class FirstLaunchRunner implements SmartInitializingSingleton, Applicatio
     /** Runs one step: once, or again and again while it waits. Returns its output. */
     private Object run(UUID runId, FirstLaunchStep step, Results results, Instant deadline) {
         if (step.file() != null) {
-            // A file step (D82): stored as the account, or the system, through the upload pipeline.
-            String actor = step.asAccount() == null ? null : results.userId(step.asAccount());
-            RequestContext request = actor == null ? RequestContext.system(locale, requestId(runId, step))
-                : FirstLaunchActing.as(actor, locale, requestId(runId, step));
-            return files.store(runId, config, step, actor, request).block();
+            // A file step (D82): stored as the account through the upload pipeline, registered under a step.
+            if (step.asAccount() == null) {
+                throw new IllegalStateException("File step " + step.key() + " names no account to store it as");
+            }
+            String actor = results.userId(step.asAccount());
+            return files.store(runId, config, step, actor,
+                FirstLaunchActing.as(actor, locale, requestId(runId, step))).block();
         }
         if (step.asAccount() != null && !powers.actingProcesses().contains(step.process())) {
             throw new IllegalStateException("Step " + step.key() + " runs " + step.process() + " as account "
