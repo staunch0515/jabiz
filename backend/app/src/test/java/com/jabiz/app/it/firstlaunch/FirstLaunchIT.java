@@ -196,6 +196,15 @@ class FirstLaunchIT extends PostgresIntegrationTest {
             .jsonPath("$.detail").value(detail -> assertThat((String) detail).contains("首发"));
         // The waiting step is asked again and again until it answers true.
         within(Duration.ofSeconds(10), () -> READY_CALLS.get() > 2);
+        // Another instance started without the configuration still stays closed while the run goes on.
+        FirstLaunchGate other = new FirstLaunchGate();
+        new com.jabiz.runtime.firstlaunch.FirstLaunchRunner(new org.springframework.mock.env.MockEnvironment(), runs,
+            other, processes, context.getBeanProvider(FirstLaunchHandler.class),
+            context.getBeanProvider(com.jabiz.runtime.firstlaunch.FirstLaunchPlatformSteps.class),
+            context.getBean(com.jabiz.i18n.MessageCatalog.class), context.getBean(java.time.Clock.class),
+            context.getBeanProvider(FirstLaunchExit.class),
+            context.getBean(tools.jackson.databind.json.JsonMapper.class)).afterSingletonsInstantiated();
+        assertThat(other.isOpen()).isFalse();
     }
 
     @Test

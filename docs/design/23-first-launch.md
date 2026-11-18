@@ -41,7 +41,10 @@
 
 ## 3. 启动时的判断
 
-运行器 `FirstLaunchRunner` 在所有单例建好之后、服务器接受请求之前判断：
+运行器 `FirstLaunchRunner` 在所有单例建好之后、服务器接受请求之前判断。运行记录优先于配置：
+- 失败的运行使每次启动都失败；
+- 内容阶段中的运行使每个实例都关门等待，没有配置的实例也一样；
+- 只有开始新的运行才要求有配置。
 
 | 情形 | 做什么 |
 |---|---|
@@ -63,7 +66,8 @@
 - 不止一个 `FirstLaunchHandler`；
 - 平台各部分（`FirstLaunchPlatformSteps`）与应用的 `validate`。
 
-**就绪门**（`FirstLaunchGate`、`FirstLaunchGateWebFilter`，最先运行的过滤器）：关闭时，对每个请求都回答 503 `FIRST_LAUNCH_IN_PROGRESS`，带 `Retry-After: 30`；只有 `/actuator/health` 照常。内部的事件投递与任务照常运行，内容阶段等待的审批结果正是由它们产生的。
+**就绪门**（`FirstLaunchGate`、`FirstLaunchGateWebFilter`，最先运行的过滤器）：关闭时，对每个请求都回答 503 `FIRST_LAUNCH_IN_PROGRESS`，带 `Retry-After: 30`；只有 `/actuator/health` 照常。
+健康指示 `firstLaunch` 在关闭时为 DOWN。要让编排系统的就绪检查也等首发，就把它加进就绪组：`management.endpoint.health.group.readiness.include=readinessState,firstLaunch`。内部的事件投递与任务照常运行，内容阶段等待的审批结果正是由它们产生的。
 
 ## 4. 内容阶段
 
@@ -75,6 +79,7 @@
    - 以系统身份运行的步骤可调用 `OPEN`、`SUB_PROCESS_ONLY` 与 `INTERNAL` 的流程。
    - 请求编号为 `first-launch-<运行>-<步骤键>`，审计与 `op_process` 据此区分首发的操作。
    - 步骤的输入由前面步骤的输出算出（`FirstLaunchResults`），只在内存中保存。
+   - 每一步开始前也检查 `content-timeout`，超过即失败（与另一实例判断"过时"用同一期限）。
    - 等待的步骤（`FirstLaunchStep.await`）反复运行，每次一个新事务，直到流程返回 `true`。用于等事件投递的结果（如审批的结果），以 `jabiz.first-launch.await-interval` 为间隔，以 `content-timeout` 为限。
 3. **完成**：`FIRST_LAUNCH_RECORD` 追加 `CONTENT_DONE` 事件（平台各部分可附 `contentDoneDetail`：用户编号与配置的代号），然后打开就绪门。
 4. **失败**：任一步失败（含超时）时：
