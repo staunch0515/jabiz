@@ -33,6 +33,11 @@ import { downloadLink, exportProfile, uploadProfileImages, type ImportPlan, type
  * pages read); the import plans its steps here and runs each through the server's import record
  * (`QB_PACKAGE_IMPORT_START` / `_STEP`), which runs the pages' own processes in the same transaction as its record: a
  * step done is never done again, so an import stopped half-way goes on where it stopped.
+ *
+ * F-LAUNCH Q1: the server plans packages too (first launch): `readPackage`, `planImport`, `firstBatch`, `partsOf`,
+ * `planContent`, `usedFiles` and `inputOfStep` have their Java in `com.jabiz.quizbuks.sponsorpackage` (PackagePlan,
+ * QuizFileCut, PackageStepInputs). Both plan the shared cases (package-plan-cases.json) and must give the expected
+ * plans (package-plan-expected.json, written from this code): a change to one is made to the other in the same PR.
  */
 
 export const PACKAGE_FORMAT = 'quizbuks.sponsor-package'
@@ -418,7 +423,8 @@ export function readPackage(value: unknown):
     }
     const versions: PackageQuizVersion[] = []
     quiz.versions.forEach((version, j) => {
-      if (!isObject(version) || typeof version.key !== 'string' || !isObject(version.file)) {
+      // An empty key would name the current content (its steps would share the current content's keys): damaged.
+      if (!isObject(version) || typeof version.key !== 'string' || version.key === '' || !isObject(version.file)) {
         places.push(`quizzes[${i}].versions[${j}]`)
         return
       }
@@ -865,13 +871,81 @@ export type RunProgress = (step: PlannedStep, index: number, total: number, phas
 
 const startAt = (now: Date) => nextHour(now)
 
-/** The input of a step, its files uploaded; the earlier steps' results give the ids it names. */
-async function stepInput(step: PlannedStep, document: SponsorPackageDocument, checks: ImportChecks,
-  results: Record<string, Record<string, unknown>>, now: Date): Promise<Record<string, unknown>> {
+/** What a step's input takes besides the plan: the files uploaded for it, and the profile's mail server password. */
+export interface StepUploads {
+  /** The profile's images (`uploadProfileImages`) or the content's files (`uploadImportFiles`); none for the others. */
+  files?: unknown
+  mailPassword?: string | null
+}
+
+/**
+ * The input of a step (`QB_PACKAGE_IMPORT_STEP`) of its files uploaded: the earlier steps' results give the ids it
+ * names, a publication starts at `startAt`. No I/O here: the server's PackageStepInputs (F-LAUNCH Q1) makes the same
+ * input from the same plan, the shared cases (package-plan-cases.json) compare the two; a change here changes it.
+ */
+export function inputOfStep(step: PlannedStep, document: SponsorPackageDocument,
+  results: Record<string, Record<string, unknown>>, sharedVideos: ReadonlySet<string>, startAt: string,
+  uploads: StepUploads = {}): Record<string, unknown> {
   const id = (key: string | null, field: string): string | null => {
     const value = key ? results[key]?.[field] : null
     return value == null ? null : String(value)
   }
+  switch (step.kind) {
+    case 'profile': {
+      if (!document.profile) throw new Error('No profile part was checked')
+      const raw = document.profile as unknown as Record<string, unknown>
+      return { profile: { document: withoutData(raw), files: uploads.files, mailPassword: uploads.mailPassword || null } }
+    }
+    case 'tree': {
+      const { tree } = step
+      return { tree: {
+        create: { ownerKind: 'SPONSOR', name: tree.name, description: tree.description },
+        nodes: tree.nodes.map((node) => ({ key: node.key, name: node.name, description: node.description,
+          condition: node.condition })),
+      } }
+    }
+    case 'content': {
+      const into = step.into ? id(step.into, 'quizId') : null
+      return { quiz: { document: withoutData(step.document), files: uploads.files, ...(into ? { intoQuizId: into } : {}) },
+        quizTopics: step.topics }
+    }
+    case 'clear':
+      return { clear: { quizId: id(step.quizStep, 'quizId'), rows: CLEAR_ROWS } }
+    case 'batch':
+      return { questions: { quizId: id(step.quizStep, 'quizId'), document: withoutData(step.document),
+        files: uploads.files } }
+    case 'version':
+      return { version: { quizId: id(step.quizStep, 'quizId') } }
+    case 'publication': {
+      const { publication } = step
+      const settings = publication.settings
+      const form = formOfSettings(settings, { quizId: id(step.quizStep, 'quizId') ?? '',
+        versionId: id(step.versionStep, 'versionId') ?? '', fullScore: null, startAt,
+        endAt: settings.durationDays ? endAfter(startAt, settings.durationDays) : null, name: settings.name })
+      const built = inputOf({ ...form, quizId: form.quizId || null, versionId: form.versionId || null }, null, null)
+      if (!built.input) throw new Error(`The settings of ${settings.name} do not make a draft`)
+      let tree: { treeId: string; treeNodeId: string } | null = null
+      if (step.node && 'treeStep' in step.node) {
+        const treeId = id(step.node.treeStep, 'treeId')
+        const nodeIds = results[step.node.treeStep]?.nodeIds as Record<string, string> | undefined
+        if (treeId && nodeIds?.[step.node.nodeKey]) tree = { treeId, treeNodeId: nodeIds[step.node.nodeKey] }
+      } else if (step.node) {
+        tree = { treeId: step.node.treeId, treeNodeId: step.node.nodeId }
+      }
+      return { publication: {
+        save: { ...built.input, ...(tree ?? {}) },
+        criteria: settings.audience === 'INVITED' || settings.conditions.length === 0 ? null : settings.conditions,
+        topics: hasTopics(publication.topics) ? publication.topics : null,
+        sharedVideoId: publication.sharedVideo && sharedVideos.has(publication.sharedVideo)
+          ? publication.sharedVideo : null,
+      } }
+    }
+  }
+}
+
+/** The input of a step, its files uploaded; the earlier steps' results give the ids it names. */
+async function stepInput(step: PlannedStep, document: SponsorPackageDocument, checks: ImportChecks,
+  results: Record<string, Record<string, unknown>>, now: Date): Promise<Record<string, unknown>> {
   switch (step.kind) {
     case 'profile': {
       const plan = checks.profile
@@ -888,61 +962,19 @@ async function stepInput(step: PlannedStep, document: SponsorPackageDocument, ch
         }
       }
       const files = await uploadProfileImages(raw, plan, undefined, linked)
-      return { profile: { document: withoutData(raw), files, mailPassword: checks.mailPassword || null } }
+      return inputOfStep(step, document, results, checks.sharedVideos, startAt(now),
+        { files, mailPassword: checks.mailPassword })
     }
-    case 'tree': {
-      const { tree } = step
-      return { tree: {
-        create: { ownerKind: 'SPONSOR', name: tree.name, description: tree.description },
-        nodes: tree.nodes.map((node) => ({ key: node.key, name: node.name, description: node.description,
-          condition: node.condition })),
-      } }
-    }
-    case 'content': {
-      const check = checks.quizzes[step.check]
-      if (!check) throw new Error(`The quiz file ${step.check} was not checked`)
-      const used = usedFiles(step.document)
-      const files = await uploadImportFiles(step.document, { files: check.files.filter((f) => used.has(f.key)) })
-      const into = step.into ? id(step.into, 'quizId') : null
-      return { quiz: { document: withoutData(step.document), files, ...(into ? { intoQuizId: into } : {}) },
-        quizTopics: step.topics }
-    }
-    case 'clear':
-      return { clear: { quizId: id(step.quizStep, 'quizId'), rows: CLEAR_ROWS } }
+    case 'content':
     case 'batch': {
       const check = checks.quizzes[step.check]
       if (!check) throw new Error(`The quiz file ${step.check} was not checked`)
       const used = usedFiles(step.document)
       const files = await uploadImportFiles(step.document, { files: check.files.filter((f) => used.has(f.key)) })
-      return { questions: { quizId: id(step.quizStep, 'quizId'), document: withoutData(step.document), files } }
+      return inputOfStep(step, document, results, checks.sharedVideos, startAt(now), { files })
     }
-    case 'version':
-      return { version: { quizId: id(step.quizStep, 'quizId') } }
-    case 'publication': {
-      const { publication } = step
-      const start = startAt(now)
-      const settings = publication.settings
-      const form = formOfSettings(settings, { quizId: id(step.quizStep, 'quizId') ?? '',
-        versionId: id(step.versionStep, 'versionId') ?? '', fullScore: null, startAt: start,
-        endAt: settings.durationDays ? endAfter(start, settings.durationDays) : null, name: settings.name })
-      const built = inputOf({ ...form, quizId: form.quizId || null, versionId: form.versionId || null }, null, null)
-      if (!built.input) throw new Error(`The settings of ${settings.name} do not make a draft`)
-      let tree: { treeId: string; treeNodeId: string } | null = null
-      if (step.node && 'treeStep' in step.node) {
-        const treeId = id(step.node.treeStep, 'treeId')
-        const nodeIds = results[step.node.treeStep]?.nodeIds as Record<string, string> | undefined
-        if (treeId && nodeIds?.[step.node.nodeKey]) tree = { treeId, treeNodeId: nodeIds[step.node.nodeKey] }
-      } else if (step.node) {
-        tree = { treeId: step.node.treeId, treeNodeId: step.node.nodeId }
-      }
-      return { publication: {
-        save: { ...built.input, ...(tree ?? {}) },
-        criteria: settings.audience === 'INVITED' || settings.conditions.length === 0 ? null : settings.conditions,
-        topics: hasTopics(publication.topics) ? publication.topics : null,
-        sharedVideoId: publication.sharedVideo && checks.sharedVideos.has(publication.sharedVideo)
-          ? publication.sharedVideo : null,
-      } }
-    }
+    default:
+      return inputOfStep(step, document, results, checks.sharedVideos, startAt(now))
   }
 }
 
