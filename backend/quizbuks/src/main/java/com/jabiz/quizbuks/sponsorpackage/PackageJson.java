@@ -2,6 +2,8 @@ package com.jabiz.quizbuks.sponsorpackage;
 
 import java.math.BigDecimal;
 import java.math.BigInteger;
+import java.math.MathContext;
+import java.math.RoundingMode;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
@@ -247,8 +249,16 @@ public final class PackageJson {
         if (d == 0) {
             return "0";
         }
-        // The shortest digits that read back as this double (Java 19 on), and where the point goes.
-        BigDecimal exact = new BigDecimal(Double.toString(Math.abs(d))).stripTrailingZeros();
+        // The shortest digits that read back as this double, and where the point goes. Java (19 on) gives the shortest
+        // of at least two digits; where one digit reads back too, JavaScript writes that one (5e-324, not 4.9e-324).
+        double abs = Math.abs(d);
+        BigDecimal exact = new BigDecimal(Double.toString(abs)).stripTrailingZeros();
+        if (exact.precision() == 2) {
+            BigDecimal one = new BigDecimal(abs).round(new MathContext(1, RoundingMode.HALF_EVEN));
+            if (one.doubleValue() == abs) {
+                exact = one.stripTrailingZeros();
+            }
+        }
         String digits = exact.unscaledValue().toString();
         int k = digits.length();
         int n = k - exact.scale();
