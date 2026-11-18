@@ -151,6 +151,11 @@ public final class PackageJson {
         }
     }
 
+    /** The value's JSON with every object's keys sorted (what {@link #digest} hashes). */
+    static String canonical(Object value) {
+        return write(value, true);
+    }
+
     private static String write(Object value, boolean sorted) {
         StringBuilder out = new StringBuilder();
         write(value, sorted, out);

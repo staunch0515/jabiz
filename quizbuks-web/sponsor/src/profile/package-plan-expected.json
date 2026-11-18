@@ -1,0 +1,2472 @@
+{
+  "about": "F-LAUNCH Q1: the plans of package-plan-cases.json, written by package.plan.cases.test.ts (the reference).",
+  "cases": [
+    {
+      "name": "one map, one quiz of two versions and a current content, one bound publication",
+      "summary": {
+        "plan": {
+          "mode": "FULL",
+          "batchSize": 2,
+          "batchBytes": 0,
+          "makes": {
+            "profile": true,
+            "trees": 1,
+            "quizzes": 1,
+            "versions": 2,
+            "publications": 3
+          },
+          "sameTitles": [],
+          "treesSkipped": [],
+          "treesKept": false,
+          "unbound": [
+            "Unbound by key",
+            "By name"
+          ],
+          "videosAgain": [],
+          "tooLarge": [],
+          "oversized": [],
+          "orphans": [],
+          "steps": [
+            {
+              "kind": "profile",
+              "key": "profile"
+            },
+            {
+              "kind": "tree",
+              "key": "tree:1",
+              "treeKey": "t-src",
+              "tree": "ddeab33e22609e95c1b254e1408eca90ee9a1e6add247dfc95adea80819a7c09"
+            },
+            {
+              "kind": "content",
+              "key": "quiz:q1:v:q1v1:content",
+              "quiz": "q1",
+              "label": "v1",
+              "title": "Coffee",
+              "check": "q1:q1v1",
+              "into": null,
+              "topics": [
+                "coffee"
+              ],
+              "customTopics": [],
+              "clears": 0,
+              "document": {
+                "questions": 2,
+                "bytes": 530,
+                "digest": "82f293bd0897e3a256550904e6b9846dc1257f5cef0fc09721aa90a608ba1194"
+              }
+            },
+            {
+              "kind": "batch",
+              "key": "quiz:q1:v:q1v1:batch:2",
+              "quiz": "q1",
+              "label": "v1",
+              "title": "Coffee",
+              "check": "q1:q1v1",
+              "batch": 2,
+              "batches": 2,
+              "quizStep": "quiz:q1:v:q1v1:content",
+              "clears": 0,
+              "document": {
+                "questions": 1,
+                "bytes": 376,
+                "digest": "cca333f914c12e818d249ce876065001b1815536418c20cb840f89fc68ae8fa5"
+              }
+            },
+            {
+              "kind": "version",
+              "key": "quiz:q1:v:q1v1:version",
+              "quiz": "q1",
+              "label": "v1",
+              "title": "Coffee",
+              "versionKey": "q1v1",
+              "quizStep": "quiz:q1:v:q1v1:content"
+            },
+            {
+              "kind": "clear",
+              "key": "quiz:q1:v:q1v2:clear:1",
+              "quiz": "q1",
+              "label": "v2",
+              "title": "Coffee",
+              "clear": 1,
+              "clears": 1,
+              "quizStep": "quiz:q1:v:q1v1:content",
+              "content": "quiz:q1:v:q1v2:content"
+            },
+            {
+              "kind": "content",
+              "key": "quiz:q1:v:q1v2:content",
+              "quiz": "q1",
+              "label": "v2",
+              "title": "Coffee",
+              "check": "q1:q1v2",
+              "into": "quiz:q1:v:q1v1:content",
+              "topics": [],
+              "customTopics": [
+                "beans"
+              ],
+              "clears": 1,
+              "document": {
+                "questions": 1,
+                "bytes": 376,
+                "digest": "b305e7c4c6203f116411c1fd6eea495e0208d51d666d81ac0da4d312dec44a98"
+              }
+            },
+            {
+              "kind": "version",
+              "key": "quiz:q1:v:q1v2:version",
+              "quiz": "q1",
+              "label": "v2",
+              "title": "Coffee",
+              "versionKey": "q1v2",
+              "quizStep": "quiz:q1:v:q1v1:content"
+            },
+            {
+              "kind": "clear",
+              "key": "quiz:q1:c:clear:1",
+              "quiz": "q1",
+              "label": "",
+              "title": "Coffee",
+              "clear": 1,
+              "clears": 1,
+              "quizStep": "quiz:q1:v:q1v1:content",
+              "content": "quiz:q1:c:content"
+            },
+            {
+              "kind": "content",
+              "key": "quiz:q1:c:content",
+              "quiz": "q1",
+              "label": "",
+              "title": "Coffee",
+              "check": "q1:current",
+              "into": "quiz:q1:v:q1v1:content",
+              "topics": [
+                "tea"
+              ],
+              "customTopics": [],
+              "clears": 1,
+              "document": {
+                "questions": 2,
+                "bytes": 530,
+                "digest": "82f293bd0897e3a256550904e6b9846dc1257f5cef0fc09721aa90a608ba1194"
+              }
+            },
+            {
+              "kind": "publication",
+              "key": "publication:1",
+              "index": 0,
+              "name": "Morning quiz",
+              "quizStep": "quiz:q1:v:q1v1:content",
+              "versionStep": "quiz:q1:v:q1v2:version",
+              "node": {
+                "treeStep": "tree:1",
+                "nodeKey": "n2"
+              },
+              "publication": "daaa3d2a2c3a9ef368796f4b60c1b356585e966e4bcc4459ed3f8795ad0ad4bd"
+            },
+            {
+              "kind": "publication",
+              "key": "publication:2",
+              "index": 1,
+              "name": "Unbound by key",
+              "quizStep": "quiz:q1:v:q1v1:content",
+              "versionStep": "quiz:q1:v:q1v1:version",
+              "node": null,
+              "publication": "bb48d21378fcb1bec05d435f8db04803efefd74f7109a04ee4741512505ea94f"
+            },
+            {
+              "kind": "publication",
+              "key": "publication:3",
+              "index": 2,
+              "name": "By name",
+              "quizStep": null,
+              "versionStep": null,
+              "node": null,
+              "publication": "39ab17d923a834296dff134bafc876ae86ebb16923d95adf2ac99a2058aad2ec"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "the account has a map it submitted: bound by node key, else by name; same titles",
+      "summary": {
+        "plan": {
+          "mode": "FULL",
+          "batchSize": 2,
+          "batchBytes": 0,
+          "makes": {
+            "profile": true,
+            "trees": 0,
+            "quizzes": 1,
+            "versions": 2,
+            "publications": 3
+          },
+          "sameTitles": [
+            "Coffee"
+          ],
+          "treesSkipped": [],
+          "treesKept": true,
+          "unbound": [
+            "Morning quiz"
+          ],
+          "videosAgain": [],
+          "tooLarge": [],
+          "oversized": [],
+          "orphans": [],
+          "steps": [
+            {
+              "kind": "profile",
+              "key": "profile"
+            },
+            {
+              "kind": "content",
+              "key": "quiz:q1:v:q1v1:content",
+              "quiz": "q1",
+              "label": "v1",
+              "title": "Coffee",
+              "check": "q1:q1v1",
+              "into": null,
+              "topics": [
+                "coffee"
+              ],
+              "customTopics": [],
+              "clears": 0,
+              "document": {
+                "questions": 2,
+                "bytes": 530,
+                "digest": "82f293bd0897e3a256550904e6b9846dc1257f5cef0fc09721aa90a608ba1194"
+              }
+            },
+            {
+              "kind": "batch",
+              "key": "quiz:q1:v:q1v1:batch:2",
+              "quiz": "q1",
+              "label": "v1",
+              "title": "Coffee",
+              "check": "q1:q1v1",
+              "batch": 2,
+              "batches": 2,
+              "quizStep": "quiz:q1:v:q1v1:content",
+              "clears": 0,
+              "document": {
+                "questions": 1,
+                "bytes": 376,
+                "digest": "cca333f914c12e818d249ce876065001b1815536418c20cb840f89fc68ae8fa5"
+              }
+            },
+            {
+              "kind": "version",
+              "key": "quiz:q1:v:q1v1:version",
+              "quiz": "q1",
+              "label": "v1",
+              "title": "Coffee",
+              "versionKey": "q1v1",
+              "quizStep": "quiz:q1:v:q1v1:content"
+            },
+            {
+              "kind": "clear",
+              "key": "quiz:q1:v:q1v2:clear:1",
+              "quiz": "q1",
+              "label": "v2",
+              "title": "Coffee",
+              "clear": 1,
+              "clears": 1,
+              "quizStep": "quiz:q1:v:q1v1:content",
+              "content": "quiz:q1:v:q1v2:content"
+            },
+            {
+              "kind": "content",
+              "key": "quiz:q1:v:q1v2:content",
+              "quiz": "q1",
+              "label": "v2",
+              "title": "Coffee",
+              "check": "q1:q1v2",
+              "into": "quiz:q1:v:q1v1:content",
+              "topics": [],
+              "customTopics": [
+                "beans"
+              ],
+              "clears": 1,
+              "document": {
+                "questions": 1,
+                "bytes": 376,
+                "digest": "b305e7c4c6203f116411c1fd6eea495e0208d51d666d81ac0da4d312dec44a98"
+              }
+            },
+            {
+              "kind": "version",
+              "key": "quiz:q1:v:q1v2:version",
+              "quiz": "q1",
+              "label": "v2",
+              "title": "Coffee",
+              "versionKey": "q1v2",
+              "quizStep": "quiz:q1:v:q1v1:content"
+            },
+            {
+              "kind": "clear",
+              "key": "quiz:q1:c:clear:1",
+              "quiz": "q1",
+              "label": "",
+              "title": "Coffee",
+              "clear": 1,
+              "clears": 1,
+              "quizStep": "quiz:q1:v:q1v1:content",
+              "content": "quiz:q1:c:content"
+            },
+            {
+              "kind": "content",
+              "key": "quiz:q1:c:content",
+              "quiz": "q1",
+              "label": "",
+              "title": "Coffee",
+              "check": "q1:current",
+              "into": "quiz:q1:v:q1v1:content",
+              "topics": [
+                "tea"
+              ],
+              "customTopics": [],
+              "clears": 1,
+              "document": {
+                "questions": 2,
+                "bytes": 530,
+                "digest": "82f293bd0897e3a256550904e6b9846dc1257f5cef0fc09721aa90a608ba1194"
+              }
+            },
+            {
+              "kind": "publication",
+              "key": "publication:1",
+              "index": 0,
+              "name": "Morning quiz",
+              "quizStep": "quiz:q1:v:q1v1:content",
+              "versionStep": "quiz:q1:v:q1v2:version",
+              "node": null,
+              "publication": "daaa3d2a2c3a9ef368796f4b60c1b356585e966e4bcc4459ed3f8795ad0ad4bd"
+            },
+            {
+              "kind": "publication",
+              "key": "publication:2",
+              "index": 1,
+              "name": "Unbound by key",
+              "quizStep": "quiz:q1:v:q1v1:content",
+              "versionStep": "quiz:q1:v:q1v1:version",
+              "node": {
+                "treeId": "own-tree",
+                "nodeId": "own-n9"
+              },
+              "publication": "bb48d21378fcb1bec05d435f8db04803efefd74f7109a04ee4741512505ea94f"
+            },
+            {
+              "kind": "publication",
+              "key": "publication:3",
+              "index": 2,
+              "name": "By name",
+              "quizStep": null,
+              "versionStep": null,
+              "node": {
+                "treeId": "own-tree",
+                "nodeId": "own-n9"
+              },
+              "publication": "39ab17d923a834296dff134bafc876ae86ebb16923d95adf2ac99a2058aad2ec"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "maps over the limit, a quiz over the bank's limit, an orphan and a video not shared",
+      "summary": {
+        "plan": {
+          "mode": "FULL",
+          "batchSize": 3,
+          "batchBytes": 0,
+          "makes": {
+            "profile": false,
+            "trees": 1,
+            "quizzes": 1,
+            "versions": 1,
+            "publications": 1
+          },
+          "sameTitles": [],
+          "treesSkipped": [
+            "Tea",
+            "t-three"
+          ],
+          "treesKept": false,
+          "unbound": [
+            "Shared"
+          ],
+          "videosAgain": [
+            "Shared"
+          ],
+          "tooLarge": [
+            "Big"
+          ],
+          "oversized": [],
+          "orphans": [
+            "On the big one",
+            "Wrong version"
+          ],
+          "steps": [
+            {
+              "kind": "tree",
+              "key": "tree:1",
+              "treeKey": "t-src",
+              "tree": "ddeab33e22609e95c1b254e1408eca90ee9a1e6add247dfc95adea80819a7c09"
+            },
+            {
+              "kind": "content",
+              "key": "quiz:q2:v:okv1:content",
+              "quiz": "ok",
+              "label": "okv1",
+              "title": "Fine",
+              "check": "ok:okv1",
+              "into": null,
+              "topics": [],
+              "customTopics": [],
+              "clears": 0,
+              "document": {
+                "questions": 3,
+                "bytes": 682,
+                "digest": "37506f3495a99108e2b9f64619838846b0287696dbd0ff81310d1cda0904af70"
+              }
+            },
+            {
+              "kind": "batch",
+              "key": "quiz:q2:v:okv1:batch:2",
+              "quiz": "ok",
+              "label": "okv1",
+              "title": "Fine",
+              "check": "ok:okv1",
+              "batch": 2,
+              "batches": 2,
+              "quizStep": "quiz:q2:v:okv1:content",
+              "clears": 0,
+              "document": {
+                "questions": 1,
+                "bytes": 374,
+                "digest": "f23e1a0e3ee775e2aa5ba0fcce6bfa2145ea6b5544632b9cf6ae88aa1b7d4d0a"
+              }
+            },
+            {
+              "kind": "version",
+              "key": "quiz:q2:v:okv1:version",
+              "quiz": "ok",
+              "label": "okv1",
+              "title": "Fine",
+              "versionKey": "okv1",
+              "quizStep": "quiz:q2:v:okv1:content"
+            },
+            {
+              "kind": "publication",
+              "key": "publication:2",
+              "index": 1,
+              "name": "Shared",
+              "quizStep": "quiz:q2:v:okv1:content",
+              "versionStep": "quiz:q2:v:okv1:version",
+              "node": null,
+              "publication": "a604284146a62606fea432d4ca6e04ba2aee9d3505bb45e8dbec67d6ca99e79d"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "only the profile part",
+      "summary": {
+        "plan": {
+          "mode": "PROFILE",
+          "batchSize": 2,
+          "batchBytes": 0,
+          "makes": {
+            "profile": true,
+            "trees": 0,
+            "quizzes": 0,
+            "versions": 0,
+            "publications": 0
+          },
+          "sameTitles": [],
+          "treesSkipped": [],
+          "treesKept": false,
+          "unbound": [],
+          "videosAgain": [],
+          "tooLarge": [],
+          "oversized": [],
+          "orphans": [],
+          "steps": [
+            {
+              "kind": "profile",
+              "key": "profile"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "version 1: no maps, nodes, topics or shared videos",
+      "summary": {
+        "plan": {
+          "mode": "FULL",
+          "batchSize": 2,
+          "batchBytes": 0,
+          "makes": {
+            "profile": false,
+            "trees": 0,
+            "quizzes": 2,
+            "versions": 1,
+            "publications": 1
+          },
+          "sameTitles": [],
+          "treesSkipped": [],
+          "treesKept": false,
+          "unbound": [],
+          "videosAgain": [],
+          "tooLarge": [],
+          "oversized": [],
+          "orphans": [],
+          "steps": [
+            {
+              "kind": "content",
+              "key": "quiz:q1:v:q1v1:content",
+              "quiz": "q1",
+              "label": "q1v1",
+              "title": "Old",
+              "check": "q1:q1v1",
+              "into": null,
+              "topics": [],
+              "customTopics": [],
+              "clears": 0,
+              "document": {
+                "questions": 2,
+                "bytes": 527,
+                "digest": "064dfc05deeceb7a985abb900dc39a8d04d0e411cbae8668d848a89af0b9a536"
+              }
+            },
+            {
+              "kind": "batch",
+              "key": "quiz:q1:v:q1v1:batch:2",
+              "quiz": "q1",
+              "label": "q1v1",
+              "title": "Old",
+              "check": "q1:q1v1",
+              "batch": 2,
+              "batches": 2,
+              "quizStep": "quiz:q1:v:q1v1:content",
+              "clears": 0,
+              "document": {
+                "questions": 1,
+                "bytes": 373,
+                "digest": "deb824e8945633b2206741b8cabcfc6a9d25d7bd6dfdccc0ff7c28f8bd86b40c"
+              }
+            },
+            {
+              "kind": "version",
+              "key": "quiz:q1:v:q1v1:version",
+              "quiz": "q1",
+              "label": "q1v1",
+              "title": "Old",
+              "versionKey": "q1v1",
+              "quizStep": "quiz:q1:v:q1v1:content"
+            },
+            {
+              "kind": "clear",
+              "key": "quiz:q1:c:clear:1",
+              "quiz": "q1",
+              "label": "",
+              "title": "Old",
+              "clear": 1,
+              "clears": 1,
+              "quizStep": "quiz:q1:v:q1v1:content",
+              "content": "quiz:q1:c:content"
+            },
+            {
+              "kind": "content",
+              "key": "quiz:q1:c:content",
+              "quiz": "q1",
+              "label": "",
+              "title": "Old",
+              "check": "q1:current",
+              "into": "quiz:q1:v:q1v1:content",
+              "topics": [],
+              "customTopics": [],
+              "clears": 1,
+              "document": {
+                "questions": 2,
+                "bytes": 527,
+                "digest": "064dfc05deeceb7a985abb900dc39a8d04d0e411cbae8668d848a89af0b9a536"
+              }
+            },
+            {
+              "kind": "batch",
+              "key": "quiz:q1:c:batch:2",
+              "quiz": "q1",
+              "label": "",
+              "title": "Old",
+              "check": "q1:current",
+              "batch": 2,
+              "batches": 2,
+              "quizStep": "quiz:q1:v:q1v1:content",
+              "clears": 1,
+              "document": {
+                "questions": 1,
+                "bytes": 373,
+                "digest": "deb824e8945633b2206741b8cabcfc6a9d25d7bd6dfdccc0ff7c28f8bd86b40c"
+              }
+            },
+            {
+              "kind": "content",
+              "key": "quiz:q2:c:content",
+              "quiz": "q2",
+              "label": "",
+              "title": "Second",
+              "check": "q2:current",
+              "into": null,
+              "topics": [],
+              "customTopics": [],
+              "clears": 0,
+              "document": {
+                "questions": 1,
+                "bytes": 376,
+                "digest": "01ba6d19707a946fa0b79b0e4a15fd8187c4ebf8c007ba4645db2e1345ca282f"
+              }
+            },
+            {
+              "kind": "publication",
+              "key": "publication:1",
+              "index": 0,
+              "name": "Old one",
+              "quizStep": "quiz:q1:v:q1v1:content",
+              "versionStep": "quiz:q1:v:q1v1:version",
+              "node": null,
+              "publication": "add063a1a05975658c500a590dda0495881984690aadce6ca56fd531ace70c3c"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "not a package",
+      "summary": {
+        "problem": "notPackage",
+        "places": []
+      }
+    },
+    {
+      "name": "a newer version",
+      "summary": {
+        "problem": "newerVersion",
+        "places": []
+      }
+    },
+    {
+      "name": "damaged places",
+      "summary": {
+        "problem": "shape",
+        "places": [
+          "profile",
+          "trees[0].nodes[0]",
+          "trees[1]",
+          "quizzes[0].versions[0]",
+          "quizzes[0].current",
+          "quizzes[1]",
+          "quizzes[2]",
+          "publications[0].settings",
+          "publications[1]"
+        ]
+      }
+    },
+    {
+      "name": "sample 1 (a large bank in two versions and the current content, a map), by questions",
+      "summary": {
+        "plan": {
+          "mode": "FULL",
+          "batchSize": 25,
+          "batchBytes": 0,
+          "makes": {
+            "profile": false,
+            "trees": 1,
+            "quizzes": 3,
+            "versions": 4,
+            "publications": 6
+          },
+          "sameTitles": [],
+          "treesSkipped": [],
+          "treesKept": false,
+          "unbound": [],
+          "videosAgain": [],
+          "tooLarge": [],
+          "oversized": [],
+          "orphans": [],
+          "steps": [
+            {
+              "kind": "tree",
+              "key": "tree:1",
+              "treeKey": "graph",
+              "tree": "d35907caf805d723597231d6e7f6576598687652be2084f9516ddd2e4dd7ed80"
+            },
+            {
+              "kind": "content",
+              "key": "quiz:q1:v:v1:content",
+              "quiz": "q1",
+              "label": "v1",
+              "title": "Sample 1 quiz 1",
+              "check": "q1:v1",
+              "into": null,
+              "topics": [],
+              "customTopics": [],
+              "clears": 0,
+              "document": {
+                "questions": 20,
+                "bytes": 27883,
+                "digest": "17764f901b348248b24be741266174995a1a1d79564cea3d28fd548a10dedf5a"
+              }
+            },
+            {
+              "kind": "version",
+              "key": "quiz:q1:v:v1:version",
+              "quiz": "q1",
+              "label": "v1",
+              "title": "Sample 1 quiz 1",
+              "versionKey": "v1",
+              "quizStep": "quiz:q1:v:v1:content"
+            },
+            {
+              "kind": "clear",
+              "key": "quiz:q1:v:v2:clear:1",
+              "quiz": "q1",
+              "label": "v2",
+              "title": "Sample 1 quiz 1",
+              "clear": 1,
+              "clears": 1,
+              "quizStep": "quiz:q1:v:v1:content",
+              "content": "quiz:q1:v:v2:content"
+            },
+            {
+              "kind": "content",
+              "key": "quiz:q1:v:v2:content",
+              "quiz": "q1",
+              "label": "v2",
+              "title": "Sample 1 quiz 1",
+              "check": "q1:v2",
+              "into": "quiz:q1:v:v1:content",
+              "topics": [],
+              "customTopics": [],
+              "clears": 1,
+              "document": {
+                "questions": 25,
+                "bytes": 34938,
+                "digest": "e09c3893ee6ad7132f87cf965f930ec74f47c171c05c355471690d67def33146"
+              }
+            },
+            {
+              "kind": "batch",
+              "key": "quiz:q1:v:v2:batch:2",
+              "quiz": "q1",
+              "label": "v2",
+              "title": "Sample 1 quiz 1",
+              "check": "q1:v2",
+              "batch": 2,
+              "batches": 5,
+              "quizStep": "quiz:q1:v:v1:content",
+              "clears": 1,
+              "document": {
+                "questions": 25,
+                "bytes": 35013,
+                "digest": "8a9b7f01af206fdea0b450bd7dbd1f7edb4680153560ffe2d12035e654c8162c"
+              }
+            },
+            {
+              "kind": "batch",
+              "key": "quiz:q1:v:v2:batch:3",
+              "quiz": "q1",
+              "label": "v2",
+              "title": "Sample 1 quiz 1",
+              "check": "q1:v2",
+              "batch": 3,
+              "batches": 5,
+              "quizStep": "quiz:q1:v:v1:content",
+              "clears": 1,
+              "document": {
+                "questions": 25,
+                "bytes": 35058,
+                "digest": "cc23c189e7cdc69e14226409c3b044164bb8c0f61d14c4e4f86216852ed3fa94"
+              }
+            },
+            {
+              "kind": "batch",
+              "key": "quiz:q1:v:v2:batch:4",
+              "quiz": "q1",
+              "label": "v2",
+              "title": "Sample 1 quiz 1",
+              "check": "q1:v2",
+              "batch": 4,
+              "batches": 5,
+              "quizStep": "quiz:q1:v:v1:content",
+              "clears": 1,
+              "document": {
+                "questions": 25,
+                "bytes": 35097,
+                "digest": "867935efaf8274363b9ba8c9839eaba3e376524a36d0d916ebc860443e2fdd8b"
+              }
+            },
+            {
+              "kind": "batch",
+              "key": "quiz:q1:v:v2:batch:5",
+              "quiz": "q1",
+              "label": "v2",
+              "title": "Sample 1 quiz 1",
+              "check": "q1:v2",
+              "batch": 5,
+              "batches": 5,
+              "quizStep": "quiz:q1:v:v1:content",
+              "clears": 1,
+              "document": {
+                "questions": 10,
+                "bytes": 14349,
+                "digest": "ecfc1a4e1e2d94fedc18f378c4f0812f73a293390e0c137b19456c8a64b507a1"
+              }
+            },
+            {
+              "kind": "version",
+              "key": "quiz:q1:v:v2:version",
+              "quiz": "q1",
+              "label": "v2",
+              "title": "Sample 1 quiz 1",
+              "versionKey": "v2",
+              "quizStep": "quiz:q1:v:v1:content"
+            },
+            {
+              "kind": "clear",
+              "key": "quiz:q1:c:clear:1",
+              "quiz": "q1",
+              "label": "",
+              "title": "Sample 1 quiz 1",
+              "clear": 1,
+              "clears": 2,
+              "quizStep": "quiz:q1:v:v1:content",
+              "content": "quiz:q1:c:content"
+            },
+            {
+              "kind": "clear",
+              "key": "quiz:q1:c:clear:2",
+              "quiz": "q1",
+              "label": "",
+              "title": "Sample 1 quiz 1",
+              "clear": 2,
+              "clears": 2,
+              "quizStep": "quiz:q1:v:v1:content",
+              "content": "quiz:q1:c:content"
+            },
+            {
+              "kind": "content",
+              "key": "quiz:q1:c:content",
+              "quiz": "q1",
+              "label": "",
+              "title": "Sample 1 quiz 1",
+              "check": "q1:current",
+              "into": "quiz:q1:v:v1:content",
+              "topics": [],
+              "customTopics": [],
+              "clears": 2,
+              "document": {
+                "questions": 25,
+                "bytes": 34920,
+                "digest": "43d2f25ee0911782e3d619027bae43ffcae62ab8c32c6d8975b65e20ace3cf54"
+              }
+            },
+            {
+              "kind": "batch",
+              "key": "quiz:q1:c:batch:2",
+              "quiz": "q1",
+              "label": "",
+              "title": "Sample 1 quiz 1",
+              "check": "q1:current",
+              "batch": 2,
+              "batches": 5,
+              "quizStep": "quiz:q1:v:v1:content",
+              "clears": 2,
+              "document": {
+                "questions": 25,
+                "bytes": 35040,
+                "digest": "09113574f1a12c792a81459320f9f1b81d782041d49f258661ec1841566056f4"
+              }
+            },
+            {
+              "kind": "batch",
+              "key": "quiz:q1:c:batch:3",
+              "quiz": "q1",
+              "label": "",
+              "title": "Sample 1 quiz 1",
+              "check": "q1:current",
+              "batch": 3,
+              "batches": 5,
+              "quizStep": "quiz:q1:v:v1:content",
+              "clears": 2,
+              "document": {
+                "questions": 25,
+                "bytes": 35016,
+                "digest": "7bb628cfea40a47fedd187bb5f37fc074bfebac8dd49c996bd077e85e7a2033e"
+              }
+            },
+            {
+              "kind": "batch",
+              "key": "quiz:q1:c:batch:4",
+              "quiz": "q1",
+              "label": "",
+              "title": "Sample 1 quiz 1",
+              "check": "q1:current",
+              "batch": 4,
+              "batches": 5,
+              "quizStep": "quiz:q1:v:v1:content",
+              "clears": 2,
+              "document": {
+                "questions": 25,
+                "bytes": 35040,
+                "digest": "986564fd82b4544e30cea8f8cc8bd51c392080238d613ceeee24318f9e8e3edd"
+              }
+            },
+            {
+              "kind": "batch",
+              "key": "quiz:q1:c:batch:5",
+              "quiz": "q1",
+              "label": "",
+              "title": "Sample 1 quiz 1",
+              "check": "q1:current",
+              "batch": 5,
+              "batches": 5,
+              "quizStep": "quiz:q1:v:v1:content",
+              "clears": 2,
+              "document": {
+                "questions": 20,
+                "bytes": 28444,
+                "digest": "592581f4a0a3de02669f1a3414534babd5d0a5be978351d49158b4e2df73b806"
+              }
+            },
+            {
+              "kind": "content",
+              "key": "quiz:q2:v:v1:content",
+              "quiz": "q2",
+              "label": "v1",
+              "title": "Sample 1 quiz 2",
+              "check": "q2:v1",
+              "into": null,
+              "topics": [],
+              "customTopics": [],
+              "clears": 0,
+              "document": {
+                "questions": 25,
+                "bytes": 26550,
+                "digest": "15a73bc793a7470702fcade14b1022f1d7d5a3a31a088a685d898e006f55a5ab"
+              }
+            },
+            {
+              "kind": "batch",
+              "key": "quiz:q2:v:v1:batch:2",
+              "quiz": "q2",
+              "label": "v1",
+              "title": "Sample 1 quiz 2",
+              "check": "q2:v1",
+              "batch": 2,
+              "batches": 2,
+              "quizStep": "quiz:q2:v:v1:content",
+              "clears": 0,
+              "document": {
+                "questions": 9,
+                "bytes": 9740,
+                "digest": "30584333fe6d2ee6a292ff0f48f5c5366693094b6e2a04fefd8148b3f1f2e255"
+              }
+            },
+            {
+              "kind": "version",
+              "key": "quiz:q2:v:v1:version",
+              "quiz": "q2",
+              "label": "v1",
+              "title": "Sample 1 quiz 2",
+              "versionKey": "v1",
+              "quizStep": "quiz:q2:v:v1:content"
+            },
+            {
+              "kind": "clear",
+              "key": "quiz:q2:c:clear:1",
+              "quiz": "q2",
+              "label": "",
+              "title": "Sample 1 quiz 2",
+              "clear": 1,
+              "clears": 1,
+              "quizStep": "quiz:q2:v:v1:content",
+              "content": "quiz:q2:c:content"
+            },
+            {
+              "kind": "content",
+              "key": "quiz:q2:c:content",
+              "quiz": "q2",
+              "label": "",
+              "title": "Sample 1 quiz 2",
+              "check": "q2:current",
+              "into": "quiz:q2:v:v1:content",
+              "topics": [],
+              "customTopics": [],
+              "clears": 1,
+              "document": {
+                "questions": 25,
+                "bytes": 26544,
+                "digest": "53f78adce613c0610c13283f991d3ca79dee194e23d6ca1928f5b6db4dc8b4b3"
+              }
+            },
+            {
+              "kind": "batch",
+              "key": "quiz:q2:c:batch:2",
+              "quiz": "q2",
+              "label": "",
+              "title": "Sample 1 quiz 2",
+              "check": "q2:current",
+              "batch": 2,
+              "batches": 2,
+              "quizStep": "quiz:q2:v:v1:content",
+              "clears": 1,
+              "document": {
+                "questions": 9,
+                "bytes": 9731,
+                "digest": "d6fc0984e246a70cff1982cfe1b1d231780c5aec4e4327671eb8b359aa5fc1dd"
+              }
+            },
+            {
+              "kind": "content",
+              "key": "quiz:q3:v:v1:content",
+              "quiz": "q3",
+              "label": "v1",
+              "title": "Sample 1 quiz 3",
+              "check": "q3:v1",
+              "into": null,
+              "topics": [],
+              "customTopics": [],
+              "clears": 0,
+              "document": {
+                "questions": 25,
+                "bytes": 26553,
+                "digest": "a9b78055d19cecc336663b5b980f75436c811f8ade42ebdd6ca5e584335856c0"
+              }
+            },
+            {
+              "kind": "batch",
+              "key": "quiz:q3:v:v1:batch:2",
+              "quiz": "q3",
+              "label": "v1",
+              "title": "Sample 1 quiz 3",
+              "check": "q3:v1",
+              "batch": 2,
+              "batches": 2,
+              "quizStep": "quiz:q3:v:v1:content",
+              "clears": 0,
+              "document": {
+                "questions": 16,
+                "bytes": 17127,
+                "digest": "01aa05a383397a9fadf51eddc54304b417fcc23a1935a284aeb04368094a5a07"
+              }
+            },
+            {
+              "kind": "version",
+              "key": "quiz:q3:v:v1:version",
+              "quiz": "q3",
+              "label": "v1",
+              "title": "Sample 1 quiz 3",
+              "versionKey": "v1",
+              "quizStep": "quiz:q3:v:v1:content"
+            },
+            {
+              "kind": "clear",
+              "key": "quiz:q3:c:clear:1",
+              "quiz": "q3",
+              "label": "",
+              "title": "Sample 1 quiz 3",
+              "clear": 1,
+              "clears": 1,
+              "quizStep": "quiz:q3:v:v1:content",
+              "content": "quiz:q3:c:content"
+            },
+            {
+              "kind": "content",
+              "key": "quiz:q3:c:content",
+              "quiz": "q3",
+              "label": "",
+              "title": "Sample 1 quiz 3",
+              "check": "q3:current",
+              "into": "quiz:q3:v:v1:content",
+              "topics": [],
+              "customTopics": [],
+              "clears": 1,
+              "document": {
+                "questions": 25,
+                "bytes": 26571,
+                "digest": "e416eaa8a971a8938075a08718d654d42a2d729f82dfb52b0bc49feadf8ba017"
+              }
+            },
+            {
+              "kind": "batch",
+              "key": "quiz:q3:c:batch:2",
+              "quiz": "q3",
+              "label": "",
+              "title": "Sample 1 quiz 3",
+              "check": "q3:current",
+              "batch": 2,
+              "batches": 2,
+              "quizStep": "quiz:q3:v:v1:content",
+              "clears": 1,
+              "document": {
+                "questions": 16,
+                "bytes": 17124,
+                "digest": "4ccebdfa147958325d96426711c02bcf9966d5c5f77c7bb1861688be872473a6"
+              }
+            },
+            {
+              "kind": "publication",
+              "key": "publication:1",
+              "index": 0,
+              "name": "Sample 1 publication 1",
+              "quizStep": "quiz:q1:v:v1:content",
+              "versionStep": "quiz:q1:v:v2:version",
+              "node": {
+                "treeStep": "tree:1",
+                "nodeKey": "src-basics"
+              },
+              "publication": "ea906796784b904d01773866dffa96134328430f186274344b5eb9ed8b2c93b9"
+            },
+            {
+              "kind": "publication",
+              "key": "publication:2",
+              "index": 1,
+              "name": "Sample 1 publication 2",
+              "quizStep": "quiz:q1:v:v1:content",
+              "versionStep": "quiz:q1:v:v2:version",
+              "node": null,
+              "publication": "67b659fc57e0fda8191a56625ca2114eecce85ef07bfd055ab387995dc3e72af"
+            },
+            {
+              "kind": "publication",
+              "key": "publication:3",
+              "index": 2,
+              "name": "Sample 1 publication 3",
+              "quizStep": "quiz:q2:v:v1:content",
+              "versionStep": "quiz:q3:v:v1:version",
+              "node": null,
+              "publication": "cb0683368d4428bb09dc00aa6e6373de7ce5b4614743b5b27c2b41dbc46af7cd"
+            },
+            {
+              "kind": "publication",
+              "key": "publication:4",
+              "index": 3,
+              "name": "Sample 1 publication 4",
+              "quizStep": "quiz:q2:v:v1:content",
+              "versionStep": "quiz:q3:v:v1:version",
+              "node": null,
+              "publication": "9791babe388baa188627a4f4d0a0e3642b8da398cdedf7ba9472cb15e67106e0"
+            },
+            {
+              "kind": "publication",
+              "key": "publication:5",
+              "index": 4,
+              "name": "Sample 1 publication 5",
+              "quizStep": "quiz:q3:v:v1:content",
+              "versionStep": "quiz:q3:v:v1:version",
+              "node": null,
+              "publication": "204910ad0c86b76eae708d3f72d93330b65c652370ab129e2a88663441d3e003"
+            },
+            {
+              "kind": "publication",
+              "key": "publication:6",
+              "index": 5,
+              "name": "Sample 1 publication 6",
+              "quizStep": "quiz:q3:v:v1:content",
+              "versionStep": "quiz:q3:v:v1:version",
+              "node": null,
+              "publication": "c2550da166170b80b5a416d99db23d22558ec3e665309ef4e6f735f284d8574b"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "sample 1, cut by bytes too",
+      "summary": {
+        "plan": {
+          "mode": "FULL",
+          "batchSize": 50,
+          "batchBytes": 24000,
+          "makes": {
+            "profile": false,
+            "trees": 1,
+            "quizzes": 3,
+            "versions": 4,
+            "publications": 6
+          },
+          "sameTitles": [],
+          "treesSkipped": [],
+          "treesKept": false,
+          "unbound": [],
+          "videosAgain": [],
+          "tooLarge": [],
+          "oversized": [],
+          "orphans": [],
+          "steps": [
+            {
+              "kind": "tree",
+              "key": "tree:1",
+              "treeKey": "graph",
+              "tree": "d35907caf805d723597231d6e7f6576598687652be2084f9516ddd2e4dd7ed80"
+            },
+            {
+              "kind": "content",
+              "key": "quiz:q1:v:v1:content",
+              "quiz": "q1",
+              "label": "v1",
+              "title": "Sample 1 quiz 1",
+              "check": "q1:v1",
+              "into": null,
+              "topics": [],
+              "customTopics": [],
+              "clears": 0,
+              "document": {
+                "questions": 17,
+                "bytes": 23713,
+                "digest": "eba1ed77b1b3fa9755b798b8da32e046818f846cd35ad254c0860fd059040376"
+              }
+            },
+            {
+              "kind": "batch",
+              "key": "quiz:q1:v:v1:batch:2",
+              "quiz": "q1",
+              "label": "v1",
+              "title": "Sample 1 quiz 1",
+              "check": "q1:v1",
+              "batch": 2,
+              "batches": 2,
+              "quizStep": "quiz:q1:v:v1:content",
+              "clears": 0,
+              "document": {
+                "questions": 3,
+                "bytes": 4439,
+                "digest": "9e1533869a97d4d1e1761bb2e0a486e9635397887156c35937f594bf3f77c4bb"
+              }
+            },
+            {
+              "kind": "version",
+              "key": "quiz:q1:v:v1:version",
+              "quiz": "q1",
+              "label": "v1",
+              "title": "Sample 1 quiz 1",
+              "versionKey": "v1",
+              "quizStep": "quiz:q1:v:v1:content"
+            },
+            {
+              "kind": "clear",
+              "key": "quiz:q1:v:v2:clear:1",
+              "quiz": "q1",
+              "label": "v2",
+              "title": "Sample 1 quiz 1",
+              "clear": 1,
+              "clears": 1,
+              "quizStep": "quiz:q1:v:v1:content",
+              "content": "quiz:q1:v:v2:content"
+            },
+            {
+              "kind": "content",
+              "key": "quiz:q1:v:v2:content",
+              "quiz": "q1",
+              "label": "v2",
+              "title": "Sample 1 quiz 1",
+              "check": "q1:v2",
+              "into": "quiz:q1:v:v1:content",
+              "topics": [],
+              "customTopics": [],
+              "clears": 1,
+              "document": {
+                "questions": 17,
+                "bytes": 23776,
+                "digest": "a55362239eb59d19cf4e4f91d8568767290cde81e1fd3d1637f08e93de066692"
+              }
+            },
+            {
+              "kind": "batch",
+              "key": "quiz:q1:v:v2:batch:2",
+              "quiz": "q1",
+              "label": "v2",
+              "title": "Sample 1 quiz 1",
+              "check": "q1:v2",
+              "batch": 2,
+              "batches": 7,
+              "quizStep": "quiz:q1:v:v1:content",
+              "clears": 1,
+              "document": {
+                "questions": 17,
+                "bytes": 23887,
+                "digest": "496e237de7b127b9c33884c9a7bcd70e813cd2a41c8b52f7de8edf450059fa92"
+              }
+            },
+            {
+              "kind": "batch",
+              "key": "quiz:q1:v:v2:batch:3",
+              "quiz": "q1",
+              "label": "v2",
+              "title": "Sample 1 quiz 1",
+              "check": "q1:v2",
+              "batch": 3,
+              "batches": 7,
+              "quizStep": "quiz:q1:v:v1:content",
+              "clears": 1,
+              "document": {
+                "questions": 17,
+                "bytes": 23863,
+                "digest": "1fc22418d4fc4c91a9a06ce4d2d2437c09708c4ee43bb8a1e552eec80976efbf"
+              }
+            },
+            {
+              "kind": "batch",
+              "key": "quiz:q1:v:v2:batch:4",
+              "quiz": "q1",
+              "label": "v2",
+              "title": "Sample 1 quiz 1",
+              "check": "q1:v2",
+              "batch": 4,
+              "batches": 7,
+              "quizStep": "quiz:q1:v:v1:content",
+              "clears": 1,
+              "document": {
+                "questions": 17,
+                "bytes": 23908,
+                "digest": "5a7fa6e4ef260fbcadcfd0bb8134169e778bd713ff27c7ea49fa887d4ca5fff8"
+              }
+            },
+            {
+              "kind": "batch",
+              "key": "quiz:q1:v:v2:batch:5",
+              "quiz": "q1",
+              "label": "v2",
+              "title": "Sample 1 quiz 1",
+              "check": "q1:v2",
+              "batch": 5,
+              "batches": 7,
+              "quizStep": "quiz:q1:v:v1:content",
+              "clears": 1,
+              "document": {
+                "questions": 17,
+                "bytes": 23884,
+                "digest": "48a95e580a5466ec33f55d416957a24c52d75373a4e10dfcb5ed8ed68f5d4c53"
+              }
+            },
+            {
+              "kind": "batch",
+              "key": "quiz:q1:v:v2:batch:6",
+              "quiz": "q1",
+              "label": "v2",
+              "title": "Sample 1 quiz 1",
+              "check": "q1:v2",
+              "batch": 6,
+              "batches": 7,
+              "quizStep": "quiz:q1:v:v1:content",
+              "clears": 1,
+              "document": {
+                "questions": 17,
+                "bytes": 23998,
+                "digest": "eddbbb941561ba2c69627f6e965e91a49f9c2be775cc2303ccb0464bf6c2aaba"
+              }
+            },
+            {
+              "kind": "batch",
+              "key": "quiz:q1:v:v2:batch:7",
+              "quiz": "q1",
+              "label": "v2",
+              "title": "Sample 1 quiz 1",
+              "check": "q1:v2",
+              "batch": 7,
+              "batches": 7,
+              "quizStep": "quiz:q1:v:v1:content",
+              "clears": 1,
+              "document": {
+                "questions": 8,
+                "bytes": 11523,
+                "digest": "45c32f7100639d764f84e50b69634438f478400c9dc27b2236677f7d4095320b"
+              }
+            },
+            {
+              "kind": "version",
+              "key": "quiz:q1:v:v2:version",
+              "quiz": "q1",
+              "label": "v2",
+              "title": "Sample 1 quiz 1",
+              "versionKey": "v2",
+              "quizStep": "quiz:q1:v:v1:content"
+            },
+            {
+              "kind": "clear",
+              "key": "quiz:q1:c:clear:1",
+              "quiz": "q1",
+              "label": "",
+              "title": "Sample 1 quiz 1",
+              "clear": 1,
+              "clears": 2,
+              "quizStep": "quiz:q1:v:v1:content",
+              "content": "quiz:q1:c:content"
+            },
+            {
+              "kind": "clear",
+              "key": "quiz:q1:c:clear:2",
+              "quiz": "q1",
+              "label": "",
+              "title": "Sample 1 quiz 1",
+              "clear": 2,
+              "clears": 2,
+              "quizStep": "quiz:q1:v:v1:content",
+              "content": "quiz:q1:c:content"
+            },
+            {
+              "kind": "content",
+              "key": "quiz:q1:c:content",
+              "quiz": "q1",
+              "label": "",
+              "title": "Sample 1 quiz 1",
+              "check": "q1:current",
+              "into": "quiz:q1:v:v1:content",
+              "topics": [],
+              "customTopics": [],
+              "clears": 2,
+              "document": {
+                "questions": 17,
+                "bytes": 23755,
+                "digest": "ec1df6f9efc4214a7c47d09f0a3f803b138d15dc261a0c66e1640263834c671b"
+              }
+            },
+            {
+              "kind": "batch",
+              "key": "quiz:q1:c:batch:2",
+              "quiz": "q1",
+              "label": "",
+              "title": "Sample 1 quiz 1",
+              "check": "q1:current",
+              "batch": 2,
+              "batches": 8,
+              "quizStep": "quiz:q1:v:v1:content",
+              "clears": 2,
+              "document": {
+                "questions": 17,
+                "bytes": 23923,
+                "digest": "f603333972a8f4ec1bea931d0bb1a12a2356d1d596a0356df4e1edb7844eece6"
+              }
+            },
+            {
+              "kind": "batch",
+              "key": "quiz:q1:c:batch:3",
+              "quiz": "q1",
+              "label": "",
+              "title": "Sample 1 quiz 1",
+              "check": "q1:current",
+              "batch": 3,
+              "batches": 8,
+              "quizStep": "quiz:q1:v:v1:content",
+              "clears": 2,
+              "document": {
+                "questions": 17,
+                "bytes": 23860,
+                "digest": "f30ee2822765201ff830f38da9e6da14731d69ecf983cf2393428528b706344e"
+              }
+            },
+            {
+              "kind": "batch",
+              "key": "quiz:q1:c:batch:4",
+              "quiz": "q1",
+              "label": "",
+              "title": "Sample 1 quiz 1",
+              "check": "q1:current",
+              "batch": 4,
+              "batches": 8,
+              "quizStep": "quiz:q1:v:v1:content",
+              "clears": 2,
+              "document": {
+                "questions": 17,
+                "bytes": 23878,
+                "digest": "a467674173f88af2470e98ab3b950a632c4101290e7bf4b69af20af754239d55"
+              }
+            },
+            {
+              "kind": "batch",
+              "key": "quiz:q1:c:batch:5",
+              "quiz": "q1",
+              "label": "",
+              "title": "Sample 1 quiz 1",
+              "check": "q1:current",
+              "batch": 5,
+              "batches": 8,
+              "quizStep": "quiz:q1:v:v1:content",
+              "clears": 2,
+              "document": {
+                "questions": 17,
+                "bytes": 23884,
+                "digest": "50c776365445229620d26584b6ed2e6632cf321c1a141cfbf5362154ca8489ea"
+              }
+            },
+            {
+              "kind": "batch",
+              "key": "quiz:q1:c:batch:6",
+              "quiz": "q1",
+              "label": "",
+              "title": "Sample 1 quiz 1",
+              "check": "q1:current",
+              "batch": 6,
+              "batches": 8,
+              "quizStep": "quiz:q1:v:v1:content",
+              "clears": 2,
+              "document": {
+                "questions": 17,
+                "bytes": 23914,
+                "digest": "d030038450208c3ee597bd894841c820b325328082a0c6aa72830875d6be4812"
+              }
+            },
+            {
+              "kind": "batch",
+              "key": "quiz:q1:c:batch:7",
+              "quiz": "q1",
+              "label": "",
+              "title": "Sample 1 quiz 1",
+              "check": "q1:current",
+              "batch": 7,
+              "batches": 8,
+              "quizStep": "quiz:q1:v:v1:content",
+              "clears": 2,
+              "document": {
+                "questions": 16,
+                "bytes": 22785,
+                "digest": "775918b420df12018b161f9c0e155b5883866539c7586c01ea589b35e8a9b2c0"
+              }
+            },
+            {
+              "kind": "batch",
+              "key": "quiz:q1:c:batch:8",
+              "quiz": "q1",
+              "label": "",
+              "title": "Sample 1 quiz 1",
+              "check": "q1:current",
+              "batch": 8,
+              "batches": 8,
+              "quizStep": "quiz:q1:v:v1:content",
+              "clears": 2,
+              "document": {
+                "questions": 2,
+                "bytes": 3114,
+                "digest": "1e7225ec1571c57e26af56823f4cdfe61e77ea089429863d2fddf5ef01c2d440"
+              }
+            },
+            {
+              "kind": "content",
+              "key": "quiz:q2:v:v1:content",
+              "quiz": "q2",
+              "label": "v1",
+              "title": "Sample 1 quiz 2",
+              "check": "q2:v1",
+              "into": null,
+              "topics": [],
+              "customTopics": [],
+              "clears": 0,
+              "document": {
+                "questions": 22,
+                "bytes": 23385,
+                "digest": "55e47c8edf1bc2310167d2e4fbaedb15eaf5ea8a132bb9bad772c5da19c1291d"
+              }
+            },
+            {
+              "kind": "batch",
+              "key": "quiz:q2:v:v1:batch:2",
+              "quiz": "q2",
+              "label": "v1",
+              "title": "Sample 1 quiz 2",
+              "check": "q2:v1",
+              "batch": 2,
+              "batches": 2,
+              "quizStep": "quiz:q2:v:v1:content",
+              "clears": 0,
+              "document": {
+                "questions": 12,
+                "bytes": 12905,
+                "digest": "1391b5e2048ba69d9af578a9c64b06391f53271e9a4f21bc0fefa124598c8daf"
+              }
+            },
+            {
+              "kind": "version",
+              "key": "quiz:q2:v:v1:version",
+              "quiz": "q2",
+              "label": "v1",
+              "title": "Sample 1 quiz 2",
+              "versionKey": "v1",
+              "quizStep": "quiz:q2:v:v1:content"
+            },
+            {
+              "kind": "clear",
+              "key": "quiz:q2:c:clear:1",
+              "quiz": "q2",
+              "label": "",
+              "title": "Sample 1 quiz 2",
+              "clear": 1,
+              "clears": 1,
+              "quizStep": "quiz:q2:v:v1:content",
+              "content": "quiz:q2:c:content"
+            },
+            {
+              "kind": "content",
+              "key": "quiz:q2:c:content",
+              "quiz": "q2",
+              "label": "",
+              "title": "Sample 1 quiz 2",
+              "check": "q2:current",
+              "into": "quiz:q2:v:v1:content",
+              "topics": [],
+              "customTopics": [],
+              "clears": 1,
+              "document": {
+                "questions": 22,
+                "bytes": 23379,
+                "digest": "5c0f94f444f5a01ce47dd7e4e2b3e9e35ae8067d32f8e37f260d6f5e2ed85672"
+              }
+            },
+            {
+              "kind": "batch",
+              "key": "quiz:q2:c:batch:2",
+              "quiz": "q2",
+              "label": "",
+              "title": "Sample 1 quiz 2",
+              "check": "q2:current",
+              "batch": 2,
+              "batches": 2,
+              "quizStep": "quiz:q2:v:v1:content",
+              "clears": 1,
+              "document": {
+                "questions": 12,
+                "bytes": 12896,
+                "digest": "6d3e19f1fd69ec8fabea50f1c9bb287f838cbf83bb9bc9ba7dbdedcf1435d68f"
+              }
+            },
+            {
+              "kind": "content",
+              "key": "quiz:q3:v:v1:content",
+              "quiz": "q3",
+              "label": "v1",
+              "title": "Sample 1 quiz 3",
+              "check": "q3:v1",
+              "into": null,
+              "topics": [],
+              "customTopics": [],
+              "clears": 0,
+              "document": {
+                "questions": 22,
+                "bytes": 23391,
+                "digest": "a1d610ef6db10d20633ff642acce750812e9b9bdc9b476b05bf3995cf11dc3ef"
+              }
+            },
+            {
+              "kind": "batch",
+              "key": "quiz:q3:v:v1:batch:2",
+              "quiz": "q3",
+              "label": "v1",
+              "title": "Sample 1 quiz 3",
+              "check": "q3:v1",
+              "batch": 2,
+              "batches": 2,
+              "quizStep": "quiz:q3:v:v1:content",
+              "clears": 0,
+              "document": {
+                "questions": 19,
+                "bytes": 20289,
+                "digest": "207eb7f2d1a11ac5801a8d051fa4cd46f785edbebf13cd007be52c4d0d4f5b6b"
+              }
+            },
+            {
+              "kind": "version",
+              "key": "quiz:q3:v:v1:version",
+              "quiz": "q3",
+              "label": "v1",
+              "title": "Sample 1 quiz 3",
+              "versionKey": "v1",
+              "quizStep": "quiz:q3:v:v1:content"
+            },
+            {
+              "kind": "clear",
+              "key": "quiz:q3:c:clear:1",
+              "quiz": "q3",
+              "label": "",
+              "title": "Sample 1 quiz 3",
+              "clear": 1,
+              "clears": 1,
+              "quizStep": "quiz:q3:v:v1:content",
+              "content": "quiz:q3:c:content"
+            },
+            {
+              "kind": "content",
+              "key": "quiz:q3:c:content",
+              "quiz": "q3",
+              "label": "",
+              "title": "Sample 1 quiz 3",
+              "check": "q3:current",
+              "into": "quiz:q3:v:v1:content",
+              "topics": [],
+              "customTopics": [],
+              "clears": 1,
+              "document": {
+                "questions": 22,
+                "bytes": 23373,
+                "digest": "82a0f67ac90dac686832e21018c9166c018cb50e964fddf3f53937c99bdf6e8b"
+              }
+            },
+            {
+              "kind": "batch",
+              "key": "quiz:q3:c:batch:2",
+              "quiz": "q3",
+              "label": "",
+              "title": "Sample 1 quiz 3",
+              "check": "q3:current",
+              "batch": 2,
+              "batches": 2,
+              "quizStep": "quiz:q3:v:v1:content",
+              "clears": 1,
+              "document": {
+                "questions": 19,
+                "bytes": 20322,
+                "digest": "09eae4b9019615ef420e81eae5f662ff27942f9a1f1a1056901493ae65e1e861"
+              }
+            },
+            {
+              "kind": "publication",
+              "key": "publication:1",
+              "index": 0,
+              "name": "Sample 1 publication 1",
+              "quizStep": "quiz:q1:v:v1:content",
+              "versionStep": "quiz:q1:v:v2:version",
+              "node": {
+                "treeStep": "tree:1",
+                "nodeKey": "src-basics"
+              },
+              "publication": "ea906796784b904d01773866dffa96134328430f186274344b5eb9ed8b2c93b9"
+            },
+            {
+              "kind": "publication",
+              "key": "publication:2",
+              "index": 1,
+              "name": "Sample 1 publication 2",
+              "quizStep": "quiz:q1:v:v1:content",
+              "versionStep": "quiz:q1:v:v2:version",
+              "node": null,
+              "publication": "67b659fc57e0fda8191a56625ca2114eecce85ef07bfd055ab387995dc3e72af"
+            },
+            {
+              "kind": "publication",
+              "key": "publication:3",
+              "index": 2,
+              "name": "Sample 1 publication 3",
+              "quizStep": "quiz:q2:v:v1:content",
+              "versionStep": "quiz:q3:v:v1:version",
+              "node": null,
+              "publication": "cb0683368d4428bb09dc00aa6e6373de7ce5b4614743b5b27c2b41dbc46af7cd"
+            },
+            {
+              "kind": "publication",
+              "key": "publication:4",
+              "index": 3,
+              "name": "Sample 1 publication 4",
+              "quizStep": "quiz:q2:v:v1:content",
+              "versionStep": "quiz:q3:v:v1:version",
+              "node": null,
+              "publication": "9791babe388baa188627a4f4d0a0e3642b8da398cdedf7ba9472cb15e67106e0"
+            },
+            {
+              "kind": "publication",
+              "key": "publication:5",
+              "index": 4,
+              "name": "Sample 1 publication 5",
+              "quizStep": "quiz:q3:v:v1:content",
+              "versionStep": "quiz:q3:v:v1:version",
+              "node": null,
+              "publication": "204910ad0c86b76eae708d3f72d93330b65c652370ab129e2a88663441d3e003"
+            },
+            {
+              "kind": "publication",
+              "key": "publication:6",
+              "index": 5,
+              "name": "Sample 1 publication 6",
+              "quizStep": "quiz:q3:v:v1:content",
+              "versionStep": "quiz:q3:v:v1:version",
+              "node": null,
+              "publication": "c2550da166170b80b5a416d99db23d22558ec3e665309ef4e6f735f284d8574b"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "sample 2 (videos), by questions",
+      "summary": {
+        "plan": {
+          "mode": "FULL",
+          "batchSize": 15,
+          "batchBytes": 0,
+          "makes": {
+            "profile": false,
+            "trees": 0,
+            "quizzes": 3,
+            "versions": 3,
+            "publications": 6
+          },
+          "sameTitles": [],
+          "treesSkipped": [],
+          "treesKept": false,
+          "unbound": [],
+          "videosAgain": [],
+          "tooLarge": [],
+          "oversized": [],
+          "orphans": [],
+          "steps": [
+            {
+              "kind": "content",
+              "key": "quiz:q1:v:v1:content",
+              "quiz": "q1",
+              "label": "v1",
+              "title": "Sample 2 quiz 1",
+              "check": "q1:v1",
+              "into": null,
+              "topics": [],
+              "customTopics": [],
+              "clears": 0,
+              "document": {
+                "questions": 15,
+                "bytes": 15977,
+                "digest": "8db7e9cdefa00bf3c5d3fc5450d2c866ca231e8fc1f5c230ea8cc461fff8fbc5"
+              }
+            },
+            {
+              "kind": "batch",
+              "key": "quiz:q1:v:v1:batch:2",
+              "quiz": "q1",
+              "label": "v1",
+              "title": "Sample 2 quiz 1",
+              "check": "q1:v1",
+              "batch": 2,
+              "batches": 4,
+              "quizStep": "quiz:q1:v:v1:content",
+              "clears": 0,
+              "document": {
+                "questions": 15,
+                "bytes": 16061,
+                "digest": "b4f98c952effdb045c8896a4f70c6529190ec6b1cd777aba01cc92d55a17991a"
+              }
+            },
+            {
+              "kind": "batch",
+              "key": "quiz:q1:v:v1:batch:3",
+              "quiz": "q1",
+              "label": "v1",
+              "title": "Sample 2 quiz 1",
+              "check": "q1:v1",
+              "batch": 3,
+              "batches": 4,
+              "quizStep": "quiz:q1:v:v1:content",
+              "clears": 0,
+              "document": {
+                "questions": 15,
+                "bytes": 16127,
+                "digest": "a21b4fd3311800c4476a934ce8690ee6498b6778fd859b3ad40c6f59440e63cf"
+              }
+            },
+            {
+              "kind": "batch",
+              "key": "quiz:q1:v:v1:batch:4",
+              "quiz": "q1",
+              "label": "v1",
+              "title": "Sample 2 quiz 1",
+              "check": "q1:v1",
+              "batch": 4,
+              "batches": 4,
+              "quizStep": "quiz:q1:v:v1:content",
+              "clears": 0,
+              "document": {
+                "questions": 11,
+                "bytes": 11830,
+                "digest": "3373ec0695dcfa256d9bab31ad877962be482470b21f207b0081cb7f8eb8e21a"
+              }
+            },
+            {
+              "kind": "version",
+              "key": "quiz:q1:v:v1:version",
+              "quiz": "q1",
+              "label": "v1",
+              "title": "Sample 2 quiz 1",
+              "versionKey": "v1",
+              "quizStep": "quiz:q1:v:v1:content"
+            },
+            {
+              "kind": "clear",
+              "key": "quiz:q1:c:clear:1",
+              "quiz": "q1",
+              "label": "",
+              "title": "Sample 2 quiz 1",
+              "clear": 1,
+              "clears": 1,
+              "quizStep": "quiz:q1:v:v1:content",
+              "content": "quiz:q1:c:content"
+            },
+            {
+              "kind": "content",
+              "key": "quiz:q1:c:content",
+              "quiz": "q1",
+              "label": "",
+              "title": "Sample 2 quiz 1",
+              "check": "q1:current",
+              "into": "quiz:q1:v:v1:content",
+              "topics": [],
+              "customTopics": [],
+              "clears": 1,
+              "document": {
+                "questions": 15,
+                "bytes": 15989,
+                "digest": "f54354e1aa9205c996ef19f8fe8d1376a1470393706950e3ed0f5b23c430ac14"
+              }
+            },
+            {
+              "kind": "batch",
+              "key": "quiz:q1:c:batch:2",
+              "quiz": "q1",
+              "label": "",
+              "title": "Sample 2 quiz 1",
+              "check": "q1:current",
+              "batch": 2,
+              "batches": 4,
+              "quizStep": "quiz:q1:v:v1:content",
+              "clears": 1,
+              "document": {
+                "questions": 15,
+                "bytes": 16115,
+                "digest": "3949bcd2f5e0f191d282d061bcdf3eef7be1c28afe0536c486de20ed2fb8ee2b"
+              }
+            },
+            {
+              "kind": "batch",
+              "key": "quiz:q1:c:batch:3",
+              "quiz": "q1",
+              "label": "",
+              "title": "Sample 2 quiz 1",
+              "check": "q1:current",
+              "batch": 3,
+              "batches": 4,
+              "quizStep": "quiz:q1:v:v1:content",
+              "clears": 1,
+              "document": {
+                "questions": 15,
+                "bytes": 16088,
+                "digest": "01e0fd8be52e17ff349107cde5d76164c3908f5a9cab2a3d220edd08f959ab29"
+              }
+            },
+            {
+              "kind": "batch",
+              "key": "quiz:q1:c:batch:4",
+              "quiz": "q1",
+              "label": "",
+              "title": "Sample 2 quiz 1",
+              "check": "q1:current",
+              "batch": 4,
+              "batches": 4,
+              "quizStep": "quiz:q1:v:v1:content",
+              "clears": 1,
+              "document": {
+                "questions": 11,
+                "bytes": 11842,
+                "digest": "d643eff97d135ab8965f61ed70c5c417e00d953c572ed48ea7a4d1704f773a47"
+              }
+            },
+            {
+              "kind": "content",
+              "key": "quiz:q2:v:v1:content",
+              "quiz": "q2",
+              "label": "v1",
+              "title": "Sample 2 quiz 2",
+              "check": "q2:v1",
+              "into": null,
+              "topics": [],
+              "customTopics": [],
+              "clears": 0,
+              "document": {
+                "questions": 15,
+                "bytes": 16078,
+                "digest": "eeeaaccadd094cee003b0653a1ecfa6e99f2c06a7eada8da196c7782b88aa71e"
+              }
+            },
+            {
+              "kind": "batch",
+              "key": "quiz:q2:v:v1:batch:2",
+              "quiz": "q2",
+              "label": "v1",
+              "title": "Sample 2 quiz 2",
+              "check": "q2:v1",
+              "batch": 2,
+              "batches": 2,
+              "quizStep": "quiz:q2:v:v1:content",
+              "clears": 0,
+              "document": {
+                "questions": 7,
+                "bytes": 7646,
+                "digest": "eda5d5b825d0b469fa368cd523c9aeb3398334856e7d1891d427d50c36377337"
+              }
+            },
+            {
+              "kind": "version",
+              "key": "quiz:q2:v:v1:version",
+              "quiz": "q2",
+              "label": "v1",
+              "title": "Sample 2 quiz 2",
+              "versionKey": "v1",
+              "quizStep": "quiz:q2:v:v1:content"
+            },
+            {
+              "kind": "clear",
+              "key": "quiz:q2:c:clear:1",
+              "quiz": "q2",
+              "label": "",
+              "title": "Sample 2 quiz 2",
+              "clear": 1,
+              "clears": 1,
+              "quizStep": "quiz:q2:v:v1:content",
+              "content": "quiz:q2:c:content"
+            },
+            {
+              "kind": "content",
+              "key": "quiz:q2:c:content",
+              "quiz": "q2",
+              "label": "",
+              "title": "Sample 2 quiz 2",
+              "check": "q2:current",
+              "into": "quiz:q2:v:v1:content",
+              "topics": [],
+              "customTopics": [],
+              "clears": 1,
+              "document": {
+                "questions": 15,
+                "bytes": 16057,
+                "digest": "851d05e91d95397dcdb58a90753a70476ecff6cfd4e8ea10adb3e526250f20f7"
+              }
+            },
+            {
+              "kind": "batch",
+              "key": "quiz:q2:c:batch:2",
+              "quiz": "q2",
+              "label": "",
+              "title": "Sample 2 quiz 2",
+              "check": "q2:current",
+              "batch": 2,
+              "batches": 2,
+              "quizStep": "quiz:q2:v:v1:content",
+              "clears": 1,
+              "document": {
+                "questions": 7,
+                "bytes": 7643,
+                "digest": "16f10b491d87375df14dc2ebc19e9d7fdfb62e1987179c4f99b24b6bcf9593aa"
+              }
+            },
+            {
+              "kind": "content",
+              "key": "quiz:q3:v:v1:content",
+              "quiz": "q3",
+              "label": "v1",
+              "title": "Sample 2 quiz 3",
+              "check": "q3:v1",
+              "into": null,
+              "topics": [],
+              "customTopics": [],
+              "clears": 0,
+              "document": {
+                "questions": 15,
+                "bytes": 15998,
+                "digest": "a93d791022efc5d438b84180968df80bd35bd66fb786204616cc690c76536680"
+              }
+            },
+            {
+              "kind": "batch",
+              "key": "quiz:q3:v:v1:batch:2",
+              "quiz": "q3",
+              "label": "v1",
+              "title": "Sample 2 quiz 3",
+              "check": "q3:v1",
+              "batch": 2,
+              "batches": 2,
+              "quizStep": "quiz:q3:v:v1:content",
+              "clears": 0,
+              "document": {
+                "questions": 14,
+                "bytes": 14995,
+                "digest": "5781bb3866aaab8e0fdf148b4a29b303e244021c700cb5ec232934e9cd986039"
+              }
+            },
+            {
+              "kind": "version",
+              "key": "quiz:q3:v:v1:version",
+              "quiz": "q3",
+              "label": "v1",
+              "title": "Sample 2 quiz 3",
+              "versionKey": "v1",
+              "quizStep": "quiz:q3:v:v1:content"
+            },
+            {
+              "kind": "clear",
+              "key": "quiz:q3:c:clear:1",
+              "quiz": "q3",
+              "label": "",
+              "title": "Sample 2 quiz 3",
+              "clear": 1,
+              "clears": 1,
+              "quizStep": "quiz:q3:v:v1:content",
+              "content": "quiz:q3:c:content"
+            },
+            {
+              "kind": "content",
+              "key": "quiz:q3:c:content",
+              "quiz": "q3",
+              "label": "",
+              "title": "Sample 2 quiz 3",
+              "check": "q3:current",
+              "into": "quiz:q3:v:v1:content",
+              "topics": [],
+              "customTopics": [],
+              "clears": 1,
+              "document": {
+                "questions": 15,
+                "bytes": 15935,
+                "digest": "4d90f1ee9258f1ec837647311f4bf77bd4ab97c22702f795f6312782773f26bf"
+              }
+            },
+            {
+              "kind": "batch",
+              "key": "quiz:q3:c:batch:2",
+              "quiz": "q3",
+              "label": "",
+              "title": "Sample 2 quiz 3",
+              "check": "q3:current",
+              "batch": 2,
+              "batches": 2,
+              "quizStep": "quiz:q3:v:v1:content",
+              "clears": 1,
+              "document": {
+                "questions": 14,
+                "bytes": 15004,
+                "digest": "7ac7e8786900a735ef411a0e37d4512e86d7442382ad7d66337e3f1f1961f468"
+              }
+            },
+            {
+              "kind": "publication",
+              "key": "publication:1",
+              "index": 0,
+              "name": "Sample 2 publication 1",
+              "quizStep": "quiz:q1:v:v1:content",
+              "versionStep": "quiz:q3:v:v1:version",
+              "node": null,
+              "publication": "ada482be6a67874bca6452bb2ee871b1b72a4c1004b4e61cac2686e394db115f"
+            },
+            {
+              "kind": "publication",
+              "key": "publication:2",
+              "index": 1,
+              "name": "Sample 2 publication 2",
+              "quizStep": "quiz:q1:v:v1:content",
+              "versionStep": "quiz:q3:v:v1:version",
+              "node": null,
+              "publication": "4e5784f62911f00f9724f451e8607882aa3668ca0c9b4ec6be017191432a9fb1"
+            },
+            {
+              "kind": "publication",
+              "key": "publication:3",
+              "index": 2,
+              "name": "Sample 2 publication 3",
+              "quizStep": "quiz:q2:v:v1:content",
+              "versionStep": "quiz:q3:v:v1:version",
+              "node": null,
+              "publication": "4062087ea7e218c23968becf73221e7602881c3a43d05633cf56b2be01bc8cce"
+            },
+            {
+              "kind": "publication",
+              "key": "publication:4",
+              "index": 3,
+              "name": "Sample 2 publication 4",
+              "quizStep": "quiz:q2:v:v1:content",
+              "versionStep": "quiz:q3:v:v1:version",
+              "node": null,
+              "publication": "80142f046b3281140bdcff58581b2b670f4d90e3948e4eff34023486ffed0204"
+            },
+            {
+              "kind": "publication",
+              "key": "publication:5",
+              "index": 4,
+              "name": "Sample 2 publication 5",
+              "quizStep": "quiz:q3:v:v1:content",
+              "versionStep": "quiz:q3:v:v1:version",
+              "node": null,
+              "publication": "cba7a207b62566327ee67e726746d14a8d0853fc1c22ef80a7374ee109265bdd"
+            },
+            {
+              "kind": "publication",
+              "key": "publication:6",
+              "index": 5,
+              "name": "Sample 2 publication 6",
+              "quizStep": "quiz:q3:v:v1:content",
+              "versionStep": "quiz:q3:v:v1:version",
+              "node": null,
+              "publication": "7217f9b8d1e57e6c58f7ab2e49788b20e8fd9da03e6fc0a54d0661ee6f70ab1e"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "a file no request takes: the heading and materials, and one question, over the bytes",
+      "summary": {
+        "plan": {
+          "mode": "FULL",
+          "batchSize": 10,
+          "batchBytes": 9000,
+          "makes": {
+            "profile": false,
+            "trees": 0,
+            "quizzes": 1,
+            "versions": 0,
+            "publications": 0
+          },
+          "sameTitles": [],
+          "treesSkipped": [],
+          "treesKept": false,
+          "unbound": [],
+          "videosAgain": [],
+          "tooLarge": [],
+          "oversized": [
+            {
+              "title": "Heavy",
+              "question": null
+            },
+            {
+              "title": "Heavy",
+              "question": 7
+            }
+          ],
+          "orphans": [],
+          "steps": [
+            {
+              "kind": "content",
+              "key": "quiz:q1:c:content",
+              "quiz": "heavy",
+              "label": "",
+              "title": "Heavy",
+              "check": "heavy:current",
+              "into": null,
+              "topics": [],
+              "customTopics": [],
+              "clears": 0,
+              "document": {
+                "questions": 0,
+                "bytes": 12386,
+                "digest": "f8011192ff1dc0185f889b2b47f834aacf497004054ac992a18b7a191654fa7e"
+              }
+            },
+            {
+              "kind": "batch",
+              "key": "quiz:q1:c:batch:2",
+              "quiz": "heavy",
+              "label": "",
+              "title": "Heavy",
+              "check": "heavy:current",
+              "batch": 2,
+              "batches": 4,
+              "quizStep": "quiz:q1:c:content",
+              "clears": 0,
+              "document": {
+                "questions": 6,
+                "bytes": 1248,
+                "digest": "5f36d035755e04d4b8cdc4294b77b2313be435dc4ad62aba9192763be200a870"
+              }
+            },
+            {
+              "kind": "batch",
+              "key": "quiz:q1:c:batch:3",
+              "quiz": "heavy",
+              "label": "",
+              "title": "Heavy",
+              "check": "heavy:current",
+              "batch": 3,
+              "batches": 4,
+              "quizStep": "quiz:q1:c:content",
+              "clears": 0,
+              "document": {
+                "questions": 1,
+                "bytes": 12504,
+                "digest": "fad4d2978079c4ffa41e66aa0da8a5b5faa2a70510c2c7ef1f54e5942f568f66"
+              }
+            },
+            {
+              "kind": "batch",
+              "key": "quiz:q1:c:batch:4",
+              "quiz": "heavy",
+              "label": "",
+              "title": "Heavy",
+              "check": "heavy:current",
+              "batch": 4,
+              "batches": 4,
+              "quizStep": "quiz:q1:c:content",
+              "clears": 0,
+              "document": {
+                "questions": 5,
+                "bytes": 1086,
+                "digest": "0fb0a400bbcdd9627d4d7ec8a8c694ea9f8403b4875a790d2acdcf3f14708406"
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "numbers and escapes as JSON writes them, cut by bytes",
+      "summary": {
+        "plan": {
+          "mode": "FULL",
+          "batchSize": 4,
+          "batchBytes": 1500,
+          "makes": {
+            "profile": false,
+            "trees": 0,
+            "quizzes": 1,
+            "versions": 1,
+            "publications": 1
+          },
+          "sameTitles": [],
+          "treesSkipped": [],
+          "treesKept": false,
+          "unbound": [],
+          "videosAgain": [],
+          "tooLarge": [],
+          "oversized": [],
+          "orphans": [],
+          "steps": [
+            {
+              "kind": "content",
+              "key": "quiz:q1:v:e1:content",
+              "quiz": "esc",
+              "label": "v1",
+              "title": "Escapes \"quoted\" \\ back\tslash",
+              "check": "esc:e1",
+              "into": null,
+              "topics": [],
+              "customTopics": [],
+              "clears": 0,
+              "document": {
+                "questions": 3,
+                "bytes": 1378,
+                "digest": "2220f70d193aee27d91ced87c8c19be148ec31ad6f21cb8d90b1110dbfe1d365"
+              }
+            },
+            {
+              "kind": "batch",
+              "key": "quiz:q1:v:e1:batch:2",
+              "quiz": "esc",
+              "label": "v1",
+              "title": "Escapes \"quoted\" \\ back\tslash",
+              "check": "esc:e1",
+              "batch": 2,
+              "batches": 6,
+              "quizStep": "quiz:q1:v:e1:content",
+              "clears": 0,
+              "document": {
+                "questions": 2,
+                "bytes": 1441,
+                "digest": "69a9a57cf9f644c51bea6cfecb8926ff4b188fd09441d2a9d8948ba1b5b15461"
+              }
+            },
+            {
+              "kind": "batch",
+              "key": "quiz:q1:v:e1:batch:3",
+              "quiz": "esc",
+              "label": "v1",
+              "title": "Escapes \"quoted\" \\ back\tslash",
+              "check": "esc:e1",
+              "batch": 3,
+              "batches": 6,
+              "quizStep": "quiz:q1:v:e1:content",
+              "clears": 0,
+              "document": {
+                "questions": 1,
+                "bytes": 1024,
+                "digest": "5e990eb0e70e443ac8e0c38fbd4c3daae865327a4e943e9f5e01dbf91b1474e3"
+              }
+            },
+            {
+              "kind": "batch",
+              "key": "quiz:q1:v:e1:batch:4",
+              "quiz": "esc",
+              "label": "v1",
+              "title": "Escapes \"quoted\" \\ back\tslash",
+              "check": "esc:e1",
+              "batch": 4,
+              "batches": 6,
+              "quizStep": "quiz:q1:v:e1:content",
+              "clears": 0,
+              "document": {
+                "questions": 1,
+                "bytes": 1104,
+                "digest": "7bfdeac082b98386e9c69c47258c5647cc493862c193fc695e6713c3cf9471d2"
+              }
+            },
+            {
+              "kind": "batch",
+              "key": "quiz:q1:v:e1:batch:5",
+              "quiz": "esc",
+              "label": "v1",
+              "title": "Escapes \"quoted\" \\ back\tslash",
+              "check": "esc:e1",
+              "batch": 5,
+              "batches": 6,
+              "quizStep": "quiz:q1:v:e1:content",
+              "clears": 0,
+              "document": {
+                "questions": 1,
+                "bytes": 1184,
+                "digest": "21ecd92477e3e05c0c938d5db6e5aa228b7539024a137b20976dc0ce7bdc862e"
+              }
+            },
+            {
+              "kind": "batch",
+              "key": "quiz:q1:v:e1:batch:6",
+              "quiz": "esc",
+              "label": "v1",
+              "title": "Escapes \"quoted\" \\ back\tslash",
+              "check": "esc:e1",
+              "batch": 6,
+              "batches": 6,
+              "quizStep": "quiz:q1:v:e1:content",
+              "clears": 0,
+              "document": {
+                "questions": 1,
+                "bytes": 1264,
+                "digest": "0bf1551fac8d84bdf4f15ded425c5ba3674b94e3a04c82ee774b653a052b0dd4"
+              }
+            },
+            {
+              "kind": "version",
+              "key": "quiz:q1:v:e1:version",
+              "quiz": "esc",
+              "label": "v1",
+              "title": "Escapes \"quoted\" \\ back\tslash",
+              "versionKey": "e1",
+              "quizStep": "quiz:q1:v:e1:content"
+            },
+            {
+              "kind": "publication",
+              "key": "publication:1",
+              "index": 0,
+              "name": "Escapes",
+              "quizStep": "quiz:q1:v:e1:content",
+              "versionStep": "quiz:q1:v:e1:version",
+              "node": null,
+              "publication": "aaccd2b88de2c1f3657816851513e73e8f2c8a682de97ae2375598602b521897"
+            }
+          ]
+        }
+      }
+    }
+  ]
+}
