@@ -239,6 +239,9 @@ public class FirstLaunchWaiting {
         ReadySteps ready, LoadWaitingState.State state, MessageCatalog messages, Locale locale) {
         List<String> remaining = new ArrayList<>();
         for (FirstLaunchAccountStore.Recorded recorded : state.accounts()) {
+            if (!state.facts().containsKey(recorded.userId())) {
+                continue;
+            }
             List<String> notRun = ready.notRun(state, recorded);
             if (!notRun.isEmpty()) {
                 remaining.add(messages.find("first-launch.report.ready-not-run", locale)

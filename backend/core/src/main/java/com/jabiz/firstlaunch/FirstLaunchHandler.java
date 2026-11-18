@@ -45,15 +45,17 @@ public interface FirstLaunchHandler {
     }
 
     /**
-     * The steps to run for the configuration's account {@code account} once it is ready in the waiting phase - once a
-     * configured role of it is in effect, so its user accepted the invitation (the address is proven) and bound a second
-     * factor (docs/design/23-first-launch.md section 9), such as adding it to what it is to be a member of. Empty by
-     * default.
+     * The steps to run for the configuration's account {@code account} once it is ready in the waiting phase - enabled,
+     * its user accepted the invitation (the address is proven) and bound a second factor, and a configured role of it in
+     * effect (docs/design/23-first-launch.md section 9) - such as adding it to what it is to be a member of. Empty by
+     * default. Asked with the configuration the instance started with, and only while it is the run's (the same shape
+     * apart from the addresses); otherwise the steps do not run and are reported.
      *
      * <p>Only {@link FirstLaunchStep#run} steps, each running a process of {@link #accountReadyProcesses()}, as the system;
-     * keys unique within the account. {@code results} gives only {@link FirstLaunchResults#userId}: the content phase's
+     * keys unique within the account, at most 200 characters and not holding the account's key (keys are recorded; the
+     * key is the user's name). {@code results} gives only {@link FirstLaunchResults#userId}: the content phase's
      * outputs are not kept. Each step runs once per account (recorded); a failure is retried by the job and, until it
-     * succeeds, listed in the report.
+     * succeeds, listed in the report; the run's end does not wait for it.
      */
     default List<FirstLaunchStep> whenAccountReady(FirstLaunchConfig config, FirstLaunchAccount account,
         FirstLaunchResults results) {

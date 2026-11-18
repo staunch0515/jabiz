@@ -38,11 +38,12 @@ public class LoadWaitingState<C extends ProcessContext> implements StepHandler<L
      *                   by the first launch (decision D63, D83)
      * @param readyDone  the keys of the application's steps that ran, by user (section 9)
      * @param readyFailed the users whose ready item failed last (its steps are tried again)
+     * @param recordedShape the configuration's shape the run recorded with {@code CONTENT_DONE} (empty: none)
      */
     public record State(FirstLaunchRun run, List<FirstLaunchAccountStore.Recorded> accounts,
         Map<UUID, FirstLaunchAccountStore.Facts> facts, Map<String, FirstLaunchAccountStore.Role> roles,
         Set<String> adminRoles, boolean armed, Set<UUID> invitable, Map<UUID, Set<String>> readyDone,
-        Set<UUID> readyFailed) {}
+        Set<UUID> readyFailed, String recordedShape) {}
 
     public static <C extends ProcessContext> StepSpec<Metadata, C> of() {
         return StepSpec.of(LoadWaitingState.class, new Metadata(false));
@@ -56,11 +57,14 @@ public class LoadWaitingState<C extends ProcessContext> implements StepHandler<L
     private final FirstLaunchRuns runs;
     private final FirstLaunchAccountStore store;
     private final ProtectedGrants grants;
+    private final tools.jackson.databind.json.JsonMapper json;
 
-    public LoadWaitingState(FirstLaunchRuns runs, FirstLaunchAccountStore store, ProtectedGrants grants) {
+    public LoadWaitingState(FirstLaunchRuns runs, FirstLaunchAccountStore store, ProtectedGrants grants,
+        tools.jackson.databind.json.JsonMapper json) {
         this.runs = runs;
         this.store = store;
         this.grants = grants;
+        this.json = json;
     }
 
     @Override
@@ -85,13 +89,15 @@ public class LoadWaitingState<C extends ProcessContext> implements StepHandler<L
                 Mono<Set<UUID>> failed = store.failedItems(FirstLaunchWaiting.JOB).map(items -> items.stream()
                     .map(item -> ReadySteps.fromHex(item.substring(1)))
                     .collect(java.util.stream.Collectors.toUnmodifiableSet()));
+                Mono<String> shape = runs.detail(run.runId(), "CONTENT_DONE").map(detail -> detail
+                    .map(text -> json.readTree(text).path("accounts").path("shape").asString("")).orElse(""));
                 return Mono.zip(store.facts(users, ctx.opTime()), store.roles(codes, ctx.opTime()),
-                        grants.armedOnRecord(), invitable, store.readyDone(run.runId()), failed)
+                        grants.armedOnRecord(), invitable, store.readyDone(run.runId()), failed, shape)
                     .flatMap(read -> store.rolesHolding(read.getT2().values().stream()
                                 .map(FirstLaunchAccountStore.Role::roleId).toList(),
                             grants.settings().administratorPermissions(), ctx.opTime())
                         .doOnNext(admins -> ctx.put(STATE, new State(run, accounts, read.getT1(), read.getT2(),
-                            admins, read.getT3(), read.getT4(), read.getT5(), read.getT6())))
+                            admins, read.getT3(), read.getT4(), read.getT5(), read.getT6(), read.getT7())))
                         .then());
             });
         });

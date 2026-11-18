@@ -16,7 +16,7 @@ import java.util.Optional;
 /**
  * Startup check {@code FIRST_LAUNCH} (docs/design/23-first-launch.md section 9): every process a ready account's steps
  * may run ({@link FirstLaunchHandler#accountReadyProcesses()}) exists, is sub-process-only or internal (never open or
- * entry-only), is not the platform's own ({@code FIRST_LAUNCH_}), and is not an acting process too - acting in the
+ * entry-only), is not the platform's own (a name with {@code FIRST_LAUNCH}), and is not an acting process too - acting in the
  * content phase and the system's steps for a ready account are kept apart.
  */
 @Component
@@ -39,9 +39,11 @@ public class FirstLaunchReadyChecks implements PlatformCheck {
             String where = "FirstLaunchHandler " + handler.name();
             for (String name : handler.accountReadyProcesses()) {
                 Optional<ProcessDefinition<?, ?, ?>> process = registry.findLatest(name);
-                if (name.startsWith("FIRST_LAUNCH_")) {
+                // The first launch's own processes, and those of its powers (CONTROL_CHANGE_FIRST_LAUNCH_PUBLISH,
+                // APPROVAL_FIRST_LAUNCH_DECIDE), are never an application's.
+                if (name.contains("FIRST_LAUNCH")) {
                     problems.add(CheckProblem.error(CATEGORY, where, "account-ready process " + name
-                        + " is the platform's own (FIRST_LAUNCH_)"));
+                        + " is the platform's own (FIRST_LAUNCH)"));
                 } else if (process.isEmpty()) {
                     problems.add(CheckProblem.error(CATEGORY, where, "account-ready process " + name
                         + " does not exist"));

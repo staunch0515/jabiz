@@ -93,7 +93,7 @@ class FirstLaunchReadyChecksTest {
             "account-ready process OPEN_ONE is OPEN: only sub-process-only or internal processes",
             "account-ready process ENTRY_ONE is ENTRY_ONLY: only sub-process-only or internal processes",
             "account-ready process MISSING does not exist",
-            "account-ready process FIRST_LAUNCH_SOMETHING is the platform's own (FIRST_LAUNCH_)",
+            "account-ready process FIRST_LAUNCH_SOMETHING is the platform's own (FIRST_LAUNCH)",
             "account-ready process SUB_TWO is an acting process too: the two lists are apart");
     }
 

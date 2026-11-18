@@ -192,10 +192,12 @@
 
 有些事只能在本人接受邀请（邮箱已验证）之后做，例如把账号加为运营商的成员（`QB_OPERATOR_MEMBER_ADD` 要求成员的邮箱已验证）。应用以 `FirstLaunchHandler.whenAccountReady(config, account, results)` 给出（缺省为空）：
 
-- **时机**：等人阶段，该账号的配置角色至少一项 `APPLIED`（因此已接受邀请、已绑定二次验证）。任务 `jabiz.first-launch` 为每个账号多一个选项（键 `r` + 用户编号的 32 位十六进制），排在各账号的授予之后、管理员授予之前，所以角色生效的同一轮即运行。停用或首发不再处理的账号不运行。
-- **步骤**：只能是 `FirstLaunchStep.run`；流程须在 `FirstLaunchHandler.accountReadyProcesses()` 中（另设的清单，不用代行清单：内容阶段的代行不能调用它们）；一个账号内键唯一。否则该项失败（日志说明）。
-  启动检查 `FIRST_LAUNCH`：清单中的流程须存在、为 `SUB_PROCESS_ONLY` 或 `INTERNAL`（不得为 `OPEN` / `ENTRY_ONLY`）、不以 `FIRST_LAUNCH_` 开头、不同时在 `actingProcesses()` 中。
-- **results**：只有 `userId(代号)`（按配置中的位置对应本运行的账号）；`output(...)` 一律为空（内容阶段的输出不保存）。`config` 是本实例启动时读入的首发配置：等人阶段配置须仍在。不在（或读不出）时这些步骤不运行、不让该项失败、`DONE` 也不等它们；每次启动日志 WARN 说明，报告把它们列为剩余事项（"放回配置并重启"）。
+- **时机**：等人阶段，该账号就绪：启用、已接受邀请、已绑定二次验证，且配置角色至少一项 `APPLIED`（只持有角色不算：管理员可能在本人接受之前手工授予）。任务 `jabiz.first-launch` 为每个账号多一个选项（键 `r` + 用户编号的 32 位十六进制），排在各账号的授予之后、管理员授予之前，所以角色生效的同一轮即运行。停用或首发不再处理的账号不运行。
+- **步骤**：只能是 `FirstLaunchStep.run`；流程须在 `FirstLaunchHandler.accountReadyProcesses()` 中（另设的清单，不用代行清单：内容阶段的代行不能调用它们）；一个账号内键唯一、至多 200 个字符、不含该账号的代号（代号即用户名，步骤键会被记下）；应用有不止一个 `FirstLaunchHandler` 时同样是问题。否则该项失败（日志说明，问题中不写步骤键）。
+  启动检查 `FIRST_LAUNCH`：清单中的流程须存在、为 `SUB_PROCESS_ONLY` 或 `INTERNAL`（不得为 `OPEN` / `ENTRY_ONLY`）、名称不含 `FIRST_LAUNCH`（平台自己的流程，含 `CONTROL_CHANGE_FIRST_LAUNCH_PUBLISH`、`APPROVAL_FIRST_LAUNCH_DECIDE`）、不同时在 `actingProcesses()` 中。
+- **results**：只有 `userId(代号)`（按配置中的位置对应本运行的账号）；`output(...)` 一律为空（内容阶段的输出不保存）。`config` 是本实例启动时读入的首发配置：等人阶段配置须仍在，且是本运行的配置——其形状（`ConfigShape`，除邮箱外的内容与目录中的文件）等于 `CONTENT_DONE` 记下的形状。
+  不在（或读不出）、或形状不同（D83 不执行的修改，例如账号换了顺序：按位置对应的账号会错位）时，这些步骤不运行、不让该项失败、`DONE` 也不等它们；启动时日志 WARN 说明，报告把它们列为剩余事项（"放回本运行的配置并重启"）。
 - **运行**：选项流程 `FIRST_LAUNCH_ADVANCE` 以子流程 `FIRST_LAUNCH_ACCOUNT_READY`（`internal()`）运行，应用的各步骤是它的子流程，以系统身份、在同一事务中按顺序运行；已记在 `sys_first_launch_ready`（V69，只追加：运行、用户编号、步骤键）的步骤跳过，运行的步骤在同一事务中记下，所以每账号每步只运行一次。
-- **失败**：该选项回滚，任务按退避重试，不影响其他账号与选项。运行的结束（`DONE`）等待尚未尝试过的步骤，不等失败过的；没有运行的步骤（未就绪或失败）列入报告的剩余事项。
-- **测试**：`FirstLaunchReadyChecksTest`（启动检查）；`FirstLaunchReadyIT`（未接受时不运行、角色生效的同一轮运行一次且以系统身份、血缘为 `FIRST_LAUNCH_ADVANCE` → `FIRST_LAUNCH_ACCOUNT_READY` → 应用流程、失败的账号不影响其他账号、运行照常结束、报告列出未运行的步骤）。
+- **失败**：该选项回滚，任务按退避重试，不影响其他账号与选项。运行的结束（`DONE`）等待就绪账号尚未尝试过的步骤，**不等失败过的项**（失败的步骤留给人处理）；没有运行的步骤（未就绪、失败、配置不在或不是本运行的）列入报告的剩余事项。
+  `FIRST_LAUNCH_ACCOUNT_READY` 只为本运行仍在等人阶段的账号运行步骤：运行结束之后、对不是本运行账号的用户、同一选项以不同的请求编号重放，都不再运行（`ran = 0`）。
+- **测试**：`FirstLaunchReadyChecksTest`（启动检查）；`ReadyStepsTest`（步骤的检查、就绪的条件、配置不在或形状不同）；`FirstLaunchReadyGuardsIT`（管理员手工授予而未接受的账号不运行、不是本运行的用户与运行结束后不运行、配置形状不同或不在时不运行而运行照常结束并在报告中列出、以两个请求编号重放只运行一次）；`FirstLaunchReadyIT`（未接受时不运行、角色生效的同一轮运行一次且以系统身份、血缘为 `FIRST_LAUNCH_ADVANCE` → `FIRST_LAUNCH_ACCOUNT_READY` → 应用流程、失败的账号不影响其他账号、运行照常结束、报告列出未运行的步骤）。

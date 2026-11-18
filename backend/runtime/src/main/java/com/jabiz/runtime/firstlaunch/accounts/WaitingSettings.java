@@ -31,10 +31,13 @@ public class WaitingSettings implements SmartInitializingSingleton {
     private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(WaitingSettings.class);
 
     private final Environment environment;
+    private final ConfigShape shapes;
     private volatile Optional<FirstLaunchConfig> config = Optional.empty();
+    private volatile Optional<String> shape = Optional.empty();
 
-    public WaitingSettings(Environment environment) {
+    public WaitingSettings(Environment environment, ConfigShape shapes) {
         this.environment = environment;
+        this.shapes = shapes;
     }
 
     public Duration deadline() {
@@ -56,6 +59,15 @@ public class WaitingSettings implements SmartInitializingSingleton {
     @Override
     public void afterSingletonsInstantiated() {
         config = read();
+        shape = config.map(shapes::of);
+    }
+
+    /**
+     * The shape of the configuration this instance was started with ({@link ConfigShape}): the application's steps
+     * for a ready account run only while it is the shape the run recorded at its content phase's end.
+     */
+    public Optional<String> shape() {
+        return shape;
     }
 
     /** The configuration this instance was started with, when there is one and it read without problems. */

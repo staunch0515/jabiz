@@ -19,7 +19,8 @@ import java.util.UUID;
  * Runs the application's steps for a ready account (section 9) in {@code FIRST_LAUNCH_ACCOUNT_READY}'s transaction,
  * each as its sub-process, skipping those recorded already and recording each that ran
  * ({@code sys_first_launch_ready}): so each runs once, and a failure rolls the item back to be tried again. Does nothing
- * unless the run waits, the account is ready (a configured role in effect) and not left to people. A platform I/O step.
+ * unless the run waits, the user is an account of it, and the account is ready ({@link ReadySteps#ready}: enabled,
+ * accepted, second factor bound, a configured role in effect). A platform I/O step.
  */
 @Component
 public class RunReadySteps<C extends ProcessContext> implements StepHandler<RunReadySteps.Metadata, C> {
@@ -63,11 +64,11 @@ public class RunReadySteps<C extends ProcessContext> implements StepHandler<RunR
                 .filter(account -> account.userId().equals(user)).findFirst().orElse(null);
             GrantPlan.Account account = FirstLaunchWaiting.accounts(state).stream()
                 .filter(found -> found.userId().equals(user)).findFirst().orElse(null);
-            if (recorded == null || account == null || account.leftToPeople() || !account.anyApplied()) {
+            if (recorded == null || account == null || !ReadySteps.ready(account)) {
                 return Mono.empty();
             }
             ReadySteps.Plan plan = steps.of(state, recorded);
-            if (plan.configMissing()) {
+            if (plan.unavailable()) {
                 // Reported by the startup and the run's report; failing every minute would change nothing.
                 return Mono.empty();
             }
