@@ -144,6 +144,8 @@ const oneOf = <T extends string>(values: readonly T[], value: unknown): T | null
 /**
  * Reads a settings file. Only the shapes are checked, and values of the wrong kind are left out rather than guessed:
  * the draft is saved through the same process as one typed by hand, which reports whatever else is wrong.
+ * F-LAUNCH Q1: its Java is the server's `sponsorpackage.PublicationSettingsFile` (`parse`, and `saveInput` for
+ * `formOfSettings` + `inputOf` of a package's draft); the package plan's shared cases compare them: change both.
  */
 export function parseSettings(value: unknown): { settings: PublicationSettings } | { problem: SettingsProblem } {
   if (!isObject(value) || value.format !== SETTINGS_FORMAT || typeof value.version !== 'number') {
