@@ -299,7 +299,8 @@ class FirstLaunchFilesIT extends PostgresIntegrationTest {
         dry.afterSingletonsInstantiated();
         dry.onApplicationEvent(null);
         assertThat(dryExits).containsExactly(0);
-        assertThat(output.getOut()).contains("img1 (process (file), as owner)");
+        // Named by its place, not its key (the user's name).
+        assertThat(output.getOut()).contains("img1 (process (file), as #1)").doesNotContain("as owner");
 
         // The step's image was stored, re-encoded, as the owner's own upload.
         Map<String, Object> stored = query("SELECT uploaded_by, content_type, policy FROM sys_file").getFirst();
