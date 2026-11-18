@@ -63,7 +63,7 @@ services:
       # Sign-in entries and mail (README.md, "账户"): registration is on at the app and the sponsor console; mail is
       # off unless switched on, and then registered users cannot verify their address. The mail server (SPRING_MAIL_*)
       # comes from .env as it is.
-      QB_ADMIN_ROLES: ${QB_ADMIN_ROLES:-ADMIN,QB_ADMIN_SUPER,QB_ADMIN_CONTENT,QB_ADMIN_FINANCE}
+      QB_ADMIN_ROLES: ${QB_ADMIN_ROLES:-ADMIN,QB_ADMIN_SUPER,QB_ADMIN_CONTENT,QB_ADMIN_FINANCE,FIRST_LAUNCH_PENDING}
       QB_APP_SELF_REGISTRATION: ${QB_APP_SELF_REGISTRATION:-true}
       QB_SPONSOR_SELF_REGISTRATION: ${QB_SPONSOR_SELF_REGISTRATION:-true}
       JABIZ_MAIL_ENABLED: ${JABIZ_MAIL_ENABLED:-false}

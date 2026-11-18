@@ -95,7 +95,7 @@ EOF
   # This machine only: the administration without a second factor, and a second administrator (control.publish
   # only) that run creates to publish the controlled changes (four eyes).
   JABIZ_SECURITY_MFA_ADMINISTRATION=false
-  QB_ADMIN_ROLES=ADMIN,QB_ADMIN_SUPER,QB_ADMIN_CONTENT,QB_ADMIN_FINANCE,QB_STM_PUBLISHER
+  QB_ADMIN_ROLES=ADMIN,QB_ADMIN_SUPER,QB_ADMIN_CONTENT,QB_ADMIN_FINANCE,FIRST_LAUNCH_PENDING,QB_STM_PUBLISHER
   JABIZ_MAIL_ENABLED=true
   JABIZ_MAIL_FROM=noreply@quizbuks.test
   JABIZ_MAIL_BASE_URL=http://localhost:$PORT
