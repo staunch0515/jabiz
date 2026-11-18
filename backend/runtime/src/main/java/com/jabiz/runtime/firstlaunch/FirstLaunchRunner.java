@@ -123,7 +123,12 @@ public class FirstLaunchRunner implements SmartInitializingSingleton, Applicatio
                     if (stale(found)) {
                         String reason = text("first-launch.stale", Map.of("time", found.startedTime(),
                             "timeout", settings.contentTimeout()));
-                        record(found.runId(), found.configHash(), "FAILED", null, "STALE", reason, null).block();
+                        try {
+                            record(found.runId(), found.configHash(), "FAILED", null, "STALE", reason, null).block();
+                        } catch (RuntimeException e) {
+                            // The instance that ran it may have recorded its own failure first: failed either way.
+                            log.debug("The first launch's failure was recorded already", e);
+                        }
                         throw failed(null, reason);
                     }
                     log.info(text("first-launch.waiting-other", Map.of()));
@@ -306,8 +311,7 @@ public class FirstLaunchRunner implements SmartInitializingSingleton, Applicatio
             // As the system, or acting as the account (decision D82): no roles, no permissions, no session.
             RequestContext system = step.asAccount() == null
                 ? RequestContext.system(locale, requestId(runId, step))
-                : new RequestContext(results.userId(step.asAccount()), null, locale, requestId(runId, step), Set.of(),
-                    Set.of());
+                : FirstLaunchActing.as(results.userId(step.asAccount()), locale, requestId(runId, step));
             FirstLaunchProcesses.StepOutput output = processes.executeAtEntry(FirstLaunchProcesses.STEP_PROCESS,
                     new FirstLaunchProcesses.StepInput(runId.toString(), step.key(), step.process(), input))
                 .contextWrite(view -> RequestContexts.put(view, system))

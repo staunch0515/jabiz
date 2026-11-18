@@ -122,9 +122,11 @@ public class ControlChanges {
                 .contextFactory(ControlChanges::start)
                 .outputMapper(ctx -> ctx.get(OUTPUT, ChangeOutput.class))
                 .step("Load the change", LoadEntity.by(ApprovalEntities.CONTROL_CHANGE_DATASET, CHANGE_ID, CHANGE))
-                .step("Check the first launch's power", com.jabiz.runtime.firstlaunch.FirstLaunchCheck.of(
+                .step("Check the first launch's power", com.jabiz.runtime.firstlaunch.FirstLaunchCheck.ofControl(
                     "sys_control_change_version", "change_id", ctx -> ctx.get(CHANGE_ID),
-                    ctx -> ctx.get(CHANGE, EntityInstance.class).get("targetKey")))
+                    ctx -> ctx.get(CHANGE, EntityInstance.class).get("targetEntity"),
+                    ctx -> ctx.get(CHANGE, EntityInstance.class).get("targetKey"),
+                    ctx -> ctx.get(CHANGE, EntityInstance.class).get("proposedBy")))
                 .step("Load the target", LoadControlTarget.of(ctx -> recorded(ctx.get(CHANGE, EntityInstance.class)),
                     REQUEST, TARGET))
                 .compute("Publish", (metadata, ctx) -> publish(ctx, targets, true)));

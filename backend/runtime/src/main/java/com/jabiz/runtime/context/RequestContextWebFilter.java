@@ -75,11 +75,16 @@ public class RequestContextWebFilter implements WebFilter {
 
     private static String requestId(ServerHttpRequest request) {
         String supplied = request.getHeaders().getFirst(REQUEST_ID_HEADER);
-        if (supplied != null && VALID_REQUEST_ID.matcher(supplied).matches()) {
+        // The first launch's steps are told apart by their request id (decision D82): a client never supplies one.
+        if (supplied != null && VALID_REQUEST_ID.matcher(supplied).matches()
+            && !supplied.toLowerCase(java.util.Locale.ROOT).startsWith(RESERVED_REQUEST_ID_PREFIX)) {
             return supplied;
         }
         return randomId();
     }
+
+    /** Request ids the platform alone gives (the first launch's steps); a client's such id is replaced. */
+    public static final String RESERVED_REQUEST_ID_PREFIX = "first-launch";
 
     /**
      * A random (version 4 layout) UUID from {@link ThreadLocalRandom}. {@link UUID#randomUUID()} reads

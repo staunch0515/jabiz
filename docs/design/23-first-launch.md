@@ -106,17 +106,24 @@
 
 ## 6. 内容阶段的三项能力（决策 D82）
 
-内容阶段中，首发有三项人所没有的能力。三者都由 `FirstLaunchPowers` 检查：
-- 请求编号是本运行的步骤（`first-launch-<运行>-<步骤>`）；
+内容阶段中，首发有三项人所没有的能力。三者都由 `FirstLaunchPowers` 按 `op_process` 的血缘检查：
+- 沿 `parent_seq_id` 到顶层操作，它是本运行的 `FIRST_LAUNCH_STEP`（`input_summary.runId`），而这个流程只由运行器启动；
 - 运行仍在内容阶段（`RUNNING`）；
-- 对象是本运行做的：该实例第一个版本的 `op_process.request_id` 以本运行的前缀开头。
+- 对象是本运行做的：该实例第一个版本的操作以同样的血缘回到本运行的步骤。
 
-运行记下 `CONTENT_DONE` 或 `FAILED` 之后，三项能力永久关闭；不满足条件时 403 `PERMISSION_DENIED`。
+请求编号 `first-launch-<运行>-<步骤>` 只用于区分，不作依据；客户端给出的以 `first-launch` 开头的请求编号一律被替换。运行记下 `CONTENT_DONE` 或 `FAILED` 之后，三项能力永久关闭；不满足条件时 403 `PERMISSION_DENIED`。
+
+启动检查 `FIRST_LAUNCH`：
+- 代行的流程须存在，且是 `OPEN` 或 `SUB_PROCESS_ONLY`；
+- 可发布的控制须有键；
+- 至多一个处理器。
+
+代行的上下文只由 `FirstLaunchActing` 建立（架构测试）。
 
 | 能力 | 用法 | 额外的限制 |
 |---|---|---|
-| 首发代行 | `FirstLaunchStep.asAccount(代号)`：步骤以该账号的用户编号运行（无角色、无权限、无会话） | 流程须在 `FirstLaunchHandler.actingProcesses()` 中；用户是本运行建的、从未有过凭据（密码、二次验证、通行密钥、关联的外部账号） |
-| 参数初值发布 | 系统步骤先 `CONTROL_CHANGE_PROPOSE`，再 `CONTROL_CHANGE_FIRST_LAUNCH_PUBLISH`（`subProcessOnly()`） | 目标键须在 `publishableControlKeys()` 中；发布人 `first-launch`；不检查 `CONTROL_SAME_PERSON` |
-| 首发审批 | 系统步骤 `APPROVAL_FIRST_LAUNCH_DECIDE`（`subProcessOnly()`，输入审批请求编号） | 批准其余各级，每级一条决定（`first-launch:<级>`，理由为配置哈希），照常发 `jabiz.approval.approved`；带限额的级拒绝 |
+| 首发代行 | `FirstLaunchStep.asAccount(代号)`：步骤以该账号的用户编号运行（无角色、无权限、无会话） | 流程须在 `FirstLaunchHandler.actingProcesses()` 中；用户是本运行建的、从未有过凭据（密码、二次验证、通行密钥、关联的外部账号、会话、成功的登录） |
+| 参数初值发布 | 系统步骤先 `CONTROL_CHANGE_PROPOSE`，再 `CONTROL_CHANGE_FIRST_LAUNCH_PUBLISH`（`subProcessOnly()`） | 只限受控参数与审批规则（职责分离规则、审批人限额不行）；提议人须是系统；目标键须在 `publishableControlKeys()` 中；发布人 `first-launch`；不检查 `CONTROL_SAME_PERSON` |
+| 首发审批 | 系统步骤 `APPROVAL_FIRST_LAUNCH_DECIDE`（`subProcessOnly()`，输入审批请求编号） | 批准其余各级，每级一条决定（`first-launch:<级>`，理由为配置哈希），照常发 `jabiz.approval.approved`；带限额的级拒绝。决定人不是用户编号：显示决定人的地方把 `first-launch:` 开头的当作首发 |
 
 审批结果由事件投递运行，所以送审之后要用等待的步骤（`FirstLaunchStep.await`）等结果流程完成，再做依赖它的步骤（如知识结构图生效后再送审绑定它的发布）。

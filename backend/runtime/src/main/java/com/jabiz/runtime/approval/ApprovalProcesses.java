@@ -136,7 +136,7 @@ public class ApprovalProcesses {
                 .outputMapper(ctx -> ctx.get(OUTPUT, DecideOutput.class))
                 .step("Load the request", LoadEntity.by(ApprovalEntities.REQUEST_DATASET, REQUEST_ID, REQUEST))
                 .step("Check the first launch's power", com.jabiz.runtime.firstlaunch.FirstLaunchCheck.of(
-                    "sys_approval_request_version", "request_id", ctx -> ctx.get(REQUEST_ID), null))
+                    "sys_approval_request_version", "request_id", ctx -> ctx.get(REQUEST_ID)))
                 .compute("Approve every level", (metadata, ctx) -> approveAll(ctx))
                 .step("Pass the task on", ApprovalTasks.passOn(PASSED))
                 .step("Announce the approval", PublishEvent.when(ctx -> isDecided(ctx, ApprovalEntities.APPROVED),

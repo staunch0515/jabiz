@@ -162,9 +162,16 @@ class FirstLaunchFailureIT extends PostgresIntegrationTest {
             .hasMessageContaining("清空数据库");
         assertThat(query("SELECT kind FROM sys_first_launch_event")).extracting(row -> row.get("kind"))
             .containsExactly("FAILED");
+        // No step runs after a failure, so none of the first launch's powers does either.
+        assertThatThrownBy(() -> processes.executeAtEntry(com.jabiz.runtime.firstlaunch.FirstLaunchProcesses.STEP_PROCESS,
+                new com.jabiz.runtime.firstlaunch.FirstLaunchProcesses.StepInput(run.runId().toString(), "after",
+                    "FL_IT_FAIL", new Fail("again")))
+            .contextWrite(view -> RequestContexts.put(view, RequestContext.system(Locale.ENGLISH,
+                "first-launch-" + run.runId() + "-after"))).block())
+            .hasMessageContaining("content phase is over (FAILED)");
         // Without the configuration as well: the record decides, not the settings.
         FirstLaunchRunner bare = new FirstLaunchRunner(new org.springframework.mock.env.MockEnvironment(), runs,
-            new FirstLaunchGate(), processes, handlers, platformSteps, messages, clockBean, exits, json);
+            new FirstLaunchGate(), processes, handlers, platformSteps, messages, clockBean, exits, json, powers);
         assertThatThrownBy(bare::afterSingletonsInstantiated)
             .isInstanceOf(FirstLaunchRunner.FirstLaunchFailedException.class)
             .hasMessageContaining("broken");

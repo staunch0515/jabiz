@@ -115,6 +115,18 @@ class FirstLaunchStartupIT extends PostgresIntegrationTest {
     }
 
     @Test
+    void protectedGrantsAlwaysOnLeaveNoSetupWindowForTheFirstLaunch() {
+        MockEnvironment environment = new MockEnvironment()
+            .withProperty("jabiz.first-launch.config", FirstLaunchIT.configFile("version: 1\n"))
+            .withProperty("jabiz.first-launch.dry-run", "true")
+            .withProperty("jabiz.security.protected-grants.always", "true");
+
+        assertThatThrownBy(() -> runner(environment, new FirstLaunchGate()).afterSingletonsInstantiated())
+            .isInstanceOf(FirstLaunchRunner.FirstLaunchFailedException.class)
+            .hasMessageContaining("jabiz.security.protected-grants.always");
+    }
+
+    @Test
     void aDryRunValidatesAndWritesNothing() {
         FirstLaunchGate gate = new FirstLaunchGate();
         MockEnvironment environment = new MockEnvironment()

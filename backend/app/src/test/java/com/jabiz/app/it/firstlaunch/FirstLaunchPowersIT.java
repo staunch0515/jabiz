@@ -66,6 +66,7 @@ class FirstLaunchPowersIT extends PostgresIntegrationTest {
     static final String RATE = "it.first-launch.rate";
     static final String OTHER = "it.first-launch.other";
     static final String RULE = "FL-PAY";
+    static final String LIMITED = "FL-LIMITED";
     static final CountDownLatch RELEASE = new CountDownLatch(1);
     static final List<Integer> EXITS = new CopyOnWriteArrayList<>();
     static volatile boolean holding;
@@ -159,12 +160,12 @@ class FirstLaunchPowersIT extends PostgresIntegrationTest {
 
                 @Override
                 public Set<String> publishableControlKeys() {
-                    return Set.of(RATE, RULE);
+                    return Set.of(RATE, RULE, LIMITED);
                 }
 
                 @Override
                 public Set<String> actingProcesses() {
-                    return Set.of(ItApprovalFixtures.PAY.name());
+                    return Set.of(ItApprovalFixtures.PAY.name(), "FL_IT_RELAY_PUBLISH");
                 }
 
                 @Override
@@ -254,44 +255,86 @@ class FirstLaunchPowersIT extends PostgresIntegrationTest {
             + " ORDER BY version_no LIMIT 1", key).getFirst().get("change_id"));
     }
 
+    /** Runs a step of the run, as the platform's runner would: as the system, or acting as {@code actor}. */
+    private Object step(String actor, String process, Object input) {
+        FirstLaunchRun run = run();
+        RequestContext request = actor == null
+            ? RequestContext.system(Locale.ENGLISH, "first-launch-" + run.runId() + "-probe")
+            : new RequestContext(actor, null, Locale.ENGLISH, "first-launch-" + run.runId() + "-probe", Set.of(),
+                Set.of());
+        FirstLaunchProcesses.StepOutput output = processes.executeAtEntry(FirstLaunchProcesses.STEP_PROCESS,
+                new FirstLaunchProcesses.StepInput(run.runId().toString(), "probe", process, input))
+            .contextWrite(view -> RequestContexts.put(view, request)).block();
+        return output == null ? null : output.output();
+    }
+
+    private String payer() {
+        return String.valueOf(query("SELECT DISTINCT user_id FROM sec_user_version WHERE user_name = 'fl-payer'")
+            .getFirst().get("user_id"));
+    }
+
     @Test
     @Order(1)
     void duringTheContentPhaseEachPowerRefusesWhatTheRunDidNotMakeOrTheApplicationDidNotName() {
         within(Duration.ofSeconds(60), () -> holding || !EXITS.isEmpty());
         assertThat(EXITS).isEmpty();
-        String probe = "first-launch-" + run().runId() + "-probe";
+        String payer = payer();
 
         // A change the run proposed, of a control the application did not name.
-        assertThatThrownBy(() -> asStep(probe, process("FL_IT_RELAY_PUBLISH"),
-            new Relay(null, changeOf(OTHER), null)))
+        assertThatThrownBy(() -> step(null, ControlChanges.FIRST_LAUNCH_PUBLISH,
+            new ControlChanges.ChangeInput(UUID.fromString(changeOf(OTHER)))))
             .hasMessageContaining("is not among the controls");
-        // Not as a step of the run.
-        assertThatThrownBy(() -> asStep("job-run", process("FL_IT_RELAY_PUBLISH"),
+        // Not under a step of the run, whatever the request id says (a relay is the top-level operation).
+        assertThatThrownBy(() -> asStep("first-launch-" + run().runId() + "-forged", process("FL_IT_RELAY_PUBLISH"),
             new Relay(null, changeOf(OTHER), null)))
             .hasMessageContaining("only a step of the first launch's content phase");
-        // A request the run did not open: the payer's own, made outside the run.
+        // An account under a step, calling the publication through a process it may run: only the system publishes.
+        assertThatThrownBy(() -> step(payer, "FL_IT_RELAY_PUBLISH", new Relay(null, changeOf(OTHER), null)))
+            .hasMessageContaining("only the system may do this");
+        // A request the run did not open: one made outside the run.
         Object outside = processes.execute(ItApprovalFixtures.PAY, new ItApprovalFixtures.PayInput("outside-1",
                 new BigDecimal("10"), "first-launch", "Outside", null))
             .contextWrite(view -> RequestContexts.put(view, new RequestContext("it-outsider", null, Locale.ENGLISH,
                 "it-outside", Set.of(), Set.of("*")))).block();
-        assertThatThrownBy(() -> asStep(probe, process("FL_IT_RELAY_DECIDE"),
-            new Relay(null, null, ((ItApprovalFixtures.PayOutput) outside).requestId())))
+        assertThatThrownBy(() -> step(null, ApprovalProcesses.FIRST_LAUNCH_DECIDE,
+            new ApprovalProcesses.FirstLaunchDecideInput(UUID.fromString(
+                ((ItApprovalFixtures.PayOutput) outside).requestId()))))
             .hasMessageContaining("was not made by this first launch");
         // Acting as a user the run did not create, or running a process the application did not name.
-        UUID stranger = UUID.randomUUID();
-        assertThatThrownBy(() -> processes.executeAtEntry(FirstLaunchProcesses.STEP_PROCESS,
-                new FirstLaunchProcesses.StepInput(run().runId().toString(), "probe", ItApprovalFixtures.PAY.name(),
-                    new ItApprovalFixtures.PayInput("stranger-1", BigDecimal.ONE, "first-launch", null, null)))
-            .contextWrite(view -> RequestContexts.put(view, new RequestContext(stranger.toString(), null,
-                Locale.ENGLISH, probe, Set.of(), Set.of()))).block())
+        assertThatThrownBy(() -> step(UUID.randomUUID().toString(), ItApprovalFixtures.PAY.name(),
+            new ItApprovalFixtures.PayInput("stranger-1", BigDecimal.ONE, "first-launch", null, null)))
             .hasMessageContaining("was not made by this first launch");
-        String payer = String.valueOf(query("SELECT DISTINCT user_id FROM sec_user_version").getFirst().get("user_id"));
-        assertThatThrownBy(() -> processes.executeAtEntry(FirstLaunchProcesses.STEP_PROCESS,
-                new FirstLaunchProcesses.StepInput(run().runId().toString(), "probe", "SEC_USER_CREATE",
-                    new UserProcesses.CreateUserInput("fl-sneaky", null, null, null, true, null, null, false)))
-            .contextWrite(view -> RequestContexts.put(view, new RequestContext(payer, null, Locale.ENGLISH, probe,
-                Set.of(), Set.of()))).block())
+        assertThatThrownBy(() -> step(payer, "SEC_USER_CREATE",
+            new UserProcesses.CreateUserInput("fl-sneaky", null, null, null, true, null, null, false)))
             .hasMessageContaining("is not among the processes it may run as an account");
+
+        // A level with an approver limit: the first launch approves no amount.
+        Map<String, Object> limited = new LinkedHashMap<>();
+        limited.put("ruleCode", LIMITED);
+        limited.put("subject", ItApprovalFixtures.SUBJECT);
+        limited.put("priority", 2);
+        limited.put("enabled", true);
+        limited.put("condition", Map.of("fact", "channel", "op", "eq", "value", "limited"));
+        limited.put("levels", List.of(Map.of("permission", "it.approve.one", "limitFact", "amount")));
+        Object proposal = step(null, ControlChanges.PROPOSE,
+            new ControlChanges.ProposeInput(ApprovalEntities.RULE, null, false, limited, null, "limited"));
+        step(null, ControlChanges.FIRST_LAUNCH_PUBLISH,
+            new ControlChanges.ChangeInput(UUID.fromString(changeId(proposal))));
+        Object paid = step(payer, ItApprovalFixtures.PAY.name(),
+            new ItApprovalFixtures.PayInput("limited-1", BigDecimal.TEN, "limited", null, null));
+        assertThatThrownBy(() -> step(null, ApprovalProcesses.FIRST_LAUNCH_DECIDE,
+            new ApprovalProcesses.FirstLaunchDecideInput(UUID.fromString(
+                ((ItApprovalFixtures.PayOutput) paid).requestId()))))
+            .hasMessageContaining("approves no amount");
+
+        // Once the person has a credential of their own, the first launch no longer acts as them.
+        processes.execute(UserProcesses.SET_PASSWORD, new UserProcesses.SetPasswordInput(payer,
+                "a password of their own 1"))
+            .contextWrite(view -> RequestContexts.put(view, new RequestContext("it-admin", null, Locale.ENGLISH,
+                "it-admin", Set.of(), Set.of("*")))).block();
+        assertThatThrownBy(() -> step(payer, ItApprovalFixtures.PAY.name(),
+            new ItApprovalFixtures.PayInput("own-1", BigDecimal.ONE, "first-launch", null, null)))
+            .hasMessageContaining("has a credential of its own");
     }
 
     @Test
@@ -307,8 +350,8 @@ class FirstLaunchPowersIT extends PostgresIntegrationTest {
             + " WHERE version_no = (SELECT max(version_no) FROM sys_control_change_version w"
             + " WHERE w.change_id = v.change_id) ORDER BY target_key"))
             .extracting(row -> row.get("target_key") + "=" + row.get("status") + "/" + row.get("published_by"))
-            .containsExactly(RULE + "=PUBLISHED/first-launch", OTHER + "=PROPOSED/null",
-                RATE + "=PUBLISHED/first-launch");
+            .containsExactly(LIMITED + "=PUBLISHED/first-launch", RULE + "=PUBLISHED/first-launch",
+                OTHER + "=PROPOSED/null", RATE + "=PUBLISHED/first-launch");
         assertThat(query("SELECT param_value AS value FROM sys_param_version WHERE param_key = ? ORDER BY version_no DESC LIMIT 1",
             RATE).getFirst().get("value").toString()).isEqualTo("0.2500");
 
@@ -327,14 +370,11 @@ class FirstLaunchPowersIT extends PostgresIntegrationTest {
     @Test
     @Order(3)
     void afterTheContentPhaseNoPowerWorks() {
-        String step = "first-launch-" + run().runId() + "-late";
-
-        assertThatThrownBy(() -> asStep(step, process("FL_IT_RELAY_PUBLISH"), new Relay(null, changeOf(OTHER), null)))
+        assertThatThrownBy(() -> step(null, ControlChanges.FIRST_LAUNCH_PUBLISH,
+            new ControlChanges.ChangeInput(UUID.fromString(changeOf(OTHER)))))
             .hasMessageContaining("content phase is over");
-        assertThatThrownBy(() -> processes.executeAtEntry(FirstLaunchProcesses.STEP_PROCESS,
-                new FirstLaunchProcesses.StepInput(run().runId().toString(), "late", ItApprovalFixtures.PAY.name(),
-                    new ItApprovalFixtures.PayInput("late-1", BigDecimal.ONE, "first-launch", null, null)))
-            .contextWrite(view -> RequestContexts.put(view, RequestContext.system(Locale.ENGLISH, step))).block())
+        assertThatThrownBy(() -> step(payer(), ItApprovalFixtures.PAY.name(),
+            new ItApprovalFixtures.PayInput("late-1", BigDecimal.ONE, "first-launch", null, null)))
             .hasMessageContaining("content phase is over");
     }
 }

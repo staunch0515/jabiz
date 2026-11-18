@@ -197,7 +197,7 @@ final class FirstLaunchSteps {
                     return Mono.error(new com.jabiz.runtime.PermissionDeniedException(FirstLaunchProcesses.PERMISSION,
                         "First launch: " + target.name() + " is not among the processes it may run as an account"));
                 }
-                return powers.contentPhase(ctx.request(), false)
+                return powers.contentPhase(ctx.request(), ctx.processSeqId(), false)
                     .flatMap(run -> powers.requireActable(run, ctx.request().actorId()))
                     .then(call(target, input));
             }).doOnNext(output -> ctx.put(FirstLaunchProcesses.OUTPUT, output)).then();
