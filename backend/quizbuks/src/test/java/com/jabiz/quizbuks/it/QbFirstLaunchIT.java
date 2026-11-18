@@ -47,7 +47,9 @@ import static org.assertj.core.api.Assertions.assertThat;
  * the publications: the application opens with everything live, and no money moved.
  */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.MOCK, properties = {
-    "jabiz.first-launch.await-interval=100ms", "jabiz.events.delivery.enabled=true"})
+    "jabiz.first-launch.await-interval=100ms", "jabiz.events.delivery.enabled=true", "jabiz.mail.enabled=true",
+    "jabiz.mail.from=quizbuks@example.com", "jabiz.mail.base-url=https://app.quizbuks.test",
+    "spring.mail.host=localhost", "spring.mail.port=3043"})
 @Import(QbFirstLaunchIT.Exits.class)
 class QbFirstLaunchIT extends PostgresIntegrationTest {
 
@@ -59,36 +61,6 @@ class QbFirstLaunchIT extends PostgresIntegrationTest {
         @Bean
         FirstLaunchExit qbFirstLaunchItExit() {
             return EXITS::add;
-        }
-
-        /**
-         * Stands in for the platform's account steps of 17zz23c (P3, not merged yet): each account made without a
-         * password or an invitation, as P3 makes them. Removed once P3 is merged into this line.
-         */
-        @Bean
-        com.jabiz.runtime.firstlaunch.FirstLaunchPlatformSteps qbFirstLaunchItAccounts() {
-            return new com.jabiz.runtime.firstlaunch.FirstLaunchPlatformSteps() {
-                @Override
-                public java.util.List<com.jabiz.firstlaunch.FirstLaunchProblem> validate(
-                    com.jabiz.firstlaunch.FirstLaunchConfig config) {
-                    return java.util.List.of();
-                }
-
-                @Override
-                public java.util.List<com.jabiz.firstlaunch.FirstLaunchStep> plan(
-                    com.jabiz.firstlaunch.FirstLaunchConfig config) {
-                    return config.accounts().stream().map(account -> com.jabiz.firstlaunch.FirstLaunchStep.run(
-                        com.jabiz.firstlaunch.FirstLaunchStep.accountStepKey(account.key()), "SEC_USER_CREATE",
-                        results -> new com.jabiz.runtime.security.UserProcesses.CreateUserInput(
-                            account.email(), account.name(), null, null, true, account.email(),
-                            account.language(), false))).toList();
-                }
-
-                @Override
-                public int getOrder() {
-                    return 0;
-                }
-            };
         }
     }
 
