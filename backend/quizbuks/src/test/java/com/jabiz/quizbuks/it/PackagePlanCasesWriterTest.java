@@ -62,6 +62,10 @@ class PackagePlanCasesWriterTest {
             context("FULL", 4, 1_500, 1000, fresh(1))));
         cases.add(testCase("what the page reads by JavaScript's rules: keys that are numbers, long and odd question keys, "
             + "empty keys, a name that is a number", edges(), context("FULL", 2, 0, 1000, fresh(1))));
+        // An empty version key would make its content's steps the current content's (the same keys): damaged.
+        cases.add(testCase("a version with an empty key", pkg(2, null, List.of(), List.of(map("key", "q1", "versions",
+            List.of(map("key", "v1", "file", quizFile("Fine", 2)), map("key", "", "file", quizFile("Blank", 2))),
+            "current", quizFile("Now", 2))), List.of()), context("FULL", 2, 0, 1000, fresh(1))));
         Map<String, Object> out = new LinkedHashMap<>();
         out.put("about", "F-LAUNCH Q1: packages the page's planImport and the server's PackagePlan both plan. Written by "
             + "PackagePlanCasesWriterTest; the expected plans are in package-plan-expected.json.");
@@ -262,7 +266,7 @@ class PackagePlanCasesWriterTest {
     /**
      * What JavaScript reads otherwise than a plain Java map would: objects iterate their number-like keys first ("2"
      * before "10"), a question key's digits read as a double whatever their length, its "." takes U+0085, an empty key
-     * names nothing, and a map's name may be any value.
+     * names no quiz or version of a publication, and a map's name may be any value.
      */
     private static Map<String, Object> edges() {
         Map<String, Object> file = quizFile("Edges", 5);
@@ -301,7 +305,7 @@ class PackagePlanCasesWriterTest {
         second.put("key", "t-two");
         second.put("name", map("en", 7, "ja", "七"));
         return pkg(2, null, List.of(coffeeTree(), second), List.of(map("key", "qe", "versions",
-            List.of(map("key", "", "label", "blank", "file", file)), "current", current)), List.of(
+            List.of(map("key", "v-e", "label", "edges", "file", file)), "current", current)), List.of(
                 map("quiz", "", "version", "", "settings", settings("Empty names"), "sharedVideo", ""),
                 map("quiz", "qe", "version", "", "settings", settings("On the current"))));
     }

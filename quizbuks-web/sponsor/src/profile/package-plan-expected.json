@@ -3720,7 +3720,7 @@
             "profile": false,
             "trees": 1,
             "quizzes": 1,
-            "versions": 0,
+            "versions": 1,
             "publications": 2
           },
           "sameTitles": [],
@@ -3743,11 +3743,11 @@
             },
             {
               "kind": "content",
-              "key": "quiz:q1:c:content",
+              "key": "quiz:q1:v:v-e:content",
               "quiz": "qe",
-              "label": "blank",
+              "label": "edges",
               "title": "Edges now",
-              "check": "qe:",
+              "check": "qe:v-e",
               "into": null,
               "topics": [],
               "customTopics": [],
@@ -3761,39 +3761,49 @@
             },
             {
               "kind": "batch",
-              "key": "quiz:q1:c:batch:2",
+              "key": "quiz:q1:v:v-e:batch:2",
               "quiz": "qe",
-              "label": "blank",
+              "label": "edges",
               "title": "Edges now",
-              "check": "qe:",
+              "check": "qe:v-e",
               "batch": 2,
               "batches": 3,
-              "quizStep": "quiz:q1:c:content",
+              "quizStep": "quiz:q1:v:v-e:content",
               "clears": 0,
               "document": {
                 "questions": 2,
                 "bytes": 713,
                 "digest": "a6ad93f2af756d5a3f20a291e5fdaa3751e0142b5f87460ae2265040d628d64c"
               },
-              "input": "619228e62eb53ad1e2f0561923a7e746c74e9e952b285c8e11c02a14273c1121"
+              "input": "9ca829876b1698a62379d9269b044c70c511d4530ae341fd843b3f411c061ce7"
             },
             {
               "kind": "batch",
-              "key": "quiz:q1:c:batch:3",
+              "key": "quiz:q1:v:v-e:batch:3",
               "quiz": "qe",
-              "label": "blank",
+              "label": "edges",
               "title": "Edges now",
-              "check": "qe:",
+              "check": "qe:v-e",
               "batch": 3,
               "batches": 3,
-              "quizStep": "quiz:q1:c:content",
+              "quizStep": "quiz:q1:v:v-e:content",
               "clears": 0,
               "document": {
                 "questions": 1,
                 "bytes": 545,
                 "digest": "cf280d15760ba61a6acb7c99da023ced60dfaf315fe03aae9991c11d6cafe739"
               },
-              "input": "a62cbe36fc18c52dd33614746234c6a12b9d95668d3bca24c417ab492590acba"
+              "input": "31d9f5650828f4e56b612bd15600f40e61e62673136005991d917ccf1a972487"
+            },
+            {
+              "kind": "version",
+              "key": "quiz:q1:v:v-e:version",
+              "quiz": "qe",
+              "label": "edges",
+              "title": "Edges now",
+              "versionKey": "v-e",
+              "quizStep": "quiz:q1:v:v-e:content",
+              "input": "3d078648927c926fe3387be5d566e8df472d1dd2605785fd1775c6fd7f853f54"
             },
             {
               "kind": "clear",
@@ -3803,9 +3813,9 @@
               "title": "Edges now",
               "clear": 1,
               "clears": 1,
-              "quizStep": "quiz:q1:c:content",
+              "quizStep": "quiz:q1:v:v-e:content",
               "content": "quiz:q1:c:content",
-              "input": "c7316aab93aabb30f6e2bb43bf1367fa134a24700866acdb744754b297fbb05a"
+              "input": "fcfe2a6aa66507ad76776b4928c30eb9f3fd1189221e7ec5b6ac47e0c150b6a8"
             },
             {
               "kind": "content",
@@ -3814,7 +3824,7 @@
               "label": "",
               "title": "Edges now",
               "check": "qe:current",
-              "into": "quiz:q1:c:content",
+              "into": "quiz:q1:v:v-e:content",
               "topics": [],
               "customTopics": [],
               "clears": 1,
@@ -3823,7 +3833,7 @@
                 "bytes": 673,
                 "digest": "b6fb8cd4974570afd72923b28867d12246706da70d00d3e34350f144cd254896"
               },
-              "input": "f4933d9ca8b9048bfb6030cb67632d86801f42f1e6220fb5ba60330e40275ebe"
+              "input": "cb4227cfadc4f910d4a42efe59d7e2842504c3f6ac697fd1f4628940fdc1accc"
             },
             {
               "kind": "batch",
@@ -3834,14 +3844,14 @@
               "check": "qe:current",
               "batch": 2,
               "batches": 3,
-              "quizStep": "quiz:q1:c:content",
+              "quizStep": "quiz:q1:v:v-e:content",
               "clears": 1,
               "document": {
                 "questions": 2,
                 "bytes": 656,
                 "digest": "27d25e73a7d6be0984639f8d866020859af8ec142f5813ab6ffe83d0e765e5ca"
               },
-              "input": "26ed8fe58138656fc7d7a82b8e894238cac3faa3872a90b940e6ba323e249cd6"
+              "input": "43548894bff15bcd80ef9fbc80520c998068a9dcca8611432b429e80ef7fe9cf"
             },
             {
               "kind": "batch",
@@ -3852,14 +3862,14 @@
               "check": "qe:current",
               "batch": 3,
               "batches": 3,
-              "quizStep": "quiz:q1:c:content",
+              "quizStep": "quiz:q1:v:v-e:content",
               "clears": 1,
               "document": {
                 "questions": 1,
                 "bytes": 488,
                 "digest": "e88540ca9a1618a422bffd10da134004e9b1c1205130bfd1e65ed8cb4355a07d"
               },
-              "input": "5db3f7d9fd1badcd181355d5f4a0aa973264bf550fcb31cc426f4b042c274772"
+              "input": "564dccf513729f65d1d3529fd80cbc7d4b7de633a873e0cc1fefa5abd12183a7"
             },
             {
               "kind": "publication",
@@ -3916,7 +3926,7 @@
               "key": "publication:2",
               "index": 1,
               "name": "On the current",
-              "quizStep": "quiz:q1:c:content",
+              "quizStep": "quiz:q1:v:v-e:content",
               "versionStep": null,
               "node": null,
               "publication": "4edaf1298f5919a0ab398fe363c45a3dbbb0a9526ceb52c4460797deb8b596c7",
@@ -3963,6 +3973,15 @@
             }
           ]
         }
+      }
+    },
+    {
+      "name": "a version with an empty key",
+      "summary": {
+        "problem": "shape",
+        "places": [
+          "quizzes[0].versions[1]"
+        ]
       }
     }
   ]
