@@ -91,7 +91,7 @@ class FirstLaunchTypesTest {
         };
 
         assertThat(handler.actingProcesses()).isEmpty();
-        assertThat(handler.settableParams()).isEmpty();
+        assertThat(handler.publishableControlKeys()).isEmpty();
         assertThat(handler.remaining(null)).isEmpty();
     }
 

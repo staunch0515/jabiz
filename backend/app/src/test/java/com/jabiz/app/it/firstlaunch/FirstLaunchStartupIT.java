@@ -54,13 +54,16 @@ class FirstLaunchStartupIT extends PostgresIntegrationTest {
     @Autowired
     JsonMapper json;
 
+    @Autowired
+    com.jabiz.runtime.firstlaunch.FirstLaunchPowers powers;
+
     private final List<Integer> exits = new CopyOnWriteArrayList<>();
 
     private FirstLaunchRunner runner(MockEnvironment environment, FirstLaunchGate gate) {
         ObjectProvider<FirstLaunchExit> exit = new org.springframework.beans.factory.support.StaticListableBeanFactory(
             java.util.Map.of("exit", (FirstLaunchExit) exits::add)).getBeanProvider(FirstLaunchExit.class);
         return new FirstLaunchRunner(environment, runs, gate, processes, handlers, platformSteps, messages, clockBean,
-            exit, json);
+            exit, json, powers);
     }
 
     @Test
@@ -109,6 +112,18 @@ class FirstLaunchStartupIT extends PostgresIntegrationTest {
             .hasMessageContaining("no account has report: true")
             .hasMessageContaining("JABIZ_BOOTSTRAP_ADMIN_USER")
             .hasMessageContaining("首发配置有");
+    }
+
+    @Test
+    void protectedGrantsAlwaysOnLeaveNoSetupWindowForTheFirstLaunch() {
+        MockEnvironment environment = new MockEnvironment()
+            .withProperty("jabiz.first-launch.config", FirstLaunchIT.configFile("version: 1\n"))
+            .withProperty("jabiz.first-launch.dry-run", "true")
+            .withProperty("jabiz.security.protected-grants.always", "true");
+
+        assertThatThrownBy(() -> runner(environment, new FirstLaunchGate()).afterSingletonsInstantiated())
+            .isInstanceOf(FirstLaunchRunner.FirstLaunchFailedException.class)
+            .hasMessageContaining("jabiz.security.protected-grants.always");
     }
 
     @Test

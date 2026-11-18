@@ -58,6 +58,8 @@
 | `CONTENT_DONE` | 照常服务（等人阶段，17zz23c） |
 | `DONE` / `EXPIRED` | 不执行；配置仍在即 WARN，提醒撤下 |
 
+**多个实例**：首发期间（直到 `CONTENT_DONE`）各实例应带同一份配置与同一个 `content-timeout`。没有配置的实例按自己的 `content-timeout`（缺省 10 分钟）判断另一实例的运行是否已过时，比执行它的实例设得短就可能提前判为失败；因此首发期间不要启动设置不同的实例。
+
 **整份校验**的内容：
 - 平台的段（第 2 节）；
 - 与首发不相容的设置，同时设置即为问题：
@@ -99,7 +101,31 @@
 
 | 类型 | 给谁 | 内容 |
 |---|---|---|
-| `FirstLaunchHandler`（core） | 应用，至多一个 | `validate`、`plan`；`actingProcesses`、`settableParams`（17zz23b）；`remaining`（17zz23c） |
+| `FirstLaunchHandler`（core） | 应用，至多一个 | `validate`、`plan`；`actingProcesses`、`publishableControlKeys`（17zz23b）；`remaining`（17zz23c） |
 | `FirstLaunchPlatformSteps`（runtime） | 平台各部分 | `validate`、`plan`、`contentDoneDetail`、`detailKey`；步骤排在应用之前 |
 | `FirstLaunchStep`（core） | — | `run` / `await`，`.asAccount(代号)`（首发代行，17zz23b），`.describedAs(说明)`；账号的步骤键 `account:<代号>`（输出为用户编号，或带 `userId()` 的 record） |
 | `FirstLaunchRuns` | 平台各部分 | `current()`、`usersEver()`、`detail(运行, 类别)` |
+
+## 6. 内容阶段的三项能力（决策 D82）
+
+内容阶段中，首发有三项人所没有的能力。三者都由 `FirstLaunchPowers` 按 `op_process` 的血缘检查：
+- 沿 `parent_seq_id` 到顶层操作，它是本运行的 `FIRST_LAUNCH_STEP`（`input_summary.runId`），而这个流程只由运行器启动；
+- 运行仍在内容阶段（`RUNNING`）；
+- 对象是本运行做的：该实例第一个版本的操作以同样的血缘回到本运行的步骤。
+
+请求编号 `first-launch-<运行>-<步骤>` 只用于区分，不作依据；客户端给出的以 `first-launch` 开头的请求编号一律被替换。运行记下 `CONTENT_DONE` 或 `FAILED` 之后，三项能力永久关闭；不满足条件时 403 `PERMISSION_DENIED`。
+
+启动检查 `FIRST_LAUNCH`：
+- 代行的流程须存在，且是 `OPEN` 或 `SUB_PROCESS_ONLY`；
+- 可发布的控制须有键；
+- 至多一个处理器。
+
+代行的上下文只由 `FirstLaunchActing` 建立（架构测试）。
+
+| 能力 | 用法 | 额外的限制 |
+|---|---|---|
+| 首发代行 | `FirstLaunchStep.asAccount(代号)`：步骤以该账号的用户编号运行（无角色、无权限、无会话） | 流程须在 `FirstLaunchHandler.actingProcesses()` 中；用户是本运行建的、从未有过凭据（密码、二次验证、通行密钥、关联的外部账号、会话、成功的登录） |
+| 参数初值发布 | 系统步骤先 `CONTROL_CHANGE_PROPOSE`，再 `CONTROL_CHANGE_FIRST_LAUNCH_PUBLISH`（`subProcessOnly()`） | 只限受控参数与审批规则（职责分离规则、审批人限额不行）；提议人须是系统；目标键须在 `publishableControlKeys()` 中；发布人 `first-launch`；不检查 `CONTROL_SAME_PERSON` |
+| 首发审批 | 系统步骤 `APPROVAL_FIRST_LAUNCH_DECIDE`（`subProcessOnly()`，输入审批请求编号） | 批准其余各级，每级一条决定（`first-launch:<级>`，理由为配置哈希），照常发 `jabiz.approval.approved`；带限额的级拒绝。决定人不是用户编号：显示决定人的地方把 `first-launch:` 开头的当作首发 |
+
+审批结果由事件投递运行，所以送审之后要用等待的步骤（`FirstLaunchStep.await`）等结果流程完成，再做依赖它的步骤（如知识结构图生效后再送审绑定它的发布）。

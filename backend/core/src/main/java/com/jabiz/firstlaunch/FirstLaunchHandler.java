@@ -35,10 +35,12 @@ public interface FirstLaunchHandler {
     }
 
     /**
-     * The controlled parameters the configuration's {@code params} may set (section 7); the platform refuses any
-     * other. Empty by default.
+     * The controls whose initial values the first launch publishes without a second person (decision D82), by the
+     * target key of their controlled change: a parameter's key, an approval rule's code. A step proposes the change
+     * (as the system, in the run) and then calls {@code CONTROL_CHANGE_FIRST_LAUNCH_PUBLISH}; the platform refuses
+     * any key not listed here. Empty by default: nothing is published.
      */
-    default Set<String> settableParams() {
+    default Set<String> publishableControlKeys() {
         return Set.of();
     }
 

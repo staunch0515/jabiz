@@ -164,13 +164,15 @@ final class FirstLaunchSteps {
         private final String poolRef;
         private final ProcessRegistry registry;
         private final ProcessExecutor executor;
+        private final FirstLaunchPowers powers;
 
         RunStep(StorageAdapterRegistry storages, @Value("${jabiz.storage.default-pool-ref:default}") String poolRef,
-            ProcessRegistry registry, ProcessExecutor executor) {
+            ProcessRegistry registry, ProcessExecutor executor, FirstLaunchPowers powers) {
             this.storages = storages;
             this.poolRef = poolRef;
             this.registry = registry;
             this.executor = executor;
+            this.powers = powers;
         }
 
         @Override
@@ -186,7 +188,18 @@ final class FirstLaunchSteps {
                     return Mono.error(new IllegalStateException("Step " + input.stepKey() + " names the unknown"
                         + " process " + input.process()));
                 }
-                return call(target, input);
+                if (com.jabiz.context.RequestContext.SYSTEM_ACTOR.equals(ctx.request().actorId())) {
+                    return call(target, input);
+                }
+                // Acting as an account (decision D82): only a process the application named, only as a user this
+                // run created who has no credential of their own yet.
+                if (!powers.actingProcesses().contains(target.name())) {
+                    return Mono.error(new com.jabiz.runtime.PermissionDeniedException(FirstLaunchProcesses.PERMISSION,
+                        "First launch: " + target.name() + " is not among the processes it may run as an account"));
+                }
+                return powers.contentPhase(ctx.request(), ctx.processSeqId(), false)
+                    .flatMap(run -> powers.requireActable(run, ctx.request().actorId()))
+                    .then(call(target, input));
             }).doOnNext(output -> ctx.put(FirstLaunchProcesses.OUTPUT, output)).then();
         }
 
