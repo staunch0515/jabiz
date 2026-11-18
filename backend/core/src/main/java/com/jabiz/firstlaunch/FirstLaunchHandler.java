@@ -70,6 +70,14 @@ public interface FirstLaunchHandler {
     }
 
     /**
+     * The file policies a file step ({@link FirstLaunchStep#file}) may store under; the platform refuses any other and
+     * the startup check {@code FIRST_LAUNCH} requires each to exist. Empty by default: no file steps.
+     */
+    default Set<String> filePolicies() {
+        return Set.of();
+    }
+
+    /**
      * What is left for people once the first launch is done, one sentence each, in {@code config.language()}: listed
      * by the report (section 8). Empty by default.
      */

@@ -129,7 +129,7 @@ jabiz 是一个**元数据驱动的业务应用平台**：开发者声明实体�
 - **数据期限**（见 10 §13.2 与决策 D28 第 8 条）：只能看某一期间数据的人以带 `dataFrom` / `dataTo` 的角色分配表达；受期限约束的数据视图明确声明
   `scope(s -> s.withinDataPeriod("时间字段"))`（或经引用：`withinDataPeriod("引用字段", "被引用的不可变时间字段")`）。没有期限即不受限制，未声明的数据视图不受期限影响。
 - **访问审查**（见 10 §13.3 与决策 D28 第 9 条）：访问权限报表是模板 `jabiz.security.access_review`，以 `REPORT_ISSUE` 按期末签发；签核只经 `ACCESS_REVIEW_SIGN_OFF`。
-- **文件**（见 14 与决策 D18）：上传只经 `/api/files?policy=…`（另一个入口只有外部作业的文件输出，走同一流水线、以请求人登记，14 §11、D50），类型按内容判定、图片一律重新编码（去掉 EXIF/GPS）；
+- **文件**（见 14 与决策 D18）：上传只经 `/api/files?policy=…`（首发配置的文件步骤除外：以代行的账号经同一流水线存储配置目录中的文件，D82、23 §6；另一个入口只有外部作业的文件输出，走同一流水线、以请求人登记，14 §11、D50），类型按内容判定、图片一律重新编码（去掉 EXIF/GPS）；
   `privateMetadata()` 策略的文件编号是随机的 UUIDv4（主键约定的例外，D48），其余为 UUIDv7；
   字段用 `f.kind(FileKind.of("策略"))` 引用文件（列 `uuid`，不加外键），策略（`FilePolicy` Bean）必须声明上传与读取权限；原名与上传者不应让其他读者看到的策略声明 `privateMetadata()`（只有上传者与 `file.read` 看得到，下载名为中性名，14 §5.1、决策 D47）。
   `sys_file` 是可删除的普通表，只经 `FILE_REGISTER` / `FILE_DELETE` / `FILE_PURGE_ORPHANS` 写入；业务流程删除文件前先清空引用并

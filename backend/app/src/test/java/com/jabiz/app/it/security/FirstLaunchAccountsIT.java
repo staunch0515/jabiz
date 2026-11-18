@@ -81,9 +81,9 @@ class FirstLaunchAccountsIT extends SignUpItSupport {
         if (roleId == null) {
             asSystem(FirstLaunchProcesses.START_PROCESS, new FirstLaunchProcesses.StartInput("it-hash"));
             roleId = asSystem(FirstLaunchAccountProcesses.WAITING_ROLE_PROCESS, new RoleInput()).roleId();
-            USERS.put("B", asSystem(FirstLaunchAccountProcesses.ACCOUNT_PROCESS, new NewAccount("B", 0, "fl-b",
+            USERS.put("B", asSystem(FirstLaunchAccountProcesses.ACCOUNT_PROCESS, new NewAccount(0, "fl-b",
                 "田中 美咲", B, "ja", List.of("IT_BACK_OFFICE"), true)).userId());
-            USERS.put("C", asSystem(FirstLaunchAccountProcesses.ACCOUNT_PROCESS, new NewAccount("C", 1, "fl-c",
+            USERS.put("C", asSystem(FirstLaunchAccountProcesses.ACCOUNT_PROCESS, new NewAccount(1, "fl-c",
                 "山田 健", C_WRONG, "ja", List.of("CUSTOMER"), false)).userId());
         }
     }

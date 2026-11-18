@@ -66,6 +66,7 @@ public class FirstLaunchRunner implements SmartInitializingSingleton, Applicatio
     private final ObjectProvider<FirstLaunchExit> exits;
     private final JsonMapper json;
     private final FirstLaunchPowers powers;
+    private final FirstLaunchFiles files;
 
     private volatile Mode mode = Mode.NONE;
     private volatile FirstLaunchConfig config;
@@ -74,7 +75,7 @@ public class FirstLaunchRunner implements SmartInitializingSingleton, Applicatio
     public FirstLaunchRunner(Environment environment, FirstLaunchRuns runs, FirstLaunchGate gate,
         ProcessExecutor processes, ObjectProvider<FirstLaunchHandler> handlers,
         ObjectProvider<FirstLaunchPlatformSteps> platformSteps, MessageCatalog messages, Clock clock,
-        ObjectProvider<FirstLaunchExit> exits, JsonMapper json, FirstLaunchPowers powers) {
+        ObjectProvider<FirstLaunchExit> exits, JsonMapper json, FirstLaunchPowers powers, FirstLaunchFiles files) {
         this.settings = FirstLaunchSettings.of(environment);
         this.environment = environment;
         this.runs = runs;
@@ -87,6 +88,7 @@ public class FirstLaunchRunner implements SmartInitializingSingleton, Applicatio
         this.exits = exits;
         this.json = json;
         this.powers = powers;
+        this.files = files;
     }
 
     /** What this start does; for tests. */
@@ -185,12 +187,40 @@ public class FirstLaunchRunner implements SmartInitializingSingleton, Applicatio
             platformSteps.orderedStream().forEach(steps -> problems.addAll(steps.validate(read.config())));
             found.forEach(handler -> problems.addAll(handler.validate(read.config())));
         }
+        if (problems.isEmpty()) {
+            problems.addAll(fileStepProblems(read.config()));
+        }
         if (!problems.isEmpty()) {
             StringBuilder report = new StringBuilder(text("first-launch.problems", Map.of("count", problems.size())));
             problems.forEach(problem -> report.append(System.lineSeparator()).append("  ").append(problem.format()));
             log.error(report.toString());
             throw new FirstLaunchFailedException(report.toString());
         }
+    }
+
+    /** Every file step's problems, found before anything is written: its account, its policy, its file. */
+    private List<FirstLaunchProblem> fileStepProblems(FirstLaunchConfig config) {
+        List<FirstLaunchProblem> problems = new ArrayList<>();
+        for (FirstLaunchStep step : plan(config)) {
+            FirstLaunchStep.FileSource source = step.file();
+            if (source == null) {
+                continue;
+            }
+            String at = "step " + step.key() + " (" + source.path() + ")";
+            if (step.asAccount() == null) {
+                problems.add(new FirstLaunchProblem(at, "stores a file as no account",
+                    "a file step stores the file as the account whose content uses it"));
+            }
+            if (!files.policies().contains(source.policy())) {
+                problems.add(new FirstLaunchProblem(at, "uses the file policy " + source.policy()
+                    + ", which the application does not name", "fix the application's handler"));
+            }
+            if (!config.files().exists(source.path())) {
+                problems.add(new FirstLaunchProblem(at, "names a file that is not in the configuration's directory",
+                    "put the file there, or fix the path"));
+            }
+        }
+        return problems;
     }
 
     /** Settings the first launch cannot work with (section 5). */
@@ -254,7 +284,8 @@ public class FirstLaunchRunner implements SmartInitializingSingleton, Applicatio
         UUID runId = UUID.fromString(started.runId());
         log.info(text("first-launch.started", Map.of("run", runId, "hash", config.hash())));
         Map<String, Object> outputs = new LinkedHashMap<>();
-        Results results = new Results(outputs);
+        Results results = new Results(outputs, config.accounts().stream()
+            .map(com.jabiz.firstlaunch.FirstLaunchAccount::key).toList());
         Instant deadline = clock.instant().plus(settings.contentTimeout());
         FirstLaunchStep current = null;
         try {
@@ -302,6 +333,15 @@ public class FirstLaunchRunner implements SmartInitializingSingleton, Applicatio
 
     /** Runs one step: once, or again and again while it waits. Returns its output. */
     private Object run(UUID runId, FirstLaunchStep step, Results results, Instant deadline) {
+        if (step.file() != null) {
+            // A file step (D82): stored as the account through the upload pipeline, registered under a step.
+            if (step.asAccount() == null) {
+                throw new IllegalStateException("File step " + step.key() + " names no account to store it as");
+            }
+            String actor = results.userId(step.asAccount());
+            return files.store(runId, config, step, actor,
+                FirstLaunchActing.as(actor, locale, requestId(runId, step))).block();
+        }
         if (step.asAccount() != null && !powers.actingProcesses().contains(step.process())) {
             throw new IllegalStateException("Step " + step.key() + " runs " + step.process() + " as account "
                 + step.asAccount() + ", but the application's handler does not name it among its acting processes");
@@ -439,11 +479,23 @@ public class FirstLaunchRunner implements SmartInitializingSingleton, Applicatio
     }
 
     /** The results so far of the content phase. */
-    private record Results(Map<String, Object> outputs) implements FirstLaunchResults {
+    /**
+     * @param accountKeys the configuration's account keys, in order: {@code account:<key>} reads the output of the step
+     *                    keyed by the account's place ({@link FirstLaunchStep#accountStepKeyAt}), so that no key - a
+     *                    user name - is recorded with the operations
+     */
+    private record Results(Map<String, Object> outputs, List<String> accountKeys) implements FirstLaunchResults {
 
         @Override
         public Optional<Object> output(String stepKey) {
-            return Optional.ofNullable(outputs.get(stepKey));
+            Object found = outputs.get(stepKey);
+            if (found == null && stepKey.startsWith("account:") && !stepKey.startsWith("account:#")) {
+                int position = accountKeys.indexOf(stepKey.substring("account:".length()));
+                if (position >= 0) {
+                    found = outputs.get(FirstLaunchStep.accountStepKeyAt(position));
+                }
+            }
+            return Optional.ofNullable(found);
         }
 
         @Override

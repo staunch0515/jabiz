@@ -134,6 +134,9 @@ class FirstLaunchFailureIT extends PostgresIntegrationTest {
     @Autowired
     com.jabiz.runtime.firstlaunch.FirstLaunchPowers powers;
 
+    @Autowired
+    com.jabiz.runtime.firstlaunch.FirstLaunchFiles files;
+
     @Test
     void aFailedStepEndsTheRunAndEveryLaterStartFails() {
         long end = System.nanoTime() + Duration.ofSeconds(30).toNanos();
@@ -155,7 +158,7 @@ class FirstLaunchFailureIT extends PostgresIntegrationTest {
 
         // The next start (a new runner on the same database) refuses to start and says what to do.
         FirstLaunchRunner restart = new FirstLaunchRunner(environment, runs, new FirstLaunchGate(), processes,
-            handlers, platformSteps, messages, clockBean, exits, json, powers);
+            handlers, platformSteps, messages, clockBean, exits, json, powers, files);
         assertThatThrownBy(restart::afterSingletonsInstantiated)
             .isInstanceOf(FirstLaunchRunner.FirstLaunchFailedException.class)
             .hasMessageContaining("broken")
@@ -171,7 +174,7 @@ class FirstLaunchFailureIT extends PostgresIntegrationTest {
             .hasMessageContaining("content phase is over (FAILED)");
         // Without the configuration as well: the record decides, not the settings.
         FirstLaunchRunner bare = new FirstLaunchRunner(new org.springframework.mock.env.MockEnvironment(), runs,
-            new FirstLaunchGate(), processes, handlers, platformSteps, messages, clockBean, exits, json, powers);
+            new FirstLaunchGate(), processes, handlers, platformSteps, messages, clockBean, exits, json, powers, files);
         assertThatThrownBy(bare::afterSingletonsInstantiated)
             .isInstanceOf(FirstLaunchRunner.FirstLaunchFailedException.class)
             .hasMessageContaining("broken");

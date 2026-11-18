@@ -116,9 +116,15 @@ public class FirstLaunchRevisions implements ApplicationListener<ApplicationRead
                     user.acceptedAt() != null));
             }
         }
+        // A place whose user was deleted meanwhile is not compared: there is nobody left to correct.
+        java.util.Set<Integer> gone = new java.util.HashSet<>();
+        accounts.stream().filter(account -> !facts.containsKey(account.userId()))
+            .forEach(account -> gone.add(account.position()));
         Map<String, String> emails = new LinkedHashMap<>();
         for (int i = 0; i < config.accounts().size(); i++) {
-            emails.put("#" + (i + 1), config.accounts().get(i).email());
+            if (!gone.contains(i)) {
+                emails.put("#" + (i + 1), config.accounts().get(i).email());
+            }
         }
         EmailRevision.Outcome outcome = EmailRevision.compare(recorded, emails, otherDifferences);
         if (!outcome.refusals().isEmpty()) {

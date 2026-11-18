@@ -89,9 +89,10 @@ class FirstLaunchChecksTest {
     void actingProcessesExistAndAreOpenOrSubProcessesOnly() {
         FirstLaunchHandler app = handler("app", Set.of("OPEN_ONE", "SUB_ONE", "INTERNAL_ONE", "ENTRY_ONE", "MISSING"),
             Set.of("qb.key", " "));
+        // (file policies below)
 
         List<CheckProblem> problems = new FirstLaunchChecks(provider(FirstLaunchHandler.class, List.of(app)),
-            registry()).check();
+            registry(), name -> name.equals("qb.content.image")).check();
 
         assertThat(problems).allMatch(CheckProblem::isError);
         assertThat(problems).extracting(CheckProblem::message).containsExactlyInAnyOrder(
@@ -104,14 +105,43 @@ class FirstLaunchChecksTest {
     @Test
     void anApplicationHasOneHandler() {
         List<CheckProblem> problems = new FirstLaunchChecks(provider(FirstLaunchHandler.class,
-            List.of(handler("a", Set.of(), Set.of()), handler("b", Set.of(), Set.of()))), registry()).check();
+            List.of(handler("a", Set.of(), Set.of()), handler("b", Set.of(), Set.of()))), registry(), name -> name.equals("qb.content.image")).check();
 
         assertThat(problems).extracting(CheckProblem::message)
             .containsExactly("2 first-launch handlers; an application has one");
     }
 
     @Test
+    void filePoliciesExist() {
+        FirstLaunchHandler app = new FirstLaunchHandler() {
+            @Override
+            public String name() {
+                return "app";
+            }
+
+            @Override
+            public List<FirstLaunchProblem> validate(FirstLaunchConfig config) {
+                return List.of();
+            }
+
+            @Override
+            public List<FirstLaunchStep> plan(FirstLaunchConfig config) {
+                return List.of();
+            }
+
+            @Override
+            public Set<String> filePolicies() {
+                return Set.of("qb.content.image", "qb.nowhere");
+            }
+        };
+
+        assertThat(new FirstLaunchChecks(provider(FirstLaunchHandler.class, List.of(app)), registry(),
+            name -> name.equals("qb.content.image")).check()).extracting(CheckProblem::message)
+            .containsExactly("file policy qb.nowhere does not exist");
+    }
+
+    @Test
     void noHandlerIsNoProblem() {
-        assertThat(new FirstLaunchChecks(provider(FirstLaunchHandler.class, List.of()), registry()).check()).isEmpty();
+        assertThat(new FirstLaunchChecks(provider(FirstLaunchHandler.class, List.of()), registry(), name -> name.equals("qb.content.image")).check()).isEmpty();
     }
 }

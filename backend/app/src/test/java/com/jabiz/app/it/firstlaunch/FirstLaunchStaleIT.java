@@ -129,6 +129,9 @@ class FirstLaunchStaleIT extends PostgresIntegrationTest {
     @Autowired
     FirstLaunchPowers powers;
 
+    @Autowired
+    com.jabiz.runtime.firstlaunch.FirstLaunchFiles files;
+
     @Test
     void aRunPastItsTimeLimitIsRecordedAsFailedByTheNextStart() {
         long end = System.nanoTime() + Duration.ofSeconds(30).toNanos();
@@ -140,7 +143,7 @@ class FirstLaunchStaleIT extends PostgresIntegrationTest {
         // A start without the configuration whose time limit has long passed for this run.
         clock.advance(Duration.ofHours(1));
         FirstLaunchRunner later = new FirstLaunchRunner(new MockEnvironment(), runs, new FirstLaunchGate(), processes,
-            handlers, platformSteps, messages, clockBean, exits, json, powers);
+            handlers, platformSteps, messages, clockBean, exits, json, powers, files);
         assertThatThrownBy(later::afterSingletonsInstantiated)
             .isInstanceOf(FirstLaunchRunner.FirstLaunchFailedException.class)
             .hasMessageContaining("did not finish within");
