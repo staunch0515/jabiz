@@ -112,7 +112,7 @@ public class FileProcesses {
      * Registers the insertion of a stored file's row in {@code ctx}, uploaded by the process's actor: what
      * {@code FILE_REGISTER} does, and {@code FILE_FETCH} for an image downloaded from a link (decision D75).
      */
-    static FileInfo record(ProcessContext ctx, RegisterInput input) {
+    public static FileInfo record(ProcessContext ctx, RegisterInput input) {
         Map<String, Object> file = new LinkedHashMap<>();
         file.put(FileEntities.FILE_ID, input.fileId());
         file.put(FileEntities.POLICY, input.policy());

@@ -193,7 +193,8 @@ final class FirstLaunchSteps {
                 }
                 // Acting as an account (decision D82): only a process the application named, only as a user this
                 // run created who has no credential of their own yet.
-                if (!powers.actingProcesses().contains(target.name())) {
+                if (!powers.actingProcesses().contains(target.name())
+                    && !FirstLaunchFileRegister.NAME.equals(target.name())) {
                     return Mono.error(new com.jabiz.runtime.PermissionDeniedException(FirstLaunchProcesses.PERMISSION,
                         "First launch: " + target.name() + " is not among the processes it may run as an account"));
                 }
