@@ -17,7 +17,8 @@ import java.util.Map;
 
 /**
  * The platform's part of the first launch's content phase: the configuration's accounts (docs/design/23-first-launch.md
- * section 8). One step creates the waiting role, then one step per account ({@code account:<key>}) creates the user,
+ * section 8). One step creates the waiting role, then one step per account (keyed by its place, {@code account:#<n>};
+ * {@code account:<key>} finds it among the results) creates the user,
  * holding the waiting role, without a password or an invitation. The waiting phase's job invites them once the
  * content phase is done.
  *
@@ -84,12 +85,15 @@ public class FirstLaunchAccountSteps implements FirstLaunchPlatformSteps {
             .describedAs("waiting role " + WaitingRole.CODE));
         int position = 0;
         for (FirstLaunchAccount account : config.accounts()) {
-            FirstLaunchAccountProcesses.NewAccount input = new FirstLaunchAccountProcesses.NewAccount(account.key(),
-                position++, account.key(), account.name(), account.email(), account.language(), account.roles(),
+            // Keyed and described by its place: step keys are recorded with the operations, and the key is the user's
+            // name (personal data); the results map account:<key> to the place.
+            FirstLaunchAccountProcesses.NewAccount input = new FirstLaunchAccountProcesses.NewAccount(position,
+                account.key(), account.name(), account.email(), account.language(), account.roles(),
                 account.report());
-            steps.add(FirstLaunchStep.run(FirstLaunchStep.accountStepKey(account.key()),
+            steps.add(FirstLaunchStep.run(FirstLaunchStep.accountStepKeyAt(position),
                     FirstLaunchAccountProcesses.ACCOUNT_CREATE, results -> input)
-                .describedAs("account " + account.key() + " (" + String.join(", ", account.roles()) + ")"));
+                .describedAs("account #" + (position + 1) + " (" + String.join(", ", account.roles()) + ")"));
+            position++;
         }
         return steps;
     }

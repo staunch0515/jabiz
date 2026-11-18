@@ -66,6 +66,8 @@ class FirstLaunchHandoverIT extends SignUpItSupport {
     static final String B = "fl-h-b@example.com";
     static final String D = "fl-h-d@example.com";
     static final String E = "fl-h-e@example.com";
+    static final String F = "fl-h-f@example.com";
+    static final String DAVE = "Dave Qx7Handover";
     static final String OWN = "own horse battery";
     static final AtomicReference<String> CONFIRMED = new AtomicReference<>("");
 
@@ -92,14 +94,22 @@ class FirstLaunchHandoverIT extends SignUpItSupport {
                 roles: [IT_GUARD]
               - key: fl-h-dave
                 email: %s
-                name: Dave
+                name: %s
                 roles: [IT_STAFF]
               - key: fl-h-erin
                 email: %s
                 name: Erin
                 roles: [IT_STAFF]
-            """.formatted(A, C, B, D, E));
+              - key: fl-h-fred
+                email: %s
+                name: Fred
+                roles: [IT_STAFF]
+            """.formatted(A, C, B, D, DAVE, E, F));
         registry.add("jabiz.first-launch.config", () -> path);
+        // The tests' login is the maintenance login too (as ErasureIT): the purge overwrites the append-only rows.
+        registry.add("jabiz.erasure.datasource.url", () -> DB.r2dbcUrl() + "?schema=" + schema());
+        registry.add("jabiz.erasure.datasource.username", DB::username);
+        registry.add("jabiz.erasure.datasource.password", DB::password);
         registry.add("jabiz.first-launch.confirm-admins", CONFIRMED::get);
     }
 
@@ -175,6 +185,32 @@ class FirstLaunchHandoverIT extends SignUpItSupport {
     void customerRole() {
     }
 
+    @org.junit.jupiter.api.BeforeEach
+    void maintenanceRole() {
+        execute("DO $$ BEGIN CREATE ROLE jabiz_maintenance; EXCEPTION WHEN duplicate_object THEN NULL; END $$");
+        execute("DO $$ BEGIN EXECUTE 'GRANT jabiz_maintenance TO ' || quote_ident(current_user);"
+            + " EXCEPTION WHEN OTHERS THEN NULL; END $$");
+    }
+
+    @Autowired
+    com.jabiz.runtime.process.ProcessExecutor executor;
+
+    /** Every table and text or JSON column of the schema that holds the value (as ErasureIT). */
+    private static List<String> occurrences(String needle) {
+        List<String> found = new java.util.ArrayList<>();
+        for (Map<String, Object> column : query("SELECT table_name::text AS t, column_name::text AS c"
+            + " FROM information_schema.columns WHERE table_schema = current_schema()"
+            + " AND data_type IN ('text', 'character varying', 'character', 'jsonb', 'json')")) {
+            String table = (String) column.get("t");
+            String name = (String) column.get("c");
+            String sql = "SELECT count(*) AS n FROM \"" + table + "\" WHERE \"" + name + "\"::text ILIKE ?";
+            if (((Number) query(sql, "%" + needle + "%").getFirst().get("n")).longValue() > 0) {
+                found.add(table + "." + name);
+            }
+        }
+        return found;
+    }
+
     private FirstLaunchRun run() {
         return runs.current().contextWrite(view -> RequestContexts.put(view,
             RequestContext.system(Locale.ENGLISH, "it"))).block().orElseThrow();
@@ -236,15 +272,23 @@ class FirstLaunchHandoverIT extends SignUpItSupport {
         assertThat(rolesOf(userId(A))).containsExactly("IT_SUPER");
         assertThat(query("SELECT count(*) AS n FROM sec_protected_grants_armed").getFirst().get("n")).isEqualTo(1L);
 
-        // Dave's account is disabled (someone saw something wrong): nothing more for it.
+        // Dave's account is disabled (someone saw something wrong): nothing more for it. Fred's address was changed by
+        // an administrator before he accepted: no invitation may go there (D63), so the first launch leaves him to
+        // people rather than fail every minute.
         updateUser(userId(D), Map.of("enabled", false));
+        String fred = userId(F);
+        updateUser(fred, Map.of("email", "fl-h-fred2@example.com"));
 
         // Bob's protected role now waits for another administrator's approval: handed over, asked once.
         acceptAndBind(B);
         advance();
         assertThat(changesOf(B)).singleElement().satisfies(row -> assertThat(row).containsEntry("status", "PENDING"));
         assertThat(rolesOf(userId(B))).containsExactly(WaitingRole.CODE);
+        // Fred is past the reminder time: not invited again (that would be refused), and nothing fails.
+        clock.set(START.plus(Duration.ofDays(4)));
+        round += 4 * 24 * 60;
         advance();
+        assertThat(to("fl-h-fred2@example.com")).isEmpty();
         assertThat(changesOf(B)).hasSize(1);
         assertThat(run().state()).isEqualTo(FirstLaunchRun.State.CONTENT_DONE);
 
@@ -270,15 +314,41 @@ class FirstLaunchHandoverIT extends SignUpItSupport {
         String report = text(to(A).getLast());
         assertThat(report).contains("#3: IT_GUARD was decided by the administrators")
             .contains("#4 (user " + userId(D) + ") is disabled")
+            .contains("#6 (user " + fred + ") is disabled, or someone else changed its address")
             .contains("setup window of protected grants has ended")
             .doesNotContain("Alice").doesNotContain("fl-h-bob").doesNotContain(B);
         assertThat(rolesOf(userId(D))).containsExactly(WaitingRole.CODE);
         assertThat(query("SELECT enabled FROM sec_role_version WHERE role_code = ? ORDER BY version_no DESC LIMIT 1",
             WaitingRole.CODE).getFirst()).containsEntry("enabled", false);
 
-        // Nothing of the first launch is ever updated or deleted, and its records hold no key or address.
-        assertThat(SqlStatementLog.STATEMENTS).noneMatch(sql -> sql.matches(
+        // Nothing of the first launch is ever updated or deleted.
+        assertThat(List.copyOf(SqlStatementLog.STATEMENTS)).noneMatch(sql -> sql.matches(
             "(?is).*\\b(UPDATE|DELETE\\s+FROM)\\s+(\\w+_version|sys_first_launch_\\w+)\\b.*"));
+        // No account key (a user name) in the request ids or the first launch's own operations.
+        assertThat(query("SELECT request_id FROM op_process")).allSatisfy(row ->
+            assertThat(String.valueOf(row.get("request_id"))).doesNotContain("fl-h-"));
+        assertThat(query("SELECT input_summary::text AS s FROM op_process WHERE process_name LIKE 'FIRST_LAUNCH_%'"
+            + " AND process_name NOT IN ('FIRST_LAUNCH_ACCOUNT_CREATE')")).allSatisfy(row ->
+            assertThat(String.valueOf(row.get("s"))).doesNotContain("fl-h-"));
+
+        // A first launch account erased: nothing of it is left anywhere - its key (the user name) was never recorded
+        // with the operations, the run's records hold none of it.
+        String dave = userId(D);
+        AtomicReference<String> erasure = new AtomicReference<>();
+        com.jabiz.runtime.erasure.AccountErasure.EraseOutput erased = executor.execute(
+                com.jabiz.runtime.erasure.AccountErasure.ERASE,
+                new com.jabiz.runtime.erasure.AccountErasure.EraseInput(UUID.fromString(dave), "it-support"))
+            .contextWrite(view -> RequestContexts.put(view, RequestContext.system(Locale.ENGLISH, "it-erase")))
+            .block();
+        erasure.set(erased.erasureId());
+        deliver();
+        assertThat(query("SELECT row_count FROM sys_erasure_purge WHERE erasure_id = ?::uuid", erasure.get()))
+            .isNotEmpty();
+        for (String needle : List.of("fl-h-dave", D, DAVE)) {
+            assertThat(occurrences(needle)).as("where %s still is", needle).isEmpty();
+        }
+
+        // The run's records hold no key or address.
         assertThat(query("SELECT detail::text AS d FROM sys_first_launch_event")).allSatisfy(row ->
             assertThat(String.valueOf(row.get("d"))).doesNotContain("fl-h-").doesNotContain("@"));
         assertThat(query("SELECT * FROM sys_first_launch_account")).allSatisfy(row ->

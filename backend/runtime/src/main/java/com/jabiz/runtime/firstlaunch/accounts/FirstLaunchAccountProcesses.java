@@ -53,15 +53,13 @@ public class FirstLaunchAccountProcesses {
     /**
      * An account to create.
      *
-     * @param key      the account's key in the configuration
      * @param position its place in the configuration's list
-     * @param userName the name to sign in with (a verified address works too)
+     * @param userName the name to sign in with (the account's key; a verified address works too)
      * @param locale   the language of the user's mail; optional
      * @param roles    the configured role codes, granted in the waiting phase
      * @param report   whether the first launch's report goes to the account
      */
-    public record NewAccount(@NotBlank @Size(max = 40) String key, int position,
-        @NotBlank @Size(max = 100) String userName, @Size(max = 200) String displayName,
+    public record NewAccount(int position, @NotBlank @Size(max = 100) String userName, @Size(max = 200) String displayName,
         @NotBlank @Size(max = 320) String email, @Size(max = 10) String locale, @NotEmpty List<String> roles,
         boolean report) {}
 

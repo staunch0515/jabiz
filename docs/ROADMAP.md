@@ -5657,9 +5657,10 @@ QuizBuks 的 #545、#546、#547 用了 43.5–45 分钟，#545 到点被取消�
 | 17zz23b-5 | 文档：决策 D82、设计 23 §6、04 §9.1、10、18 §3.5、`CLAUDE.md` 第 4 节"审批与职责分离" |
 | 17zz23b-6 | 审查修正：三项能力按 `op_process` 血缘判断（顶层是本运行的 `FIRST_LAUNCH_STEP`），不再看请求编号；`RequestContextWebFilter` 替换客户端给出的 `first-launch…` 请求编号；参数初值发布只限受控参数与审批规则、提议人须是系统；"从未有过凭据"含会话与成功的登录；启动检查 `FIRST_LAUNCH`；`FirstLaunchActing` 与架构测试；过时的运行由另一实例先记失败时照样启动失败 |
 | 17zz23b-7 | 测试：`FirstLaunchPowersIT` 的探查改为真实的步骤（伪造的请求编号、账号调用发布、带限额的级、本人有了密码后不再代行）；`FirstLaunchFailureIT`（失败后不再有步骤）；`FirstLaunchStartupIT`（与 `.always` 互斥）；`FirstLaunchStaleIT`（超时的运行由下一次启动记为失败，运行中的实例随之退出）；`RequestContextWebFilterTest` |
-| 17zz23c-1 | 账号：平台步骤 `FirstLaunchAccountSteps`（`waiting-role`、`account:<代号>`）、待命角色 `FIRST_LAUNCH_PENDING` 与 `WaitingRoleWriteCheck`（`FIRST_LAUNCH_ROLE_RESERVED`）、V68 `sys_first_launch_account`；校验入口接受待命角色、邮件开启 |
+| 17zz23c-1 | 账号：平台步骤 `FirstLaunchAccountSteps`（`waiting-role`、`account:#n`，代号不进 `op_process`）、待命角色 `FIRST_LAUNCH_PENDING` 与 `WaitingRoleWriteCheck`（`FIRST_LAUNCH_ROLE_RESERVED`）、V68 `sys_first_launch_account`；校验入口接受待命角色、邮件开启 |
 | 17zz23c-2 | 等人阶段：任务 `jabiz.first-launch`（`FIRST_LAUNCH_ADVANCE`：邀请与再邀请、授予、管理员最后且须指纹确认、撤下待命角色、`DONE` / `EXPIRED`、报告 `FIRST_LAUNCH_REPORT`） |
 | 17zz23c-3 | 改邮箱的补救（D83）：`FIRST_LAUNCH_EMAIL_REVISE`、`CredentialChain` 的窄例外、`ConfigShape`、`FirstLaunchRevisions`、`REVISED` |
+| 17zz23c-5 | 抹除：`ErasurePurger` 也清除用户邮件（如邀请）的审计记录中的地址与参数（原来遗漏，与首发无关的已有缺口，由首发账号的全库搜索发现） |
 | 17zz23c-4 | 测试：`GrantPlanTest`、`EmailRevisionTest`、`ConfigShapeTest`、`CredentialChainTest`、`FirstLaunchAccountsIT`、`FirstLaunchWaitingIT`、`FirstLaunchExpiryIT`；文档：设计 23 §8、D83、10 §15.14、指南、`CLAUDE.md` |
 ### 线 1.3 的候选（未排期，2026-11-08 总控：首次上线前不做）
 
