@@ -7,9 +7,9 @@ import com.jabiz.process.ProcessDefinition;
 import com.jabiz.runtime.BusinessRuleViolationException;
 import com.jabiz.runtime.context.RequestContexts;
 import com.jabiz.runtime.firstlaunch.accounts.FirstLaunchAccountProcesses;
-import com.jabiz.runtime.firstlaunch.accounts.FirstLaunchAccountProcesses.CreateInput;
-import com.jabiz.runtime.firstlaunch.accounts.FirstLaunchAccountProcesses.CreateOutput;
+import com.jabiz.runtime.firstlaunch.FirstLaunchProcesses;
 import com.jabiz.runtime.firstlaunch.accounts.FirstLaunchAccountProcesses.NewAccount;
+import com.jabiz.runtime.firstlaunch.accounts.FirstLaunchAccountProcesses.RoleInput;
 import com.jabiz.runtime.firstlaunch.accounts.FirstLaunchAccountProcesses.ReviseInput;
 import com.jabiz.runtime.firstlaunch.accounts.WaitingRole;
 import com.jabiz.runtime.process.ProcessExecutor;
@@ -56,7 +56,8 @@ class FirstLaunchAccountsIT extends SignUpItSupport {
     private static final String C_WRONG = "fl-c.yamda@example.com";
     private static final String C_RIGHT = "fl-c.yamada@example.com";
 
-    private static CreateOutput created;
+    private static String roleId;
+    private static final Map<String, String> USERS = new java.util.HashMap<>();
 
     @Autowired
     ProcessExecutor processes;
@@ -77,33 +78,37 @@ class FirstLaunchAccountsIT extends SignUpItSupport {
 
     @BeforeEach
     void accounts() {
-        if (created == null) {
-            created = asSystem(FirstLaunchAccountProcesses.CREATE_PROCESS, new CreateInput(List.of(
-                new NewAccount("B", "fl-b", "田中 美咲", B, "ja"),
-                new NewAccount("C", "fl-c", "山田 健", C_WRONG, "ja"))));
+        if (roleId == null) {
+            asSystem(FirstLaunchProcesses.START_PROCESS, new FirstLaunchProcesses.StartInput("it-hash"));
+            roleId = asSystem(FirstLaunchAccountProcesses.WAITING_ROLE_PROCESS, new RoleInput()).roleId();
+            USERS.put("B", asSystem(FirstLaunchAccountProcesses.ACCOUNT_PROCESS, new NewAccount("B", 0, "fl-b",
+                "田中 美咲", B, "ja", List.of("IT_BACK_OFFICE"), true)).userId());
+            USERS.put("C", asSystem(FirstLaunchAccountProcesses.ACCOUNT_PROCESS, new NewAccount("C", 1, "fl-c",
+                "山田 健", C_WRONG, "ja", List.of("CUSTOMER"), false)).userId());
         }
     }
 
     private String user(String key) {
-        return created.users().get(key);
+        return USERS.get(key);
     }
 
     @Test
     @Order(1)
     void theAccountsHoldTheWaitingRoleOnlyAndNoPasswordAndAreNotInvitedYet() {
-        assertThat(created.users()).containsOnlyKeys("B", "C");
+        assertThat(query("SELECT account_key, roles, report FROM sys_first_launch_account ORDER BY position"))
+            .extracting(row -> row.get("account_key") + " " + row.get("roles") + " " + row.get("report"))
+            .containsExactly("B IT_BACK_OFFICE true", "C CUSTOMER false");
         assertThat(userOf(B)).containsEntry("password_hash", null).containsEntry("verified_email", null);
         assertThat(rolesOf(user("B"))).containsExactly(WaitingRole.CODE);
         assertThat(query("SELECT enabled, require_mfa FROM sec_role_version WHERE role_code = ?", WaitingRole.CODE))
             .singleElement().satisfies(role -> assertThat(role).containsEntry("enabled", true)
                 .containsEntry("require_mfa", true));
-        assertThat(query("SELECT 1 FROM sec_role_permission_version WHERE role_id = ?::uuid", created.roleId()))
+        assertThat(query("SELECT 1 FROM sec_role_permission_version WHERE role_id = ?::uuid", roleId))
             .isEmpty();
         deliver();
         assertThat(to(B)).isEmpty();
         // One run only.
-        assertThatThrownBy(() -> asSystem(FirstLaunchAccountProcesses.CREATE_PROCESS, new CreateInput(List.of(
-            new NewAccount("D", "fl-d", null, "fl-d@example.com", null)))))
+        assertThatThrownBy(() -> asSystem(FirstLaunchAccountProcesses.WAITING_ROLE_PROCESS, new RoleInput()))
             .isInstanceOfSatisfying(BusinessRuleViolationException.class, e -> assertThat(e.violations())
                 .extracting(com.jabiz.entity.Violation::ruleCode).containsExactly("FIRST_LAUNCH_ROLE_RESERVED"));
     }
@@ -149,11 +154,11 @@ class FirstLaunchAccountsIT extends SignUpItSupport {
     void theWaitingRoleIsTheFirstLaunchsAlone() {
         String other = createUserWithEmail(unique("other"), address("other"), null);
         assertThat(refusal(post("/api/processes/SEC_USER_ROLE_ASSIGN/latest", admin(), Map.of("userId", other,
-            "roleId", created.roleId(), "reason", "r")), 422)).isEqualTo("FIRST_LAUNCH_ROLE_RESERVED");
+            "roleId", roleId, "reason", "r")), 422)).isEqualTo("FIRST_LAUNCH_ROLE_RESERVED");
         assertThat(refusal(commit(SecurityEntities.USER_ROLE_DATASET, Map.of("action", "INSERT", "attributes",
-            Map.of("userId", other, "roleId", created.roleId()))), 422)).isEqualTo("FIRST_LAUNCH_ROLE_RESERVED");
+            Map.of("userId", other, "roleId", roleId))), 422)).isEqualTo("FIRST_LAUNCH_ROLE_RESERVED");
         assertThat(refusal(commit(SecurityEntities.ROLE_PERMISSION_DATASET, Map.of("action", "INSERT", "attributes",
-            Map.of("roleId", created.roleId(), "permission", "price.read"))), 422))
+            Map.of("roleId", roleId, "permission", "price.read"))), 422))
             .isEqualTo("FIRST_LAUNCH_ROLE_RESERVED");
         assertThat(refusal(updateRole(Map.of("requireMfa", false)), 422)).isEqualTo("FIRST_LAUNCH_ROLE_RESERVED");
         // Disabling is anybody's who may write roles; enabling again is not.
@@ -202,8 +207,8 @@ class FirstLaunchAccountsIT extends SignUpItSupport {
     private org.springframework.test.web.reactive.server.WebTestClient.ResponseSpec updateRole(
         Map<String, Object> attributes) {
         Map<String, Object> role = get("/api/datasets/" + SecurityEntities.ROLE_DATASET + "/entities/"
-            + created.roleId(), admin()).expectStatus().isOk().expectBody(MAP).returnResult().getResponseBody();
-        return commit(SecurityEntities.ROLE_DATASET, Map.of("action", "UPDATE", "id", created.roleId(), "version",
+            + roleId, admin()).expectStatus().isOk().expectBody(MAP).returnResult().getResponseBody();
+        return commit(SecurityEntities.ROLE_DATASET, Map.of("action", "UPDATE", "id", roleId, "version",
             role.get("version"), "attributes", attributes));
     }
 }

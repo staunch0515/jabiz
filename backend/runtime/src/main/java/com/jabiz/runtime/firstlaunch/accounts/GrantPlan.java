@@ -25,7 +25,8 @@ import java.util.UUID;
  *   <li>A grant that waits for another administrator's approval ({@link RoleState#PENDING}) is handed over: not asked
  *       for again, and listed in what is left for people to do.</li>
  *   <li>The waiting role is withdrawn only once a configured role is {@link RoleState#APPLIED}.</li>
- *   <li>An account that has not accepted after {@code remindAfter} is invited once more.</li>
+ *   <li>An account never invited is invited; one that has not accepted after {@code remindAfter} is invited once
+ *       more.</li>
  * </ul>
  */
 public final class GrantPlan {
@@ -51,7 +52,7 @@ public final class GrantPlan {
      * @param mfaConfirmedAt  when the current second factor was confirmed (null: none)
      * @param states          the configured roles' states; a role not named is {@link RoleState#NONE}
      * @param holdsWaitingRole whether the account still holds the waiting role
-     * @param invitedAt       when the latest invitation was sent
+     * @param invitedAt       when the first invitation was sent (null: never)
      * @param reminded        whether the account was invited once more already
      */
     public record Account(String key, UUID userId, List<Role> roles, Instant acceptedAt, Instant mfaConfirmedAt,
@@ -103,6 +104,9 @@ public final class GrantPlan {
         /** Tell the operator (in the log) the fingerprint to confirm before an administrator's role is granted. */
         record AwaitConfirmation(String key, UUID userId, String fingerprint) implements Action {}
 
+        /** Invite for the first time ({@code SEC_USER_INVITE}), once the content phase is done. */
+        record Invite(String key, UUID userId) implements Action {}
+
         /** Invite once more ({@code SEC_USER_INVITE}). */
         record Remind(String key, UUID userId) implements Action {}
     }
@@ -120,8 +124,9 @@ public final class GrantPlan {
         List<Action> reminders = new ArrayList<>();
         for (Account account : accounts) {
             if (!account.ready()) {
-                if (account.acceptedAt() == null && !account.reminded() && account.invitedAt() != null
-                    && !now.isBefore(account.invitedAt().plus(remindAfter))) {
+                if (account.acceptedAt() == null && account.invitedAt() == null) {
+                    reminders.add(new Action.Invite(account.key(), account.userId()));
+                } else if (account.acceptedAt() == null && !account.reminded() && !now.isBefore(account.invitedAt().plus(remindAfter))) {
                     reminders.add(new Action.Remind(account.key(), account.userId()));
                 }
                 continue;

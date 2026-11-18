@@ -37,7 +37,8 @@ import java.util.UUID;
 class WaitingRoleWriteCheck implements TemporalWriteCheck {
 
     /** The processes that write the waiting role (each checks the run's state itself). */
-    static final Set<String> PROCESSES = Set.of(FirstLaunchAccountProcesses.CREATE, FirstLaunchAccountProcesses.ADVANCE);
+    static final Set<String> PROCESSES = Set.of(FirstLaunchAccountProcesses.WAITING_ROLE_CREATE,
+        FirstLaunchAccountProcesses.ACCOUNT_CREATE);
 
     private static final String ROLE = SqlIdentifiers.require(SecurityEntities.SEC_ROLE.physicalTable);
     private static final String ROLE_ID = SqlIdentifiers.require(SecurityEntities.SEC_ROLE.fields.get("roleId")

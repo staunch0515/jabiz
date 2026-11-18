@@ -122,6 +122,12 @@ class GrantPlanTest {
     }
 
     @Test
+    void anAccountNeverInvitedIsInvitedFirst() {
+        Account fresh = new Account("C", C, List.of(OPERATOR), null, null, Map.of(), true, null, false);
+        assertThat(next(List.of(fresh), Set.of())).containsExactly(new Action.Invite("C", C));
+    }
+
+    @Test
     void anAccountNotAcceptingInTimeIsInvitedOnceMore() {
         Account c = new Account("C", C, List.of(OPERATOR), null, null, Map.of(), true, INVITED, false);
         assertThat(GrantPlan.next(RUN, List.of(c), Set.of(), INVITED.plus(REMIND_AFTER).minusSeconds(1),
