@@ -23,7 +23,7 @@ while IFS='=' read -r key _; do
   [[ -z $key || $key == \#* ]] && continue
   check "app.env's $key is given to the application" "grep -q '^$key=' <<< \"\$out\""
 done < "$root/quizbuks-web/e2e/app.env"
-check "the fixed values are app.env's" "grep -qx 'QB_ADMIN_ROLES=ADMIN,QB_ADMIN_SUPER,QB_ADMIN_CONTENT,QB_ADMIN_FINANCE,QB_E2E_PUBLISHER,QB_E2E_FINANCE,QB_E2E_CONTENT' <<< \"\$out\""
+check "the fixed values are app.env's" "grep -qx 'QB_ADMIN_ROLES=ADMIN,QB_ADMIN_SUPER,QB_ADMIN_CONTENT,QB_ADMIN_FINANCE,FIRST_LAUNCH_PENDING,QB_E2E_PUBLISHER,QB_E2E_FINANCE,QB_E2E_CONTENT' <<< \"\$out\""
 check "the analytics job runs every minute, with the e2e switch" "grep -qx 'QB_ANALYTICS_RUN_CRON=15 \* \* \* \* \*' <<< \"\$out\" && grep -qx 'QB_E2E_ENABLED=true' <<< \"\$out\""
 
 # This machine's ports replace CI's where they differ.

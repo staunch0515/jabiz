@@ -82,6 +82,30 @@ class FirstLaunchSwitchesTest {
         }
     }
 
+    /**
+     * F-LAUNCH (plan section 7.2, H4): the rows whose first launch's value waits for a decision outside the system (the
+     * AI notice, the confirmed floor or range of a price) are only proposed by the first launch's configuration; every
+     * other row takes effect with its first launch's value.
+     */
+    @Test
+    void onlyTheRowsThatWaitForAnotherDecisionAreProposedWithoutTakingEffect() {
+        List<String> waiting = FirstLaunchSwitches.ALL.stream().filter(row -> row.prerequisite() != null)
+            .map(Row::key).toList();
+        assertThat(waiting).containsExactlyInAnyOrder(QbParams.HELP_ENABLED, QbParams.AI_ENABLED,
+            QbParams.DISTRIBUTION_BILLING_ENABLED, QbParams.EXPOSURE_BILLING_ENABLED);
+        for (Row row : FirstLaunchSwitches.ALL) {
+            if (row.prerequisite() != null) {
+                assertThat(row.prerequisite()).as(row.key()).isNotBlank();
+                assertThat(row.status()).as(row.key()).isEqualTo(Status.ACTIVE);
+                assertThat(row.value()).as(row.key()).isNotNull();
+                assertThat(row.takesEffectAtLaunch()).as(row.key()).isFalse();
+            } else {
+                assertThat(row.takesEffectAtLaunch()).as(row.key())
+                    .isEqualTo(row.status() == Status.ACTIVE && row.value() != null);
+            }
+        }
+    }
+
     @Test
     void everyKeyIsListedOnce() {
         List<String> keys = FirstLaunchSwitches.ALL.stream().map(Row::key).toList();
