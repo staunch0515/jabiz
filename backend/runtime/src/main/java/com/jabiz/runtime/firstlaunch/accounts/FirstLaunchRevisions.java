@@ -122,7 +122,8 @@ public class FirstLaunchRevisions implements ApplicationListener<ApplicationRead
             log.warn("First launch: the content phase is done; the configuration (hash {}) is not applied: {}. Only the"
                 + " address of an account that has not accepted its invitation may still be corrected here; do the"
                 + " rest in the administration as usual. While it differs, the application's steps for ready accounts"
-                + " do not run.", config.hash(), String.join("; ", outcome.refusals()));
+                + " do not run (for every account when more than an address differs, else for the accounts whose"
+                + " address differs).", config.hash(), String.join("; ", outcome.refusals()));
             return List.of();
         }
         if (outcome.revisions().isEmpty()) {

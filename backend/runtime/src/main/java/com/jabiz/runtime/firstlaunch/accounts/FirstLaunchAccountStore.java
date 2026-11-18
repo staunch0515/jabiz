@@ -153,10 +153,11 @@ public class FirstLaunchAccountStore {
      * The ready items ({@code r} and the user id's hex digits) of the job whose latest outcome failed: their steps are
      * listed in the report until they succeed.
      */
-    public Mono<Set<String>> failedItems(String jobName) {
-        return engine().select("SELECT f.item_key FROM (SELECT DISTINCT ON (item_key) item_key, kind FROM"
+    public Mono<Set<String>> failedItems(String jobName, int attempts) {
+        return engine().select("SELECT f.item_key FROM (SELECT DISTINCT ON (item_key) item_key, kind, attempt FROM"
                 + " sys_job_item_failure WHERE job_name = :job AND item_key LIKE 'r%' ORDER BY item_key, entry_no DESC) f"
-                + " WHERE f.kind = 'FAILED'", Map.of("job", BoundValue.of(jobName)))
+                + " WHERE f.kind = 'FAILED' AND f.attempt >= :attempts",
+                Map.of("job", BoundValue.of(jobName), "attempts", BoundValue.of(attempts)))
             .map(row -> Rows.string(row.get("item_key"))).collectList().map(Set::copyOf);
     }
 

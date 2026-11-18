@@ -320,7 +320,7 @@ class FirstLaunchReadyGuardsIT extends SignUpItSupport {
 
         // The configuration now is another shape (the accounts reordered: Alice's place holds Bob): it drives nothing.
         restartWith(Mode.CHANGED);
-        awaitOutput(output, "While it differs, the application's steps for ready accounts do not run.");
+        awaitOutput(output, "While it differs, the application's steps for ready accounts do not run (for every account");
         acceptAndBind(A);
         assertThat(advance()).isEqualTo(JobRunner.Outcome.SUCCEEDED);
         assertThat(rolesOf(userId(A))).contains("IT_STAFF");

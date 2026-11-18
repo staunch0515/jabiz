@@ -54,8 +54,10 @@ public interface FirstLaunchHandler {
      * <p>Only {@link FirstLaunchStep#run} steps, each running a process of {@link #accountReadyProcesses()}, as the system;
      * keys unique within the account, at most 200 characters and not holding the account's key (keys are recorded; the
      * key is the user's name). {@code results} gives only {@link FirstLaunchResults#userId}: the content phase's
-     * outputs are not kept. Each step runs once per account (recorded); a failure is retried by the job and, until it
-     * succeeds, listed in the report; the run's end does not wait for it.
+     * outputs are not kept. Each step runs once per account (recorded); a failure is retried by the job with its
+     * backoff, and the run's end waits for it until it has failed {@code jabiz.first-launch.ready-attempts} (5) times
+     * in a row; then it is listed in the report. Not run (and reported) either for an account whose address in the
+     * configuration is not its address now (one it accepted cannot be changed there).
      */
     default List<FirstLaunchStep> whenAccountReady(FirstLaunchConfig config, FirstLaunchAccount account,
         FirstLaunchResults results) {

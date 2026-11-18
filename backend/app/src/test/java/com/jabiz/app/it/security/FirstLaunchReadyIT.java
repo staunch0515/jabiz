@@ -49,7 +49,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  * others or the run's end, and the report lists what did not run.
  */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.MOCK, properties = {
-    "jabiz.first-launch.await-interval=50ms", "jabiz.jobs.lock-at-least-for=0s",
+    "jabiz.first-launch.await-interval=50ms", "jabiz.jobs.lock-at-least-for=0s", "jabiz.first-launch.ready-attempts=2",
     "jabiz.mail.enabled=true", "jabiz.mail.from=jabiz@example.com", "jabiz.mail.base-url=https://app.example.com",
     "spring.mail.host=localhost", "spring.mail.port=3047",
     "jabiz.security.entries.admin.accepted-roles=IT_STAFF," + WaitingRole.CODE})
@@ -281,13 +281,19 @@ class FirstLaunchReadyIT extends SignUpItSupport {
                 .containsEntry("root", "FIRST_LAUNCH_ADVANCE").containsEntry("actor_id", "system"));
         assertThat(run().state()).as("Carol has not accepted").isEqualTo(FirstLaunchRun.State.CONTENT_DONE);
 
-        // Carol's step fails: her item fails, the others go on, and the run ends without it, reporting it.
+        // Carol's step fails: her item fails, the others go on. A failure may pass (a conflict, a busy lock): the run
+        // waits while the job tries it again, and ends without it once it has failed ready-attempts (2) times in a row.
         acceptAndBind(C);
         assertThat(advance()).isEqualTo(JobRunner.Outcome.PARTIAL);
         assertThat(rolesOf(userId(C))).as("her grant is in an item of its own").contains("IT_STAFF");
         assertThat(JOINED).as("not again").hasSize(1);
-        advance();
+        assertThat(run().state()).as("one failure: still waiting").isEqualTo(FirstLaunchRun.State.CONTENT_DONE);
+        for (int i = 0; i < 5 && run().state() != FirstLaunchRun.State.DONE; i++) {
+            advance();
+        }
         assertThat(run().state()).isEqualTo(FirstLaunchRun.State.DONE);
+        assertThat(query("SELECT max(attempt) AS attempts FROM sys_job_item_failure WHERE item_key LIKE 'r%'"))
+            .singleElement().satisfies(row -> assertThat(((Number) row.get("attempts")).intValue()).isEqualTo(2));
         assertThat(text(to(A).getLast())).contains("#2 (user " + userId(C) + "): the application's steps for a ready"
             + " account did not run").contains(": join");
         assertThat(JOINED).hasSize(1);

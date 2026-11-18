@@ -51,9 +51,9 @@ public class ReadySteps {
     static final String CONFIG_MISSING = "the first-launch configuration is not there (or does not read): the"
         + " application's steps for a ready account cannot run; put it back and restart";
     /** The problem when the configuration is not the run's. */
-    static final String CONFIG_CHANGED = "the first-launch configuration differs from the run's in more than the"
-        + " accounts' addresses: the application's steps for a ready account do not run on it; put the run's"
-        + " configuration back and restart";
+    static final String CONFIG_CHANGED = "the first-launch configuration differs from the run's (in more than an"
+        + " address, or in this account's address, which it has accepted): the application's steps for the account do"
+        + " not run on it; put the run's configuration back and restart";
     /** The longest step key ({@code sys_first_launch_ready.step_key}). */
     static final int MAX_KEY = 200;
 
@@ -85,12 +85,23 @@ public class ReadySteps {
         }
         // A configuration the waiting phase refused (decision D83: more than the addresses differ) drives nothing:
         // with the accounts moved about, one account's steps would be done for another.
-        if (!settings.shape().orElse("").equals(state.recordedShape())) {
+        if (state.configShape().isEmpty()) {
+            return new Plan(List.of(), null, CONFIG_MISSING, true);
+        }
+        if (!state.configShape().equals(state.recordedShape())) {
             return new Plan(List.of(), null, CONFIG_CHANGED, true);
         }
         List<FirstLaunchAccount> accounts = config.get().accounts();
         if (recorded.position() >= accounts.size()) {
             return Plan.problem("the configuration has no account at place " + recorded.label());
+        }
+        // The shape leaves the addresses out. An address the waiting phase refused (the account had accepted, D83)
+        // is not one its user proved: the handler is not given it.
+        FirstLaunchAccountStore.Facts facts = state.facts().get(recorded.userId());
+        String configured = accounts.get(recorded.position()).email();
+        if (facts != null && (configured == null || facts.email() == null
+            || !configured.equalsIgnoreCase(facts.email()))) {
+            return new Plan(List.of(), null, CONFIG_CHANGED, true);
         }
         FirstLaunchResults results = results(state, accounts);
         List<FirstLaunchStep> steps = handler.get().whenAccountReady(config.get(), accounts.get(recorded.position()),

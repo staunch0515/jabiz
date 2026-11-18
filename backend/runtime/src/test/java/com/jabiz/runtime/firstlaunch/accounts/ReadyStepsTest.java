@@ -52,26 +52,34 @@ class ReadyStepsTest {
     private static final FirstLaunchAccountStore.Recorded B = new FirstLaunchAccountStore.Recorded(RUN, BOB, 1,
         List.of("STAFF"), false);
 
-    private static LoadWaitingState.State state(String recordedShape, Map<UUID, Set<String>> done) {
+    private static FirstLaunchAccountStore.Facts facts(UUID user, String email) {
+        return new FirstLaunchAccountStore.Facts(user, email, "name", "en", AT, AT, Set.of(), Set.of(), Set.of(), AT,
+            1, true);
+    }
+
+    private static final Map<UUID, FirstLaunchAccountStore.Facts> AS_CONFIGURED = Map.of(
+        ALICE, facts(ALICE, "a@example.com"), BOB, facts(BOB, "b@example.com"));
+
+    private static LoadWaitingState.State state(String recordedShape, String configShape,
+        Map<UUID, FirstLaunchAccountStore.Facts> facts, Map<UUID, Set<String>> done) {
         FirstLaunchRun run = new FirstLaunchRun(RUN, "hash", AT, FirstLaunchRun.State.CONTENT_DONE, AT, null, null);
-        return new LoadWaitingState.State(run, List.of(A, B), Map.of(), Map.of(), Set.of(), false, Set.of(), done,
-            Set.of(), recordedShape);
+        return new LoadWaitingState.State(run, List.of(A, B), facts, Map.of(), Set.of(), false, Set.of(), done,
+            Set.of(), recordedShape, configShape);
+    }
+
+    private static LoadWaitingState.State state(Map<UUID, Set<String>> done) {
+        return state(SHAPE, SHAPE, AS_CONFIGURED, done);
     }
 
     private static LoadWaitingState.State state() {
-        return state(SHAPE, Map.of());
+        return state(Map.of());
     }
 
-    private static WaitingSettings settings(FirstLaunchConfig config, String shape) {
+    private static WaitingSettings settings(FirstLaunchConfig config) {
         return new WaitingSettings(null, null) {
             @Override
             public Optional<FirstLaunchConfig> config() {
                 return Optional.ofNullable(config);
-            }
-
-            @Override
-            public Optional<String> shape() {
-                return Optional.ofNullable(shape);
             }
         };
     }
@@ -115,7 +123,7 @@ class ReadyStepsTest {
     }
 
     private static ReadySteps ready(List<FirstLaunchStep> steps) {
-        return ready(settings(CONFIG, SHAPE), handler(steps));
+        return ready(settings(CONFIG), handler(steps));
     }
 
     private static FirstLaunchStep join(String key) {
@@ -179,26 +187,45 @@ class ReadyStepsTest {
 
     @Test
     void withoutTheConfigurationNothingRunsAndNothingFails() {
-        ReadySteps.Plan plan = ready(settings(null, null), handler(List.of(join("join")))).of(state(), A);
+        ReadySteps.Plan plan = ready(settings(null), handler(List.of(join("join")))).of(state(), A);
         assertThat(plan.steps()).isEmpty();
         assertThat(plan.unavailable()).isTrue();
         assertThat(plan.problem()).isEqualTo(ReadySteps.CONFIG_MISSING);
+        // Read, but its directory could not be hashed: the same.
+        assertThat(ready(List.of(join("join"))).of(state("", "", AS_CONFIGURED, Map.of()), A).problem())
+            .isEqualTo(ReadySteps.CONFIG_MISSING);
     }
 
     @Test
     void aConfigurationOfAnotherShapeThanTheRunsDrivesNothing() {
         // With the accounts reordered, Bob's place holds Alice: her steps would be done for him.
-        ReadySteps steps = ready(settings(CONFIG, "shape-2"), handler(List.of(join("join"))));
-        ReadySteps.Plan plan = steps.of(state(), A);
+        ReadySteps steps = ready(List.of(join("join")));
+        ReadySteps.Plan plan = steps.of(state(SHAPE, "shape-2", AS_CONFIGURED, Map.of()), A);
         assertThat(plan.steps()).isEmpty();
         assertThat(plan.unavailable()).isTrue();
         assertThat(plan.problem()).isEqualTo(ReadySteps.CONFIG_CHANGED);
-        assertThat(steps.of(state("", Map.of()), A).unavailable()).as("none recorded").isTrue();
+        assertThat(steps.of(state("", SHAPE, AS_CONFIGURED, Map.of()), A).unavailable()).as("none recorded").isTrue();
+    }
+
+    @Test
+    void anAccountsAddressChangedInTheConfigurationDrivesNothingForIt() {
+        // The shape leaves addresses out; Alice accepted, so the waiting phase refused the change: not her address.
+        ReadySteps steps = ready(List.of(join("join")));
+        LoadWaitingState.State changed = state(SHAPE, SHAPE, Map.of(ALICE, facts(ALICE, "alice@other.example"),
+            BOB, facts(BOB, "b@example.com")), Map.of());
+        ReadySteps.Plan plan = steps.of(changed, A);
+        assertThat(plan.steps()).isEmpty();
+        assertThat(plan.unavailable()).isTrue();
+        assertThat(plan.problem()).isEqualTo(ReadySteps.CONFIG_CHANGED);
+        assertThat(steps.of(changed, B).steps()).as("Bob's is his").hasSize(1);
+        // Case does not matter.
+        assertThat(steps.of(state(SHAPE, SHAPE, Map.of(ALICE, facts(ALICE, "A@Example.com")), Map.of()), A).steps())
+            .hasSize(1);
     }
 
     @Test
     void twoHandlersAreAProblemAsForTheRunner() {
-        ReadySteps.Plan plan = ready(settings(CONFIG, SHAPE), handler(List.of(join("join"))),
+        ReadySteps.Plan plan = ready(settings(CONFIG), handler(List.of(join("join"))),
             handler(List.of(join("join")))).of(state(), A);
         assertThat(plan.steps()).isEmpty();
         assertThat(plan.problem()).contains("2 first-launch handlers");
@@ -220,11 +247,11 @@ class ReadyStepsTest {
         ReadySteps steps = ready(List.of(join("join"), join("welcome")));
         Account ready = account(AT, AT, RoleState.APPLIED, true);
         assertThat(steps.waitingFor(state(), A, ready)).containsExactly("join", "welcome");
-        assertThat(steps.waitingFor(state(SHAPE, Map.of(ALICE, Set.of("join"))), A, ready)).containsExactly("welcome");
+        assertThat(steps.waitingFor(state(Map.of(ALICE, Set.of("join"))), A, ready)).containsExactly("welcome");
         assertThat(steps.waitingFor(state(), A, account(null, null, RoleState.APPLIED, true))).isEmpty();
-        assertThat(ready(settings(null, null), handler(List.of(join("join")))).waitingFor(state(), A, ready))
+        assertThat(ready(settings(null), handler(List.of(join("join")))).waitingFor(state(), A, ready))
             .as("the configuration missing: reported, not waited for").isEmpty();
-        assertThat(ready(settings(null, null), handler(List.of(join("join")))).notRun(state(), A))
+        assertThat(ready(settings(null), handler(List.of(join("join")))).notRun(state(), A))
             .containsExactly(ReadySteps.CONFIG_MISSING);
     }
 }
