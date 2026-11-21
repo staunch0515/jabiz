@@ -65,6 +65,13 @@ public class QbFirstLaunch implements FirstLaunchHandler {
 
     private static final String MESSAGES = "qb.firstLaunch.";
 
+    /**
+     * The key of an account's one step once it is ready ({@link QbFirstLaunchChecks} keeps an account to one
+     * operator). The platform records the key and refuses one that holds the account's key (its user's name), which
+     * is made of letters, digits, '-' and '_': this key has none of them, so no account's key is in it.
+     */
+    public static final String MEMBER_STEP = "::";
+
     private final JsonMapper json;
     private final MessageCatalog messages;
     private final Clock clock;
@@ -109,13 +116,6 @@ public class QbFirstLaunch implements FirstLaunchHandler {
      * joins each operator that names it among its members (plan section 5.2). The operator is found by its lead, as
      * the waiting phase keeps no output of the content phase.
      */
-    /**
-     * The key of an account's one step once it is ready ({@link QbFirstLaunchChecks} keeps an account to one
-     * operator). The platform records the key and refuses one that holds the account's key (its user's name), which
-     * is made of letters, digits, '-' and '_': this key has none of them, so no account's key is in it.
-     */
-    public static final String MEMBER_STEP = "::";
-
     @Override
     public List<FirstLaunchStep> whenAccountReady(FirstLaunchConfig config, FirstLaunchAccount account,
         FirstLaunchResults results) {
