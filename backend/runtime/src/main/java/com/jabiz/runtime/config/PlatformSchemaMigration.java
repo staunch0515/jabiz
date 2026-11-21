@@ -70,7 +70,7 @@ public final class PlatformSchemaMigration implements FlywayMigrationStrategy {
         "sys_mail_address_optout", "sec_external_token_use", "sys_erasure", "sys_erasure_purge", "sys_erasure_item",
         "sys_account_deletion", "sys_account_deletion_end", "sys_public_counter_day", "sec_user_passkey",
         "sec_passkey_challenge", "sys_mail_text_version", "sys_mail_layout_version", "sys_first_launch_run",
-        "sys_first_launch_event");
+        "sys_first_launch_event", "sys_first_launch_account", "sys_first_launch_ready");
 
     private final Duration lockTimeout;
 

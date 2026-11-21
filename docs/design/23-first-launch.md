@@ -83,7 +83,7 @@
    - 步骤的输入由前面步骤的输出算出（`FirstLaunchResults`），只在内存中保存。
    - 每一步开始前也检查 `content-timeout`，超过即失败（与另一实例判断"过时"用同一期限）。
    - 等待的步骤（`FirstLaunchStep.await`）反复运行，每次一个新事务，直到流程返回 `true`。用于等事件投递的结果（如审批的结果），以 `jabiz.first-launch.await-interval` 为间隔，以 `content-timeout` 为限。
-3. **完成**：`FIRST_LAUNCH_RECORD` 追加 `CONTENT_DONE` 事件（平台各部分可附 `contentDoneDetail`：用户编号与配置的代号），然后打开就绪门。
+3. **完成**：`FIRST_LAUNCH_RECORD` 追加 `CONTENT_DONE` 事件（平台各部分可附 `contentDoneDetail`：用户编号与位置、哈希，不写账号的代号——代号即登录名），然后打开就绪门。
 4. **失败**：任一步失败（含超时）时：
    - 该步的事务回滚；
    - 追加 `FAILED` 事件（步骤键、错误类别、原因）；
@@ -95,7 +95,7 @@
 - `sys_first_launch_event`：`CONTENT_DONE`、`DONE`、`FAILED`、`EXPIRED`、`REVISED`。
   - 当前状态是最新一条非 `REVISED` 的事件；没有事件即 `RUNNING`。
   - 状态机由 `FIRST_LAUNCH_RECORD` 在锁住运行记录后检查：`RUNNING` → `CONTENT_DONE` 或 `FAILED`；`CONTENT_DONE` → `DONE`、`EXPIRED` 或 `REVISED`；结束后不再有事件。
-- 两张表都不存邮箱与姓名，只存哈希、代号与用户编号。
+- 两张表都不存邮箱、姓名与账号的代号（代号即登录名，是个人信息），只存哈希、步骤键与用户编号；账号的步骤键用位置（`account:#n`，§8）。V67 中 `detail` 的注释说 `REVISED` 以代号称呼账号，已由 V68 的说明取代：`REVISED` 只写用户编号（D83）。
 
 ## 5. 扩展点
 
@@ -103,7 +103,7 @@
 |---|---|---|
 | `FirstLaunchHandler`（core） | 应用，至多一个 | `validate`、`plan`；`actingProcesses`、`publishableControlKeys`（17zz23b）；`remaining`（17zz23c） |
 | `FirstLaunchPlatformSteps`（runtime） | 平台各部分 | `validate`、`plan`、`contentDoneDetail`、`detailKey`；步骤排在应用之前 |
-| `FirstLaunchStep`（core） | — | `run` / `await`，`.asAccount(代号)`（首发代行，17zz23b），`.describedAs(说明)`；账号的步骤键 `account:<代号>`（输出为用户编号，或带 `userId()` 的 record） |
+| `FirstLaunchStep`（core） | — | `run` / `await`，`.asAccount(代号)`（首发代行，17zz23b），`.describedAs(说明)`；`FirstLaunchStep.accountStepKey(代号)` 是在结果中找到账号步骤输出的键（输出为用户编号，或带 `userId()` 的 record）；账号的步骤本身以位置为键（`accountStepKeyAt(位置)` = `account:#n`），结果在内存中把 `account:<代号>` 映射到它，所以代号不进请求编号与 `op_process` |
 | `FirstLaunchRuns` | 平台各部分 | `current()`、`usersEver()`、`detail(运行, 类别)` |
 
 ## 6. 内容阶段的三项能力（决策 D82）
@@ -142,3 +142,63 @@
 - 只有运行器使用 `FirstLaunchFiles`（架构测试）。
 
 审批结果由事件投递运行，所以送审之后要用等待的步骤（`FirstLaunchStep.await`）等结果流程完成，再做依赖它的步骤（如知识结构图生效后再送审绑定它的发布）。
+
+## 8. 账号与等人阶段（17zz23c，决策 D83）
+
+**内容阶段的账号**（平台的步骤，`FirstLaunchAccountSteps`，排在应用的步骤之前）：
+- `waiting-role`：`FIRST_LAUNCH_WAITING_ROLE` 建**待命角色** `FIRST_LAUNCH_PENDING`（没有任何权限，`requireMfa = true`）；
+- 每个账号一步，键为位置 `account:#n`（不是代号：步骤键进请求编号与 `FIRST_LAUNCH_STEP` 的输入摘要，而代号即登录名；`results.userId(代号)` 与 `output(accountStepKey(代号))` 照常可用）：`FIRST_LAUNCH_ACCOUNT_CREATE` 建用户（登录名为代号，地址去掉首尾空白），**不设密码、不寄邀请**，分配待命角色，
+  并在 `sys_first_launch_account`（V68，只追加：运行、用户编号、在配置中的位置、配置的角色代码、是否收报告；**不存代号**——代号即登录名，是个人信息）记下一行；输出 `{userId}`。
+- 两个流程都是 `internal()`、只由系统身份运行，并自己确认运行处于内容阶段（`FirstLaunchContentPhase`）。
+- **校验**（有账号时）：邀请链接的入口 `admin` 须接受待命角色（否则被邀请的人登录不了、绑不了二次验证）；邮件须开启；账号的 `roles` 不能写待命角色。角色是否存在留到等人阶段（应用的步骤才建角色）。
+- `CONTENT_DONE` 的 `detail.accounts.shape`：配置的**形状**（`ConfigShape`：主文件去掉各账号 `email` 后的规范文本，加上目录中其他每个文件的哈希），供改邮箱的补救判断"只差地址"。
+
+**待命角色**（`WaitingRoleWriteCheck`，所有时态写入路径）：
+- 只有首发的两个流程（系统身份、带 `FirstLaunchGrant`）能分配它、启用它、改它的 `requireMfa`；它的权限一律拒绝。其他写入 422 `FIRST_LAUNCH_ROLE_RESERVED`。停用它、从某人收回它，照常（有写角色权限的人）。
+- 只有待命角色的账号能在 `admin` 入口登录，被要求绑定二次验证（`MFA_ENROLLMENT_REQUIRED`），之后得到一个零权限、菜单为空的会话。
+- 运行结束（`DONE` / `EXPIRED`）时由首发停用，此后谁也不能再启用或分配（上一条）。仍只持有它的账号因此登录不了。
+
+**等人阶段**：任务 `jabiz.first-launch`（`JobDefinition.forEach`，缺省每分钟，`jabiz.first-launch.cron`；核对模式下不注册）。选项模板 `jabiz.first_launch_items` 只在运行已 `CONTENT_DONE`、尚未结束时给出选项；
+每个选项一个事务（`FIRST_LAUNCH_ADVANCE`，`internal()`），按现状判断（`GrantPlan`），重复运行无害：
+
+| 选项 | 做什么 |
+|---|---|
+| 账号（键：用户编号） | 从未邀请即邀请（`SEC_USER_INVITE`，入口 `admin`）；超过 `jabiz.first-launch.remind-after`（缺省 3 天）仍未接受即再邀请一次；已接受邀请**并**已绑定二次验证时，授予配置中不使账号成为管理员的角色（`SEC_USER_ROLE_ASSIGN`，理由"First launch configuration <哈希>"）；有配置角色已生效时撤下待命角色 |
+| 管理员（键：`x` + 用户编号的 32 位十六进制） | 使账号成为管理员（D51：持有 `*` 或管理员权限，含已排期的版本）的角色，另须运维确认指纹：未确认时日志 WARN（每小时一次）给出账号的位置（`#n`）、用户编号、接受邀请与绑定二次验证的时刻与**指纹**；确认后授予 |
+| 结束（键：`end`） | 全部配置角色已 `APPLIED`、已移交（`PENDING`，由已有的管理员照常审批）或已由管理员决定（`DECIDED`：被拒的申请、给过又收回的角色，首发不再申请）且该撤的待命角色已撤 → `DONE`（运行中被删除的账号不再等）；自 `CONTENT_DONE` 起超过 `jabiz.first-launch.deadline`（缺省 14 天）→ `EXPIRED`。二者都停用待命角色、经 `FIRST_LAUNCH_REPORT` 给收报告的账号寄报告（模板 `jabiz.first-launch.report`，收件人的语言）并写日志；事件的 `detail` 只含代号、用户编号与各角色的状态。未结束时每小时一行日志说明在等谁 |
+
+- 管理员的角色排在每一轮的最后：建立期内其他人的授予当即生效；第二位管理员得到角色后建立期结束，之后的授予照常为 `PENDING`、由两位管理员审批，首发视为已移交、列入报告。
+- **指纹**：运行编号、用户编号与当前二次验证的确认时刻的 SHA-256 前 12 位十六进制（`GrantPlan.fingerprint`）。运维与本人核对后把它加入 `JABIZ_FIRST_LAUNCH_CONFIRM_ADMINS`（`jabiz.first-launch.confirm-admins`，逗号分隔，不分大小写）并重启。本人重新绑定二次验证即换指纹，旧的确认失效。不做页面。
+- 账号的状态全部从现有的表读出（`FirstLaunchAccountStore`）：邀请 = `sys_mail_message` 中模板 `jabiz.auth.invitation`、寄到当前地址的记录；接受 = 当前地址等于已证地址；二次验证 = 已确认的 `sec_user_mfa` 的确认时刻；角色 = 当前的 `sec_user_role`；移交 = 待审批的 `sec_protected_change`（`USER_ROLE`）；已决定 = 曾经分配过、或其受保护变更已有结论的角色。
+- 选项键：账号为 36 位的用户编号，管理员为 `x`（非十六进制）加 32 位十六进制。一个账号的授予在同一事务中：其中一项被拒（如职责分离冲突）时整项回滚并按任务的退避重试，直到期限（配置错误，由人照常处理）。
+- **停用与他人改址**：账号被停用（发现异常即停用），或尚未接受邀请而地址被他人改过（邀请不能寄出，D63），首发即不再为它做任何事（不邀请、不授予），列入报告的剩下事项。
+- **个人信息**：日志、报告、运行事件、请求编号与步骤的输入摘要只以位置（`#n`）与用户编号称呼账号，不写代号、姓名与邮箱（`FIRST_LAUNCH_ACCOUNT_CREATE` 的输入照常含登录名与地址，同 `SEC_USER_CREATE`，随账号的抹除清除；邀请邮件的审计记录亦然）；报告正文由 `FIRST_LAUNCH_REPORT` 在流程中按状态写出（输入只有用户编号与结束方式，不进 `input_summary`）。
+- **报告**：结束方式、各账号的角色与状态（`APPLIED` / `PENDING` / `DECIDED` / `NONE`）及接受邀请的时刻、建立期是否仍开着及其含义、待审批的授予、管理员已决定的授予、首发不再处理的账号、没有任何配置角色生效的账号、应用的 `FirstLaunchHandler.remaining`（启动时读入的配置）、撤下首发配置与 `JABIZ_FIRST_LAUNCH_*`。
+
+**改邮箱的补救**（D83，`FirstLaunchRevisions`）：等人阶段的实例启动时，配置的哈希与最近一次应用的（最近的 `REVISED` 的 `hash`，或运行的）不同：
+- 形状与 `CONTENT_DONE` 记下的相同、且有地址不同的账号都**尚未接受邀请** → 对每个以 `FIRST_LAUNCH_EMAIL_REVISE` 改地址（流程自己核对用户在 `sys_first_launch_account` 中、运行处于等人阶段），追加 `REVISED`（`detail`：`previousHash`、`hash`、`accounts`）；
+  任务随后邀请新地址（邀请按当前地址计数，所以改址后中断也不会漏邀），旧链接因地址改变而作废；没有要改的即不记 `REVISED`（另一实例已改，或只差注释）；
+- 其他任何差异（形状不同、已接受邀请的账号的地址、账号增减）→ 什么都不做，日志 WARN 说明并请在管理系统中照常办理。用户已被删除的位置不参与比较。
+- 改回原地址（A→B→A）：同样是一次更正（地址又变了，B 的链接作废，任务邀请 A），条件照旧（尚未接受邀请、从未被他人改过）。
+- 地址仍须在 `allowedEmailDomains` 之下（配置读取时校验）。
+
+**测试**：`GrantPlanTest`、`EmailRevisionTest`、`ConfigShapeTest`、`CredentialChainTest`（D83 的窄例外）；`FirstLaunchAccountsIT`（只有待命角色的账号登录与二次验证、零权限与空菜单、待命角色只属于首发、改地址与重寄、管理员改的地址仍不能邀请）、
+`FirstLaunchWaitingIT`（内容阶段之后才邀请、接受且绑定后才授予、管理员须指纹确认、撤下待命角色、管理员收回的角色不再授予、`DONE` 与报告、改邮箱的补救、两个实例同时补救、改址后由任务邀请、其他差异被拒）、`FirstLaunchExpiryIT`（期限、停用后登录不了）、
+`FirstLaunchHandoverIT`（首发账号抹除并清除后全库搜不到其代号、姓名与邮箱；请求编号与首发流程的输入摘要不含代号；地址被他人改过的账号过了提醒时间也不邀请、任务不失败；两位管理员后建立期结束、之后的受保护授予 `PENDING` 移交、被拒绝后不再申请、停用的账号不再处理、报告不含代号姓名邮箱、首发写的表与时态表没有 UPDATE / DELETE）。
+
+**未做**（17zz23c 之后）：邀请邮件中写明将得到的角色与运营商（F-LAUNCH L2）——需要首发自己的邀请模板或给 `SEC_USER_INVITE` 加可选的说明，另议。
+
+## 9. 账号就绪后的应用步骤（17zz23c2）
+
+有些事只能在本人接受邀请（邮箱已验证）之后做，例如把账号加为运营商的成员（`QB_OPERATOR_MEMBER_ADD` 要求成员的邮箱已验证）。应用以 `FirstLaunchHandler.whenAccountReady(config, account, results)` 给出（缺省为空）：
+
+- **时机**：等人阶段，该账号就绪：启用、已接受邀请、已绑定二次验证，且配置角色至少一项 `APPLIED`（只持有角色不算：管理员可能在本人接受之前手工授予）。任务 `jabiz.first-launch` 为每个账号多一个选项（键 `r` + 用户编号的 32 位十六进制），排在各账号的授予之后、管理员授予之前，所以角色生效的同一轮即运行。停用或首发不再处理的账号不运行。
+- **步骤**：只能是 `FirstLaunchStep.run`；流程须在 `FirstLaunchHandler.accountReadyProcesses()` 中（另设的清单，不用代行清单：内容阶段的代行不能调用它们）；一个账号内键唯一、至多 200 个字符、不含该账号的代号（代号即用户名，步骤键会被记下）；应用有不止一个 `FirstLaunchHandler` 时同样是问题。否则该项失败（日志说明，问题中不写步骤键）。
+  启动检查 `FIRST_LAUNCH`：清单中的流程须存在、为 `SUB_PROCESS_ONLY` 或 `INTERNAL`（不得为 `OPEN` / `ENTRY_ONLY`）、名称不含 `FIRST_LAUNCH`（平台自己的流程，含 `CONTROL_CHANGE_FIRST_LAUNCH_PUBLISH`、`APPROVAL_FIRST_LAUNCH_DECIDE`）、不同时在 `actingProcesses()` 中。
+- **results**：只有 `userId(代号)`（按配置中的位置对应本运行的账号）；`output(...)` 一律为空（内容阶段的输出不保存）。`config` 是本实例启动时读入的首发配置：等人阶段配置须仍在，且是本运行的配置——其形状（`ConfigShape`，除邮箱外的内容与目录中的文件）等于 `CONTENT_DONE` 记下的形状。
+  形状只在等人阶段需要时算一次（对配置目录做哈希，不在每次启动时；读不出时 WARN、按配置不在处理）。另外，该位置配置的邮箱须等于该账号现在的邮箱（不分大小写）：已接受邀请的账号在配置中改了邮箱（D83 不执行），handler 不得拿到未经本人验证的地址，该账号的步骤按形状不同处理。
+  不在（或读不出）、或形状不同（D83 不执行的修改，例如账号换了顺序：按位置对应的账号会错位）时，这些步骤不运行、不让该项失败、`DONE` 也不等它们；启动时日志 WARN 说明，报告把它们列为剩余事项（"放回本运行的配置并重启"）。
+- **运行**：选项流程 `FIRST_LAUNCH_ADVANCE` 以子流程 `FIRST_LAUNCH_ACCOUNT_READY`（`internal()`）运行，应用的各步骤是它的子流程，以系统身份、在同一事务中按顺序运行；已记在 `sys_first_launch_ready`（V69，只追加：运行、用户编号、步骤键）的步骤跳过，运行的步骤在同一事务中记下，所以每账号每步只运行一次。
+- **失败**：该选项回滚，任务按退避重试，不影响其他账号与选项。运行的结束（`DONE`）等待就绪账号尚未运行的步骤；失败的项由任务按退避重试，`DONE` 照样等它，直到连续失败 `jabiz.first-launch.ready-attempts`（缺省 5）次——一次冲突或 `PROCESS_BUSY` 不交给人；此后不再等（任务仍会重试，期限照常结束运行），失败的步骤留给人处理；没有运行的步骤（未就绪、失败、配置不在或不是本运行的）列入报告的剩余事项。
+  `FIRST_LAUNCH_ACCOUNT_READY` 只为本运行仍在等人阶段的账号运行步骤：运行结束之后、对不是本运行账号的用户、同一选项以不同的请求编号重放，都不再运行（`ran = 0`）。
+- **测试**：`FirstLaunchReadyChecksTest`（启动检查）；`ReadyStepsTest`（步骤的检查、就绪的条件、配置不在或形状不同）；`FirstLaunchReadyGuardsIT`（管理员手工授予而未接受的账号不运行、不是本运行的用户与运行结束后不运行、配置形状不同或不在时不运行而运行照常结束并在报告中列出、以两个请求编号重放只运行一次）；`FirstLaunchReadyIT`（未接受时不运行、角色生效的同一轮运行一次且以系统身份、血缘为 `FIRST_LAUNCH_ADVANCE` → `FIRST_LAUNCH_ACCOUNT_READY` → 应用流程、失败的账号不影响其他账号、运行照常结束、报告列出未运行的步骤）。

@@ -45,9 +45,19 @@ public record FirstLaunchStep(String key, String process, Function<FirstLaunchRe
     /** The process the platform shows for a file step in the dry run and the log. */
     public static final String FILE_PROCESS = "(file)";
 
-    /** The key of the platform's step that creates the configuration's account {@code accountKey}. */
+    /**
+     * The key by which {@link FirstLaunchResults#output} finds the output of the platform's step that creates the
+     * configuration's account {@code accountKey}. The step itself is keyed by the account's place
+     * ({@link #accountStepKeyAt}), since step keys are recorded with the operations and an account's key is its user
+     * name; the results map one to the other.
+     */
     public static String accountStepKey(String accountKey) {
         return "account:" + accountKey;
+    }
+
+    /** The key of the platform's step that creates the configuration's account at {@code position} (from 0). */
+    public static String accountStepKeyAt(int position) {
+        return "account:#" + (position + 1);
     }
 
     public FirstLaunchStep {

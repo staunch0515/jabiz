@@ -17,7 +17,6 @@ import com.jabiz.runtime.firstlaunch.FirstLaunchFiles;
 import com.jabiz.runtime.firstlaunch.FirstLaunchGate;
 import com.jabiz.runtime.firstlaunch.FirstLaunchRun;
 import com.jabiz.runtime.firstlaunch.FirstLaunchRuns;
-import com.jabiz.runtime.security.UserProcesses;
 import com.jabiz.runtime.test.PostgresIntegrationTest;
 import org.junit.jupiter.api.MethodOrderer;
 import org.junit.jupiter.api.Order;
@@ -59,8 +58,9 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  * a file too large for the policy, an undeclared policy, an account the run did not create, and any file step once
  * the content phase is over are refused.
  */
-@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.MOCK,
-    properties = "jabiz.first-launch.await-interval=50ms")
+@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.MOCK, properties = {
+    "jabiz.first-launch.await-interval=50ms", "jabiz.mail.enabled=true", "jabiz.mail.from=jabiz@example.com",
+    "jabiz.mail.base-url=https://app.example.com", "spring.mail.host=localhost", "spring.mail.port=3043"})
 @Import({FirstLaunchFilesIT.Handler.class, ItFileFixtures.class})
 @TestMethodOrder(MethodOrderer.OrderAnnotation.class)
 class FirstLaunchFilesIT extends PostgresIntegrationTest {
@@ -109,6 +109,13 @@ class FirstLaunchFilesIT extends PostgresIntegrationTest {
         }
     }
 
+    /** The objects of the file store, by path. */
+    private Set<Path> objects() throws IOException {
+        try (var walk = Files.walk(filesRoot())) {
+            return walk.filter(Files::isRegularFile).collect(java.util.stream.Collectors.toSet());
+        }
+    }
+
     static final String GPS_MARKER = "GPSLatitude-first-launch-35.6812";
 
     @org.junit.jupiter.api.AfterAll
@@ -125,7 +132,17 @@ class FirstLaunchFilesIT extends PostgresIntegrationTest {
         registry.add("jabiz.first-launch.config", () -> {
             try {
                 directory = Files.createTempDirectory("first-launch-files");
-                Files.writeString(directory.resolve("first-launch.yml"), "version: 1\n");
+                // The file steps store as an account of the configuration, made by an earlier step.
+                Files.writeString(directory.resolve("first-launch.yml"), """
+                    version: 1
+                    allowedEmailDomains: [example.co.jp]
+                    accounts:
+                      - key: owner
+                        email: owner@example.co.jp
+                        name: Owner
+                        roles: [ADMIN]
+                        report: true
+                    """);
                 Files.createDirectories(directory.resolve("sponsors/hq"));
                 // A package with the image inside, as the sponsor page exports it.
                 Files.writeString(directory.resolve("sponsors/hq/package.json"), "{\"img1\":\""
@@ -188,8 +205,6 @@ class FirstLaunchFilesIT extends PostgresIntegrationTest {
                 @Override
                 public List<FirstLaunchStep> plan(FirstLaunchConfig config) {
                     return List.of(
-                        FirstLaunchStep.run(FirstLaunchStep.accountStepKey("owner"), "SEC_USER_CREATE", results ->
-                            new UserProcesses.CreateUserInput("fl-owner", null, null, null, true, null, null, false)),
                         FirstLaunchStep.file("img1", new FirstLaunchStep.FileSource(CommerceFiles.IMAGE,
                             "sponsors/hq/package.json", fromPackage("img1"), "picture")).asAccount("owner"),
                         FirstLaunchStep.await("hold", "FL_IT_HOLD_FILES", results -> new Ask()));
@@ -218,7 +233,7 @@ class FirstLaunchFilesIT extends PostgresIntegrationTest {
     }
 
     private String owner() {
-        return String.valueOf(query("SELECT DISTINCT user_id FROM sec_user_version WHERE user_name = 'fl-owner'")
+        return String.valueOf(query("SELECT DISTINCT user_id FROM sec_user_version WHERE email = 'owner@example.co.jp'")
             .getFirst().get("user_id"));
     }
 
@@ -284,7 +299,8 @@ class FirstLaunchFilesIT extends PostgresIntegrationTest {
         dry.afterSingletonsInstantiated();
         dry.onApplicationEvent(null);
         assertThat(dryExits).containsExactly(0);
-        assertThat(output.getOut()).contains("img1 (process (file), as owner)");
+        // Named by its place, not its key (the user's name).
+        assertThat(output.getOut()).contains("img1 (process (file), as #1)").doesNotContain("as owner");
 
         // The step's image was stored, re-encoded, as the owner's own upload.
         Map<String, Object> stored = query("SELECT uploaded_by, content_type, policy FROM sys_file").getFirst();
@@ -310,6 +326,8 @@ class FirstLaunchFilesIT extends PostgresIntegrationTest {
         assertThat(store(owner, ItFileFixtures.PRIVATE, "sponsors/hq/package.json", fromPackage("gps")).version())
             .isEqualTo(4);
 
+        long before = (Long) query("SELECT count(*) AS files FROM sys_file").getFirst().get("files");
+        Set<Path> objects = objects();
         assertThatThrownBy(() -> store(owner, CommerceFiles.IMAGE, "../outside.png", Function.identity()))
             .hasMessageContaining("leaves");
         assertThatThrownBy(() -> store(owner, CommerceFiles.IMAGE, directory.resolve("big.bin").toString(),
@@ -341,14 +359,14 @@ class FirstLaunchFilesIT extends PostgresIntegrationTest {
         assertThatThrownBy(() -> store(owner, ItFileFixtures.TINY, "big.bin", Function.identity()))
             .hasMessageContaining("has changed since the configuration was read");
 
-        long before = (Long) query("SELECT count(*) AS files FROM sys_file").getFirst().get("files");
         // An account with a credential of its own is no longer acted as, for files either.
         execute("INSERT INTO sec_refresh_token (token_hash, family_id, user_id, issued_at, expires_at)"
             + " VALUES (?, ?, ?::uuid, now(), now() + interval '1 day')", "b".repeat(64), UUID.randomUUID(), owner);
         assertThatThrownBy(() -> store(owner, CommerceFiles.IMAGE, "sponsors/hq/package.json", fromPackage("img1")))
             .hasMessageContaining("has a credential of its own");
-        // Refused registrations leave no row behind (their stored objects are deleted).
+        // Refused steps leave no row and no stored object behind (a refused registration deletes its object).
         assertThat(query("SELECT count(*) AS files FROM sys_file").getFirst().get("files")).isEqualTo(before);
+        assertThat(objects()).isEqualTo(objects);
     }
 
     @Test

@@ -22,15 +22,17 @@ import java.util.UUID;
 /**
  * The file steps of the first launch (decision D82, docs/design/23-first-launch.md section 6): the bytes come from the
  * configuration's directory only ({@link FirstLaunchConfig.Files}: normalised paths that stay inside it, no symbolic
- * links, the size limit), go through the platform's whole upload pipeline ({@link FileUploadService#storeGenerated}:
- * the type recognised from the content, images re-encoded without their metadata, the policy's size and types) and
- * are registered as the upload of the step's account, so that content processes, which accept only their actor's own
- * uploads, take them. Nothing is loosened for the first launch but the upload permission, which an account the run
- * created has not yet: in its place stand the handler's declared policies and the conditions of acting (a user the run
- * created with no credential of their own, while the run's content phase goes on). The bytes in memory are bounded
- * twice: the source file is read only up to {@code jabiz.first-launch.max-file-bytes}, and what the handler picks out
- * of it is held to the policy's size before anything else is done with it (413). Only the runner uses this class (an
- * architecture test).
+ * links, each file as its SHA-256 was when the configuration was read, the size limit), go through the platform's
+ * whole upload pipeline ({@link FileUploadService#storeGenerated}: the type recognised from the content, images
+ * re-encoded without their metadata, the policy's size and types), and are then registered by the sub-process
+ * {@code FIRST_LAUNCH_FILE_REGISTER} under the run's step process {@code FIRST_LAUNCH_STEP}, as the upload of the
+ * step's account, so that content processes, which accept only their actor's own uploads, take them; a refused
+ * registration deletes the stored object. The registration holds the run's row lock and checks, by the process's
+ * lineage, the content phase and the conditions of acting (a user the run created with no credential of their own);
+ * in place of the upload permission, which such an account has not yet, stand the handler's declared policies. The
+ * bytes in memory are bounded twice: the source file is read only up to {@code jabiz.first-launch.max-file-bytes},
+ * and what the handler picks out of it is held to the policy's size before anything else is done with it (413). Only
+ * the first launch's package uses this class (an architecture test).
  */
 @Component
 public class FirstLaunchFiles {

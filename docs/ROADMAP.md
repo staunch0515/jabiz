@@ -5635,7 +5635,6 @@ QuizBuks 的 #545、#546、#547 用了 43.5–45 分钟，#545 到点被取消�
 
 **17zz22 状态**：进行中。
 
-
 ### 17zz23 首发配置：一个配置文件，启动即完成首发初始化（2026-11-18，QuizBuks F-LAUNCH）
 
 **缘由**：全新系统的初始化原来要两位管理员按步骤操作，需求方要求"不要页面，必须更简单"。计划与审查见 QuizBuks 应用分支的 `docs/quizbuks/plans/impl/F-LAUNCH.md`（需求方已确认）。设计 23。分三个 PR：17zz23a（运行器）、17zz23b（内容阶段的三项能力与 D82）、17zz23c（账号与等人阶段）。
@@ -5657,8 +5656,43 @@ QuizBuks 的 #545、#546、#547 用了 43.5–45 分钟，#545 到点被取消�
 | 17zz23b-5 | 文档：决策 D82、设计 23 §6、04 §9.1、10、18 §3.5、`CLAUDE.md` 第 4 节"审批与职责分离" |
 | 17zz23b-6 | 审查修正：三项能力按 `op_process` 血缘判断（顶层是本运行的 `FIRST_LAUNCH_STEP`），不再看请求编号；`RequestContextWebFilter` 替换客户端给出的 `first-launch…` 请求编号；参数初值发布只限受控参数与审批规则、提议人须是系统；"从未有过凭据"含会话与成功的登录；启动检查 `FIRST_LAUNCH`；`FirstLaunchActing` 与架构测试；过时的运行由另一实例先记失败时照样启动失败 |
 | 17zz23b-7 | 测试：`FirstLaunchPowersIT` 的探查改为真实的步骤（伪造的请求编号、账号调用发布、带限额的级、本人有了密码后不再代行）；`FirstLaunchFailureIT`（失败后不再有步骤）；`FirstLaunchStartupIT`（与 `.always` 互斥）；`FirstLaunchStaleIT`（超时的运行由下一次启动记为失败，运行中的实例随之退出）；`RequestContextWebFilterTest` |
+| 17zz23c-1 | 账号：平台步骤 `FirstLaunchAccountSteps`（`waiting-role`、`account:#n`，代号不进 `op_process`）、待命角色 `FIRST_LAUNCH_PENDING` 与 `WaitingRoleWriteCheck`（`FIRST_LAUNCH_ROLE_RESERVED`）、V68 `sys_first_launch_account`；校验入口接受待命角色、邮件开启 |
+| 17zz23c-2 | 等人阶段：任务 `jabiz.first-launch`（`FIRST_LAUNCH_ADVANCE`：邀请与再邀请、授予、管理员最后且须指纹确认、撤下待命角色、`DONE` / `EXPIRED`、报告 `FIRST_LAUNCH_REPORT`） |
+| 17zz23c-3 | 改邮箱的补救（D83）：`FIRST_LAUNCH_EMAIL_REVISE`、`CredentialChain` 的窄例外、`ConfigShape`、`FirstLaunchRevisions`、`REVISED` |
+| 17zz23c-4 | 测试：`GrantPlanTest`、`EmailRevisionTest`、`ConfigShapeTest`、`CredentialChainTest`、`FirstLaunchAccountsIT`、`FirstLaunchWaitingIT`、`FirstLaunchExpiryIT`；文档：设计 23 §8、D83、10 §15.14、指南、`CLAUDE.md` |
+| 17zz23c-5 | 抹除：`ErasurePurger` 也清除用户邮件（如邀请）的审计记录中的地址与参数（原来遗漏，与首发无关的已有缺口，由首发账号的全库搜索发现） |
 | 17zz23d-1 | 文件步骤：core `FirstLaunchStep.file`、`FileSource`（策略、相对路径、取出字节、名称），`FirstLaunchHandler.filePolicies()`；文件步骤必须代行；runtime `FirstLaunchFiles`（声明的策略，经 `FileUploadService.storeGenerated` 存储后在 `FIRST_LAUNCH_STEP` 之下以子流程 `FIRST_LAUNCH_FILE_REGISTER` 登记为该账号的上传：行锁、内容阶段、代行条件，登记失败删除对象；输出文件编号），配置目录的文件按启动时的摘要读取（新增、改写即拒绝），运行器先于代行流程的检查处理文件步骤，启动校验与试运行一次报全文件步骤的问题；启动检查 `FIRST_LAUNCH` 要求策略存在、不空白；架构测试 |
 | 17zz23d-2 | 测试 `FirstLaunchFilesIT`：从包中取出的图片以代行存储（上传者为该账号、重新编码、文件名不进记录）；带 EXIF/GPS 的 JPEG 存储后不含 GPS；`privateMetadata()` 策略得随机编号；试运行输出含文件步骤；登记的父流程是 `FIRST_LAUNCH_STEP`；出目录的路径、绝对路径、中途的符号链接、启动后新增或改写的文件、不是图片的内容、超出策略大小、未声明的策略、取出为空、系统身份、非本运行的账号、有会话的账号都被拒且不留下行；内容阶段后被拒。`FirstLaunchConfigReaderTest`（摘要）。`FirstLaunchChecksTest`（不存在的策略）。文档：设计 23 §6、D82 补充、`CLAUDE.md` 文件 |
+| 17zz23c2-1 | 账号就绪后的应用步骤：`FirstLaunchHandler.whenAccountReady`、`accountReadyProcesses()` 与启动检查、选项 `r…`、`FIRST_LAUNCH_ACCOUNT_READY`、V69 `sys_first_launch_ready`（每步一次）、失败不影响他人并列入报告；测试 `FirstLaunchReadyChecksTest`、`FirstLaunchReadyIT`；设计 23 §9 |
+| 17zz23e | #740 复核的后续：文件步骤的问题与排除的设置一次报全，文件步骤的账号须是配置中的、且其建号步骤在前；启动检查拒绝以 `FIRST_LAUNCH_*` 作代行流程；架构测试只允许 `runtime.file` / `external` / `firstlaunch` 依赖 `FileUploadService`；`FirstLaunchFilesIT` 断言被拒的步骤不留下行与存储的对象；文档：设计 14 §13、`CLAUDE.md` 的 `sys_file` 写入途径、`FirstLaunchFiles` 类注释 |
+
+### 17zz24 子流程只读已存储的状态：写明并留痕（2026-11-18，QuizBuks S6 报告）
+
+**缘由**：流程先 `ctx.changes().update` 用户的邮箱、再以 `CallProcess` 调用 `SEC_USER_INVITE`，邀请检查并寄到**旧地址**。查明不是 D46"读之前写出"的漏洞：`AddressVerifiable`（`ProtectedGrants.credentials`）与收件人解析都经 `StorageEngine.select`，引擎的缓冲写入在读其表之前一律先写出；原因是 `ctx.changes()` 登记的变更要到流程结束或 `SaveChanges` 才提交，`CallProcess` 不替父流程提交，子流程读到的是已存储的状态。总控决定不改行为（改了会动 D11 的语义与所有子流程调用点的语句数），写明并留痕。
+
+| # | 内容 |
+|---|---|
+| 17zz24-1 | 测试 `CallProcessSeesOnlyCommittedChangesIT`（真实 PostgreSQL）：父流程先 `SaveChanges` 再调 `SEC_USER_INVITE`，子流程看得到新地址（邀请被拒 `INVITATION_ADDRESS_CHANGED`）；不 `SaveChanges`，邀请寄给旧地址、新地址在父流程结束时才存储 |
+| 17zz24-2 | `CallProcess`：带着未提交变更调用子流程时记 DEBUG 日志（不刷 WARN）；Javadoc 写明 |
+| 17zz24-3 | 文档：设计 06 §2.1（`SaveChanges` 一行）与 §5（父流程登记、尚未提交的变更对子流程不可见） |
+
+**验收**：`CallProcessSeesOnlyCommittedChangesIT` 绿；`StatementBudgetIT` 不受影响（只加日志）。
+
+**17zz24 状态**：草稿 PR 待合并。
+
+### 17zz26 Gradle 拉依赖遇到 429 时多等一会儿再试（2026-11-18，QuizBuks 的 e2e 冷启动失败）
+
+**缘由**：QuizBuks 的 e2e 与 package 作业在冷启动的运行器上解析 `spring-boot-gradle-plugin:4.0.9` 的依赖（`spring-boot-buildpack-platform`、`spring-boot-loader-tools`、`spring-core`）时，Maven Central 对共享出口返回 429（`Could not GET … Received status code 429`）或 `Could not find`（#737、#739）。Gradle 9.1 已把 408、429 与 5xx 当作暂时的网络问题并指数退避，但只试 3 次、首次间隔 1 秒，不够。与 17zz25（`pluginManagement` 列出仓库，#745）配合：那一项让根工程直接问 Central，这一项让它在被限流时多等。
+
+| # | 内容 |
+|---|---|
+| 17zz26-1 | `backend/gradle.properties`（新）：`systemProp.org.gradle.internal.network.retry.max.attempts=6`、`…network.retry.initial.backOff=2000`（传输层，每次下载）；`…repository.max.tentatives=5`、`…repository.initial.backoff=1000`（仓库访问层，模块元数据） |
+| 17zz26-2 | 核对属性名与默认值取自 Gradle 9.1 的类（`NetworkOperationBackOffAndRetry`：3 次、1000 毫秒；`NetworkingIssueVerifier` 对 408、429 与服务器错误重试；`ErrorHandlingModuleComponentRepository`：`max.tentatives`、`initial.backoff`）；本地以 `-Dorg.gradle.internal.repository.max.tentatives=0` 验证构建读取该属性（解析报 "Unexpected state"，不设时正常） |
+
+**验收**：本地联网 `./gradlew :core:compileJava` 通过；CI 绿。429 本身无法在本地复现，效果以之后冷启动的运行为准。
+
+**17zz26 状态**：草稿 PR 待合并。
+
 ### 线 1.3 的候选（未排期，2026-11-08 总控：首次上线前不做）
 
 | 候选 | 缘由 | 粗估 |
