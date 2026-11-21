@@ -242,7 +242,7 @@ public class FirstLaunchWaiting {
             if (!state.facts().containsKey(recorded.userId())) {
                 continue;
             }
-            List<String> notRun = ready.notRun(state, recorded);
+            List<String> notRun = ready.notRunDescribed(state, recorded);
             if (!notRun.isEmpty()) {
                 remaining.add(messages.find("first-launch.report.ready-not-run", locale)
                     .orElse("{key} (user {user}): the application's steps did not run: {steps}")

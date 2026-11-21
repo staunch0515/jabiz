@@ -3,6 +3,19 @@ import { ADMIN, adminToken, CARRIERS, chooseLanguage, datasetPath, insert, signI
 
 /** Sign-in, the dynamic menu, languages and what the UI offers by permission (ROADMAP phase 10 requirement 4). */
 test.describe('sign-in and navigation', () => {
+  test('the test system badge lets clicks through to what is under it (17zz27)', async ({ page }) => {
+    await page.goto('/login')
+    const name = page.getByTestId('environment-badge').locator('span.uppercase')
+    await expect(name).toBeVisible()
+    // The point of the capsule's own words: nothing of the badge is there to take a click (its close key aside).
+    const box = (await name.boundingBox())!
+    const covered = await page.evaluate(({ x, y }) => {
+      const hit = document.elementFromPoint(x, y)
+      return !!hit?.closest('[data-testid="environment-badge"]')
+    }, { x: box.x + box.width / 2, y: box.y + box.height / 2 })
+    expect(covered).toBe(false)
+  })
+
   test('a wrong password is refused with the server message', async ({ page }) => {
     await page.goto('/data')
     await expect(page).toHaveURL(/\/login$/)
