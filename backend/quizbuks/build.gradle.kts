@@ -79,6 +79,12 @@ tasks.named<Test>("test") {
     useJUnitPlatform {
         excludeTags("perf")
     }
+    // F-LAUNCH Q1: the package plan's shared cases and the page's plans of them (PackagePlanCasesTest) are outside the
+    // module; a change of either runs the tests again. The case writer runs only when its variable asks for it.
+    inputs.files(rootProject.layout.projectDirectory.files(
+        "../quizbuks-web/sponsor/src/profile/package-plan-cases.json",
+        "../quizbuks-web/sponsor/src/profile/package-plan-expected.json"))
+    inputs.property("packagePlanCasesWrite", providers.environmentVariable("PACKAGE_PLAN_CASES_WRITE").orElse(""))
 }
 
 // platformCheck starts the application with application.yml only: Stripe's webhook secrets, which come from the

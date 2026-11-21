@@ -179,6 +179,8 @@
 
 实现：每类目标是一个 `ControlTarget` Bean（runtime `approval`：加载所基于的状态、检查提案、检查并登记发布的写入；记下的值写成 JSON 后不得超过目标的 `maxValuesLength()`，缺省 30000 字符，超过即 422 `TOO_LONG`，列本身不限长，17zt）；审批规则、限额、职责分离规则为 `ApprovalControlTarget`，参数为 `ParamControlTarget`。
 
+**首发配置的例外**（17zz23b，决策 D82）：在首发的内容阶段中，系统以 `CONTROL_CHANGE_FIRST_LAUNCH_PUBLISH` 发布本运行提议的受控变更（只限应用列出的目标键，发布人 `first-launch`），以 `APPROVAL_FIRST_LAUNCH_DECIDE` 批准本运行开出的审批请求（每级一条决定 `first-launch:<级>`，带限额的级拒绝）。内容阶段结束后两者永久关闭（设计 23 §6）。
+
 ### 3.6 影响预览
 
 `POST /api/approvals/preview`（权限 `approval.read`）：`{subject, ruleId?, draft?: {ruleCode, condition, levels, priority, enabled}, limit?}`。

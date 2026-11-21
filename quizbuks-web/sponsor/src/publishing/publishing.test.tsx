@@ -1054,6 +1054,18 @@ describe('the reward method (Q22)', () => {
     expect(processCalls('QB_PUBLICATION_SAVE')[0]).toMatchObject({ rewardMethod: 'SPONSOR_CASH' })
   })
 
+  it('saves a draft from its first page with an allowed method when the one it keeps is no longer allowed', async () => {
+    // A draft saved while the platform's Kudos was allowed; the method is chosen on the policy step, which the first
+    // page's save never reaches, so the save must not send the method the sponsor may no longer use.
+    const { processCalls } = server({ methods: 'SPONSOR_CASH,OFFLINE_REDEEM', processes: { QB_PUBLICATION_SAVE: [saved(4)] } })
+    window.history.replaceState(null, '', '/publications/p1?step=0')
+    render(<App />)
+    await screen.findByTestId('publication-wizard')
+    await userEvent.click(screen.getByTestId('publication-next'))
+    await waitFor(() => expect(processCalls('QB_PUBLICATION_SAVE')).toHaveLength(1))
+    expect(processCalls('QB_PUBLICATION_SAVE')[0]).toMatchObject({ rewardMethod: 'SPONSOR_CASH' })
+  })
+
   it('lists the cash rewards owed and marks one paid with a note', async () => {
     const reward = { cashRewardId: 'c1', code: 'C-ABCD1234', publicationId: 'p1', publicationName: 'Coffee week',
       takerName: 'Mei', amount: '100', status: 'DUE', dueAt: '2026-10-20T01:00:00Z', payBy: '2026-11-03T01:00:00Z',

@@ -54,7 +54,7 @@ jabiz 是一个**元数据驱动的业务应用平台**：开发者声明实体�
   业务单据号（不能缺号、不能重复）只经 `NumberSequence` Bean 与流程步骤 `AssignNumber` 取得（18 §2、决策 D23），不自己计数。
 - **审批与职责分离**（见 18 §3–§4 与决策 D23）：需要审批的单据声明 `ApprovalSubject` Bean，流程中用 `RequireApproval` 取得结论（批准绑定内容哈希），
   以订阅 `jabiz.approval.approved` / `rejected` 继续；不自己写审批状态机或"准备人不能审批"之类的检查。审批对象的显示名写在消息 `approval.subject.<名>`，`ApprovalCase.reference(…)` 给出人认得的单据标识（待办标题用它，18 §5.2）。审批规则、限额、职责分离规则与受控的业务参数（`ControlledParams` Bean，04 §9.1、决策 D40）只经
-  `CONTROL_CHANGE_PROPOSE` / `CONTROL_CHANGE_PUBLISH`（四眼）修改。
+  `CONTROL_CHANGE_PROPOSE` / `CONTROL_CHANGE_PUBLISH`（四眼）修改。唯一的例外是首发配置的内容阶段（决策 D82：`CONTROL_CHANGE_FIRST_LAUNCH_PUBLISH`、`APPROVAL_FIRST_LAUNCH_DECIDE`，只对本运行做的、应用列出的对象），业务代码不调用它们之外的途径。
   授予受保护的权限（`jabiz.security.protected-grants.permissions`，缺省含 `*`、改权限、审批、记账、改参数与补跑定时任务（`job.run`）的权限）、对其持有人重设密码 / 二次验证 / 关联外部账号，
   须另一位管理员审批（10 §16、决策 D48）：只经 `SEC_USER_ROLE_ASSIGN`、`SEC_ROLE_PERMISSION_ADD`、`SEC_USER_IDENTITY_LINK`、`SEC_USER_SET_PASSWORD`、`SEC_MFA_RESET`、`SEC_USER_EMAIL_SET`（持有人的邮箱），
   平台在 `VersionAppender` 中拒绝其他途径；不在业务流程中自己授予这类权限；建立期（首个管理员之外不足两位 `*` 管理员）内当即生效，之后首个管理员永久退出受保护的操作。
@@ -129,10 +129,10 @@ jabiz 是一个**元数据驱动的业务应用平台**：开发者声明实体�
 - **数据期限**（见 10 §13.2 与决策 D28 第 8 条）：只能看某一期间数据的人以带 `dataFrom` / `dataTo` 的角色分配表达；受期限约束的数据视图明确声明
   `scope(s -> s.withinDataPeriod("时间字段"))`（或经引用：`withinDataPeriod("引用字段", "被引用的不可变时间字段")`）。没有期限即不受限制，未声明的数据视图不受期限影响。
 - **访问审查**（见 10 §13.3 与决策 D28 第 9 条）：访问权限报表是模板 `jabiz.security.access_review`，以 `REPORT_ISSUE` 按期末签发；签核只经 `ACCESS_REVIEW_SIGN_OFF`。
-- **文件**（见 14 与决策 D18）：上传只经 `/api/files?policy=…`（另一个入口只有外部作业的文件输出，走同一流水线、以请求人登记，14 §11、D50），类型按内容判定、图片一律重新编码（去掉 EXIF/GPS）；
+- **文件**（见 14 与决策 D18）：上传只经 `/api/files?policy=…`（首发配置的文件步骤除外：以代行的账号经同一流水线存储配置目录中的文件，D82、23 §6；另一个入口只有外部作业的文件输出，走同一流水线、以请求人登记，14 §11、D50），类型按内容判定、图片一律重新编码（去掉 EXIF/GPS）；
   `privateMetadata()` 策略的文件编号是随机的 UUIDv4（主键约定的例外，D48），其余为 UUIDv7；
   字段用 `f.kind(FileKind.of("策略"))` 引用文件（列 `uuid`，不加外键），策略（`FilePolicy` Bean）必须声明上传与读取权限；原名与上传者不应让其他读者看到的策略声明 `privateMetadata()`（只有上传者与 `file.read` 看得到，下载名为中性名，14 §5.1、决策 D47）。
-  `sys_file` 是可删除的普通表，只经 `FILE_REGISTER` / `FILE_DELETE` / `FILE_PURGE_ORPHANS` 写入；业务流程删除文件前先清空引用并
+  `sys_file` 是可删除的普通表，只经 `FILE_REGISTER`（上传与 `/api/files/fetch` 的链接图片都经它）/ `FIRST_LAUNCH_FILE_REGISTER`（首发的文件步骤，23 §6）/ `FILE_DELETE` / `FILE_PURGE_ORPHANS` 写入；业务流程删除文件前先清空引用并
   `SaveChanges.now`，再 `CallProcess.of("FILE_DELETE", …)`。文件名不进 `input_summary`；`FileStore` 返回 `Mono`/`Flux`，不对业务开放。
   服务器生成、交给外部的文件（银行付款文件、申报文件）不进 `sys_file`：业务流程以子流程 `CallProcess.of("FILE_ARCHIVE", …)` 原样保存到只追加的 `sys_generated_file`
   （声明读取所需的权限），下载只经 `GET /api/generated-files/{id}`（记入 `sys_reveal_record`）；不自建存档表（14 §10、决策 D31）。
@@ -143,6 +143,12 @@ jabiz 是一个**元数据驱动的业务应用平台**：开发者声明实体�
   不设标记；需要立即撤下时在流程的提交后步骤 `FileAccess.invalidate(...)`。公开读取不写操作记录。
   匿名访客的浏览与点击只经公开计数器（`PublicCounter` Bean，键来自公开视图的白名单字段，`owner(字段)` 记下键的所有人供应用按读者限定，所有人是用户账号时加 `ownerIsUser()`，删除账号时计数随之删除；前端 `countPublic`；`POST /api/public/counters/{计数器}/{键}`，
   每访客每天一次、只在内存中去重、按日聚合到 `sys_public_counter_day`，15 §10、决策 D65），不自写匿名写入的接口或逐次记录访问。
+- **首发配置**（见 23 与 17zz23）：全新系统（从未有过用户）的初始化只经 `JABIZ_FIRST_LAUNCH_CONFIG` 与应用的 `FirstLaunchHandler`（core，同步：校验与步骤计划；步骤是现有流程，由平台以 `FIRST_LAUNCH_STEP` 逐个运行，请求编号 `first-launch-<运行>-<步骤>`），
+  不另写启动时初始化数据的代码；首发配置不含秘密，与引导管理员（`JABIZ_BOOTSTRAP_ADMIN_USER`）、`protected-grants.always` 互斥；内容阶段完成之前对外 503 `FIRST_LAUNCH_IN_PROGRESS`；
+  内容阶段出错即记录并退出，不续做：修改后清空数据库与文件目录重来。
+  首发的账号只由平台建（不设密码、内容阶段之后才邀请），持有待命角色 `FIRST_LAUNCH_PENDING`（无权限、要求二次验证，只属于首发，`FIRST_LAUNCH_ROLE_RESERVED`）；配置的角色由任务 `jabiz.first-launch` 在本人接受邀请并绑定二次验证后以 `SEC_USER_ROLE_ASSIGN` 授予，
+  使人成为管理员（D51）的角色另须运维以指纹确认（`JABIZ_FIRST_LAUNCH_CONFIRM_ADMINS`）；等人阶段只接受改尚未接受邀请的账号的邮箱（D83）；不另写授予或邀请首发账号的代码（23 §8）。
+  须在账号就绪（本人已接受邀请）之后才能做的应用步骤只以 `FirstLaunchHandler.whenAccountReady` 给出（流程须在另设的 `accountReadyProcesses()` 中，只限子流程或内部流程，每账号每步一次，23 §9）。
 - **启动即失败**：元数据、数据视图、流程、SQL 模板、表结构的不一致，必须在启动时一次性全部报告，而不是等到请求触发。
   新的检查实现 `PlatformCheck`（返回问题列表，不抛异常），启动与 `platformCheck` 共用。
 - **单据**（见 22 与决策 D30）：发票、确认书这类单据用 `DocumentLayout` Bean 声明（区块显示普通 SQL 模板的列，模板不写 `timeSlice`），
@@ -255,6 +261,7 @@ Gradle 9（wrapper）多模块工程，根目录为 `backend/`（模块：`core`
   启动时 Flyway 先迁移平台脚本 `db/jabiz`、再迁移业务脚本 `db/migration`）→ `frontend/` 下 `pnpm install && pnpm dev`（5173，`/api` 代理到 8080）。
   开发用操作人请求头：`--args='--spring.profiles.active=dev'`（见 01 §5）。非 dev 启动需要 `JABIZ_JWT_SECRET`、`JABIZ_INTEGRITY_KEY` 与 `JABIZ_MFA_KEY`（都是 Base64，≥32 字节，
   如 `openssl rand -base64 48`），示范应用另需外部服务 `demo-ai` 的密钥 `JABIZ_DEMO_AI_KEY`（任意值；D38）；首个管理员用 `JABIZ_BOOTSTRAP_ADMIN_USER` / `JABIZ_BOOTSTRAP_ADMIN_PASSWORD` 创建（见 10 §7）；
+  首发配置 `JABIZ_FIRST_LAUNCH_CONFIG`（只在从未有过用户的库上执行一次，试运行加 `JABIZ_FIRST_LAUNCH_DRY_RUN=true`；见 `docs/guide/first-launch.md`）；
   上传文件的存储目录 `JABIZ_FILES_LOCAL_ROOT`（非 dev 必须设置，dev 默认 `backend/app/build/jabiz-files`；见 14 §6）
 - 集成测试调用 HTTP API：`dev` profile 下用 `X-Jabiz-*` 请求头；非 dev 下用 `TestTokens.bearer(jwtService, actor, permissions…)` 签发真实令牌
   （测试配置 `config/application.properties` 提供固定测试密钥与 BCrypt 强度 4）

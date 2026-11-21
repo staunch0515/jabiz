@@ -1,6 +1,16 @@
 pluginManagement {
     // The convention plugin jabiz.boot-app (docs/design/17-apps-and-branches.md section 3.1).
     includeBuild("build-logic")
+
+    // Where the root build resolves its plugins, and the dependencies of the convention plugin's own plugins
+    // (spring-boot-gradle-plugin and what it needs: spring-core, spring-boot-buildpack-platform, ...). Without a
+    // list Gradle asks only the Plugin Portal, which hands every library over to Maven Central by redirect: a cold
+    // runner then fails with 429 or "Could not find" when Central limits the shared address. Central is asked first,
+    // directly; the Portal still serves the plugins that live only there.
+    repositories {
+        mavenCentral()
+        gradlePluginPortal()
+    }
 }
 
 rootProject.name = "backend"
