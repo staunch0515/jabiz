@@ -244,6 +244,12 @@ class QbFirstLaunchChecksTest {
         // An amount only at the value the money switches' table gives for the launch (the fees at 0).
         keys.stream().filter(key -> FirstLaunchParams.verdict(key) == FirstLaunchParams.Verdict.AMOUNT)
             .forEach(key -> assertThat(QbFirstLaunch.switchesAtLaunch()).as(key).containsKey(key));
+        // A fixed parameter is published as QB_SETUP proposed it: its declared value is the fixed one.
+        FirstLaunchParams.FIXED_VALUES.forEach((key, value) -> {
+            assertThat(QbFirstLaunch.asDeclared()).contains(key);
+            assertThat(QbParams.ALL.stream().filter(param -> param.key().equals(key)).findFirst().orElseThrow()
+                .value()).as(key).isEqualTo(value);
+        });
         // Every parameter the run publishes is one QB_SETUP proposes.
         keys.stream().filter(key -> QbParams.ALL.stream().anyMatch(param -> param.key().equals(key)))
             .forEach(key -> assertThat(QbParams.CONTROLLED).as(key).contains(key));

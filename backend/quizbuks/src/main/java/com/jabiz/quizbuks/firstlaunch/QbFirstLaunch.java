@@ -276,8 +276,8 @@ public class QbFirstLaunch implements FirstLaunchHandler {
     private static void params(QbFirstLaunchConfig sections, String reason, List<FirstLaunchStep> steps) {
         Map<String, Object> values = new LinkedHashMap<>(switchesAtLaunch());
         values.putAll(QbFirstLaunchChecks.values(sections));
-        // A settable parameter not configured, and one the launch's own processes read, take the value QB_SETUP
-        // proposed (the declared one; the processes read it from now on).
+        // A settable parameter not configured, and one fixed at its declared value, take the value QB_SETUP proposed
+        // (the declared one; the launch's own processes read it from now on).
         for (String key : asDeclared()) {
             if (QbParams.CONTROLLED.contains(key) && !values.containsKey(key)) {
                 steps.add(FirstLaunchStep.run("qb:param:" + key, ControlChanges.FIRST_LAUNCH_PUBLISH,
@@ -301,16 +301,14 @@ public class QbFirstLaunch implements FirstLaunchHandler {
     }
 
     /**
-     * Controlled parameters the first launch's own processes read (the reviews' switches: their declared value, no
-     * automatic approval, plan section 3.1), published as {@code QB_SETUP} proposed them.
+     * The parameters published as {@code QB_SETUP} proposed them: the settable ones unless configured, and those
+     * {@link FirstLaunchParams#FIXED_VALUES fixed} at their declared value (the publications' review: no automatic
+     * approval, plan section 3.1), which the configuration cannot set.
      */
-    static final List<String> READ_AT_LAUNCH = List.of(QbParams.REVIEW_PUBLICATION_AUTO);
-
-    /** The parameters published as {@code QB_SETUP} proposed them, unless configured. */
     static Set<String> asDeclared() {
         Set<String> keys = new LinkedHashSet<>();
         FirstLaunchParams.SETTABLE.stream().filter(QbParams.CONTROLLED::contains).forEach(keys::add);
-        READ_AT_LAUNCH.stream().filter(QbParams.CONTROLLED::contains).forEach(keys::add);
+        FirstLaunchParams.FIXED_VALUES.keySet().stream().filter(QbParams.CONTROLLED::contains).forEach(keys::add);
         return keys;
     }
 
