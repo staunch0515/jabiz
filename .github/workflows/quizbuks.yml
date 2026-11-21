@@ -93,9 +93,7 @@ jobs:
           distribution: temurin
           java-version: 21
       - if: ${{ needs.quizbuks-scope.outputs.docs_tests == 'true' }}
-        uses: gradle/actions/setup-gradle@v5
-        with:
-          cache-read-only: ${{ github.event_name == 'pull_request' }}
+        uses: ./.github/actions/gradle-deps
       # The documents they read are listed in tools/quizbuks/ci/scope.sh. All plain unit tests but the first launch's
       # replay of the sample (F-LAUNCH), which starts the application on PostgreSQL (Testcontainers on the runner).
       - name: The backend tests that read documents
@@ -323,10 +321,8 @@ jobs:
         with:
           distribution: temurin
           java-version: 21
-      # Pull requests read the cache their base branch wrote (as ci.yml).
-      - uses: gradle/actions/setup-gradle@v5
-        with:
-          cache-read-only: ${{ github.event_name == 'pull_request' }}
+      # The Gradle dependencies the line branch's push saved (quizbuks-gradle-cache.yml); read only.
+      - uses: ./.github/actions/gradle-deps
       - run: ./gradlew :quizbuks:bootJar
         working-directory: backend
       - name: Start the application and wait for health
@@ -453,9 +449,7 @@ jobs:
         with:
           distribution: temurin
           java-version: 21
-      - uses: gradle/actions/setup-gradle@v5
-        with:
-          cache-read-only: ${{ github.event_name == 'pull_request' }}
+      - uses: ./.github/actions/gradle-deps
       # Builds the three SPAs with pnpm and packages them into the boot jar.
       - run: ./gradlew :quizbuks:bootJar
         working-directory: backend
@@ -569,9 +563,7 @@ jobs:
         with:
           distribution: temurin
           java-version: 21
-      - uses: gradle/actions/setup-gradle@v5
-        with:
-          cache-read-only: ${{ github.event_name == 'pull_request' }}
+      - uses: ./.github/actions/gradle-deps
       - run: ./gradlew :quizbuks:bootJar
         working-directory: backend
       - name: Start the application with the first-launch configuration
@@ -666,9 +658,7 @@ jobs:
         with:
           distribution: temurin
           java-version: 21
-      - uses: gradle/actions/setup-gradle@v5
-        with:
-          cache-read-only: ${{ github.event_name == 'pull_request' }}
+      - uses: ./.github/actions/gradle-deps
       # Builds the three SPAs with pnpm and packages them into the boot jar.
       - run: ./gradlew :quizbuks:bootJar
         working-directory: backend
@@ -793,9 +783,7 @@ jobs:
         with:
           distribution: temurin
           java-version: 21
-      - uses: gradle/actions/setup-gradle@v5
-        with:
-          cache-read-only: ${{ github.event_name == 'pull_request' }}
+      - uses: ./.github/actions/gradle-deps
       - name: Start with demo data
         run: tools/quizbuks/local-demo.sh start --seed
       - name: The taker sees the demo quiz
@@ -868,9 +856,7 @@ jobs:
           distribution: temurin
           java-version: 21
       - if: steps.key.outputs.ready == 'true'
-        uses: gradle/actions/setup-gradle@v5
-        with:
-          cache-read-only: true
+        uses: ./.github/actions/gradle-deps
       - if: steps.key.outputs.ready == 'true'
         run: ./gradlew :quizbuks:bootJar
         working-directory: backend

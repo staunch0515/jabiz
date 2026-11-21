@@ -49,9 +49,7 @@ jobs:
         with:
           distribution: temurin
           java-version: 21
-      - uses: gradle/actions/setup-gradle@v5
-        with:
-          cache-read-only: true
+      - uses: ./.github/actions/gradle-deps
       # Builds the three SPAs with pnpm and packages them into the boot jar.
       - run: ./gradlew :quizbuks:bootJar
         working-directory: backend
