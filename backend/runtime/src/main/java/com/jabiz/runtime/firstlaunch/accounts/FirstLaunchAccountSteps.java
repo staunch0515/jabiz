@@ -65,9 +65,11 @@ public class FirstLaunchAccountSteps implements FirstLaunchPlatformSteps {
             problems.add(new FirstLaunchProblem("jabiz.mail.enabled", "is off: the accounts' invitations would"
                 + " never arrive", "turn mail on (jabiz.mail.enabled=true) with a working server"));
         }
-        for (FirstLaunchAccount account : config.accounts()) {
+        for (int i = 0; i < config.accounts().size(); i++) {
+            FirstLaunchAccount account = config.accounts().get(i);
             if (account.roles().contains(WaitingRole.CODE)) {
-                problems.add(new FirstLaunchProblem("accounts[" + account.key() + "].roles", "names the waiting"
+                // By place: the key is the user's name, and problems go to the log.
+                problems.add(new FirstLaunchProblem("accounts[#" + (i + 1) + "].roles", "names the waiting"
                     + " role " + WaitingRole.CODE, "list only the roles the account is to be given"));
             }
         }

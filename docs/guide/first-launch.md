@@ -59,3 +59,4 @@
 | `jabiz.first-launch.remind-after` | 3d | 未接受邀请的账号再邀请一次 |
 | `jabiz.first-launch.deadline` | 14d | 自内容阶段完成起，到期即 `EXPIRED` |
 | `jabiz.first-launch.cron` | 每分钟 | 任务 `jabiz.first-launch` |
+| `jabiz.first-launch.ready-attempts` | 5 | 账号就绪后的应用步骤连续失败几次后，运行的结束不再等它们（23 §9） |

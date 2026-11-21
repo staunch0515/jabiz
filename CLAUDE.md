@@ -148,6 +148,7 @@ jabiz 是一个**元数据驱动的业务应用平台**：开发者声明实体�
   内容阶段出错即记录并退出，不续做：修改后清空数据库与文件目录重来。
   首发的账号只由平台建（不设密码、内容阶段之后才邀请），持有待命角色 `FIRST_LAUNCH_PENDING`（无权限、要求二次验证，只属于首发，`FIRST_LAUNCH_ROLE_RESERVED`）；配置的角色由任务 `jabiz.first-launch` 在本人接受邀请并绑定二次验证后以 `SEC_USER_ROLE_ASSIGN` 授予，
   使人成为管理员（D51）的角色另须运维以指纹确认（`JABIZ_FIRST_LAUNCH_CONFIRM_ADMINS`）；等人阶段只接受改尚未接受邀请的账号的邮箱（D83）；不另写授予或邀请首发账号的代码（23 §8）。
+  须在账号就绪（本人已接受邀请）之后才能做的应用步骤只以 `FirstLaunchHandler.whenAccountReady` 给出（流程须在另设的 `accountReadyProcesses()` 中，只限子流程或内部流程，每账号每步一次，23 §9）。
 - **启动即失败**：元数据、数据视图、流程、SQL 模板、表结构的不一致，必须在启动时一次性全部报告，而不是等到请求触发。
   新的检查实现 `PlatformCheck`（返回问题列表，不抛异常），启动与 `platformCheck` 共用。
 - **单据**（见 22 与决策 D30）：发票、确认书这类单据用 `DocumentLayout` Bean 声明（区块显示普通 SQL 模板的列，模板不写 `timeSlice`），

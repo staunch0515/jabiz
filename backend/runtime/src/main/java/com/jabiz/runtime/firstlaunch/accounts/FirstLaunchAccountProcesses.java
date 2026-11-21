@@ -45,6 +45,8 @@ public class FirstLaunchAccountProcesses {
     public static final String EMAIL_REVISE = "FIRST_LAUNCH_EMAIL_REVISE";
     /** The job's item of the waiting phase: invitations, grants, the waiting role's withdrawal, the end. */
     public static final String ADVANCE = "FIRST_LAUNCH_ADVANCE";
+    /** The application's steps for a ready account (section 9), as a sub-process of {@value #ADVANCE}. */
+    public static final String ACCOUNT_READY = "FIRST_LAUNCH_ACCOUNT_READY";
 
     public record RoleInput() {}
 
