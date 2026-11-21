@@ -143,6 +143,17 @@ public class FileUploadService {
      */
     public Mono<Stored> storeGenerated(String policyName, String name, long size, Supplier<InputStream> content,
         String jobId) {
+        return storeGenerated(policyName, name, size, content,
+            input -> registerProcess(withJob(input, jobId)));
+    }
+
+    /**
+     * As {@link #storeGenerated(String, String, long, Supplier, String)}, with the file's row registered by
+     * {@code register} (in its caller's transaction and checks: the first launch's file steps, decision D82); if it
+     * fails, the stored objects are deleted.
+     */
+    public Mono<Stored> storeGenerated(String policyName, String name, long size, Supplier<InputStream> content,
+        Function<FileProcesses.RegisterInput, Mono<FileProcesses.FileInfo>> register) {
         return Mono.defer(() -> {
             FilePolicy policy = policies.find(policyName).orElseThrow(() -> new IllegalStateException(
                 "No file policy " + policyName));
@@ -163,8 +174,8 @@ public class FileUploadService {
                         })
                         .subscribeOn(Schedulers.boundedElastic())
                         .flatMap(written -> written != size ? Mono.error(invalid("The file is not "
-                            + size + " bytes long")) : storeFile(policy, new Received(upload, written,
-                            FileNames.sanitize(name)), jobId)),
+                            + size + " bytes long")) : storeWith(policy, new Received(upload, written,
+                            FileNames.sanitize(name)), register)),
                     upload -> store.discard(upload).then(store.discard(workDirectory(upload)))));
         });
     }

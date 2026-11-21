@@ -943,6 +943,8 @@ jabiz:
 - **只寄给需要的人**：用户启用（否则 422 `INVITATION_USER_DISABLED`）、有邮箱（`MAIL_NO_ADDRESS`）、邮箱未验证（已验证的由本人找回密码，422 `INVITATION_NOT_NEEDED`）。
 - **只寄到建号时的地址**：建号之后改过或补填的地址（任何人改的，包括以"本人"会话改的）422 `INVITATION_ADDRESS_CHANGED`（`AddressVerifiable.unchanged`，按所有权链的 `addressAsCreated`）：
   不论账号是否干净、受保护的授权是否开启——请求的是管理员而不是本人，改地址正是接管账号的手法。地址填错的账号重新建立。建号时的地址去掉首尾空白后保存。
+  唯一的例外是首发（决策 D82、D83）：首发以系统身份、流程 `FIRST_LAUNCH_EMAIL_REVISE` 更正本运行所建、从未有过任何凭据（密码、外部关联、二次验证、已证地址）的账号的地址，
+  视同建号时填写，之后在另一个事务中照常以 `SEC_USER_INVITE` 寄到新地址；其他任何人、任何流程的改动照旧被拒（`CredentialChainTest`、`FirstLaunchAccountsIT`）。
 - **邮件未开启**（`jabiz.mail.enabled`）即 422 `MAIL_DISABLED`：不记下一封永远不会寄出的邀请。
 - **替换已有的密码**：用户已有密码时，邀请另需 `security.user.password`（同 `SEC_USER_SET_PASSWORD`，否则 403）：只有建号权限的人不能借邀请把账号从其用户手中拿走。
 - **链接**：只认最新的一封（新的邀请使之前的失效，`MailTokens.consume`）；邮箱已验证（本人已接受某一封）、用户停用或邮箱已改即作废。
@@ -1453,3 +1455,11 @@ class CustomerPersonalData implements PersonalDataEraser {
 - **运维**：地址库由部署放到服务器上并按月更新（例如 DB-IP 的 "IP to Country Lite" CSV：`https://db-ip.com/db/download/ip-to-country-lite`，CC BY 4.0，
   须在网站上署名"IP Geolocation by DB-IP"）；替换文件即可（原子替换：先写临时文件再改名），一分钟内生效，日志写"Address database …: N ranges"。
   过旧时启动检查告警；读不懂时保留旧库并记 WARN。应用的运维文档写明下载、更新的步骤与署名的位置。
+
+## 首发配置与账号（17zz23，决策 D82）
+
+在从未有过用户的库上，首发配置（设计 23）以 `FirstLaunchHandler` 的步骤建立账号与内容：
+- 与引导管理员（§7）、`protected-grants.always` 互斥；
+- 内容阶段中，步骤可"代行"本运行建立、从未有过凭据的账号（无角色、无权限、无会话，流程须由应用列出），本人一旦有凭据即不再代行；
+- 账号的角色照常由 `SEC_USER_ROLE_ASSIGN` 授予（17zz23c）。
+

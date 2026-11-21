@@ -43,6 +43,11 @@ import java.util.UUID;
 public class ApprovalProcesses {
 
     public static final String DECIDE = "APPROVAL_DECIDE";
+    /**
+     * Approves, as the first launch, a request the same run opened (decision D82): a sub-process of the first
+     * launch's content phase only.
+     */
+    public static final String FIRST_LAUNCH_DECIDE = "APPROVAL_FIRST_LAUNCH_DECIDE";
     public static final String APPROVED_EVENT = "jabiz.approval.approved";
     public static final String REJECTED_EVENT = "jabiz.approval.rejected";
 
@@ -54,6 +59,9 @@ public class ApprovalProcesses {
     public record DecideInput(@NotNull UUID requestId, @NotNull Decision decision, @Size(max = 500) String reason) {}
 
     public record DecideOutput(String requestId, String status, int currentLevel) {}
+
+    /** @param requestId a pending request opened by a step of the same first launch */
+    public record FirstLaunchDecideInput(@NotNull UUID requestId) {}
 
     /**
      * Payload of the approved and rejected events.
@@ -103,6 +111,88 @@ public class ApprovalProcesses {
                     APPROVED_EVENT, ctx -> ctx.get(DECIDED)))
                 .step("Announce the rejection", PublishEvent.when(ctx -> isDecided(ctx, ApprovalEntities.REJECTED),
                     REJECTED_EVENT, ctx -> ctx.get(DECIDED))));
+    }
+
+    /**
+     * {@value #FIRST_LAUNCH_DECIDE}: what the deployment's first-launch configuration brings counts as reviewed
+     * (decision D82). Approves every remaining level of the request at once, one decision each, as
+     * {@code first-launch:<level>} (one approver decides one level) with the configuration's hash as the reason; then announces the approval as a person's
+     * would be, so the subject's own result process runs as usual. Only as the system, in a step of a first launch
+     * whose content phase goes on, for a request that run opened
+     * ({@link com.jabiz.runtime.firstlaunch.FirstLaunchCheck}). A level with an approver limit is refused: the first
+     * launch has no limit to approve an amount with.
+     */
+    public static ProcessDefinition<FirstLaunchDecideInput, DecideOutput, ProcessContext> firstLaunchDecide() {
+        return ProcessDefinition.define(FIRST_LAUNCH_DECIDE, 1, FirstLaunchDecideInput.class, DecideOutput.class,
+            ProcessContext.class, pb -> pb
+                .description("Approves a request the first launch itself opened (D82).")
+                .permissions(ApprovalPermissions.DECIDE)
+                .subProcessOnly()
+                .contextFactory((start, input) -> {
+                    ProcessContext ctx = new ProcessContext(start);
+                    ctx.put(REQUEST_ID, input.requestId());
+                    return ctx;
+                })
+                .outputMapper(ctx -> ctx.get(OUTPUT, DecideOutput.class))
+                .step("Load the request", LoadEntity.by(ApprovalEntities.REQUEST_DATASET, REQUEST_ID, REQUEST))
+                .step("Check the first launch's power", com.jabiz.runtime.firstlaunch.FirstLaunchCheck.of(
+                    "sys_approval_request_version", "request_id", ctx -> ctx.get(REQUEST_ID)))
+                .compute("Approve every level", (metadata, ctx) -> approveAll(ctx))
+                .step("Pass the task on", ApprovalTasks.passOn(PASSED))
+                .step("Announce the approval", PublishEvent.when(ctx -> isDecided(ctx, ApprovalEntities.APPROVED),
+                    APPROVED_EVENT, ctx -> ctx.get(DECIDED))));
+    }
+
+    @SuppressWarnings("unchecked")
+    private static void approveAll(ProcessContext ctx) {
+        EntityInstance request = ctx.get(REQUEST, EntityInstance.class);
+        String requestId = String.valueOf(request.id());
+        if (!ApprovalEntities.PENDING.equals(request.get("status"))) {
+            ctx.reject(new Violation(REQUEST_ID, PlatformErrorCodes.APPROVAL_NOT_PENDING,
+                "Approval request " + requestId + " is " + request.get("status") + ", not pending",
+                Map.of("request", requestId, "status", String.valueOf(request.<Object>get("status")))));
+            return;
+        }
+        List<Map<String, Object>> levels = (List<Map<String, Object>>) ApprovalJson.read(request.get("levels"));
+        int current = ((BigDecimal) request.get("currentLevel")).intValueExact();
+        for (int level = current; level <= levels.size(); level++) {
+            Object limitFact = levels.get(level - 1).get("limitFact");
+            if (limitFact != null) {
+                ctx.reject(new Violation(REQUEST_ID, PlatformErrorCodes.APPROVAL_LIMIT_EXCEEDED,
+                    "The first launch approves no amount: level " + level + " of approval request " + requestId
+                        + " has an approver limit on " + limitFact,
+                    Map.of("fact", String.valueOf(limitFact), "value", "-", "limit", "-")));
+                return;
+            }
+        }
+        // One approver decides one level of a request (a unique key): each level is recorded as the first launch's
+        // own approver for it, first-launch:<level>.
+        String actor = com.jabiz.runtime.firstlaunch.FirstLaunchPowers.ACTOR;
+        String reason = "first-launch configuration "
+            + ctx.get(com.jabiz.runtime.firstlaunch.FirstLaunchCheck.HASH, String.class);
+        for (int level = current; level <= levels.size(); level++) {
+            Map<String, Object> decision = new LinkedHashMap<>();
+            decision.put("requestId", request.id());
+            decision.put("levelNo", BigDecimal.valueOf(level));
+            decision.put("approverId", actor + ":" + level);
+            decision.put("decision", Decision.APPROVE.name());
+            decision.put("reason", reason);
+            decision.put("decidedTime", ctx.opTime());
+            decision.put("processSeqId", BigDecimal.valueOf(ctx.processSeqId()));
+            decision.put("scopeName", request.get("scopeName"));
+            decision.put("scopeValue", request.get("scopeValue"));
+            ctx.changes().insert(ApprovalEntities.DECISION, decision);
+        }
+        Map<String, Object> changes = new LinkedHashMap<>();
+        changes.put("status", ApprovalEntities.APPROVED);
+        changes.put("currentLevel", BigDecimal.valueOf(levels.size()));
+        ctx.changes().update(ApprovalEntities.REQUEST, request.id(), request.version(), changes);
+        ctx.put(DECIDED, new Decided(requestId, request.get("subject"), request.get("entityId"),
+            request.get("preparerId"), request.get("contentHash"), ApprovalEntities.APPROVED,
+            actor + ":" + levels.size(), reason));
+        ctx.put(OUTPUT, new DecideOutput(requestId, ApprovalEntities.APPROVED, levels.size()));
+        ctx.put(PASSED, new ApprovalTasks.Passed(requestId, request.get("subject"), request.get("entityId"),
+            request.get("reference"), levels.size(), null, scopeOf(request)));
     }
 
     /** Users are temporal entities with UUID keys; any other actor (the system, a dev header) has no limit. */
@@ -209,5 +299,10 @@ public class ApprovalProcesses {
     @Bean
     ProcessDefinition<DecideInput, DecideOutput, ProcessContext> approvalDecideProcess() {
         return decide();
+    }
+
+    @Bean
+    ProcessDefinition<FirstLaunchDecideInput, DecideOutput, ProcessContext> approvalFirstLaunchDecideProcess() {
+        return firstLaunchDecide();
     }
 }

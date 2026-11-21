@@ -400,6 +400,17 @@ public class ErasurePurger {
         targets.add(new Target("sys_audit_record", "t.entity_type = :entityType AND t.changed_fields && :fields"
             + " AND lower(COALESCE(t.changes::jsonb->'address'->>0, t.changes::jsonb->'address'->>1))"
             + " = ANY(:addresses)", optOuts, Map.of("changes", masked())));
+        // The user's mail (the invitation, among others): its audit records hold the address and the parameters as
+        // the message was recorded (sys_mail_message itself is masked above). Found by the user, or - for mail of
+        // nobody's, as for sys_mail_message - by one of the user's addresses: another user's mail is theirs.
+        Map<String, BoundValue> mail = new LinkedHashMap<>(run.user());
+        mail.put("entityType", BoundValue.of(MailEntities.MESSAGE));
+        mail.put("fields", BoundValue.of(new String[] {"address", "params"}));
+        targets.add(new Target("sys_audit_record", "t.entity_type = :entityType AND t.changed_fields && :fields"
+            + " AND (t.changes::jsonb->'userId'->>1 = :userText OR t.changes::jsonb->'userId'->>0 = :userText"
+            + " OR (COALESCE(t.changes::jsonb->'userId'->>1, t.changes::jsonb->'userId'->>0) IS NULL"
+            + " AND lower(COALESCE(t.changes::jsonb->'address'->>0, t.changes::jsonb->'address'->>1))"
+            + " = ANY(:addresses)))", mail, Map.of("changes", masked())));
         return targets;
     }
 
