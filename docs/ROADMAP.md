@@ -5721,6 +5721,19 @@ QuizBuks 的 #545、#546、#547 用了 43.5–45 分钟，#545 到点被取消�
 
 **17zz28 状态**：草稿 PR 待合并。
 
+### 17zz29 首发报告按说明列出就绪账号未运行的步骤（2026-11-21，QuizBuks #747）
+
+**缘由**：首发报告"就绪账号的应用步骤没有运行"一行列出的是步骤的键（`FirstLaunchStep.key`）。键是处理器自己的标识，随运行记录、不能含账号代号（QuizBuks 的成员步骤为 `::`），读报告的人看不懂。
+
+| # | 内容 |
+|---|---|
+| 17zz29-1 | `ReadySteps.notRunDescribed`：与 `notRun` 同一判断，按步骤的说明（`describedAs`，没有说明时即键）列出；报告（`FirstLaunchWaiting.remaining`）改用它。等待的判断（`waitingFor`）与运行记录仍用键 |
+| 17zz29-2 | `ReadyStepsTest.theReportNamesAStepByItsDescription`；`FirstLaunchReadyIT` 的步骤带说明，断言报告列出说明 |
+
+**验收**：`:runtime:test --tests '*ReadyStepsTest'`、`:app:test --tests '*FirstLaunchReady*' --tests '*FirstLaunchWaitingIT'` 绿。不需要迁移。
+
+**17zz29 状态**：草稿 PR 待合并。
+
 ### 线 1.3 的候选（未排期，2026-11-08 总控：首次上线前不做）
 
 | 候选 | 缘由 | 粗估 |
