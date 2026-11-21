@@ -109,17 +109,24 @@ public class QbFirstLaunch implements FirstLaunchHandler {
      * joins each operator that names it among its members (plan section 5.2). The operator is found by its lead, as
      * the waiting phase keeps no output of the content phase.
      */
+    /**
+     * The key of an account's one step once it is ready ({@link QbFirstLaunchChecks} keeps an account to one
+     * operator). The platform records the key and refuses one that holds the account's key (its user's name), which
+     * is made of letters, digits, '-' and '_': this key has none of them, so no account's key is in it.
+     */
+    public static final String MEMBER_STEP = "::";
+
     @Override
     public List<FirstLaunchStep> whenAccountReady(FirstLaunchConfig config, FirstLaunchAccount account,
         FirstLaunchResults results) {
         List<FirstLaunchStep> steps = new ArrayList<>();
         for (QbFirstLaunchConfig.Operator operator : QbFirstLaunchConfig.of(config).operators()) {
             if (operator.members().contains(account.key())) {
-                // The key names the operator, not the account (the account's key is its user's name).
-                steps.add(FirstLaunchStep.run("qb:member:" + operator.index(), QbFirstLaunchProcesses.MEMBER,
+                steps.add(FirstLaunchStep.run(MEMBER_STEP, QbFirstLaunchProcesses.MEMBER,
                     ready -> new QbFirstLaunchProcesses.MemberInput(ready.userId(operator.lead()),
                         ready.userId(account.key())))
                     .describedAs("Member of operator " + operator.name()));
+                break;
             }
         }
         return steps;

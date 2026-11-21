@@ -438,6 +438,9 @@ class QbFirstLaunchIT extends PostgresIntegrationTest {
         advance();
         assertThat(rolesOf(userOf(A))).doesNotContain("QB_ADMIN_SUPER");
         assertThat(run().state()).isEqualTo(FirstLaunchRun.State.CONTENT_DONE);
+        // Not ready yet, so not a member of any operator either.
+        assertThat(query("SELECT 1 FROM qb_operator_member WHERE user_id = ?::uuid", userOf(A))).isEmpty();
+        assertThat(query("SELECT 1 FROM sys_first_launch_ready")).isEmpty();
         java.time.Instant bound = ((java.sql.Timestamp) query("SELECT confirmed_time FROM sec_user_mfa_version"
             + " WHERE user_id = ?::uuid AND confirmed ORDER BY version_no DESC LIMIT 1", userOf(A)).getFirst()
             .get("confirmed_time")).toInstant();
@@ -452,6 +455,13 @@ class QbFirstLaunchIT extends PostgresIntegrationTest {
         assertThat(query("SELECT 1 FROM qb_operator_member WHERE operator_id = ? AND user_id = ?::uuid", tokyo, userOf(A)))
             .hasSize(1);
         assertThat(query("SELECT 1 FROM qb_operator_member WHERE user_id = ?::uuid", userOf(C))).hasSize(1);
+        // One step for the one member, run once: running the job again repeats nothing.
+        assertThat(query("SELECT user_id::text AS user_id, step_key FROM sys_first_launch_ready"))
+            .containsExactly(Map.of("user_id", userOf(A),
+                "step_key", com.jabiz.quizbuks.firstlaunch.QbFirstLaunch.MEMBER_STEP));
+        advance();
+        assertThat(query("SELECT 1 FROM sys_first_launch_ready")).hasSize(1);
+        assertThat(query("SELECT 1 FROM qb_operator_member WHERE user_id = ?::uuid", userOf(A))).hasSize(1);
 
         // Done: the report goes to A, with what is left for people (QuizBuks's items among them).
         assertThat(run().state()).isEqualTo(FirstLaunchRun.State.DONE);

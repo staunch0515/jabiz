@@ -43,10 +43,13 @@ class QbFirstLaunchChecksTest {
     }
 
     private static FirstLaunchConfig config(Map<String, Object> document) {
-        List<FirstLaunchAccount> accounts = List.of(
+        return config(document, List.of(
             new FirstLaunchAccount("A", "a@example.co.jp", "A", "ja", List.of("QB_ADMIN_SUPER"), true),
             new FirstLaunchAccount("B", "b@example.co.jp", "B", "ja", List.of("QB_OPERATOR"), false),
-            new FirstLaunchAccount("C", "c@example.co.jp", "C", "ja", List.of("QB_OPERATOR"), false));
+            new FirstLaunchAccount("C", "c@example.co.jp", "C", "ja", List.of("QB_OPERATOR"), false)));
+    }
+
+    private static FirstLaunchConfig config(Map<String, Object> document, List<FirstLaunchAccount> accounts) {
         return new FirstLaunchConfig("0".repeat(64), document, "en", List.of("example.co.jp"), accounts,
             new FirstLaunchConfig.Files() {
                 @Override
@@ -244,5 +247,35 @@ class QbFirstLaunchChecksTest {
         // Every parameter the run publishes is one QB_SETUP proposes.
         keys.stream().filter(key -> QbParams.ALL.stream().anyMatch(param -> param.key().equals(key)))
             .forEach(key -> assertThat(QbParams.CONTROLLED).as(key).contains(key));
+    }
+
+    /**
+     * Review M5: the platform refuses an account's step whose key holds the account's key (its user's name), so the
+     * member's step never names the operator's place or anything an account's key could be.
+     */
+    @Test
+    void aMembersStepKeyHoldsNoAccountsKeyWhateverItIs() {
+        QbFirstLaunch handler = new QbFirstLaunch(JSON, null, java.time.Clock.systemUTC());
+        for (String key : List.of("member", "qb", "m", "e", "r", "b", "0", "1", "-", "_", "M-0_x")) {
+            Map<String, Object> document = valid();
+            document.put("operators", List.of(
+                Map.of("key", "tokyo", "name", "Tokyo", "default", true, "lead", "B", "members", List.of(key)),
+                Map.of("key", "kansai", "name", "Kansai", "lead", "C")));
+            FirstLaunchAccount member = new FirstLaunchAccount(key, "m@example.co.jp", "M", "ja",
+                List.of("QB_OPERATOR"), false);
+            FirstLaunchConfig config = config(document, List.of(
+                new FirstLaunchAccount("B", "b@example.co.jp", "B", "ja", List.of("QB_OPERATOR"), false),
+                new FirstLaunchAccount("C", "c@example.co.jp", "C", "ja", List.of("QB_OPERATOR"), false), member));
+            var steps = handler.whenAccountReady(config, member, null);
+            assertThat(steps).as(key).singleElement().satisfies(step -> {
+                assertThat(step.key()).as(key).doesNotContain(key);
+                assertThat(step.process()).isEqualTo(QbFirstLaunchProcesses.MEMBER);
+                assertThat(step.asAccount()).isNull();
+                assertThat(step.await()).isFalse();
+            });
+            assertThat(handler.accountReadyProcesses()).containsExactly(QbFirstLaunchProcesses.MEMBER);
+            // A lead, or an account no operator names among its members, has no step.
+            assertThat(handler.whenAccountReady(config, config.accounts().getFirst(), null)).isEmpty();
+        }
     }
 }
