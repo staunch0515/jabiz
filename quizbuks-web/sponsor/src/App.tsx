@@ -89,7 +89,7 @@ const MAIL_PAGES = new Set(MAIL_LINK_PAGES.map((page) => `/auth/${page}`))
  */
 const UNSUBSCRIBE_PATH = '/mail/unsubscribe'
 
-/** Locked after the entry's idle time (30 minutes): about to be signed out; the sign-in page says why. */
+/** Locked after the entry's idle time (24 hours, QB_SESSION_IDLE_TIMEOUT): about to be signed out; the sign-in page says why. */
 function lockIdle() {
   lockedIdle = true
 }

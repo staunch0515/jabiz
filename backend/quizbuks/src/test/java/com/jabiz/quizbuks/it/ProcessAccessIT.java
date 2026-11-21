@@ -54,6 +54,12 @@ class ProcessAccessIT extends QbItSupport {
         Map.entry("QB_PUBLICATION_ERASED_END", ProcessAccess.SUB_PROCESS_ONLY),
         // F-M15 b: the wind-up of an erased sponsor's money.
         Map.entry("QB_SPONSOR_CLOSURE_REGISTER", ProcessAccess.INTERNAL),
+        // F-LAUNCH Q3: the first launch's own steps (run by FIRST_LAUNCH_STEP or the account-ready hook only).
+        Map.entry("QB_FIRST_LAUNCH_PARAM", ProcessAccess.INTERNAL),
+        Map.entry("QB_FIRST_LAUNCH_APPROVE", ProcessAccess.INTERNAL),
+        Map.entry("QB_FIRST_LAUNCH_READY", ProcessAccess.INTERNAL),
+        Map.entry("QB_FIRST_LAUNCH_LEAD", ProcessAccess.SUB_PROCESS_ONLY),
+        Map.entry("QB_LAUNCH_MEMBER_ADD", ProcessAccess.SUB_PROCESS_ONLY),
         Map.entry("QB_FEE_CREDIT_VOID_LOT", ProcessAccess.SUB_PROCESS_ONLY),
         Map.entry("QB_FEE_CREDIT_NOTE_GIVE_BACK", ProcessAccess.SUB_PROCESS_ONLY),
         Map.entry("QB_SPONSOR_MONEY_CLOSE", ProcessAccess.INTERNAL),

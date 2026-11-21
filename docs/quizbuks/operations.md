@@ -27,6 +27,8 @@
 | `LOGGING_STRUCTURED_FORMAT_CONSOLE` | 建议 `ecs` | — | — | 文本日志 |
 | `JABIZ_STORAGE_WRITE_BATCHING_ENABLED` | **不设** | — | — | 缺省 `true`：平台在事务中缓冲写入（决策 D46，16p-2）。应急开关：只在怀疑写缓冲有缺陷时设 `false` 并重启，行为与保证不变，热门发布的容量约降 30 %（`perf/Q10a-load-test.md` §11） |
 | `QB_ADMIN_ROLES` | 否 | 缺省 `ADMIN,QB_ADMIN_SUPER,QB_ADMIN_CONTENT,QB_ADMIN_FINANCE,FIRST_LAUNCH_PENDING` | — | 用缺省（含首发的待命角色 `FIRST_LAUNCH_PENDING`：没有权限、要求二次验证，首发配置建的账号凭它登录并绑定二次验证；首发建立它之前启动检查警告"role FIRST_LAUNCH_PENDING does not exist (yet)"，可忽略）。**永远不要**加 `*`、`QB_TAKER`、`QB_SPONSOR`（自己注册的人会进入平台管理系统）。启动检查只在相应入口开放注册时拒绝（`SignInEntries`）：`*` 在 App 或发起方任一入口开放注册时、`QB_TAKER` 在 App 开放注册时（`QB_APP_SELF_REGISTRATION`）、`QB_SPONSOR` 在发起方开放注册时（`QB_SPONSOR_SELF_REGISTRATION`）启动失败；关掉注册后不再拦，但仍不要这样配置。也不得含测试的 `QB_E2E_*`（正式模式下启动失败） |
+| `QB_SESSION_IDLE_TIMEOUT` | 否 | 缺省 `PT24H`：平台管理系统、发起方页面、运营商管理系统与 Shopify 内嵌页闲置多久后需要重新登录（需求方 2026-11-21；App 不因闲置锁定，不受它影响） | — | 用缺省。四个入口共用这一个变量。**不能为 `0`**（平台管理系统的入口必须闲置锁定，`SignInEntries` 启动错误）、**不能短于访问令牌的有效期**（15 分钟，`SessionChecks` 启动错误）；改它时同时看 `QB_SESSION_REFRESH_TOKEN_TTL` |
+| `QB_SESSION_REFRESH_TOKEN_TTL` | 否 | 缺省 `P2D`：上述四个入口的刷新令牌自最后一次刷新起的有效期 | — | 须不短于访问令牌（15 分钟）加闲置时长，否则闲置的会话提前结束：启动检查 `QUIZBUKS \| jabiz.security.entries.<入口>.session.refresh-token-ttl` 警告（`identity.SessionLengthCheck`）；至多 90 天（平台） |
 | `QB_APP_SELF_REGISTRATION` / `QB_SPONSOR_SELF_REGISTRATION` | 否 | 缺省 `true` | — | — |
 | `QB_APP_EMAIL_LINK` | 否 | 缺省 `true` | — | App 以邮件中的链接登录（Q15 的分享链接，平台 D54）；关掉后分享页仍显示，但只能用密码登录 |
 | `JABIZ_PUBLIC_ENABLED` | 否 | 缺省 `true`（Q7b） | — | 设 `false` 时 `/api/public/**` 一律 404：帮助中心与条款、隐私政策页（App 与发起方页面，也给未登录的人看）都打不开。只有四个公开模板 `qb.public.*`（已发布的法律文本版本与已发布的 FAQ），没有公开的文件；按客户端地址限流（平台缺省每分钟 300 次），结果缓存 5 分钟 |
@@ -210,6 +212,12 @@ FROM pg_stat_statements ORDER BY total_exec_time DESC LIMIT 20;
 ## 3. 首次启动
 
 **首发按两账号的做法初始化**（需求方 2026-11-17）：需求方本人用两个账号（超级管理员与负责人）完成初始化与日常运营，步骤与分工见 `two-account-setup.md`。本节下面的多人步骤保留，作为以后有了第二个人时的做法。
+
+**以首发配置初始化时的人工处理**（F-LAUNCH Q3；配置与运行见首发的方案 `plans/impl/F-LAUNCH.md`）：
+- **运营商成员**：配置中列为某运营商成员的账号，在本人接受邀请、绑定二次验证并拿到角色之后，由首发以系统身份加入其负责人的运营商（`QB_LAUNCH_MEMBER_ADD`，经 `QB_OPERATOR_MEMBER_ADD`，每个账号只做一次）。已是该运营商成员的不再加入（总部此前若已把他设为负责人，不会被改回成员）。
+  这一步失败时（`QB_OPERATOR_MEMBER_ELSEWHERE`：已是另一个运营商的成员；`QB_OPERATOR_MEMBERS_FULL`：运营商已满员），首发不重试：总部确认原因后在管理系统中手工执行 `QB_OPERATOR_MEMBER_ADD`。
+- **转账审批**：转账审批的消费者（`QB_TRANSFER_APPROVAL_RESULT`）收到所有已决定的审批，首发期间转账的参数（`qb.transfer.enabled`、`qb.transfer.hold-days`、`qb.withdrawal.bank.enabled`）可能还没有值；这只影响转账，不影响内容的审批。
+  批准的转账若当时这些参数没有值，转账不会发出，而是以 `NOT_SENDABLE` 驳回，并给财务一条待办；学者随之暂停自动转账，财务确认参数已设好之后，以 `QB_TRANSFER_HOLD_RELEASE` 放行。
 
 1. 准备 §1 的全部变量（`QB_STRIPE_PLACEHOLDERS=false`）、HTTPS 的反向代理（`JABIZ_TRUSTED_PROXIES`）、邮件。先以**测试模式**启动（§4 之前），确认 `docker compose … logs app` 中没有 `Platform check failed`。
 2. 以 `JABIZ_BOOTSTRAP_ADMIN_USER` 登录 `/admin/`，在"安全设置"中**开启两步验证**（TOTP），保存恢复码。随后从环境中删去 `JABIZ_BOOTSTRAP_ADMIN_USER` 与 `JABIZ_BOOTSTRAP_ADMIN_PASSWORD` 并设 `QB_BOOTSTRAP_ADMIN_DONE=true`（密码与这一行都没有时镜像的入口脚本拒绝启动；共用服务器上的步骤见 `deploy/quizbuks/DEPLOY.md`）。

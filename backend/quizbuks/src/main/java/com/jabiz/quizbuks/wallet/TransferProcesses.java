@@ -413,7 +413,9 @@ public final class TransferProcesses {
                     ApprovalResultInput input = ctx.get(INPUT, ApprovalResultInput.class);
                     return QbPayouts.APPROVAL_SUBJECT.equals(input.subject()) ? input.entityId() : null;
                 }))
-                .step("Load the parameters", LoadParams.<ProcessContext>of(ProcessContext::opTime, PARAMS,
+                // Every approval decided comes here, most of them not a transfer's (a first launch's content, say,
+                // before any transfer setting has a value): a missing setting only stops a transfer from being sent.
+                .step("Load the parameters", LoadParams.<ProcessContext>optional(ProcessContext::opTime, PARAMS,
                     QbParams.TRANSFER_ENABLED, QbParams.TRANSFER_HOLD_DAYS, QbParams.WITHDRAWAL_BANK_ENABLED))
                 .steps(b -> loadTaker(b, TransferProcesses::transferUser))
                 .step("Load the request", QueryEntities.<ProcessContext>of(ApprovalEntities.REQUEST_DATASET,
@@ -457,14 +459,14 @@ public final class TransferProcesses {
             EntityInstance ban = first(ctx, BAN);
             BigDecimal amount = QbPayouts.money(transfer.get("amount"));
             ParamValues params = ctx.get(PARAMS, ParamValues.class);
-            boolean common = TransferRules.wholeAndNotNegative(params.get(QbParams.TRANSFER_HOLD_DAYS,
-                    BigDecimal.class))
+            boolean common = TransferRules.wholeAndNotNegative(params.find(QbParams.TRANSFER_HOLD_DAYS,
+                    BigDecimal.class).orElse(null))
                 && !BanRules.banned(ban == null ? null : ban.attributes())
                 && TransferRules.transferable(ledgerBalance(ctx), rewardsHeld(ctx)).compareTo(amount) >= 0;
             // A withdrawal goes to the bank account copied when it was asked for (Q13b): finance pays it by hand.
             boolean sendable = common && (bank(transfer)
-                ? Boolean.TRUE.equals(params.get(QbParams.WITHDRAWAL_BANK_ENABLED, Boolean.class))
-                : Boolean.TRUE.equals(params.get(QbParams.TRANSFER_ENABLED, Boolean.class))
+                ? params.find(QbParams.WITHDRAWAL_BANK_ENABLED, Boolean.class).orElse(false)
+                : params.find(QbParams.TRANSFER_ENABLED, Boolean.class).orElse(false)
                     && account != null && PayoutAccountStatus.ENABLED.equals(account.get("status"))
                     && transfer.get("externalAccountId").equals(account.get("externalAccountId")));
             if (sendable) {
@@ -1051,8 +1053,8 @@ public final class TransferProcesses {
                 ACCOUNT))
             .step("Read the taker's balance", RunTemplate.<ProcessContext>of(TakerWallets.TRANSFERABLE_TEMPLATE,
                 ctx -> {
-                    BigDecimal days = ctx.get(PARAMS, ParamValues.class).get(QbParams.TRANSFER_HOLD_DAYS,
-                        BigDecimal.class);
+                    BigDecimal days = ctx.get(PARAMS, ParamValues.class).find(QbParams.TRANSFER_HOLD_DAYS,
+                        BigDecimal.class).orElse(null);
                     Map<String, Object> params = new LinkedHashMap<>();
                     params.put("userId", String.valueOf(userId.apply(ctx)));
                     params.put("at", ctx.opTime());

@@ -1,0 +1,61 @@
+# The example of docs/quizbuks/operations.md "First launch", run by QbFirstLaunchIT: two operators, each with its own
+# sponsor whose content comes from a package exported from the sponsor page (sponsors/*/package.json).
+# Only on a new database. No passwords or codes here. Content phase failed: fix this file, empty the database and the
+# files directory, start again.
+version: 1
+
+site:
+  language: en
+
+allowedEmailDomains: [example.co.jp]
+
+accounts:
+  - key: A
+    email: a.suzuki@example.co.jp
+    name: Ichiro Suzuki
+    language: ja
+    roles: [QB_ADMIN_SUPER]
+    report: true
+  - key: B
+    email: b.tanaka@example.co.jp
+    name: Misaki Tanaka
+    language: ja
+    roles: [QB_OPERATOR]
+  - key: C
+    email: c.yamada@example.co.jp
+    name: Ken Yamada
+    language: ja
+    roles: [QB_OPERATOR]
+
+operators:
+  - key: tokyo
+    name: Tokyo Operations
+    default: true
+    lead: B
+    members: [A]
+  - key: kansai
+    name: Kansai Operations
+    lead: C
+
+sponsors:
+  - operator: tokyo
+    package: sponsors/tokyo/package.json
+    rewardMethods: [OFFLINE_REDEEM]
+    publications:
+      Spring quiz:
+        rewardMethod: OFFLINE_REDEEM
+        redeemDescription: Show the result page at the Tokyo shop's till for a badge.
+        startAt: launch
+        endAt: 2026-12-31T23:59+09:00
+  - operator: kansai
+    package: sponsors/kansai/package.json
+    rewardMethods: [OFFLINE_REDEEM]
+    publications:
+      Spring quiz:
+        rewardMethod: OFFLINE_REDEEM
+        redeemDescription: Show the result page at the Osaka shop for a postcard.
+        startAt: launch
+        endAt: 2026-11-30T23:59+09:00
+
+params:
+  qb.ai.sponsor.daily-jobs: 5

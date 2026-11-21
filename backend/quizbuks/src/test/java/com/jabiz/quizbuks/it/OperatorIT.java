@@ -68,6 +68,23 @@ class OperatorIT extends PlayItSupport {
             .getFirst();
     }
 
+    /**
+     * F-LAUNCH (plan section 5.1): a new operator's lead must have verified the address. Only the first launch's
+     * content phase makes one whose lead it made itself and has not invited yet; a person is refused as before, and
+     * the system outside a first launch is refused too.
+     */
+    @Test
+    void aLeadWhoHasNotVerifiedIsAcceptedOnlyInAFirstLaunch() {
+        String unverified = createUser(unique("fl-unverified-lead"));
+        Map<String, Object> input = body("name", unique("Unverified"), "contactName", "Lead", "contactEmail",
+            "lead@example.com", "leadUserId", unverified);
+        assertThat(codes(refused(OperatorProcesses.SAVE, hq(), input, 422)))
+            .containsExactly(OperatorCodes.MEMBER_UNVERIFIED);
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> runAsSystem(OperatorProcesses.SAVE, input))
+            .isInstanceOf(com.jabiz.runtime.PermissionDeniedException.class);
+        assertThat(query("SELECT 1 FROM qb_operator WHERE direct_sponsor_id = ?", unverified)).isEmpty();
+    }
+
     @Test
     void headquartersCreatesAnOperatorAndNamesItsMembers() {
         String operatorId = newOperator(unique("Kansai"));

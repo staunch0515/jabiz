@@ -41,8 +41,8 @@
   根 SPA 的 Service Worker 经 `VITE_JABIZ_SPA_PREFIXES` 放过 `/admin/`、`/sponsor/`。
 - `application.yml`：删去 `jabiz.web.spa`，用 jar 中的缺省（指南 §2），否则 `/` 与 `/sponsor/` 不被提供、启动检查 `WEB` 告警。保留缺省的 CSP（含 `img-src blob:`，
   显示需登录读取的图片）；Stripe Checkout 与 Connect 是整页跳转，不需改 CSP；视频资料以外链打开（Q-3），不需 `frame-src`。
-  入口加 `session`：`app` 为 `persistence: device`、`refresh-token-ttl: P30D`、`idle-timeout: 0`（设计缺省 Q12）；`sponsor` 为 `idle-timeout: PT30M`、`persistence: tab`；
-  `admin` 为 `idle-timeout: PT30M`（不能用 `device`，10 §15.1）。
+  入口加 `session`：`app` 为 `persistence: device`、`refresh-token-ttl: P30D`、`idle-timeout: 0`（设计缺省 Q12）；`sponsor` 为 `idle-timeout: PT24H`、`persistence: tab`（需求方 2026-11-21 由 30 分钟改为 24 小时，`QB_SESSION_IDLE_TIMEOUT`；刷新令牌 `P2D`，`QB_SESSION_REFRESH_TOKEN_TTL`；`operator`、`shopify` 相同）；
+  `admin` 为 `idle-timeout: PT24H`（同上；不能用 `device`，10 §15.1）。
 - 每个 SPA：自己的 `package.json`、`pnpm-lock.yaml`、`vite.config.ts`（`jabizSpa`，开发端口 5175 / 5176，`/api` 代理到 8080）、带指南 §4 `paths` 的 `tsconfig*.json`、
   `eslint.config.js`、`src/test/setup.ts`、`index.css`（`@import '@jabiz/ui/theme.css'`）；依赖版本照抄示范门户。App 另有 `public/` 中的三个 PNG 图标与 manifest（名字 QuizBuks）。
 - **邮件链接（A-2，可在 QP1 中做）**：商家邮件的参数 `link` 改为 `{entryUrl.sponsor}`（D43 第 4 条）；`quizbuks.links.sponsor` 保留给 Checkout 的返回地址。
@@ -160,7 +160,7 @@
 
 1. `./gradlew :quizbuks:check` 通过（含 `spaCheckRoot`、`spaCheckSponsor`）。jar 提供 `/`（PWA：manifest 与 `/sw.js`）、`/sponsor/`（无 `sw.js`：带 `Service-Worker: script` 得 404）
    与 `/admin/`，各自有客户端路由回退。
-2. 会话按入口分开：登录 App 不会登录商家后台；App 的会话在关闭并重开浏览器后仍在（`device`）；商家后台闲置 30 分钟锁定。
+2. 会话按入口分开：登录 App 不会登录商家后台；App 的会话在关闭并重开浏览器后仍在（`device`）；发起方页面闲置 24 小时锁定（需求方 2026-11-21，原为 30 分钟）。
 3. 邮件中的验证与重置链接在 `/auth/…` 与 `/sponsor/auth/…` 打开并完成。配置了 Google 时，只为答题人开户。
 4. 邮箱验证之前写入一律拒绝，横幅说明原因；被封禁的人不能登录，已有令牌得 `QB_USER_BANNED`。
 5. 答题全流程：提交前看不到答案；重新加载恢复题目与答案；超时显示为自动提交；结果显示逐题对错与奖励或"待支付"。

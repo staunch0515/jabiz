@@ -10,7 +10,7 @@ import { loadAds } from './qb/ads'
 import { siteEnvironment } from './qb/environment'
 
 // The sponsor console's sign-in entry (jabizApp passes it as VITE_JABIZ_ENTRY; named here as well for `pnpm dev`):
-// its sessions (this tab only, locked after 30 minutes idle) are the console's, apart from the app's and the
+// its sessions (this tab only, locked after 24 hours idle) are the console's, apart from the app's and the
 // administration's in the same browser.
 // Platform 17ze: the brand's own site (shared with staging until production) shows no test-system banner.
 configureClient({ entry: 'sponsor', environment: siteEnvironment() })
