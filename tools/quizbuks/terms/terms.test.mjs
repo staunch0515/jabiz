@@ -42,6 +42,8 @@ const SCANNED = [
   { dir: 'docs/quizbuks/store', ext: ['.md'] },
   // The help centre's texts kept in the repository (F-C1d), published by the content administrators.
   { dir: 'docs/quizbuks/help', ext: ['.md'] },
+  // F-LAUNCH: the first launch's sample handed to the requester (its comments and content are read and copied).
+  { dir: 'docs/quizbuks/first-launch-sample', ext: ['.yml', '.json'] },
 ]
 
 /**
@@ -70,8 +72,16 @@ const isText = (file) => /messages[^/]*\.ts$|biz\/src\/content\/|\.(properties|m
 const isComment = (file, text) =>
   file.endsWith('.properties') ? /^\s*#/.test(text) : /\.m?[jt]sx?$/.test(file) && /^\s*(\/\/|\/\*|\*)/.test(text)
 
+/** Documents written for the requester to read, scanned as a whole for the replaced terms too (F-LAUNCH). */
+const WHOLE_DOCS = ['docs/quizbuks/first-launch-guide.md']
+
 /** Whole documents people read besides SCANNED, for the retired names: the operators' manual and troubleshooting. */
-const RETIRED_DOCS = ['docs/quizbuks/operations.md', 'docs/quizbuks/troubleshooting.md']
+const RETIRED_DOCS = [
+  'docs/quizbuks/operations.md',
+  'docs/quizbuks/troubleshooting.md',
+  // F-LAUNCH: the one page for the requester.
+  'docs/quizbuks/first-launch-guide.md',
+]
 
 /** Files whose texts may keep a word, each with the reason. */
 export const EXCEPTIONS = [
@@ -134,6 +144,9 @@ export function findOldTerms() {
   }
   const help = helpTexts()
   for (const { line, text } of help.lines) check(help.file, line, text, false)
+  for (const file of WHOLE_DOCS) {
+    readFileSync(join(ROOT, file), 'utf8').split('\n').forEach((text, i) => check(file, i + 1, text, false))
+  }
   return problems
 }
 
