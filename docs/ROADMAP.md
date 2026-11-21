@@ -5679,6 +5679,19 @@ QuizBuks 的 #545、#546、#547 用了 43.5–45 分钟，#545 到点被取消�
 
 **17zz24 状态**：草稿 PR 待合并。
 
+### 17zz26 Gradle 拉依赖遇到 429 时多等一会儿再试（2026-11-18，QuizBuks 的 e2e 冷启动失败）
+
+**缘由**：QuizBuks 的 e2e 与 package 作业在冷启动的运行器上解析 `spring-boot-gradle-plugin:4.0.9` 的依赖（`spring-boot-buildpack-platform`、`spring-boot-loader-tools`、`spring-core`）时，Maven Central 对共享出口返回 429（`Could not GET … Received status code 429`）或 `Could not find`（#737、#739）。Gradle 9.1 已把 408、429 与 5xx 当作暂时的网络问题并指数退避，但只试 3 次、首次间隔 1 秒，不够。与 17zz25（`pluginManagement` 列出仓库，#745）配合：那一项让根工程直接问 Central，这一项让它在被限流时多等。
+
+| # | 内容 |
+|---|---|
+| 17zz26-1 | `backend/gradle.properties`（新）：`systemProp.org.gradle.internal.network.retry.max.attempts=6`、`…network.retry.initial.backOff=2000`（传输层，每次下载）；`…repository.max.tentatives=5`、`…repository.initial.backoff=1000`（仓库访问层，模块元数据） |
+| 17zz26-2 | 核对属性名与默认值取自 Gradle 9.1 的类（`NetworkOperationBackOffAndRetry`：3 次、1000 毫秒；`NetworkingIssueVerifier` 对 408、429 与服务器错误重试；`ErrorHandlingModuleComponentRepository`：`max.tentatives`、`initial.backoff`）；本地以 `-Dorg.gradle.internal.repository.max.tentatives=0` 验证构建读取该属性（解析报 "Unexpected state"，不设时正常） |
+
+**验收**：本地联网 `./gradlew :core:compileJava` 通过；CI 绿。429 本身无法在本地复现，效果以之后冷启动的运行为准。
+
+**17zz26 状态**：草稿 PR 待合并。
+
 ### 线 1.3 的候选（未排期，2026-11-08 总控：首次上线前不做）
 
 | 候选 | 缘由 | 粗估 |
