@@ -7,6 +7,10 @@
 #       with the environment of quizbuks-web/e2e/app.env, run `pnpm e2e` (all tests, or the files and -g given after
 #       --), then stop what it started. --build rebuilds the jar; --fresh drops the e2e database first; --keep leaves
 #       everything running for the next run (then: tools/quizbuks/e2e.sh stop).
+#   tools/quizbuks/e2e.sh first-launch [--build] [--keep] [-- <playwright arguments>]
+#       F-LAUNCH Q4: the same with the first launch's test (first-launch.config.ts) instead: a database of its own
+#       dropped first, an empty files root, no first administrator, the sample's configuration
+#       (tools/quizbuks/first-launch-e2e-config.sh) and quizbuks-web/e2e/first-launch.env; stops what it started.
 #   tools/quizbuks/e2e.sh stop | status | logs | env
 #
 # Needs JDK 21, pnpm, curl, openssl; Docker for the database and Mailpit unless something already listens on their
@@ -233,6 +237,51 @@ run() {
   return $status
 }
 
+first_launch() {
+  local build=false keep=false
+  while [[ $# -gt 0 ]]; do
+    case $1 in
+      --build) build=true ;;
+      --keep) keep=true ;;
+      --) shift; break ;;
+      *) die "unknown option $1 (playwright arguments go after --)" ;;
+    esac
+    shift
+  done
+  need java "JDK 21"; need pnpm "the tests"; need curl "health checks"; need openssl "keys"
+  DB_NAME=${QB_E2E_FIRST_LAUNCH_DB_NAME:-quizbuks_e2e_first_launch}
+  environment
+  running app && die "an application is running already (tools/quizbuks/e2e.sh stop first): a first launch needs its own"
+  # A first launch makes its own accounts: no first administrator (the two are refused together).
+  unset JABIZ_BOOTSTRAP_ADMIN_USER JABIZ_BOOTSTRAP_ADMIN_PASSWORD E2E_ADMIN_USER E2E_ADMIN_PASSWORD
+  rm -rf "$STATE/first-launch"
+  mkdir -p "$STATE/first-launch/files"
+  export JABIZ_FILES_LOCAL_ROOT=$STATE/first-launch/files
+  JABIZ_FIRST_LAUNCH_CONFIG=$("$ROOT/tools/quizbuks/first-launch-e2e-config.sh" "$STATE/first-launch/config")
+  export JABIZ_FIRST_LAUNCH_CONFIG
+  set -a
+  # shellcheck disable=SC1091
+  . "$E2E/first-launch.env"
+  set +a
+  database true
+  mailpits
+  # The sample's addresses are fixed: earlier runs' mail would answer for this one's.
+  curl -sf -X DELETE "localhost:$MAILPIT_PORT/api/v1/messages" >/dev/null
+  stubs
+  application "$build"
+  [[ -d $E2E/node_modules ]] || (cd "$E2E" && pnpm install --frozen-lockfile)
+  if [[ -z ${E2E_CHROMIUM:-} ]]; then (cd "$E2E" && pnpm exec playwright install chromium >/dev/null); fi
+  say "running the first launch's test${*:+: $*}"
+  local status=0
+  (cd "$E2E" && pnpm e2e:first-launch "$@") || status=$?
+  if $keep; then
+    say "kept running (http://localhost:$PORT, mail http://localhost:$MAILPIT_PORT); stop with: tools/quizbuks/e2e.sh stop"
+  else
+    stop
+  fi
+  return $status
+}
+
 stop() {
   environment
   for name in app stripe claude; do
@@ -264,9 +313,10 @@ print_env() {
 
 case ${1:-} in
   run) shift; run "$@" ;;
+  first-launch) shift; first_launch "$@" ;;
   stop) stop ;;
   status) status ;;
   logs) environment; tail -n 100 -f "$STATE/app.log" ;;
   env) print_env ;;
-  *) sed -n '2,16p' "$0" | sed 's/^# \{0,1\}//'; exit 2 ;;
+  *) sed -n '2,20p' "$0" | sed 's/^# \{0,1\}//'; exit 2 ;;
 esac

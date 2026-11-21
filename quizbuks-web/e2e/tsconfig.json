@@ -15,5 +15,5 @@
     "erasableSyntaxOnly": true,
     "noFallthroughCasesInSwitch": true
   },
-  "include": ["playwright.config.ts", "store.config.ts", "tests", "store"]
+  "include": ["playwright.config.ts", "store.config.ts", "first-launch.config.ts", "tests", "store", "first-launch"]
 }
