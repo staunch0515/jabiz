@@ -183,7 +183,7 @@ describe('a visitor', () => {
     expect(document.querySelector('a[href="/password-reset"]')).not.toBeNull()
     await waitFor(() => expect(asked).toContain('/api/auth/oidc/providers?entry=app'))
     // A test system says so before signing in (platform 16zd): the entry names the environment.
-    expect(await screen.findByTestId('environment-banner')).toHaveTextContent('staging')
+    expect(await screen.findByTestId('environment-badge')).toHaveTextContent('staging')
   })
 
   it('signs in and signs up with Google, Facebook and LINE as a row of icons on a phone (Q40)', async () => {
@@ -353,7 +353,7 @@ describe('the entry pages (platform 17zk; P4)', () => {
       expect(within(links).getAllByRole('link').map((a) => a.getAttribute('href')))
         .toEqual(['/help', '/legal/terms', '/legal/privacy'])
       // The test system's banner is the template's, over the page; the language at the top right.
-      expect(await screen.findByTestId('environment-banner')).toHaveTextContent('staging')
+      expect(await screen.findByTestId('environment-badge')).toHaveTextContent('staging')
       expect(screen.getByTestId('entry-language')).toBeInTheDocument()
       await expectAccessible()
     })
@@ -430,7 +430,7 @@ describe('the entry pages (platform 17zk; P4)', () => {
     expect(await screen.findByTestId('oidc-error')).toHaveTextContent('access_denied')
     expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('QuizBuks')
     expect(screen.getAllByRole('heading', { level: 2 })).toHaveLength(1)
-    expect(await screen.findByTestId('environment-banner')).toBeInTheDocument()
+    expect(await screen.findByTestId('environment-badge')).toBeInTheDocument()
     expect(screen.getByTestId('entry-language')).toBeInTheDocument()
     await expectAccessible()
   })
@@ -557,7 +557,7 @@ describe('a signed-in Taker', () => {
     render(<App />)
     expect(await screen.findByTestId('home')).toHaveTextContent('Mei')
     // The app's own header carries the test system's banner too (platform 16zd).
-    expect(await screen.findByTestId('environment-banner')).toHaveTextContent('staging')
+    expect(await screen.findByTestId('environment-badge')).toHaveTextContent('staging')
     expect(window.location.pathname).toBe('/')
     expect(screen.getByTestId('verify-email-banner')).toHaveTextContent('mei@example.com')
     expect(screen.getByRole('navigation', { name: 'App' })).toBeInTheDocument()

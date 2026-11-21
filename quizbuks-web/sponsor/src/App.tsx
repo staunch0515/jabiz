@@ -2,7 +2,7 @@ import { AuthProvider, useAuth, type SignInStep } from '@jabiz/client'
 import {
   AppearanceProvider,
   EntryLayoutProvider,
-  EnvironmentBanner,
+  EnvironmentBadge,
   MAIL_LINK_PAGES,
   MailLinkPage,
   MailUnsubscribe,
@@ -164,9 +164,9 @@ function PublicPage({ page }: { page: ReactNode }) {
   const { t } = useTranslation(SPONSOR)
   return (
     <div className="flex min-h-full flex-col">
+      {/* A test system's mark (platform 17zz27) is a corner badge, before signing in too, as the app's public pages. */}
+      <EnvironmentBadge />
       <header className="bg-background border-b">
-        {/* A test system says so before signing in too (platform 16zd; gap 6), as the app's public pages do. */}
-        <EnvironmentBanner />
         <div className="mx-auto flex max-w-3xl items-center gap-2 px-4 py-2">
           <Wordmark name={t('brand')} compact className="mr-auto" />
           <ThemeToggle />
