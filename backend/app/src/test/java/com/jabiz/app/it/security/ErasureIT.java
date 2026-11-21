@@ -201,6 +201,35 @@ class ErasureIT extends SecurityItSupport {
         create(unique("eve"), "Eve again", email);
     }
 
+    /**
+     * The audit records of the user's mail (an invitation, among others) hold the address and parameters as the message
+     * was recorded: the purge masks them - the user's, and nobody's mail to one of the user's addresses - and leaves
+     * another user's mail to the same address alone (review of #738).
+     */
+    @Test
+    void theAuditRecordsOfTheUsersMailAreMasked() {
+        String name = unique("mia");
+        String email = name + "@example.com";
+        String userId = create(name, "Mia " + UUID.randomUUID(), email);
+        String other = create(unique("other"), "Other", unique("other") + "@example.com");
+        String audit = "INSERT INTO sys_audit_record (entity_type, entity_id, action, changes, changed_fields, actor_id,"
+            + " recorded_time) VALUES ('MailMessage', ?, 'INSERT', ?, ARRAY['address','params','userId'], 'system',"
+            + " now())";
+        execute(audit, UUID.randomUUID().toString(), "{\"address\":[null,\"" + email + "\"],\"params\":[null,"
+            + "\"{\\\"entry\\\":\\\"admin\\\"}\"],\"userId\":[null,\"" + userId + "\"]}");
+        execute(audit, UUID.randomUUID().toString(), "{\"address\":[null,\"" + email + "\"],\"params\":[null,"
+            + "\"{}\"],\"userId\":[null,null]}");
+        String othersMail = UUID.randomUUID().toString();
+        execute(audit, othersMail, "{\"address\":[null,\"" + email + "\"],\"params\":[null,\"{}\"],"
+            + "\"userId\":[null,\"" + other + "\"]}");
+
+        erase(userId);
+        deliverer.deliverPending().block();
+
+        assertThat(query("SELECT entity_id FROM sys_audit_record WHERE entity_type = 'MailMessage' AND changes ILIKE ?",
+            "%" + email + "%")).extracting(row -> row.get("entity_id")).containsExactly(othersMail);
+    }
+
     @Test
     void anotherUsersRecordsUnderAnAddressTheErasedUserOnceHadStay() {
         String shared = unique("shared") + "@example.com";
