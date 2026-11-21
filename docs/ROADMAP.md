@@ -5729,3 +5729,16 @@ QuizBuks 的 #545、#546、#547 用了 43.5–45 分钟，#545 到点被取消�
 | 经 HTTPS 发信 API 发信（如 Cloudflare Email Sending） | 服务器的出站 SMTP 端口被托管商封锁时不依赖端口。`NotificationSender` 的第二个实现，`jabiz.mail.transport` 选择；令牌只取自环境变量、出站主机白名单、4xx 不重试；附件视 API 而定（不支持则 `DOCUMENT_SEND` 明确拒绝）；应用登记的发信服务器（D56）仍走 SMTP。设计 18 §5.6 增节，可能需要新决策 | 约 1.5–2 天 |
 | 升级 Playwright 前：axe 与沙箱 frame | 2026-11-12 查明：Playwright 1.56.1 配 Chromium 153（build 1243，非配套）时，`sandbox=""` 的邮件预览 frame 中注入的定时器永不触发，`AxeBuilder.analyze()` 挂到超时（QuizBuks `mail-layout.spec.ts` 本机复现，CI 用配套的 build 1194 通过）。升级到自带 Chromium ≥ 153 的 Playwright 时 CI 也会挂。做法：升级时先把管理系统的 `/mail/layout` 与 `/mail/texts/edit` 加进平台的 `e2e/a11y.spec.ts`（亮暗两种），让平台 CI 先发现；遇到沙箱 frame 用哪种办法（等 Playwright / axe 修复，或 `accessibilityViolations` 不进入不允许脚本的 frame，与 Vitest 版的 `iframes: false` 一致，属于改变 axe 的检查范围），到那时再决定。本机规避见 `docs/guide/app-spa.md` §4 "浏览器的版本" | 约 0.5 天（不含所选办法） |
 | 审批人的应用层检查接入点 | 被封禁的用户在访问令牌到期之前（缺省 15 分钟）仍能用平台的 `APPROVAL_DECIDE` 审批：应用的封禁（如 QuizBuks）写在 `SignInGuard` 中，只在登录与刷新时检查；审批决定上平台只有自用的 `ApprovalDecisionCheck`（runtime、返回 `Mono`），应用插不进自己的检查（2026-11-13 总控）。做法：core 加同步、声明式的 `ApprovalGuard`（同 `SignInGuard`：`loads()` 以 `SignInLoad` 预读、`check` 返回拒绝或放行，可按审批对象限定），平台以一个 `ApprovalDecisionCheck` 在记录决定之前对审批人（与可选的对象）逐个运行，拒绝为 403、写入审计；启动检查同 `SignInGuard` 的预读；示范应用的封禁客户不能审批；文档 18 §3.4、10 §15.3、决策 D23 后加带日期的说明。在此之前的应急办法：封禁时同时吊销其会话（`SEC_USER_SESSIONS_REVOKE`），刷新令牌立即失效，剩余的访问令牌至多 15 分钟 | 约 1–1.5 天 |
+
+### 17zz29 首发报告按说明列出就绪账号未运行的步骤（2026-11-21，QuizBuks #747）
+
+**缘由**：首发报告"就绪账号的应用步骤没有运行"一行列出的是步骤的键（`FirstLaunchStep.key`）。键是处理器自己的标识，随运行记录、不能含账号代号（QuizBuks 的成员步骤为 `::`），读报告的人看不懂。
+
+| # | 内容 |
+|---|---|
+| 17zz29-1 | `ReadySteps.notRunDescribed`：与 `notRun` 同一判断，按步骤的说明（`describedAs`，没有说明时即键）列出；报告（`FirstLaunchWaiting.remaining`）改用它。等待的判断（`waitingFor`）与运行记录仍用键 |
+| 17zz29-2 | `ReadyStepsTest.theReportNamesAStepByItsDescription`；`FirstLaunchReadyIT` 的步骤带说明，断言报告列出说明 |
+
+**验收**：`:runtime:test --tests '*ReadyStepsTest'`、`:app:test --tests '*FirstLaunchReady*' --tests '*FirstLaunchWaitingIT'` 绿。不需要迁移。
+
+**17zz29 状态**：草稿 PR 待合并。

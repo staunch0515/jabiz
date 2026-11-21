@@ -254,4 +254,15 @@ class ReadyStepsTest {
         assertThat(ready(settings(null), handler(List.of(join("join")))).notRun(state(), A))
             .containsExactly(ReadySteps.CONFIG_MISSING);
     }
+
+    /** 17zz29: the report names a step by its description; the key only stands in when there is none. */
+    @Test
+    void theReportNamesAStepByItsDescription() {
+        ReadySteps steps = ready(List.of(join("::").describedAs("Member of operator Tokyo"), join("welcome")));
+        assertThat(steps.notRunDescribed(state(), A)).containsExactly("Member of operator Tokyo", "welcome");
+        assertThat(steps.notRun(state(), A)).containsExactly("::", "welcome");
+        assertThat(steps.notRunDescribed(state(Map.of(ALICE, Set.of("::"))), A)).containsExactly("welcome");
+        assertThat(ready(settings(null), handler(List.of(join("join")))).notRunDescribed(state(), A))
+            .containsExactly(ReadySteps.CONFIG_MISSING);
+    }
 }
