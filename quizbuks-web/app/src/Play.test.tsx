@@ -2233,6 +2233,33 @@ describe('a video file on any https address (F-S15)', () => {
     expect(screen.getByTestId('video-stage-file')).toBe(video)
   })
 
+  it('gives the staged video file a full-screen key on the start page, not on a card (F-S16)', async () => {
+    const request = vi.fn(() => Promise.resolve())
+    Object.defineProperty(document, 'fullscreenEnabled', { configurable: true, value: true })
+    Object.defineProperty(HTMLElement.prototype, 'requestFullscreen', { configurable: true, value: request })
+    try {
+      const io = intersections()
+      server({ feed: [{ ...CARD, video: FILE }], publicationPage: required })
+      render(<App />)
+      const card = await screen.findByTestId('feed-card')
+      io.fire(card, true, MIDDLE)
+      await screen.findByTestId('video-stage-file')
+      // On a card the whole of the player opens the start page: no key in it.
+      expect(screen.queryByTestId('video-fullscreen')).toBeNull()
+      await userEvent.click(screen.getByTestId('video-open'))
+      await waitFor(() => expect(screen.getByTestId('video-slot')).toHaveAttribute('data-mode', 'page'))
+      const key = await screen.findByTestId('video-fullscreen')
+      expect(key).toHaveAccessibleName('Full screen')
+      await userEvent.click(key)
+      expect(request).toHaveBeenCalledTimes(1)
+      // The stage itself goes full screen: the video, and the key with it.
+      expect((request.mock.contexts as HTMLElement[])[0]).toBe(screen.getByTestId('video-stage'))
+    } finally {
+      delete (document as { fullscreenEnabled?: boolean }).fullscreenEnabled
+      delete (HTMLElement.prototype as { requestFullscreen?: unknown }).requestFullscreen
+    }
+  })
+
   it('shows the cover and a link to the file when a video file does not play', async () => {
     const io = intersections()
     server({ feed: [{ ...CARD, video: FILE }], publicationPage: required })
