@@ -16,7 +16,12 @@ const en = {
     save: "Save",
   },
   toggleSidebar: "Toggle sidebar",
-  environment: { label: "Environment", notProduction: "Test system, not the production system" },
+  environment: {
+    label: "Environment",
+    notProduction: "Test system, not the production system",
+    collapse: "Hide the test system mark",
+    expand: "Show the test system mark",
+  },
   sidebar: "Navigation",
   breadcrumb: "Breadcrumb",
   dataTable: {
@@ -121,7 +126,12 @@ const zh: Messages = {
     save: "保存",
   },
   toggleSidebar: "展开或收起侧栏",
-  environment: { label: "环境", notProduction: "测试环境，不是正式版" },
+  environment: {
+    label: "环境",
+    notProduction: "测试环境，不是正式版",
+    collapse: "收起测试环境标志",
+    expand: "展开测试环境标志",
+  },
   sidebar: "导航",
   breadcrumb: "面包屑",
   dataTable: {
@@ -224,7 +234,12 @@ const ja: Messages = {
     save: "保存",
   },
   toggleSidebar: "サイドバーの表示を切り替え",
-  environment: { label: "環境", notProduction: "テスト環境、本番ではありません" },
+  environment: {
+    label: "環境",
+    notProduction: "テスト環境、本番ではありません",
+    collapse: "テスト環境の表示をたたむ",
+    expand: "テスト環境の表示を開く",
+  },
   sidebar: "ナビゲーション",
   breadcrumb: "パンくずリスト",
   dataTable: {
