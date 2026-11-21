@@ -125,7 +125,8 @@ public class QbFirstLaunch implements FirstLaunchHandler {
                 steps.add(FirstLaunchStep.run(MEMBER_STEP, QbFirstLaunchProcesses.MEMBER,
                     ready -> new QbFirstLaunchProcesses.MemberInput(ready.userId(operator.lead()),
                         ready.userId(account.key())))
-                    .describedAs("Member of operator " + operator.name()));
+                    // Shown in the log and the run's report: in the configuration's language, as the plan's steps.
+                    .describedAs(say(locale(config), "step.member", Map.of("operator", operator.name()))));
                 break;
             }
         }
