@@ -244,6 +244,17 @@ class QbFirstLaunchIT extends PostgresIntegrationTest {
         // Publications are reviewed: the switch is in effect at its declared value (no automatic approval).
         assertThat(String.valueOf(param("qb.review.publication.auto"))).contains("false");
 
+        // Every consumer of the approvals decided takes them in its stride, though the transfers' period has no value
+        // yet: the transfers' consumer recognises that none of them is a transfer's before it needs a setting.
+        assertThat(param("qb.transfer.hold-days")).isNull();
+        assertThat(query("SELECT 1 FROM sys_outbox_event WHERE event_type = 'jabiz.approval.approved'")).isNotEmpty();
+        while (deliverer.deliverPending().block() > 0) {
+            // until every event is delivered
+        }
+        assertThat(query("SELECT consumer, error FROM sys_outbox_attempt")).isEmpty();
+        assertThat(query("SELECT 1 FROM sys_event_consumption c JOIN sys_outbox_event e ON e.event_id = c.event_id"
+            + " WHERE e.event_type = 'jabiz.approval.approved' AND c.consumer = 'qb.transfer-approved'")).isNotEmpty();
+
         // Nothing moved money or was held for it (plan section 4).
         assertThat(query("SELECT 1 FROM ledger_transaction_version")).isEmpty();
         assertThat(query("SELECT 1 FROM ledger_entry_version")).isEmpty();
@@ -286,6 +297,9 @@ class QbFirstLaunchIT extends PostgresIntegrationTest {
 
     @Autowired
     com.jabiz.runtime.security.JwtService tokens;
+
+    @Autowired
+    com.jabiz.runtime.event.OutboxDeliverer deliverer;
 
     private static int round;
 
