@@ -5693,6 +5693,20 @@ QuizBuks 的 #545、#546、#547 用了 43.5–45 分钟，#545 到点被取消�
 
 **17zz26 状态**：草稿 PR 待合并。
 
+### 17zz28 CI 的 Gradle 依赖只下载一次（2026-11-21，#745 之后仍 429）
+
+**缘由**：每个作业的 `gradle/actions/setup-gradle` 缓存按作业名分键、拉取请求上只读，作业之间不共用；1.3/quizbuks 的推送上没有任何作业写缓存（`ci.yml` 只在 `*/platform` 的推送上跑，`quizbuks.yml` 只在拉取请求上跑），所以 QuizBuks 的拉取请求只取到旧条目（#751 的 e2e (1/3)：缓存恢复了，但没有 `spring-core:7.0.10`，向 Central 取即 429），几个拉取请求同时跑时一起冷下载。
+
+| # | 内容 |
+|---|---|
+| 17zz28-1 | 组合动作 `.github/actions/gradle-deps`：以 `backend/**/*.gradle.kts`、`gradle.properties`、包装器属性的哈希为键（`gradle-deps-v1-<OS>-<哈希>`，退回同前缀的最新条目），`actions/cache/restore` 取 `~/.gradle/caches/modules-2` 与 `~/.gradle/wrapper/dists`，`setup-gradle` 只校验包装器（`cache-disabled`）；`save: 'true'` 时停守护进程、去掉锁文件后 `actions/cache/save` |
+| 17zz28-2 | `ci.yml`：`build`、`build-application-shard`、`e2e` 都用它；`*/platform` 的推送在 `build` 通过后保存，拉取请求只读（不写进别人读的缓存） |
+| 17zz28-3 | 应用分支照用：1.3/quizbuks 另提，`quizbuks.yml` 在线分支的推送上加一个保存缓存的作业，其余作业只恢复 |
+
+**验收**：`*/platform` 推送后的运行里出现 `gradle-deps-v1-Linux-…` 的保存；之后拉取请求的 Gradle 作业恢复到它，构建日志里不再向 Central 下载已有的依赖。
+
+**17zz28 状态**：草稿 PR 待合并。
+
 ### 线 1.3 的候选（未排期，2026-11-08 总控：首次上线前不做）
 
 | 候选 | 缘由 | 粗估 |
