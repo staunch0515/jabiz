@@ -31,10 +31,14 @@ public class WaitingSettings implements SmartInitializingSingleton {
     private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(WaitingSettings.class);
 
     private final Environment environment;
+    private final ConfigShape shapes;
     private volatile Optional<FirstLaunchConfig> config = Optional.empty();
+    /** The shape, once worked out (empty inside: it could not be). */
+    private volatile Optional<String> shape;
 
-    public WaitingSettings(Environment environment) {
+    public WaitingSettings(Environment environment, ConfigShape shapes) {
         this.environment = environment;
+        this.shapes = shapes;
     }
 
     public Duration deadline() {
@@ -56,6 +60,37 @@ public class WaitingSettings implements SmartInitializingSingleton {
     @Override
     public void afterSingletonsInstantiated() {
         config = read();
+    }
+
+    /**
+     * The shape of the configuration this instance was started with ({@link ConfigShape}): the application's steps
+     * for a ready account run only while it is the shape the run recorded at its content phase's end. Worked out on
+     * first use only - when the waiting phase needs it, not at every start of a system long past its first launch -
+     * and once: it hashes the configuration's directory (blocking: call it off the request path). Empty when there is
+     * no configuration or it cannot be hashed (logged).
+     */
+    public Optional<String> shape() {
+        Optional<String> known = shape;
+        if (known == null) {
+            try {
+                known = config().map(shapes::of);
+            } catch (RuntimeException e) {
+                log.warn("First launch: the configuration's directory could not be read to compare it with the run's;"
+                    + " the application's steps for ready accounts do not run until a restart: {}", e.toString());
+                known = Optional.empty();
+            }
+            shape = known;
+        }
+        return known;
+    }
+
+    /**
+     * How many times in a row a ready account's item may fail before the run's end stops waiting for its steps
+     * ({@code jabiz.first-launch.ready-attempts}, 5): a passing failure (a conflict, a busy lock) is tried again by
+     * the job with its backoff; the run's deadline ends the wait in any case.
+     */
+    public int readyAttempts() {
+        return Math.max(1, environment.getProperty("jabiz.first-launch.ready-attempts", Integer.class, 5));
     }
 
     /** The configuration this instance was started with, when there is one and it read without problems. */

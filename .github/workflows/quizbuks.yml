@@ -417,7 +417,9 @@ jobs:
     # Pinned: ubuntu-latest became 26.04, where Playwright 1.56 has no Chromium ("does not support chromium on
     # ubuntu26.04-x64"). Back to ubuntu-latest once Playwright is upgraded to a version that supports it.
     runs-on: ubuntu-24.04
-    timeout-minutes: 35
+    # 45: installing (bootJar, fonts, Playwright's Chromium) takes 8 to 14 minutes on the runners and a shard's tests
+    # about 27 (the launch loop's money steps run several minutes each); 35 cancelled shards that were passing.
+    timeout-minutes: 45
     strategy:
       fail-fast: false
       matrix:

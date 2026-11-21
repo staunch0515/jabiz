@@ -5663,6 +5663,8 @@ QuizBuks 的 #545、#546、#547 用了 43.5–45 分钟，#545 到点被取消�
 | 17zz23c-5 | 抹除：`ErasurePurger` 也清除用户邮件（如邀请）的审计记录中的地址与参数（原来遗漏，与首发无关的已有缺口，由首发账号的全库搜索发现） |
 | 17zz23d-1 | 文件步骤：core `FirstLaunchStep.file`、`FileSource`（策略、相对路径、取出字节、名称），`FirstLaunchHandler.filePolicies()`；文件步骤必须代行；runtime `FirstLaunchFiles`（声明的策略，经 `FileUploadService.storeGenerated` 存储后在 `FIRST_LAUNCH_STEP` 之下以子流程 `FIRST_LAUNCH_FILE_REGISTER` 登记为该账号的上传：行锁、内容阶段、代行条件，登记失败删除对象；输出文件编号），配置目录的文件按启动时的摘要读取（新增、改写即拒绝），运行器先于代行流程的检查处理文件步骤，启动校验与试运行一次报全文件步骤的问题；启动检查 `FIRST_LAUNCH` 要求策略存在、不空白；架构测试 |
 | 17zz23d-2 | 测试 `FirstLaunchFilesIT`：从包中取出的图片以代行存储（上传者为该账号、重新编码、文件名不进记录）；带 EXIF/GPS 的 JPEG 存储后不含 GPS；`privateMetadata()` 策略得随机编号；试运行输出含文件步骤；登记的父流程是 `FIRST_LAUNCH_STEP`；出目录的路径、绝对路径、中途的符号链接、启动后新增或改写的文件、不是图片的内容、超出策略大小、未声明的策略、取出为空、系统身份、非本运行的账号、有会话的账号都被拒且不留下行；内容阶段后被拒。`FirstLaunchConfigReaderTest`（摘要）。`FirstLaunchChecksTest`（不存在的策略）。文档：设计 23 §6、D82 补充、`CLAUDE.md` 文件 |
+| 17zz23c2-1 | 账号就绪后的应用步骤：`FirstLaunchHandler.whenAccountReady`、`accountReadyProcesses()` 与启动检查、选项 `r…`、`FIRST_LAUNCH_ACCOUNT_READY`、V69 `sys_first_launch_ready`（每步一次）、失败不影响他人并列入报告；测试 `FirstLaunchReadyChecksTest`、`FirstLaunchReadyIT`；设计 23 §9 |
+| 17zz23e | #740 复核的后续：文件步骤的问题与排除的设置一次报全，文件步骤的账号须是配置中的、且其建号步骤在前；启动检查拒绝以 `FIRST_LAUNCH_*` 作代行流程；架构测试只允许 `runtime.file` / `external` / `firstlaunch` 依赖 `FileUploadService`；`FirstLaunchFilesIT` 断言被拒的步骤不留下行与存储的对象；文档：设计 14 §13、`CLAUDE.md` 的 `sys_file` 写入途径、`FirstLaunchFiles` 类注释 |
 
 ### 17zz24 子流程只读已存储的状态：写明并留痕（2026-11-18，QuizBuks S6 报告）
 
@@ -5677,6 +5679,19 @@ QuizBuks 的 #545、#546、#547 用了 43.5–45 分钟，#545 到点被取消�
 **验收**：`CallProcessSeesOnlyCommittedChangesIT` 绿；`StatementBudgetIT` 不受影响（只加日志）。
 
 **17zz24 状态**：草稿 PR 待合并。
+
+### 17zz26 Gradle 拉依赖遇到 429 时多等一会儿再试（2026-11-18，QuizBuks 的 e2e 冷启动失败）
+
+**缘由**：QuizBuks 的 e2e 与 package 作业在冷启动的运行器上解析 `spring-boot-gradle-plugin:4.0.9` 的依赖（`spring-boot-buildpack-platform`、`spring-boot-loader-tools`、`spring-core`）时，Maven Central 对共享出口返回 429（`Could not GET … Received status code 429`）或 `Could not find`（#737、#739）。Gradle 9.1 已把 408、429 与 5xx 当作暂时的网络问题并指数退避，但只试 3 次、首次间隔 1 秒，不够。与 17zz25（`pluginManagement` 列出仓库，#745）配合：那一项让根工程直接问 Central，这一项让它在被限流时多等。
+
+| # | 内容 |
+|---|---|
+| 17zz26-1 | `backend/gradle.properties`（新）：`systemProp.org.gradle.internal.network.retry.max.attempts=6`、`…network.retry.initial.backOff=2000`（传输层，每次下载）；`…repository.max.tentatives=5`、`…repository.initial.backoff=1000`（仓库访问层，模块元数据） |
+| 17zz26-2 | 核对属性名与默认值取自 Gradle 9.1 的类（`NetworkOperationBackOffAndRetry`：3 次、1000 毫秒；`NetworkingIssueVerifier` 对 408、429 与服务器错误重试；`ErrorHandlingModuleComponentRepository`：`max.tentatives`、`initial.backoff`）；本地以 `-Dorg.gradle.internal.repository.max.tentatives=0` 验证构建读取该属性（解析报 "Unexpected state"，不设时正常） |
+
+**验收**：本地联网 `./gradlew :core:compileJava` 通过；CI 绿。429 本身无法在本地复现，效果以之后冷启动的运行为准。
+
+**17zz26 状态**：草稿 PR 待合并。
 
 ### 线 1.3 的候选（未排期，2026-11-08 总控：首次上线前不做）
 

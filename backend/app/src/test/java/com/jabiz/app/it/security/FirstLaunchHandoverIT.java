@@ -334,6 +334,10 @@ class FirstLaunchHandoverIT extends SignUpItSupport {
         // A first launch account erased: nothing of it is left anywhere - its key (the user name) was never recorded
         // with the operations, the run's records hold none of it.
         String dave = userId(D);
+        // The search finds them before: it would see them after.
+        for (String needle : List.of("fl-h-dave", D, DAVE)) {
+            assertThat(occurrences(needle)).as("where %s is before", needle).isNotEmpty();
+        }
         AtomicReference<String> erasure = new AtomicReference<>();
         com.jabiz.runtime.erasure.AccountErasure.EraseOutput erased = executor.execute(
                 com.jabiz.runtime.erasure.AccountErasure.ERASE,
