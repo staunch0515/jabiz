@@ -4,7 +4,7 @@ import { ChevronRightIcon, type LucideIcon } from 'lucide-react'
 
 import { useIsMobile } from '../hooks/use-mobile'
 import { cn } from '../lib/utils'
-import { EnvironmentBanner } from './environment-banner'
+import { EnvironmentBadge } from './environment-badge'
 import { Separator } from './ui/separator'
 import {
   Sidebar,
@@ -132,9 +132,9 @@ export function AppShell({
         <SidebarRail />
       </Sidebar>
       <SidebarInset>
-        {/* The environment's banner (a test system, phase 16zd) and the header bar stay on screen together. */}
+        {/* A test system's mark (phase 17zz27) is a corner badge of its own: no room of the page. */}
+        <EnvironmentBadge />
         <div className="sticky top-0 z-20 shrink-0">
-          <EnvironmentBanner />
           <header
             data-slot="app-shell-header"
             className={cn('bg-background text-foreground flex h-12 shrink-0 items-center gap-2 border-b px-3')}
