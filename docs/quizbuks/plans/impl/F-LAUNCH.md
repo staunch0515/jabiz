@@ -151,6 +151,7 @@ accounts:
 
 # 运营商：default: true 的是新发起方的默认运营商（恰好一个）。
 # lead 即负责人，也是该运营商的直营发起方的账号。members 在本人接受邀请后加入。
+# 一个账号只能属于一个运营商（作负责人或成员，校验强制）。
 operators:
   - key: tokyo
     name: 东京运营
@@ -160,7 +161,6 @@ operators:
   - key: kansai
     name: 关西运营
     lead: C
-    members: [B]
 
 # 直营发起方：每个运营商一个，内容在 sponsors/<key>/package.json。
 sponsors:
@@ -168,9 +168,9 @@ sponsors:
     package: sponsors/hq/package.json
     # 发起方可用的奖励方式（QB_SPONSOR_REWARD_METHODS_SET）；首发只允许线下兑换。
     rewardMethods: [OFFLINE_REDEEM]
-    # 包中各发布的补充，按包内的发布 key 对应。
+    # 包中各发布的补充，按包内发布的名称（settings.name）对应；包中每个发布都要写，名称不能重复。
     publications:
-      spring-quiz:
+      春季答题:
         rewardMethod: OFFLINE_REDEEM
         redeemDescription: 在东京店的收银台出示答题结果页即可领取纪念徽章。
         startAt: launch          # launch = 首发运行的时刻；也可写 2026-12-01T09:00+09:00
@@ -179,7 +179,7 @@ sponsors:
     package: sponsors/kansai/package.json
     rewardMethods: [OFFLINE_REDEEM]
     publications:
-      kansai-history:
+      关西历史:
         rewardMethod: OFFLINE_REDEEM
         redeemDescription: 在大阪店出示结果页领取明信片。
         startAt: launch
@@ -219,7 +219,7 @@ params:
         "files": { "img1": { "type": "image/jpeg", "data": "/9j/4AAQ…" } } } } ] }
   ],
   "publications": [
-    { "key": "spring-quiz", "quiz": "spring", "version": 1,
+    { "quiz": "spring", "version": 1,
       "settings": { "name": "春季答题", "timeLimitSec": 300, "passScore": 2, "budgetCap": 0, "maxWinners": 100,
                     "tiers": [ { "minScore": 2, "reward": 0 } ], "regions": ["JP"] },
       "node": { "tree": "spring", "node": "basics" }, "topics": ["seasonal"] }

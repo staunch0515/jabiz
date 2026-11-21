@@ -1,0 +1,314 @@
+package com.jabiz.quizbuks.firstlaunch;
+
+import com.jabiz.runtime.EntityInstance;
+import com.jabiz.process.ProcessContext;
+import com.jabiz.process.ProcessDefinition;
+import com.jabiz.query.EntityQuery;
+import com.jabiz.query.QueryPredicate;
+import com.jabiz.quizbuks.QbPermissions;
+import com.jabiz.quizbuks.page.QbSponsorPages;
+import com.jabiz.quizbuks.publishing.PublicationStatus;
+import com.jabiz.quizbuks.publishing.QbPublications;
+import com.jabiz.quizbuks.tree.QbTrees;
+import com.jabiz.runtime.approval.ApprovalEntities;
+import com.jabiz.runtime.approval.ApprovalProcesses;
+import com.jabiz.runtime.approval.ControlChanges;
+import com.jabiz.runtime.firstlaunch.FirstLaunchCheck;
+import com.jabiz.runtime.process.steps.CallProcess;
+import com.jabiz.runtime.process.steps.QueryEntities;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Size;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.UUID;
+
+/**
+ * QuizBuks's own steps of the first launch (F-LAUNCH, docs/quizbuks/plans/impl/F-LAUNCH.md section 2.3), each run by
+ * the platform's step process {@code FIRST_LAUNCH_STEP} as the system:
+ * <ul>
+ *   <li>{@value #PARAM}: a controlled parameter's initial value: the proposal {@code QB_SETUP} made is withdrawn, the
+ *       configured (or {@link com.jabiz.quizbuks.setup.FirstLaunchSwitches first launch's}) value proposed and
+ *       published by the platform's {@code CONTROL_CHANGE_FIRST_LAUNCH_PUBLISH} (decision D82);</li>
+ *   <li>{@value #APPROVE}: every pending approval request, approved by the platform's
+ *       {@code APPROVAL_FIRST_LAUNCH_DECIDE} (which refuses a request the run did not make);</li>
+ *   <li>{@value #READY}: whether the graphs, pages and publications made are in effect (the run waits on it);</li>
+ *   <li>{@value #LEAD}: inside {@code QB_OPERATOR_SAVE}, a lead whose address is not verified yet is accepted only when
+ *       the platform finds the account made by a first launch whose content phase goes on (plan section 5.1);</li>
+ *   <li>{@value #MEMBER}: in the waiting phase, once a configured member's own roles are applied, they join the
+ *       operator their lead leads (plan section 5.2; the platform's account-ready hook, run as the system).</li>
+ * </ul>
+ * None is open to a request: the first three are {@code internal()}, the last two {@code subProcessOnly()}.
+ */
+public final class QbFirstLaunchProcesses {
+
+    public static final String PARAM = "QB_FIRST_LAUNCH_PARAM";
+    public static final String APPROVE = "QB_FIRST_LAUNCH_APPROVE";
+    public static final String READY = "QB_FIRST_LAUNCH_READY";
+    public static final String LEAD = "QB_FIRST_LAUNCH_LEAD";
+    public static final String MEMBER = "QB_LAUNCH_MEMBER_ADD";
+
+    /**
+     * @param withdraw    the proposal {@code QB_SETUP} made of the parameter
+     * @param key         the parameter
+     * @param kind        its value kind, as declared
+     * @param value       the value it takes
+     * @param description its description, as declared
+     * @param reason      the proposal's reason (names the configuration's hash)
+     */
+    public record ParamInput(@NotNull UUID withdraw, @NotBlank String key, @NotNull Map<String, Object> kind,
+        @NotNull Object value, String description, @NotBlank @Size(max = 500) String reason) {}
+
+    public record ApproveInput() {}
+
+    /** @param approved the requests approved */
+    public record ApproveOutput(List<String> approved) {}
+
+    /**
+     * @param treeIds        graphs whose version must be in effect
+     * @param pageUsers      sponsors whose page must be published
+     * @param publicationIds publications that must be live or scheduled
+     */
+    public record ReadyInput(@NotNull List<String> treeIds, @NotNull List<String> pageUsers,
+        @NotNull List<UUID> publicationIds) {}
+
+    public record LeadInput(@NotBlank String userId) {}
+
+    /**
+     * @param leadUserId the operator's lead (its own sponsor): the operator is found by it, not by an id the content
+     *                   phase gave (the waiting phase keeps none)
+     * @param userId     the member to add
+     */
+    public record MemberInput(@NotBlank String leadUserId, @NotBlank String userId) {}
+
+    /** A value the first launch may not give the parameter (its checks refuse it first). */
+    public static final String PARAM_REFUSED = "QB_FIRST_LAUNCH_PARAM_REFUSED";
+
+    /** The subjects of the reviews the first launch asks for: only these it approves. */
+    static final List<String> SUBJECTS = List.of(com.jabiz.quizbuks.page.SponsorPageApprovals.SUBJECT,
+        com.jabiz.quizbuks.tree.TreeApprovals.SUBJECT, com.jabiz.quizbuks.publishing.PublicationApprovals.SUBJECT);
+    /** The most requests one approval step decides; more fails the step rather than leaving some. */
+    static final int MAX_REQUESTS = 500;
+
+    static final String INPUT = "input";
+    static final String WITHDRAWN = "withdrawn";
+    static final String PROPOSED = "proposed";
+    static final String PUBLISHED = "published";
+    static final String PENDING = "pending";
+    static final String DECIDED = "decided";
+    static final String TREE_VERSIONS = "treeVersions";
+    static final String PAGES = "pages";
+    static final String PUBLICATIONS = "publications";
+    static final String OPERATOR = "operator";
+    static final String ADDED = "added";
+    static final String PLACE = "place";
+
+    /** Publication states the first launch takes as in effect. */
+    static final Set<String> IN_EFFECT = Set.of(PublicationStatus.LIVE, PublicationStatus.SCHEDULED);
+
+    private QbFirstLaunchProcesses() {}
+
+    private static ProcessContext start(com.jabiz.process.ProcessStart start, Object input) {
+        ProcessContext ctx = new ProcessContext(start);
+        ctx.put(INPUT, input);
+        return ctx;
+    }
+
+    public static ProcessDefinition<ParamInput, ControlChanges.ChangeOutput, ProcessContext> param() {
+        return ProcessDefinition.define(PARAM, 1, ParamInput.class, ControlChanges.ChangeOutput.class,
+            ProcessContext.class, pb -> pb
+                .description("First launch: a controlled parameter's initial value, proposed and published (D82).")
+                .permissions(QbPermissions.SETUP)
+                .internal()
+                .contextFactory(QbFirstLaunchProcesses::start)
+                .outputMapper(ctx -> ctx.get(PUBLISHED, ControlChanges.ChangeOutput.class))
+                .compute("Only a value the first launch may set", (metadata, ctx) -> {
+                    // The handler's checks found it allowed; the process holds to the same rule whoever plans it.
+                    ParamInput input = input(ctx);
+                    boolean settable = com.jabiz.quizbuks.setup.FirstLaunchParams.verdict(input.key(),
+                        String.valueOf(input.value())) == com.jabiz.quizbuks.setup.FirstLaunchParams.Verdict.SETTABLE;
+                    boolean fixed = com.jabiz.quizbuks.setup.FirstLaunchSwitches.row(input.key())
+                        .filter(com.jabiz.quizbuks.setup.FirstLaunchSwitches.Row::takesEffectAtLaunch)
+                        .filter(row -> java.util.Objects.equals(row.value(), input.value())).isPresent();
+                    if (!settable && !fixed) {
+                        ctx.reject(new com.jabiz.entity.Violation("value", PARAM_REFUSED, "The first launch does not "
+                            + "set " + input.key() + " to this value", Map.of("key", input.key())));
+                    }
+                })
+                .step("Withdraw the setup's proposal", CallProcess.<ProcessContext>of(ControlChanges.WITHDRAW, 1,
+                    ctx -> new ControlChanges.ChangeInput(input(ctx).withdraw()), WITHDRAWN))
+                .step("Propose the value", CallProcess.<ProcessContext>of(ControlChanges.PROPOSE, 1, ctx -> {
+                    ParamInput input = input(ctx);
+                    Map<String, Object> values = new java.util.LinkedHashMap<>();
+                    values.put(com.jabiz.runtime.param.ParamEntities.KEY, input.key());
+                    values.put(com.jabiz.runtime.param.ParamEntities.KIND, input.kind());
+                    values.put(com.jabiz.runtime.param.ParamEntities.VALUE, input.value());
+                    values.put(com.jabiz.runtime.param.ParamEntities.DESCRIPTION, input.description());
+                    return new ControlChanges.ProposeInput(com.jabiz.runtime.param.ParamEntities.ENTITY, null, false,
+                        values, null, input.reason());
+                }, PROPOSED))
+                .step("Publish it", CallProcess.<ProcessContext>of(ControlChanges.FIRST_LAUNCH_PUBLISH, 1,
+                    ctx -> new ControlChanges.ChangeInput(UUID.fromString(
+                        ctx.get(PROPOSED, ControlChanges.ChangeOutput.class).changeId())), PUBLISHED)));
+    }
+
+    public static ProcessDefinition<ApproveInput, ApproveOutput, ProcessContext> approve() {
+        return ProcessDefinition.define(APPROVE, 1, ApproveInput.class, ApproveOutput.class, ProcessContext.class, pb -> pb
+            .description("First launch: approves every pending approval request the run made (D82).")
+            .permissions(QbPermissions.SETUP)
+            .internal()
+            .contextFactory(QbFirstLaunchProcesses::start)
+            .outputMapper(ctx -> new ApproveOutput(pending(ctx)))
+            .step("Load the pending requests", QueryEntities.<ProcessContext>of(ApprovalEntities.REQUEST_DATASET,
+                ctx -> EntityQuery.builder().where(new QueryPredicate.And(List.of(
+                    new QueryPredicate.Eq("status", ApprovalEntities.PENDING),
+                    new QueryPredicate.In("subject", new ArrayList<Object>(SUBJECTS)))))
+                    .limit(MAX_REQUESTS + 1).build(), PENDING))
+            .compute("Not more than one step decides", (metadata, ctx) -> {
+                if (list(ctx, PENDING).size() > MAX_REQUESTS) {
+                    throw new IllegalStateException("More than " + MAX_REQUESTS + " reviews are pending: the first "
+                        + "launch decides at most that many at once");
+                }
+            })
+            .step("Approve each", CallProcess.<ProcessContext>forEach(ApprovalProcesses.FIRST_LAUNCH_DECIDE, 1,
+                ctx -> pending(ctx).stream()
+                    .map(id -> new ApprovalProcesses.FirstLaunchDecideInput(UUID.fromString(id))).toList(),
+                DECIDED)));
+    }
+
+    public static ProcessDefinition<ReadyInput, Boolean, ProcessContext> ready() {
+        return ProcessDefinition.define(READY, 1, ReadyInput.class, Boolean.class, ProcessContext.class, pb -> pb
+            .description("First launch: whether the graphs, pages and publications it made are in effect.")
+            .permissions(QbPermissions.SETUP)
+            .internal()
+            .contextFactory(QbFirstLaunchProcesses::start)
+            .outputMapper(QbFirstLaunchProcesses::isReady)
+            .step("Load them", QueryEntities.<ProcessContext>all(
+                QueryEntities.query(QbTrees.defaultDataset(QbTrees.VERSION), ctx -> EntityQuery.builder()
+                    .where(new QueryPredicate.And(List.of(
+                        new QueryPredicate.In("treeId", new ArrayList<>(ready(ctx).treeIds())),
+                        new QueryPredicate.In("status", List.of(QbTrees.ACTIVE, QbTrees.REJECTED))))).limit(1000)
+                    .build(), TREE_VERSIONS),
+                QueryEntities.query(QbSponsorPages.DEFAULT_DATASET, ctx -> EntityQuery.builder()
+                    .where(new QueryPredicate.In("userId", new ArrayList<>(ready(ctx).pageUsers()))).limit(1000)
+                    .build(), PAGES),
+                QueryEntities.query(QbPublications.defaultDataset(QbPublications.PUBLICATION),
+                    ctx -> EntityQuery.builder().where(new QueryPredicate.In("publicationId",
+                        ready(ctx).publicationIds().stream().map(String::valueOf).map(Object.class::cast).toList()))
+                        .limit(1000).build(), PUBLICATIONS))));
+    }
+
+    public static ProcessDefinition<LeadInput, Boolean, ProcessContext> lead() {
+        return ProcessDefinition.define(LEAD, 1, LeadInput.class, Boolean.class, ProcessContext.class, pb -> pb
+            .description("First launch: a new operator's lead the run made may not have verified the address yet.")
+            .permissions(QbPermissions.OPERATORS_WRITE)
+            .subProcessOnly()
+            .contextFactory(QbFirstLaunchProcesses::start)
+            .outputMapper(ctx -> Boolean.TRUE)
+            .step("Check the first launch's power", FirstLaunchCheck.of("sec_user_version", "user_id",
+                ctx -> ctx.get(INPUT, LeadInput.class).userId())));
+    }
+
+    /**
+     * The waiting phase's step for a configured member of an operator (plan section 5.2), once the member's own roles
+     * are applied (the platform's account-ready hook, run as the system): added to the operator its lead leads, with
+     * {@code QB_OPERATOR_MEMBER_ADD}'s own checks (a verified address among them). One already a member of that
+     * operator is left as they are: headquarters may have named them its lead in the meantime, which adding them
+     * again (not as a lead) would undo. One who is a member of another operator, or an operator that is full, fails
+     * the step; headquarters then names them by hand.
+     */
+    public static ProcessDefinition<MemberInput, com.jabiz.quizbuks.operator.OperatorProcesses.MemberOutput,
+        ProcessContext> member() {
+        return ProcessDefinition.define(MEMBER, 1, MemberInput.class,
+            com.jabiz.quizbuks.operator.OperatorProcesses.MemberOutput.class, ProcessContext.class, pb -> pb
+                .description("First launch: adds a configured member to the operator its lead leads.")
+                .permissions(QbPermissions.OPERATORS_WRITE)
+                .subProcessOnly()
+                .contextFactory(QbFirstLaunchProcesses::start)
+                .outputMapper(QbFirstLaunchProcesses::memberOutput)
+                .step("Load the lead's operator and the member's place", QueryEntities.<ProcessContext>all(
+                    QueryEntities.query(com.jabiz.quizbuks.operator.QbOperators.defaultDataset(
+                            com.jabiz.quizbuks.operator.QbOperators.OPERATOR),
+                        ctx -> EntityQuery.builder().where(new QueryPredicate.Eq("directSponsorId",
+                            ctx.get(INPUT, MemberInput.class).leadUserId())).limit(1).build(), OPERATOR),
+                    QueryEntities.query(com.jabiz.quizbuks.operator.QbOperators.defaultDataset(
+                            com.jabiz.quizbuks.operator.QbOperators.MEMBER),
+                        ctx -> com.jabiz.quizbuks.operator.OperatorChecks.current(
+                            ctx.get(INPUT, MemberInput.class).userId()), PLACE)))
+                .step("Add the member", CallProcess.<ProcessContext>when(ctx -> !alreadyMember(ctx),
+                    com.jabiz.quizbuks.operator.OperatorProcesses.MEMBER_ADD, 1,
+                    ctx -> new com.jabiz.quizbuks.operator.OperatorProcesses.MemberInput(leadOperator(ctx),
+                        ctx.get(INPUT, MemberInput.class).userId(), false), ADDED)));
+    }
+
+    private static String leadOperator(ProcessContext ctx) {
+        List<EntityInstance> found = list(ctx, OPERATOR);
+        if (found.isEmpty()) {
+            throw new IllegalStateException("No operator is led by the configured lead");
+        }
+        return String.valueOf(found.getFirst().id());
+    }
+
+    /** Whether the member already belongs to the lead's operator (as a lead or not). */
+    static boolean alreadyMember(ProcessContext ctx) {
+        List<EntityInstance> place = list(ctx, PLACE);
+        return !place.isEmpty()
+            && leadOperator(ctx).equals(String.valueOf((Object) place.getFirst().get("operatorId")));
+    }
+
+    private static com.jabiz.quizbuks.operator.OperatorProcesses.MemberOutput memberOutput(ProcessContext ctx) {
+        return ctx.contains(ADDED) ? ctx.get(ADDED, com.jabiz.quizbuks.operator.OperatorProcesses.MemberOutput.class)
+            : new com.jabiz.quizbuks.operator.OperatorProcesses.MemberOutput(ctx.get(INPUT, MemberInput.class).userId(),
+                leadOperator(ctx), false);
+    }
+
+    private static ParamInput input(ProcessContext ctx) {
+        return ctx.get(INPUT, ParamInput.class);
+    }
+
+    private static ReadyInput ready(ProcessContext ctx) {
+        return ctx.get(INPUT, ReadyInput.class);
+    }
+
+    @SuppressWarnings("unchecked")
+    private static List<EntityInstance> list(ProcessContext ctx, String key) {
+        return ctx.contains(key) ? (List<EntityInstance>) ctx.get(key) : List.of();
+    }
+
+    private static List<String> pending(ProcessContext ctx) {
+        return list(ctx, PENDING).stream().map(row -> String.valueOf((Object) row.get("requestId"))).toList();
+    }
+
+    /** Pages and publications that did not get through: the run fails at once rather than waiting out its time. */
+    static void refused(ProcessContext ctx) {
+        List<String> refused = new ArrayList<>();
+        list(ctx, TREE_VERSIONS).stream().filter(row -> QbTrees.REJECTED.equals(row.get("status")))
+            .forEach(row -> refused.add("graph " + row.get("treeId")));
+        list(ctx, PAGES).stream().filter(row -> QbSponsorPages.REJECTED.equals(row.get("status")))
+            .forEach(row -> refused.add("page of " + row.get("userId")));
+        list(ctx, PUBLICATIONS).stream()
+            .filter(row -> !IN_EFFECT.contains(String.valueOf((Object) row.get("status")))
+                && !PublicationStatus.PENDING_REVIEW.equals(row.get("status")))
+            .forEach(row -> refused.add("publication " + row.id() + " (" + row.get("status") + ")"));
+        if (!refused.isEmpty()) {
+            throw new IllegalStateException("Not put into effect after its review: " + String.join(", ", refused));
+        }
+    }
+
+    static Boolean isReady(ProcessContext ctx) {
+        refused(ctx);
+        ReadyInput input = ready(ctx);
+        Set<String> trees = new java.util.HashSet<>();
+        list(ctx, TREE_VERSIONS).stream().filter(row -> QbTrees.ACTIVE.equals(row.get("status")))
+            .forEach(row -> trees.add(String.valueOf((Object) row.get("treeId"))));
+        long pages = list(ctx, PAGES).stream()
+            .filter(row -> QbSponsorPages.PUBLISHED.equals(row.get("status"))).count();
+        long publications = list(ctx, PUBLICATIONS).stream()
+            .filter(row -> IN_EFFECT.contains(String.valueOf((Object) row.get("status")))).count();
+        return trees.containsAll(input.treeIds()) && pages >= input.pageUsers().size()
+            && publications >= input.publicationIds().size();
+    }
+}
