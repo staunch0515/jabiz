@@ -7,6 +7,7 @@
   "packageManager": "pnpm@10.18.0",
   "scripts": {
     "e2e": "playwright test",
+    "e2e:first-launch": "playwright test -c first-launch.config.ts",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "screenshots": "playwright test -c store.config.ts"
   },
