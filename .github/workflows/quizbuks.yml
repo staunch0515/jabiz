@@ -96,7 +96,8 @@ jobs:
         uses: gradle/actions/setup-gradle@v5
         with:
           cache-read-only: ${{ github.event_name == 'pull_request' }}
-      # Plain unit tests (no database): the documents they read are listed in tools/quizbuks/ci/scope.sh.
+      # The documents they read are listed in tools/quizbuks/ci/scope.sh. All plain unit tests but the first launch's
+      # replay of the sample (F-LAUNCH), which starts the application on PostgreSQL (Testcontainers on the runner).
       - name: The backend tests that read documents
         if: ${{ needs.quizbuks-scope.outputs.docs_tests == 'true' }}
         working-directory: backend
@@ -104,6 +105,7 @@ jobs:
           ./gradlew :quizbuks:test --console=plain
           --tests '*ProfilePackageHelpTest' --tests '*SiteProfileHelpTest' --tests '*FeeAccountHelpTest'
           --tests '*ProfilePackagePromptsTest' --tests '*QuizFilePromptsTest' --tests '*ReconOperationsTableTest'
+          --tests '*FirstLaunchScenarioTest'
 
   # The QuizBuks front ends (docs/quizbuks/plans/QP-pages.md section 7): the app and the sponsor console use the
   # platform's versions (app:check), pass their own lint, types and tests, and keep the shared folder src/qb the same.
