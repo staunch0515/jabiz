@@ -5705,7 +5705,7 @@ QuizBuks 的 #545、#546、#547 用了 43.5–45 分钟，#545 到点被取消�
 
 **验收**：前端 lint、typecheck、全部 Vitest 绿；`pnpm check:api` 不变；e2e 的登录页断言绿。QuizBuks 侧受影响的断言等同步后在 `1.3/quizbuks` 另提。
 
-**17zz27 状态**：✅ 已合并（#749）。后续修正（#755，不另立阶段号）：QuizBuks 的 e2e（axe 的 `target-size`）指出角标的收起键只有 20 px，改为 24 px（`size-6`），与收起后的小圆点一致。
+**17zz27 状态**：✅ 已合并（#749）。后续修正（#755，不另立阶段号）：QuizBuks 的 e2e（axe 的 `target-size`）指出角标的收起键只有 20 px，改为 24 px（`size-6`），与收起后的小圆点一致。又一处修正（不另立阶段号）：QuizBuks 的 e2e 发现角标挡住了「我的」页的退出键。胶囊本体改为 `pointer-events-none`，只有收起键与小圆点接收点击，除此之外角标不截任何点击；展开 6 秒（`autoCollapseMs`，0 为不自动收起）后自动收成小圆点（照旧只按标签页记住），收起时读屏仍读到环境名与说明。测试：Vitest（`environment-badge.test.tsx`）与 Playwright（`login.spec.ts`，角标所在处取元素不是角标）。
 
 ### 17zz28 CI 的 Gradle 依赖只下载一次（2026-11-21，#745 之后仍 429）
 
