@@ -351,8 +351,8 @@ const FLOATING = 'bg-background/80 text-foreground hover:bg-background focus-vis
 /**
  * The help centre, the legal texts and the About page (Q7b): readable without signing in, in a frame of their own
  * with the way back (to the app, or to signing in). A Sponsor's page (`sponsorSite`) has the whole top to itself (the
- * requester, 2026-11-21): no app bar; the way back and the appearance switch are round see-through buttons floating
- * over the top of the Sponsor's cover.
+ * requester, 2026-11-21): no app bar and no appearance switch; the way back is a round see-through button floating
+ * over the top left of the Sponsor's cover.
  */
 function PublicPage({ path, signedIn, sponsorSite = false, children }: { path: string; signedIn: boolean;
   sponsorSite?: boolean; children?: ReactNode }) {
@@ -380,14 +380,14 @@ function PublicPage({ path, signedIn, sponsorSite = false, children }: { path: s
       )}
       {sponsorSite && (
         // Over the Sponsor's cover, not in the page: a row of no height that stays at the top while scrolling, with the
-        // way back on the left and the appearance switch on the right (round, see-through, clear of a phone's notch).
+        // way back on the left (round, see-through, clear of a phone's notch). No appearance switch here: the
+        // requester agreed to drop it from this page (2026-11-21); the app's settings have it.
         <div className="sticky top-0 z-20 mx-auto h-0 w-full max-w-md" data-testid="sponsor-site-controls">
-          <div className={'flex items-center justify-between px-3 pt-[max(0.75rem,env(safe-area-inset-top))] '
-            + 'pl-[max(0.75rem,env(safe-area-inset-left))] pr-[max(0.75rem,env(safe-area-inset-right))]'}>
+          <div className={'flex items-center pt-[max(0.75rem,env(safe-area-inset-top))] '
+            + 'pl-[max(0.75rem,env(safe-area-inset-left))]'}>
             <Link to={back} aria-label={backLabel} data-testid="public-back" className={FLOATING}>
               {signedIn ? <ArrowLeft aria-hidden className="size-5" /> : <LogIn aria-hidden className="size-5" />}
             </Link>
-            <ThemeToggle className={FLOATING} />
           </div>
         </div>
       )}
