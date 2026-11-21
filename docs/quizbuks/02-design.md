@@ -503,7 +503,7 @@ SCHEDULED / LIVE / PAUSED / FUNDS_SHORT ──到结束时间（Q4）、名额�
   所以没有 OpenAPI 生成的类型：流程的输入输出对照 Java record 手写在 `src/qb/api.ts`，由 e2e 覆盖。
 - PWA：`manifest.webmanifest`、图标、Service Worker 只缓存应用外壳与静态资源（不离线缓存数据，不做推送），由平台预设 `jabizSpa({ pwa })` 生成；放过 `/sponsor/`、`/admin/`。
 - 会话保存在设备上（入口 `app`：`persistence: device`、30 天、不按闲置锁定，缺省 Q12）。
-- 测试系统的标志（平台 16zd，2026-10-24）：三个前端的每一页顶部都显示 `@jabiz/ui` 的 `EnvironmentBanner`（警示色通栏："STAGING · 测试环境，不是正式版"，标题前加 `[STAGING]`），
+- 测试系统的标志（平台 16zd，2026-10-24）：三个前端的每一页顶部都显示 `@jabiz/ui` 的 `EnvironmentBanner`（警示色通栏："STAGING · 测试环境，不是正式版"，标题前加 `[STAGING]`）， **（2026-11-21：平台 17zz27 起是 `EnvironmentBadge`，页面左下角的角标，可收起成小圆点，不再占一行；三个前端的每一页仍有，标题前缀 `[STAGING]` 不变。）**
   正式环境的 `.env` 以 `JABIZ_WEB_ENVIRONMENT=production` 关掉它（`deploy/quizbuks/DEPLOY.md`、`operations.md` §1.1、上线检查清单）。发起方页面与平台管理系统经 `AppShell` / `AuthFrame` 自动得到，
   App 的两个外框（登录后的页头与公开页的页头）自己放置；登录、注册等页面经平台积木自动得到。
 - 宽度 ≤ 430px 设计，底部导航（QP1：首页、账户；QP2 加历史，QP4 加钱包，Q7 加收件箱，Q-8）；卡片紧凑：首页在问候横幅之下以两列封面网格列出，390×844 一屏 ≥ 4 张完整可见（U-10；Q32 之前是单列 6 张，横幅与封面换来可见张数）。
