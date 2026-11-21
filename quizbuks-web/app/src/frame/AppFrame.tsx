@@ -1,4 +1,4 @@
-import { BottomBar, cn, type BottomBarItem } from '@jabiz/ui'
+import { BottomBar, cn, EnvironmentBadge, type BottomBarItem } from '@jabiz/ui'
 import { useQueryClient } from '@tanstack/react-query'
 import { useEffect, useRef, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -125,6 +125,11 @@ export function AppFrame({ nav, children }: { nav: boolean; children: ReactNode 
   }, [path, search, queryClient])
   return (
     <>
+      {/* A test system's mark (platform 17zz27): a corner badge, clear of the bottom menu of a phone and of the left
+          column of a wide screen, where it would cover the first area. */}
+      <EnvironmentBadge className={nav
+        ? 'bottom-[calc(var(--bottom-bar-height)+env(safe-area-inset-bottom,0px)+0.5rem)] md:bottom-3 md:left-[calc(var(--sidebar-width,16rem)+0.75rem)]'
+        : undefined} />
       <div ref={content} className={cn('flex min-h-full flex-col', nav && 'md:pl-[var(--sidebar-width,16rem)]')}>
         {children}
       </div>
