@@ -1,7 +1,8 @@
-import { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from 'react'
 import { createPortal } from 'react-dom'
 import { VIMEO_PLAYER, videoKind } from '../qb/video'
 import { markVideoFailed } from '../qb/videoFailures'
+import { FullscreenButton, useFullscreen } from '../qb/view/FullscreenButton'
 import { recordPlayback, UNKNOWN_AFTER_MS, type PlaybackEvent } from './playback'
 
 /*
@@ -410,6 +411,15 @@ export function VideoStage() {
   const stage = useStage()
   const [rect, setRect] = useState<Placement | null>(null)
   const slot = stage.slot
+  // F-S16: a video file has no full-screen key of YouTube's or Vimeo's kind: the stage gives it one (`FullscreenButton`).
+  const box = useRef<HTMLDivElement>(null)
+  const media = useRef<HTMLVideoElement>(null)
+  const { active: fullscreen } = useFullscreen(box, media)
+  // One function for the life of the stage: a new one at each render would be called again with the element, each time.
+  const attach = useCallback((element: HTMLVideoElement | null) => {
+    media.current = element
+    attachMedia(element)
+  }, [])
   useEffect(() => {
     window.addEventListener('message', listen)
     return () => window.removeEventListener('message', listen)
@@ -437,17 +447,18 @@ export function VideoStage() {
     || clip.left + clip.right >= rect.width)
   const visible = !!slot && !!rect && !hidden
   return createPortal(
-    <div data-testid="video-stage" data-mode={slot?.mode}
+    <div ref={box} data-testid="video-stage" data-mode={slot?.mode}
       style={{ position: 'absolute', top: rect?.top ?? 0, left: rect?.left ?? 0, width: rect?.width ?? 0,
         height: rect?.height ?? 0, visibility: visible ? 'visible' : 'hidden',
-        clipPath: clip ? `inset(${clip.top}px ${clip.right}px ${clip.bottom}px ${clip.left}px)` : undefined,
+        // In full screen the player fills the screen: nothing of the home's place is cut off it.
+        clipPath: clip && !fullscreen ? `inset(${clip.top}px ${clip.right}px ${clip.bottom}px ${clip.left}px)` : undefined,
         // F-S10: above the vertical mode's screens (which lie over the home at z-index 50).
         zIndex: slot?.mode === 'short' ? 55 : 5 }}>
       {videoKind(stage.player) === 'file' ? (
         // F-S15: a video file, started muted; its controls on the start page and in the vertical mode only.
         <video
           key={stage.player}
-          ref={attachMedia}
+          ref={attach}
           src={stage.player}
           title={slot?.title ?? ''}
           aria-label={slot?.title ?? ''}
@@ -458,6 +469,7 @@ export function VideoStage() {
           playsInline
           preload="auto"
           controls={!!slot && slot.mode !== 'card'}
+          controlsList="nofullscreen"
           onError={() => markVideoFailed(stage.player!)}
         />
       ) : (
@@ -482,6 +494,10 @@ export function VideoStage() {
           startCounting()
         }}
       />
+      )}
+      {videoKind(stage.player) === 'file' && !!slot && slot.mode !== 'card' && (
+        // Above the browser's own control bar, whose full-screen key `controlsList` takes away where it can.
+        <FullscreenButton target={box} video={media} className="bottom-[4.25rem]" />
       )}
       {/* On a card nothing in the player is for touching: the whole of it opens the start page. */}
       {slot?.mode === 'card' && (

@@ -86,6 +86,24 @@ class FirstLaunchParamsTest {
         }
     }
 
+    /**
+     * Publications are always reviewed before they go live (the requester, 2026-10-28; operations.md, the first stage's
+     * settings): the configuration cannot turn the review off, while the sponsors' onboarding review stays settable.
+     */
+    @Test
+    void thePublicationReviewIsFixedOnAndTheSponsorReviewStaysSettable() {
+        String key = QbParams.REVIEW_PUBLICATION_AUTO;
+        assertThat(FirstLaunchParams.SETTABLE).doesNotContain(key).contains(QbParams.REVIEW_SPONSOR_AUTO);
+        assertThat(FirstLaunchParams.verdict(key)).isEqualTo(Verdict.FIXED);
+        assertThat(FirstLaunchParams.fixedValue(key)).contains(false);
+        assertThat(FirstLaunchParams.verdict(key, "true")).isEqualTo(Verdict.FIXED);
+        assertThat(FirstLaunchParams.verdict(key, "false")).isEqualTo(Verdict.FIXED);
+        assertThat(FirstLaunchParams.verdict(QbParams.REVIEW_SPONSOR_AUTO, "true")).isEqualTo(Verdict.SETTABLE);
+        // Fixed at the parameter's own declared value, so QB_SETUP and the first launch propose the same.
+        QbParams.Param param = PARAMS.get(key);
+        assertThat(param.value()).isEqualTo(false);
+    }
+
     @Test
     void anAmountIsNeverSettable() {
         assertThat(FirstLaunchParams.verdict(QbParams.TOPUP_MIN)).isEqualTo(Verdict.AMOUNT);

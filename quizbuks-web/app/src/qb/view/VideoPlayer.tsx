@@ -1,5 +1,7 @@
-import { autoplaying, PAGE_ALLOW, PAGE_SANDBOX, videoKind } from '../video'
+import { useRef } from 'react'
+import { autoplaying, PAGE_ALLOW, PAGE_SANDBOX, trackable, videoKind } from '../video'
 import { markVideoFailed } from '../videoFailures'
+import { FullscreenButton } from './FullscreenButton'
 
 /**
  * A video's own player in the page (Q19): YouTube's no-cookie player or Vimeo's, loaded when it comes near the
@@ -11,17 +13,29 @@ import { markVideoFailed } from '../videoFailures'
  * F-S15: a video file plays in a `<video>` with the browser's controls (muted when it starts by itself); one that fails
  * is marked (`videoFailures`), and the card or page shows its cover and link instead. A page of another site is framed
  * in a stricter sandbox: no pop-ups, no navigation, no forms, no referrer.
+ *
+ * F-S16: a full-screen key at the player's bottom right (`FullscreenButton`) for every player that has none of its
+ * own: a video file, a page of another site and the sites other than YouTube and Vimeo, whose players bring theirs.
  */
 export function VideoPlayer({ player, title, autoplay = false, className }: { player: string; title: string;
   autoplay?: boolean; className?: string }) {
   const kind = videoKind(player)
   const box = className ?? 'bg-muted aspect-video w-full overflow-hidden rounded-md'
+  // The element that goes full screen: all of the player and its key, black behind a letterboxed video.
+  const inner = useRef<HTMLDivElement>(null)
+  const media = useRef<HTMLVideoElement>(null)
+  const own = kind === 'site' && trackable(player)
+  const frame = 'relative size-full [&:fullscreen]:bg-black'
   if (kind === 'file') {
     return (
       <div className={box} data-testid="video-player" data-kind="file" data-autoplay={autoplay || undefined}>
-        <video src={player} title={title} aria-label={title} className="size-full bg-black object-contain"
-          controls playsInline preload="metadata" autoPlay={autoplay} muted={autoplay}
-          onError={() => markVideoFailed(player)} />
+        <div ref={inner} className={frame}>
+          <video ref={media} src={player} title={title} aria-label={title}
+            className="size-full bg-black object-contain" controls controlsList="nofullscreen" playsInline
+            preload="metadata" autoPlay={autoplay} muted={autoplay} onError={() => markVideoFailed(player)} />
+          {/* Above the browser's own control bar, whose full-screen key `controlsList` takes away where it can. */}
+          <FullscreenButton target={inner} video={media} className="bottom-[4.25rem]" />
+        </div>
       </div>
     )
   }
@@ -29,6 +43,7 @@ export function VideoPlayer({ player, title, autoplay = false, className }: { pl
   return (
     <div className={box} data-testid="video-player" data-kind={kind ?? undefined}
       data-autoplay={autoplay || undefined}>
+      <div ref={inner} className={frame}>
       <iframe
         src={autoplay && !page ? autoplaying(player) : player}
         title={title}
@@ -42,6 +57,8 @@ export function VideoPlayer({ player, title, autoplay = false, className }: { pl
         sandbox={page ? PAGE_SANDBOX
           : 'allow-scripts allow-same-origin allow-presentation allow-popups allow-popups-to-escape-sandbox'}
       />
+      {!own && <FullscreenButton target={inner} />}
+      </div>
     </div>
   )
 }

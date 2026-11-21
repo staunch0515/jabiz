@@ -14,8 +14,9 @@ import java.util.stream.Stream;
  * <ul>
  *   <li>{@link #SETTABLE}: neither money nor an amount; the configured value takes effect, if its
  *       {@link #VALUE_RULES rule} allows it;</li>
- *   <li>a money switch of {@link FirstLaunchSwitches} is {@link Verdict#FIXED} at its first launch's value
- *       ({@link #fixedValue}): the configuration cannot change it, money parameters change only by four eyes;</li>
+ *   <li>a money switch of {@link FirstLaunchSwitches}, and a key of {@link #FIXED_VALUES} (the publications' review),
+ *       is {@link Verdict#FIXED} at its first launch's value ({@link #fixedValue}): the configuration cannot set it,
+ *       whatever the value;</li>
  *   <li>an amount (a price, a limit in Kudos or yen, a rate) is {@link Verdict#AMOUNT}: refused;</li>
  *   <li>anything else is {@link Verdict#NOT_SETTABLE}: refused.</li>
  * </ul>
@@ -55,6 +56,13 @@ public final class FirstLaunchParams {
         QbParams.REWARD_DEFAULT_METHODS, value -> value == null || value.isBlank()
             || "OFFLINE_REDEEM".equals(value.strip()));
 
+    /**
+     * Keys that are not money switches but are {@link Verdict#FIXED} all the same, with their first launch's value:
+     * publications are always reviewed before they go live (the requester, 2026-10-28; operations.md, the first stage's
+     * settings). The value is the parameter's declared one, so the configuration has nothing to add.
+     */
+    public static final Map<String, Object> FIXED_VALUES = Map.of(QbParams.REVIEW_PUBLICATION_AUTO, false);
+
     private static final Map<String, QbParams.Param> PARAMS = QbParams.ALL.stream()
         .collect(Collectors.toUnmodifiableMap(QbParams.Param::key, Function.identity()));
 
@@ -66,6 +74,9 @@ public final class FirstLaunchParams {
         QbParams.Param param = PARAMS.get(key);
         if (param != null && amount(param)) {
             return Verdict.AMOUNT;
+        }
+        if (FIXED_VALUES.containsKey(key)) {
+            return Verdict.FIXED;
         }
         if (param != null && SETTABLE.contains(key)) {
             return Verdict.SETTABLE;
@@ -93,6 +104,9 @@ public final class FirstLaunchParams {
     public static Optional<Object> fixedValue(String key) {
         if (verdict(key) != Verdict.FIXED) {
             return Optional.empty();
+        }
+        if (FIXED_VALUES.containsKey(key)) {
+            return Optional.of(FIXED_VALUES.get(key));
         }
         return FirstLaunchSwitches.row(key)
             .filter(row -> row.status() == FirstLaunchSwitches.Status.ACTIVE && row.value() != null)

@@ -271,7 +271,7 @@ FROM pg_stat_statements ORDER BY total_exec_time DESC LIMIT 20;
 
 - [ ] `qb.reward.default-methods` 保持**空**（首次上线：新发起方缺省没有任何奖励方式，答平台图上"电子奖品" / "线下兑奖"的考试点亮节点后才开通，门槛参数见 §7.41）；发起方页面在没有 Kudos 方式时不显示学分钱包（资金 → 学分钱包），平台费账户与账单照常显示（F-F3）。要让所有发起方都能用某种方式，把它写进这个参数（逗号分隔，如 `OFFLINE_REDEEM,DIGITAL_PRIZE`）；只给某个发起方，在平台管理系统"发起方审核"页单独允许（`QB_SPONSOR_REWARD_METHODS_SET`，单个管理员，与缺省取并集）。
 - [ ] `qb.reward.max-per-attempt` = 法务给出的上限（Kudos 等值）。按答对与否给奖是景品表示法的"懸賞"而不是"総付"：与购买或到店挂钩的一般懸賞，单个景品至多交易额的 20 倍（交易额不足 5,000 日元）或 10 万日元（5,000 日元以上），总额不超过预计销售额的 2%；不要求购买的开放式懸賞没有上限（填 `0`）。线下兑换是否算与购买挂钩由法务认定。高于它的奖励档在保存时报 `QB_REWARD_ABOVE_MAX`、提交被拒。
-- [ ] `qb.review.sponsor.auto` = `true`、`qb.review.publication.auto` = **`false`**：发起方的入驻在推广期不逐个人工审核（线下奖品不经手资金；封禁照常可用），**发布一律在发布前审核**（需求方 2026-10-28，商店 App 的上架要求，`plans/Q49d-store.md` D-Q49d-7）。
+- [ ] `qb.review.sponsor.auto` = `true`、`qb.review.publication.auto` = **`false`**：发起方的入驻在推广期不逐个人工审核（线下奖品不经手资金；封禁照常可用），**发布一律在发布前审核**（需求方 2026-10-28，商店 App 的上架要求，`plans/Q49d-store.md` D-Q49d-7）。首发配置不能改它（`FirstLaunchParams.FIXED_VALUES`，写了即校验失败）；`qb.review.sponsor.auto` 可以在首发配置中设。
   审核员拒绝以酒类、烟草或毒品为题材或奖品的问卷（商店的内容分级按"没有受管制物质"申报，`docs/quizbuks/store/play-content-rating.md`）。
 - [ ] `qb.transfer.enabled` 保持 `false`、`qb.ai.enabled` 按上线检查清单。
 - [ ] 开始收费（招商网站价格页的"计划中"项）前：把 `qb.reward.default-methods` 改为所售套餐的方式（或按发起方单独开通），发布 `qb.creator-fee-rate`，并在网站去掉"计划中"。
