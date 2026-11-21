@@ -23,7 +23,7 @@ function state() {
 
 beforeEach(async () => {
   await act(() => i18n.changeLanguage('en'))
-  // The frame's environment banner (16zd) would otherwise ask the server: the counted calls are the page's alone.
+  // The frame's environment badge (16zd, 17zz27) would otherwise ask the server: the counted calls are the page's alone.
   setEnvironment('test')
 })
 

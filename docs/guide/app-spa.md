@@ -135,7 +135,7 @@ export default defineConfig({
 
 ## 5. 入口、会话与页面
 
-- **测试系统的标志**（17 §3.2）：用 `AppShell` / `SignInForm` 等平台外框的页面自动在顶部显示测试系统的横条；自己写外框的前端在外框顶部放 `<EnvironmentBanner />`（`@jabiz/ui`），
+- **测试系统的标志**（17 §3.2）：用 `AppShell` / `SignInForm` 等平台外框的页面自动在页面左下角显示测试系统的角标（略透明的小胶囊（不透明度 90%，浅色页面上文字对比度仍达标），可收起成小圆点，不占版面，17zz27）；自己写外框的前端在外框里放 `<EnvironmentBadge />`（`@jabiz/ui`，固定定位；旧名 `EnvironmentBanner` 仍可用），
   正式环境以 `JABIZ_WEB_ENVIRONMENT=production` 关掉它，其他环境什么都不用设。
   一个公开的地址暂时由测试系统的应用回答时（如上线前的正式域名），应用可以按地址改变页面所示的环境（17ze）：
   `configureClient({ environment: (server, { hostname }) => (hostname === '…' ? { name: 'production', production: true } : undefined) })`。

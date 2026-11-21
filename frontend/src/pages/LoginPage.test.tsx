@@ -184,12 +184,12 @@ describe('LoginPage', () => {
     await expectAccessible()
   })
 
-  it('says before signing in that this is a test system, as the entry tells it (phase 16zd)', async () => {
+  it('says before signing in that this is a test system, as the entry tells it (phases 16zd, 17zz27)', async () => {
     setEnvironment('staging')
     try {
       page()
-      const banner = await screen.findByTestId('environment-banner')
-      expect(banner).toHaveTextContent('staging')
+      const badge = await screen.findByTestId('environment-badge')
+      expect(badge).toHaveTextContent('staging')
       await expectAccessible()
     } finally {
       forgetEnvironment()

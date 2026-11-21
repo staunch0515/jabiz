@@ -7,7 +7,7 @@ test.describe('sign-in and navigation', () => {
     await page.goto('/data')
     await expect(page).toHaveURL(/\/login$/)
     // Not configured as production (jabiz.web.environment): every page says so, before signing in too (phase 16zd).
-    await expect(page.getByTestId('environment-banner')).toContainText('test')
+    await expect(page.getByTestId('environment-badge')).toContainText('test')
     await page.getByPlaceholder('用户名').fill(ADMIN.userName)
     await page.getByPlaceholder('密码').fill('not-the-password')
     await page.getByRole('button', { name: '登录', exact: true }).click()
@@ -28,7 +28,7 @@ test.describe('sign-in and navigation', () => {
     })
 
     await signIn(page)
-    await expect(page.getByTestId('environment-banner')).toContainText('测试环境，不是正式版')
+    await expect(page.getByTestId('environment-badge')).toContainText('测试环境，不是正式版')
     await expect(page.getByRole('link', { name: `承运商菜单${code}` })).toBeVisible()
     await page.getByRole('link', { name: `承运商菜单${code}` }).click()
     await expect(page).toHaveURL(new RegExp(encodeURIComponent(CARRIERS)))

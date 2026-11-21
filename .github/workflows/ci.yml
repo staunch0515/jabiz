@@ -75,16 +75,18 @@ jobs:
         with:
           distribution: temurin
           java-version: 21
-      # Caches the Gradle wrapper and dependencies. By default only the repository's default branch ('main') writes
-      # the cache; the long-lived branches write it here, and pull requests read what their base branch wrote.
-      - uses: gradle/actions/setup-gradle@v5
-        with:
-          cache-read-only: ${{ github.event_name == 'pull_request' }}
+      # The Gradle wrapper and dependencies, shared by every job (.github/actions/gradle-deps, 17zz28): a push to a
+      # platform branch saves them at the end of this job; pull requests read what their base branch saved.
+      - uses: ./.github/actions/gradle-deps
       # Compile, unit tests, integration tests (Testcontainers postgres:16), the core coverage gate,
       # platformCheck (the startup self-checks against a freshly migrated database, docs/design/07-quality.md),
       # the validation cases shared with the frontend and the OpenAPI snapshot the frontend is generated from.
       - run: ./gradlew check
         working-directory: backend
+      - if: github.event_name == 'push'
+        uses: ./.github/actions/gradle-deps
+        with:
+          save: 'true'
       - if: failure()
         uses: actions/upload-artifact@v6
         with:
@@ -119,9 +121,7 @@ jobs:
         with:
           distribution: temurin
           java-version: 21
-      - uses: gradle/actions/setup-gradle@v5
-        with:
-          cache-read-only: ${{ github.event_name == 'pull_request' }}
+      - uses: ./.github/actions/gradle-deps
       - name: Check (shard ${{ matrix.shard }}/3)
         working-directory: backend
         env:
@@ -302,9 +302,7 @@ jobs:
         with:
           distribution: temurin
           java-version: 21
-      - uses: gradle/actions/setup-gradle@v5
-        with:
-          cache-read-only: ${{ github.event_name == 'pull_request' }}
+      - uses: ./.github/actions/gradle-deps
       # Builds the frontend with pnpm and packages it into the boot jar.
       - run: ./gradlew :app:bootJar
         working-directory: backend

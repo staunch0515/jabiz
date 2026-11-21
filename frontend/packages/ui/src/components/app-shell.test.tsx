@@ -152,20 +152,21 @@ describe('AppShell and ShellNav', () => {
     })
   })
 
-  it('says on every page that this is a test system, and nothing on production (phase 16zd)', async () => {
+  it('says on every page that this is a test system with a corner badge, and nothing on production (phases 16zd, 17zz27)', async () => {
     setEnvironment('staging')
     try {
       const { container, unmount } = renderShell('/data')
-      const banner = screen.getByTestId('environment-banner')
-      expect(banner).toHaveTextContent('staging')
-      expect(banner).toHaveTextContent('Test system, not the production system')
-      // The banner and the header bar stay on screen together.
-      expect(banner.parentElement).toContainElement(container.querySelector('[data-slot="app-shell-header"]'))
+      const badge = screen.getByTestId('environment-badge')
+      expect(badge).toHaveTextContent('staging')
+      expect(badge).toHaveTextContent('Test system, not the production system')
+      // A corner badge, not a line of the page: the header bar's sticky box holds nothing of it.
+      expect(badge).toHaveClass('fixed')
+      expect(container.querySelector('[data-slot="app-shell-header"]')!.parentElement).not.toContainElement(badge)
       await expectAccessible(container)
       unmount()
       setEnvironment('production')
       renderShell('/data')
-      expect(screen.queryByTestId('environment-banner')).not.toBeInTheDocument()
+      expect(screen.queryByTestId('environment-badge')).not.toBeInTheDocument()
     } finally {
       forgetEnvironment()
     }
@@ -176,11 +177,11 @@ describe('AppShell and ShellNav', () => {
     try {
       configureClient({ environment: () => ({ name: 'production', production: true }) })
       const { unmount } = renderShell('/data')
-      expect(screen.queryByTestId('environment-banner')).not.toBeInTheDocument()
+      expect(screen.queryByTestId('environment-badge')).not.toBeInTheDocument()
       unmount()
       configureClient({ environment: null })
       renderShell('/data')
-      expect(screen.getByTestId('environment-banner')).toHaveTextContent('staging')
+      expect(screen.getByTestId('environment-badge')).toHaveTextContent('staging')
     } finally {
       configureClient({ environment: null })
       forgetEnvironment()
