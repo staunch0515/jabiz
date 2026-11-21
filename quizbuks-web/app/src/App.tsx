@@ -23,7 +23,7 @@ import {
   useEntryNotices,
 } from '@jabiz/ui'
 import { QueryClientProvider, useQuery } from '@tanstack/react-query'
-import { ArrowLeft, LogOut, Search, Store } from 'lucide-react'
+import { ArrowLeft, LogIn, LogOut, Search, Store } from 'lucide-react'
 import { useEffect, useState, type FormEvent, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 import { APP } from './messages'
@@ -346,9 +346,11 @@ function SignedIn({ path }: { path: string }) {
 
 /**
  * The help centre, the legal texts and the About page (Q7b): readable without signing in, in a frame of their own
- * with the way back (to the app, or to signing in).
+ * with the way back (to the app, or to signing in). A Sponsor's page (`sponsorSite`) has the whole top to itself (the
+ * requester, 2026-11-21): no app bar, and the way back is a small round button floating at the bottom left.
  */
-function PublicPage({ path, signedIn, children }: { path: string; signedIn: boolean; children?: ReactNode }) {
+function PublicPage({ path, signedIn, sponsorSite = false, children }: { path: string; signedIn: boolean;
+  sponsorSite?: boolean; children?: ReactNode }) {
   const { t } = useTranslation(QB)
   const { t: tApp } = useTranslation(APP)
   const kind = legalKindOf(path)
@@ -356,21 +358,31 @@ function PublicPage({ path, signedIn, children }: { path: string; signedIn: bool
     : path === ABOUT ? <AboutPage />
     : kind ? <LegalPage key={kind} kind={kind} />
     : null
+  const back = signedIn ? HOME : itemPage(path) || sponsorPageOf(path) ? `/login?next=${encodeURIComponent(path)}`
+    : '/login'
+  const backLabel = signedIn ? tApp('public.back') : tApp('public.signIn')
   return (
     <div className="flex min-h-full flex-col">
-      <header className="bg-background sticky top-0 z-10 border-b">
-        <EnvironmentBanner className={ONE_LINE_BANNER} />
-        <div className="mx-auto flex max-w-md items-center gap-2 px-4 py-2">
-          <Wordmark name={t('brand')} compact className="text-primary mr-auto" />
-          <ThemeToggle />
-          <Link to={signedIn ? HOME : itemPage(path) || sponsorPageOf(path)
-            ? `/login?next=${encodeURIComponent(path)}` : '/login'}
-            className="text-primary text-sm underline" data-testid="public-back">
-            {signedIn ? tApp('public.back') : tApp('public.signIn')}
-          </Link>
-        </div>
-      </header>
-      <main className="mx-auto flex w-full max-w-md flex-col gap-6 px-4 py-4">
+      {sponsorSite ? <EnvironmentBanner className={ONE_LINE_BANNER} /> : (
+        <header className="bg-background sticky top-0 z-10 border-b" data-testid="public-header">
+          <EnvironmentBanner className={ONE_LINE_BANNER} />
+          <div className="mx-auto flex max-w-md items-center gap-2 px-4 py-2">
+            <Wordmark name={t('brand')} compact className="text-primary mr-auto" />
+            <ThemeToggle />
+            <Link to={back} className="text-primary text-sm underline" data-testid="public-back">{backLabel}</Link>
+          </div>
+        </header>
+      )}
+      {sponsorSite && (
+        // Over the page, not in it: it takes no room from the Sponsor's header; the page leaves space for it below.
+        <Link to={back} aria-label={backLabel} data-testid="public-back"
+          className={'bg-background text-foreground hover:bg-accent focus-visible:ring-ring fixed left-4 z-20 flex '
+            + 'size-12 items-center justify-center rounded-full border shadow-md focus-visible:ring-2 '
+            + 'focus-visible:outline-none bottom-[max(1rem,env(safe-area-inset-bottom))]'}>
+          {signedIn ? <ArrowLeft aria-hidden className="size-5" /> : <LogIn aria-hidden className="size-5" />}
+        </Link>
+      )}
+      <main className={'mx-auto flex w-full max-w-md flex-col gap-6 px-4 ' + (sponsorSite ? 'pt-4 pb-24' : 'py-4')}>
         <OfflineBanner />
         {page}
         <LegalLinks kinds={LEGAL.appKinds} className="border-t pt-4" />
@@ -475,7 +487,9 @@ function Routes() {
   // A sponsor's page (Q60a): anybody's, signed in or not, from the public templates.
   const sponsorHandle = sponsorPageOf(path)
   if (sponsorHandle) {
-    return <PublicPage path={path} signedIn={signedIn}><SponsorPage key={sponsorHandle} handle={sponsorHandle} signedIn={signedIn} /></PublicPage>
+    return <PublicPage path={path} signedIn={signedIn} sponsorSite>
+      <SponsorPage key={sponsorHandle} handle={sponsorHandle} signedIn={signedIn} />
+    </PublicPage>
   }
   // A publication's share link before signing in (Q15): its public page with the address to sign in by.
   const shared = itemPage(path)

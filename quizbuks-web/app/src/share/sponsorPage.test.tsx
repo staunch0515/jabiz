@@ -119,6 +119,32 @@ describe("a Sponsor's page (Q60a)", () => {
     await expectAccessible()
   })
 
+  it("gives the whole top of the page to the Sponsor's site: no app bar, the way back floats", async () => {
+    server()
+    window.history.replaceState(null, '', '/s/acme-bakery')
+    render(<App />)
+    expect(await screen.findByTestId('sponsor-page-headline')).toBeInTheDocument()
+    // No app header above the Sponsor's own: no banner landmark, no app wordmark, the cover is the first thing shown.
+    expect(screen.queryByTestId('public-header')).toBeNull()
+    const main = screen.getByRole('main')
+    // The only header is the Sponsor's own, in the page.
+    for (const header of document.querySelectorAll('header')) expect(main.contains(header)).toBe(true)
+    const article = screen.getByTestId('sponsor-page')
+    expect(main.querySelector('[data-testid]:not([data-testid="offline-banner"])')).toBe(article)
+    expect(article.querySelector('[data-testid]')).toBe(screen.getByTestId('sponsor-page-cover-frame'))
+    // The way back (here: to sign in, and back to this page) is a small round button floating at the bottom left,
+    // named for screen readers.
+    const back = screen.getByTestId('public-back')
+    expect(back).toHaveAccessibleName('Sign in')
+    expect(back).toHaveAttribute('href', '/login?next=%2Fs%2Facme-bakery')
+    expect(back).toHaveClass('fixed', 'rounded-full')
+    expect(back.closest('header')).toBeNull()
+    // The page leaves room below for it, so it never covers the last links.
+    expect(screen.getByRole('main')).toHaveClass('pb-24')
+    expect(screen.getByRole('main')).not.toHaveClass('py-4')
+    await expectAccessible()
+  })
+
   it('makes no link of a website that is not https', async () => {
     server({ page: { ...PAGE, website: 'javascript:alert(1)' } })
     window.history.replaceState(null, '', '/s/acme-bakery')
