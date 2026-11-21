@@ -37,6 +37,43 @@ describe('EnvironmentBadge (phases 16zd and 17zz27)', () => {
     await expectAccessible(container)
   })
 
+  it('lets every click through the capsule: only its close key and the dot take one (17zz27)', () => {
+    render(<EnvironmentBadge autoCollapseMs={0} />)
+    const capsule = screen.getByTestId('environment-badge').querySelector(':scope > div')!
+    expect(capsule).toHaveClass('pointer-events-none')
+    expect(screen.getByTestId('environment-badge')).toHaveClass('pointer-events-none')
+    expect(screen.getByTestId('environment-badge-collapse')).toHaveClass('pointer-events-auto')
+  })
+
+  it('folds into the dot by itself after a while, keeps it for the tab and is still said (17zz27)', () => {
+    vi.useFakeTimers()
+    try {
+      render(<EnvironmentBadge autoCollapseMs={6000} />)
+      expect(screen.getByRole('note')).toHaveAttribute('data-collapsed', 'false')
+      act(() => { vi.advanceTimersByTime(5999) })
+      expect(screen.getByRole('note')).toHaveAttribute('data-collapsed', 'false')
+      act(() => { vi.advanceTimersByTime(2) })
+      expect(screen.getByRole('note')).toHaveAttribute('data-collapsed', 'true')
+      expect(window.sessionStorage.getItem('jabiz.environment-badge.collapsed')).toBe('1')
+      // The dot has only a picture: the note still says it in words.
+      expect(screen.getByRole('note')).toHaveTextContent('staging')
+      expect(screen.getByRole('note')).toHaveTextContent('Test system, not the production system')
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('stays open where it is told not to fold (autoCollapseMs 0)', () => {
+    vi.useFakeTimers()
+    try {
+      render(<EnvironmentBadge autoCollapseMs={0} />)
+      act(() => { vi.advanceTimersByTime(60000) })
+      expect(screen.getByRole('note')).toHaveAttribute('data-collapsed', 'false')
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
   it('folds into a dot, opens again, and keeps the choice for the tab', async () => {
     const user = userEvent.setup()
     const { container, unmount } = render(<EnvironmentBadge />)

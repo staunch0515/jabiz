@@ -148,12 +148,26 @@ public class ReadySteps {
 
     /** The keys of the application's steps for the account that have not run (a problem: one key, the problem). */
     public List<String> notRun(LoadWaitingState.State state, FirstLaunchAccountStore.Recorded recorded) {
+        return notRun(state, recorded, FirstLaunchStep::key);
+    }
+
+    /**
+     * As {@link #notRun}, for people: each step by its description ({@link FirstLaunchStep#describe}, which is its key
+     * only when the handler gave none). A key is the handler's own identifier, recorded with the run; it need not mean
+     * anything to the report's reader.
+     */
+    public List<String> notRunDescribed(LoadWaitingState.State state, FirstLaunchAccountStore.Recorded recorded) {
+        return notRun(state, recorded, FirstLaunchStep::describe);
+    }
+
+    private List<String> notRun(LoadWaitingState.State state, FirstLaunchAccountStore.Recorded recorded,
+        java.util.function.Function<FirstLaunchStep, String> shown) {
         Plan plan = of(state, recorded);
         if (plan.problem() != null) {
             return List.of(plan.problem());
         }
         Set<String> done = state.readyDone().getOrDefault(recorded.userId(), Set.of());
-        return plan.steps().stream().map(FirstLaunchStep::key).filter(key -> !done.contains(key)).toList();
+        return plan.steps().stream().filter(step -> !done.contains(step.key())).map(shown).toList();
     }
 
     /**
