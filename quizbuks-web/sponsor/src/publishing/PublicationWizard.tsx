@@ -328,9 +328,10 @@ export function PublicationWizard({ detail, initialStep, onStale, stale, header 
   const methodLabel = useRewardMethodLabel()
   const deliveryLabel = useDigitalDeliveryLabel()
   const methodChoices: RewardMethod[] = allowed ?? ['PLATFORM']
-  // A new draft starts with the first method allowed (the platform's is not always among them) until the sponsor
-  // picks one; a draft already saved keeps its own, which the choice then shows as not allowed any more.
-  const rewardMethod: RewardMethod = !detail && allowed && allowed.length > 0 && !allowed.includes(form.rewardMethod)
+  // A method no longer allowed (a new draft's default, or a draft saved while the platform's Kudos was allowed) is
+  // replaced by the first allowed one, for every draft: the choice is on the policy step, and a save from the first
+  // page would otherwise send a method the server refuses with nothing on that page to change it.
+  const rewardMethod: RewardMethod = allowed && allowed.length > 0 && !allowed.includes(form.rewardMethod)
     ? allowed[0] : form.rewardMethod
   const showMethods = methodChoices.length > 1 || !methodChoices.includes(rewardMethod)
 
