@@ -344,10 +344,15 @@ function SignedIn({ path }: { path: string }) {
   }}><FeedControlsProvider>{pages}</FeedControlsProvider></ConsentGate>
 }
 
+/** A round see-through button floating over a Sponsor's cover (from the theme's tokens, readable on any cover). */
+const FLOATING = 'bg-background/80 text-foreground hover:bg-background focus-visible:ring-ring flex size-10 items-center '
+  + 'justify-center rounded-full border shadow-md backdrop-blur focus-visible:ring-2 focus-visible:outline-none'
+
 /**
  * The help centre, the legal texts and the About page (Q7b): readable without signing in, in a frame of their own
  * with the way back (to the app, or to signing in). A Sponsor's page (`sponsorSite`) has the whole top to itself (the
- * requester, 2026-11-21): no app bar, and the way back is a small round button floating at the bottom left.
+ * requester, 2026-11-21): no app bar; the way back and the appearance switch are round see-through buttons floating
+ * over the top of the Sponsor's cover.
  */
 function PublicPage({ path, signedIn, sponsorSite = false, children }: { path: string; signedIn: boolean;
   sponsorSite?: boolean; children?: ReactNode }) {
@@ -374,15 +379,19 @@ function PublicPage({ path, signedIn, sponsorSite = false, children }: { path: s
         </header>
       )}
       {sponsorSite && (
-        // Over the page, not in it: it takes no room from the Sponsor's header; the page leaves space for it below.
-        <Link to={back} aria-label={backLabel} data-testid="public-back"
-          className={'bg-background text-foreground hover:bg-accent focus-visible:ring-ring fixed left-4 z-20 flex '
-            + 'size-12 items-center justify-center rounded-full border shadow-md focus-visible:ring-2 '
-            + 'focus-visible:outline-none bottom-[max(1rem,env(safe-area-inset-bottom))]'}>
-          {signedIn ? <ArrowLeft aria-hidden className="size-5" /> : <LogIn aria-hidden className="size-5" />}
-        </Link>
+        // Over the Sponsor's cover, not in the page: a row of no height that stays at the top while scrolling, with the
+        // way back on the left and the appearance switch on the right (round, see-through, clear of a phone's notch).
+        <div className="sticky top-0 z-20 mx-auto h-0 w-full max-w-md" data-testid="sponsor-site-controls">
+          <div className={'flex items-center justify-between px-3 pt-[max(0.75rem,env(safe-area-inset-top))] '
+            + 'pl-[max(0.75rem,env(safe-area-inset-left))] pr-[max(0.75rem,env(safe-area-inset-right))]'}>
+            <Link to={back} aria-label={backLabel} data-testid="public-back" className={FLOATING}>
+              {signedIn ? <ArrowLeft aria-hidden className="size-5" /> : <LogIn aria-hidden className="size-5" />}
+            </Link>
+            <ThemeToggle className={FLOATING} />
+          </div>
+        </div>
       )}
-      <main className={'mx-auto flex w-full max-w-md flex-col gap-6 px-4 ' + (sponsorSite ? 'pt-4 pb-24' : 'py-4')}>
+      <main className="mx-auto flex w-full max-w-md flex-col gap-6 px-4 py-4">
         <OfflineBanner />
         {page}
         <LegalLinks kinds={LEGAL.appKinds} className="border-t pt-4" />

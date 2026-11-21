@@ -132,16 +132,21 @@ describe("a Sponsor's page (Q60a)", () => {
     const article = screen.getByTestId('sponsor-page')
     expect(main.querySelector('[data-testid]:not([data-testid="offline-banner"])')).toBe(article)
     expect(article.querySelector('[data-testid]')).toBe(screen.getByTestId('sponsor-page-cover-frame'))
-    // The way back (here: to sign in, and back to this page) is a small round button floating at the bottom left,
-    // named for screen readers.
-    const back = screen.getByTestId('public-back')
+    // The way back (here: to sign in, and back to this page) and the appearance switch float over the top of the
+    // cover, left and right, as round see-through buttons named for screen readers; they stay while scrolling and take
+    // no room from the page.
+    const controls = screen.getByTestId('sponsor-site-controls')
+    expect(controls).toHaveClass('sticky', 'h-0')
+    expect(controls.compareDocumentPosition(main) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    const back = within(controls).getByTestId('public-back')
     expect(back).toHaveAccessibleName('Sign in')
     expect(back).toHaveAttribute('href', '/login?next=%2Fs%2Facme-bakery')
-    expect(back).toHaveClass('fixed', 'rounded-full')
+    expect(back).toHaveClass('rounded-full')
+    const appearance = within(controls).getByTestId('appearance-switch')
+    expect(appearance).toHaveAccessibleName(/Appearance/)
+    expect(appearance).toHaveClass('rounded-full')
+    expect(back.compareDocumentPosition(appearance) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
     expect(back.closest('header')).toBeNull()
-    // The page leaves room below for it, so it never covers the last links.
-    expect(screen.getByRole('main')).toHaveClass('pb-24')
-    expect(screen.getByRole('main')).not.toHaveClass('py-4')
     await expectAccessible()
   })
 
