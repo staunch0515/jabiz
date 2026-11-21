@@ -1,0 +1,56 @@
+# 首发配置的示例（两个账号的做法，two-account-setup.md）。说明见 docs/quizbuks/first-launch-guide.md。
+# 复制整个目录，按注释改成真实的内容即可。场景回放 FirstLaunchScenarioTest 以本目录原样执行它，所以这里写的都能用。
+#
+# - 只在全新的数据库上执行一次；完成后撤下本文件与 JABIZ_FIRST_LAUNCH_CONFIG（留着也不会再执行，但每次启动都会提醒）。
+# - 不要写任何密码或兑换码（键名中带 password、secret、token、codes 等的一律被拒）。
+# - 内容阶段出错：按日志改本文件，清空数据库与文件目录（JABIZ_FILES_LOCAL_ROOT），重新启动。
+version: 1
+
+# 日志与报告邮件的语言：zh、ja 或 en。
+site:
+  language: zh
+
+# 下面每个邮箱都必须在这些域名之下（防止笔误把邀请寄到别处）。
+allowedEmailDomains: [example.com]
+
+# 账号。内容就位后才寄邀请；本人从邀请邮件设密码、在 /admin/ 登录并绑定二次验证，之后一分钟内得到这里写的角色。
+# 超级管理员另须运维确认：日志中会出现它的指纹，与本人核对后写进 JABIZ_FIRST_LAUNCH_CONFIRM_ADMINS 并重启。
+# key 是登录名。邮箱写错了：只要本人还没接受邀请，改这里的 email 后重启，邀请就重寄到新地址。
+accounts:
+  - key: account-a
+    email: a@example.com
+    name: 示例 A
+    language: zh
+    roles: [QB_ADMIN_SUPER, QB_OPERATOR]
+    report: true            # 首发完成的报告寄给它（至少一个账号写 true）
+  - key: account-b
+    email: b@example.com
+    name: 示例 B
+    language: zh
+    roles: [QB_OPERATOR, QB_ADMIN_FINANCE, QB_ADMIN_CONTENT]
+
+# 运营商。default: true 的是新发起方的默认运营商（恰好一个）。
+# lead 是负责人，也是这个运营商的直营发起方（官方账号）；一个账号只能属于一个运营商。
+operators:
+  - key: official
+    name: 官方运营
+    default: true
+    lead: account-b
+    members: [account-a]
+
+# 直营发起方：每个运营商一个，内容是在测试系统的发起方页面导出的发起方包（概况 → 导入与导出 → 导出发起方包）。
+sponsors:
+  - operator: official
+    package: sponsors/official/package.json
+    rewardMethods: [OFFLINE_REDEEM]       # 首发只允许线下兑换
+    # 包中每个发布都要在这里写一项，按发布的名称对应（名称不能重复）。
+    publications:
+      春季答题:
+        rewardMethod: OFFLINE_REDEEM
+        redeemDescription: 在店内收银台出示答题结果页，即可领取纪念徽章。
+        startAt: launch                   # launch = 首发运行的时刻；也可写 2026-12-01T09:00+09:00
+        endAt: 2027-01-31T23:59+09:00      # 带时区；不能晚于开始后 366 天
+
+# 参数：只能写首发可设的键（启动日志列出清单；金额与资金开关不能写）。没有要改的可以整段删去。
+params:
+  qb.ai.sponsor.daily-jobs: 5
