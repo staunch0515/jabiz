@@ -23,7 +23,7 @@
 |---|---|
 | `LoadEntity` | 按主键（取自上下文的键）经指定数据视图加载实体，放入上下文 |
 | `QueryEntities` / `RunTemplate` | 执行实体查询或 SQL 模板，结果放入上下文 |
-| `SaveChanges` | 立即提交上下文中已登记的变更（通常不需要，见 3.1） |
+| `SaveChanges` | 立即提交上下文中已登记的变更（通常不需要，见 3.1；但子流程要读本流程刚登记的变更时需要，见第 5 节） |
 | `CallProcess` | 调用另一个流程（同一事务，见第 5 节） |
 | `PublishEvent` | 写入 Outbox（事务提交后由投递器发送） |
 
@@ -268,6 +268,10 @@ ProcessDefinition.define(ORDER_CANCEL, 1, CancelInput.class, …, pb -> pb
 - 撤销父操作时，按相反顺序一并撤销子操作（见 04 第 6 节）。
 - 禁止递归调用同一流程（启动时检查调用图有无环）。
 - 实现：`CallProcess` 步骤调用 `ProcessExecutor.executeChild`；子流程的变更在它结束时（同一事务内）提交，输出放入父流程上下文（`outputKey`）。
+- **父流程登记、尚未提交的变更对子流程不可见**（17zz24）：子流程读到的是已存储的状态；父流程用 `ctx.changes()` 登记的变更要到父流程结束或 `SaveChanges` 才提交，
+  `CallProcess` 不替父流程提交。子流程要判断或读取父流程刚登记的数据（如先改用户的邮箱、再调用 `SEC_USER_INVITE`，它按已存储的地址检查与收信）时，
+  父流程先 `SaveChanges.now()`（或只在需要时 `SaveChanges.when(…)`）。这与引擎的缓冲写入无关：缓冲的写入在读取其表之前一律先写出（决策 D46、03 §3.1），
+  所以提交之后的变更子流程总能读到。父流程带着未提交的变更调用子流程时，平台记一条 DEBUG 日志（不刷 WARN：多数调用本来就不读这些变更）。
 - `CallProcess.forEach` 的各次调用同样在**同一事务**中：一项失败整批回滚，各项取的锁持有到整批提交。需要逐项提交的批量工作
   （一项失败不影响其他项、不与在线请求形成锁环）用逐项任务 `JobDefinition.forEach`（11 §4.1、D42），不用 `CallProcess.forEach`。
 
