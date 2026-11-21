@@ -32,6 +32,8 @@ describe('EnvironmentBadge (phases 16zd and 17zz27)', () => {
     expect(badge.className).not.toContain('right-')
     expect(badge).toHaveAttribute('data-collapsed', 'false')
     expect(document.title).toBe('[STAGING] Carriers')
+    // Touch targets of at least 24 px (WCAG 2.2, axe's target-size): the close key and, folded, the dot.
+    expect(screen.getByTestId('environment-badge-collapse')).toHaveClass('size-6')
     await expectAccessible(container)
   })
 
