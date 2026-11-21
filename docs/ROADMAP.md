@@ -5699,7 +5699,7 @@ QuizBuks 的 #545、#546、#547 用了 43.5–45 分钟，#545 到点被取消�
 | # | 内容 |
 |---|---|
 | 17zz27-1 | 设计：17 §3.2（测试系统的标志）、12 §（入口页的提示区）、指南 `app-spa.md` |
-| 17zz27-2 | `@jabiz/ui` 的 `EnvironmentBadge`：固定在左下角（让出安全区，不遮右下角）、半透明小胶囊（警示图标 + 大写环境名，悬停与读屏给出"测试环境，不是正式版"），"收起"变小圆点、再点展开，收起状态只按标签页记在 `sessionStorage`（`try/catch`）；仍是 `role="note"` 带无障碍名称、文档标题前缀 `[名字]` 不变；正式系统与尚未读到时什么也不显示。`EnvironmentBanner` 保留为别名；`AppShell` 与 `AuthFrame`/`EntryLayout` 不再给它留版面 |
+| 17zz27-2 | `@jabiz/ui` 的 `EnvironmentBadge`：固定在左下角（让出安全区，不遮右下角）、略透明（90%）的小胶囊（警示图标 + 大写环境名，悬停与读屏给出"测试环境，不是正式版"），"收起"变小圆点、再点展开，收起状态只按标签页记在 `sessionStorage`（`try/catch`）；仍是 `role="note"` 带无障碍名称、文档标题前缀 `[名字]` 不变；正式系统与尚未读到时什么也不显示。`EnvironmentBanner` 保留为别名；`AppShell` 与 `AuthFrame`/`EntryLayout` 不再给它留版面 |
 | 17zz27-3 | 三语消息（收起、展开）；Vitest（`environment-badge.test.tsx`、`app-shell`、`entry`、`LoginPage` 受影响的断言）与 Playwright（`login.spec.ts`），亮暗两种外观过 axe |
 
 **验收**：前端 lint、typecheck、全部 Vitest 绿；`pnpm check:api` 不变；e2e 的登录页断言绿。QuizBuks 侧受影响的断言等同步后在 `1.3/quizbuks` 另提。

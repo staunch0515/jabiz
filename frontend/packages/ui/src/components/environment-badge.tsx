@@ -53,7 +53,7 @@ function useTitlePrefix(name: string | undefined) {
 
 /**
  * Says that this is a test system and not the real one (platform phases 16zd and 17zz27) without taking any room of
- * the page: a small half-transparent capsule fixed at the bottom left (the bottom right is where a video's full-screen
+ * the page: a small, slightly see-through capsule (90 %: enough for text to keep its contrast on a white page) fixed at the bottom left (the bottom right is where a video's full-screen
  * key and the usual action buttons are), with the environment's name; a click on its close button folds it into a
  * small dot, a click on the dot opens it again, and the choice is kept for the tab only (`sessionStorage`). The
  * document's title says it too. Nothing at all on production, and nothing while the environment is not known yet.
@@ -95,7 +95,7 @@ export function EnvironmentBadge({ environment, className }: EnvironmentBadgePro
           aria-label={`${t('environment.expand')}: ${test.name}`}
           onClick={() => set(false)}
           className={cn(
-            'bg-warning/80 text-warning-foreground pointer-events-auto flex size-6 items-center justify-center',
+            'bg-warning/90 text-warning-foreground pointer-events-auto flex size-6 items-center justify-center',
             'rounded-full shadow-sm backdrop-blur focus-visible:outline-2 focus-visible:outline-offset-2',
           )}
         >
@@ -104,7 +104,7 @@ export function EnvironmentBadge({ environment, className }: EnvironmentBadgePro
       ) : (
         <div
           className={cn(
-            'bg-warning/80 text-warning-foreground pointer-events-auto flex items-center gap-1.5 rounded-full',
+            'bg-warning/90 text-warning-foreground pointer-events-auto flex items-center gap-1.5 rounded-full',
             'py-0.5 pr-1 pl-2.5 text-xs font-bold tracking-wide shadow-sm backdrop-blur',
           )}
         >
