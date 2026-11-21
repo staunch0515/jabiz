@@ -40,8 +40,19 @@ public final class FirstLaunchSwitches {
      *                   "the declared value stands" (amounts), and for the intent of nothing
      * @param waitingFor the feature a {@link Status#WAITING} row waits for (F-M8)
      * @param why        why the value differs from the declared one; required then
+     * @param prerequisite what has to be decided outside the system before the value may take effect (F-LAUNCH, plan
+     *                     section 7.2): the first launch's configuration only proposes such a row, as a controlled
+     *                     change another administrator publishes once it is decided; null for a row whose value takes
+     *                     effect at the first launch
      */
-    public record Row(String key, String group, Status status, Object value, String waitingFor, String why) {}
+    public record Row(String key, String group, Status status, Object value, String waitingFor, String why,
+        String prerequisite) {
+
+        /** Whether the first launch's configuration puts the value into effect, not only proposes it. */
+        public boolean takesEffectAtLaunch() {
+            return status == Status.ACTIVE && value != null && prerequisite == null;
+        }
+    }
 
     /** The group of each row, in the order the card shows them. */
     public static final List<Row> ALL = List.of(
@@ -50,12 +61,14 @@ public final class FirstLaunchSwitches {
         keep(QbParams.FEE_CREDIT_GRANT_BASIC, "grant"),
         keep(QbParams.FEE_CREDIT_GRANT_CERTIFIED, "grant"),
         keep(QbParams.FEE_CREDIT_VALID_DAYS, "grant"),
-        active(QbParams.HELP_ENABLED, "help", true,
+        awaiting(active(QbParams.HELP_ENABLED, "help", true,
             "the AI help is open to Takers and Sponsors at the launch (declared off until the AI notice is published)"),
+            "the AI notice is published"),
         keep(QbParams.HELP_USER_DAILY, "help"),
         keep(QbParams.HELP_GLOBAL_MONTHLY_TOKENS, "help"),
-        active(QbParams.AI_ENABLED, "ai", true,
+        awaiting(active(QbParams.AI_ENABLED, "ai", true,
             "AI quiz generation and translation are open at the launch; the proposal is published after the AI notice"),
+            "the AI notice is published"),
         active(QbParams.FEE_MONTHLY, "fees", "0", null),
         active(QbParams.CREATOR_FEE_RATE, "fees", "0", null),
         active(QbParams.TRANSFER_FEE_RATE, "fees", "0", null),
@@ -76,9 +89,10 @@ public final class FirstLaunchSwitches {
         // The charge groups of F-M: their rows turn ACTIVE in the pull request that adds the key (F-F10 plan, 2).
         // F-M6: on at the launch once the requester has confirmed the floor of the price per start (its least value
         // qb.distribution.unit-floor.min is a placeholder, 1 yen); the operators' prices are their own (no row).
-        active(QbParams.DISTRIBUTION_BILLING_ENABLED, "distribution", true,
+        awaiting(active(QbParams.DISTRIBUTION_BILLING_ENABLED, "distribution", true,
             "publications pay the distribution fee at the launch (declared off: the tests rely on it); the requester "
                 + "confirms qb.distribution.unit-floor.min before the proposal is published"),
+            "the requester confirms the floor of the distribution fee (qb.distribution.unit-floor.min)"),
         keep(QbParams.DISTRIBUTION_UNIT_FLOOR_MIN, "distribution"),
         // F-M7 (§10.3-13): on at the launch, then whether an early end gives back the unused days, which the requester
         // decides apart (off: no refund is promised, the wizard says so).
@@ -89,9 +103,10 @@ public final class FirstLaunchSwitches {
         // qb.exposure.unit.min / .max, the fewest exposures bought qb.exposure.min-purchase and the most a top-up buys
         // qb.exposure.top-up.max. An operator without a price charges nothing, so each operator sets its own price
         // before the first publication that uses another's video (launch checklist).
-        active(QbParams.EXPOSURE_BILLING_ENABLED, "exposure", true,
+        awaiting(active(QbParams.EXPOSURE_BILLING_ENABLED, "exposure", true,
             "publications that use another's video pay for their exposures at the launch (declared off: the tests rely "
                 + "on it); the requester confirms the range of the prices, the fewest bought and the biggest top-up first"),
+            "the requester confirms the range of the exposure prices (qb.exposure.unit.min/.max, min-purchase, top-up.max)"),
         keep(QbParams.EXPOSURE_UNIT_MIN, "exposure"),
         keep(QbParams.EXPOSURE_UNIT_MAX, "exposure"),
         keep(QbParams.EXPOSURE_MIN_PURCHASE, "exposure"),
@@ -148,19 +163,23 @@ public final class FirstLaunchSwitches {
     }
 
     private static Row active(String key, String group, Object value, String why) {
-        return new Row(key, group, Status.ACTIVE, value, null, why);
+        return new Row(key, group, Status.ACTIVE, value, null, why, null);
+    }
+
+    private static Row awaiting(Row row, String prerequisite) {
+        return new Row(row.key(), row.group(), row.status(), row.value(), row.waitingFor(), row.why(), prerequisite);
     }
 
     private static Row keep(String key, String group) {
-        return new Row(key, group, Status.ACTIVE, null, null, null);
+        return new Row(key, group, Status.ACTIVE, null, null, null, null);
     }
 
     private static Row waiting(String key, String group, Object intent, String feature) {
-        return new Row(key, group, Status.WAITING, intent, feature, null);
+        return new Row(key, group, Status.WAITING, intent, feature, null, null);
     }
 
     private static Row manual(String key, String group) {
-        return new Row(key, group, Status.MANUAL, null, null, null);
+        return new Row(key, group, Status.MANUAL, null, null, null, null);
     }
 
     private FirstLaunchSwitches() {}
