@@ -98,6 +98,33 @@ public class QbFirstLaunch implements FirstLaunchHandler {
         return ACTING;
     }
 
+    /** The waiting phase's steps: only adding the configured members to their operators. */
+    @Override
+    public Set<String> accountReadyProcesses() {
+        return Set.of(QbFirstLaunchProcesses.MEMBER);
+    }
+
+    /**
+     * Once an account's own roles are in effect (its address verified by the invitation, a second factor bound): it
+     * joins each operator that names it among its members (plan section 5.2). The operator is found by its lead, as
+     * the waiting phase keeps no output of the content phase.
+     */
+    @Override
+    public List<FirstLaunchStep> whenAccountReady(FirstLaunchConfig config, FirstLaunchAccount account,
+        FirstLaunchResults results) {
+        List<FirstLaunchStep> steps = new ArrayList<>();
+        for (QbFirstLaunchConfig.Operator operator : QbFirstLaunchConfig.of(config).operators()) {
+            if (operator.members().contains(account.key())) {
+                // The key names the operator, not the account (the account's key is its user's name).
+                steps.add(FirstLaunchStep.run("qb:member:" + operator.index(), QbFirstLaunchProcesses.MEMBER,
+                    ready -> new QbFirstLaunchProcesses.MemberInput(ready.userId(operator.lead()),
+                        ready.userId(account.key())))
+                    .describedAs("Member of operator " + operator.name()));
+            }
+        }
+        return steps;
+    }
+
     @Override
     public Set<String> filePolicies() {
         return QbPackages.POLICIES;

@@ -48,8 +48,8 @@ import static org.assertj.core.api.Assertions.assertThat;
  * 17): the job invites the accounts; the operators' leads accept, bind a second factor and get their roles; the super
  * administrator gets hers only once the operator confirmed the fingerprint; the run is done and its report mailed
  * with QuizBuks's items left for people; a taker passes a publication (offline redemption, no money); a start with
- * the configuration still there does nothing again. Operators' other members join through the platform's
- * account-ready hook (#743), tested once it is merged.
+ * the configuration still there does nothing again. An operator's other member joins once her roles are in effect
+ * (the platform's account-ready hook).
  */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.MOCK, properties = {
     "jabiz.first-launch.await-interval=100ms", "jabiz.jobs.lock-at-least-for=0s",
@@ -432,6 +432,12 @@ class QbFirstLaunchIT extends PostgresIntegrationTest {
         advance();
         assertThat(rolesOf(userOf(A))).contains("QB_ADMIN_SUPER");
         advance();
+        // A, once her roles are in effect, joins the operator that names her among its members (account-ready hook).
+        String tokyo = String.valueOf(query("SELECT operator_id FROM qb_operator WHERE direct_sponsor_id = ?",
+            userOf(B)).getFirst().get("operator_id"));
+        assertThat(query("SELECT 1 FROM qb_operator_member WHERE operator_id = ? AND user_id = ?::uuid", tokyo, userOf(A)))
+            .hasSize(1);
+        assertThat(query("SELECT 1 FROM qb_operator_member WHERE user_id = ?::uuid", userOf(C))).hasSize(1);
 
         // Done: the report goes to A, with what is left for people (QuizBuks's items among them).
         assertThat(run().state()).isEqualTo(FirstLaunchRun.State.DONE);

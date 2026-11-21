@@ -47,7 +47,7 @@ public final class QbFirstLaunchProcesses {
     public static final String APPROVE = "QB_FIRST_LAUNCH_APPROVE";
     public static final String READY = "QB_FIRST_LAUNCH_READY";
     public static final String LEAD = "QB_FIRST_LAUNCH_LEAD";
-    public static final String MEMBER = "QB_FIRST_LAUNCH_MEMBER_ADD";
+    public static final String MEMBER = "QB_LAUNCH_MEMBER_ADD";
 
     /**
      * @param withdraw    the proposal {@code QB_SETUP} made of the parameter
