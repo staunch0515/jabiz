@@ -1,11 +1,12 @@
-import { configureClient, session } from '@jabiz/client'
-import { render, screen, waitFor } from '@testing-library/react'
+import { configureClient, i18n, session } from '@jabiz/client'
+import { act, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import App from '../App'
 import '../messages'
 import { nameFromEmail } from '../pages/ProfileForm'
 import { forgetRedeem, pendingRedeem } from '../redeemReturn'
+import { rawKeysIn } from '../test/rawKeys'
 import { forgetShareNext, rememberShareNext, shareNext } from './share'
 
 function json(status: number, body: unknown) {
@@ -112,6 +113,22 @@ describe('the share link before signing in', () => {
       body: { email: 'mei@example.com', entry: 'app', to: '/p/pub1', locale: 'en' } })
     // A password still works, and leads back here.
     expect(screen.getByTestId('share-password')).toHaveAttribute('href', '/login?next=%2Fp%2Fpub1')
+  })
+
+  it('says how many questions are drawn, in each language, and never shows a message key', async () => {
+    server({ shared: { ...SHARED, pickCount: 3 } })
+    window.history.replaceState(null, '', '/p/pub1')
+    render(<App />)
+    expect(await screen.findByRole('heading', { name: 'Spring quiz' })).toBeInTheDocument()
+    const expected: Record<string, string> = { en: '3 of 10 questions, drawn at random', zh: '10 题中随机 3 题',
+      ja: '10 問から無作為に 3 問' }
+    for (const [language, text] of Object.entries(expected)) {
+      await act(async () => { await i18n.changeLanguage(language) })
+      await waitFor(() => expect(screen.getByTestId('share-facts')).toHaveTextContent(text))
+      expect(screen.getByTestId('share-facts')).not.toHaveTextContent('detail.pickCount')
+      expect(rawKeysIn(document.body.textContent ?? '')).toEqual([])
+    }
+    await act(async () => { await i18n.changeLanguage('en') })
   })
 
   it('opened inside WeChat, says first how to open it in the phone\'s browser (Q50)', async () => {

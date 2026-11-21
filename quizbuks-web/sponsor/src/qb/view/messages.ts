@@ -109,6 +109,8 @@ const en = {
     DIGITAL_PRIZEShort: 'Digital',
     DIGITAL_PRIZEHint: 'After passing you get a code, a voucher or a link right here in the app, nothing to collect:',
   },
+  // F-S16: the full-screen key of a video player.
+  player: { fullscreen: 'Full screen', exitFullscreen: 'Exit full screen' },
   feed: {
     videoTitle: 'Video: {{name}}',
     hasVideo: 'With a video',
@@ -225,6 +227,8 @@ const zh: typeof en = {
     DIGITAL_PRIZEShort: '电子',
     DIGITAL_PRIZEHint: '通过后直接在 App 里得到兑换码、券号或链接，无需到店领取：',
   },
+  // F-S16: the full-screen key of a video player.
+  player: { fullscreen: '全屏', exitFullscreen: '退出全屏' },
   feed: {
     videoTitle: '视频：{{name}}',
     hasVideo: '有视频',
@@ -340,6 +344,8 @@ const ja: typeof en = {
     DIGITAL_PRIZEShort: 'デジタル',
     DIGITAL_PRIZEHint: '合格するとコード、クーポン番号またはリンクをこのアプリで受け取れます。店舗に行く必要はありません：',
   },
+  // F-S16: the full-screen key of a video player.
+  player: { fullscreen: '全画面', exitFullscreen: '全画面を終了' },
   feed: {
     videoTitle: '動画：{{name}}',
     hasVideo: '動画あり',

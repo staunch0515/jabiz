@@ -162,7 +162,7 @@ tools/quizbuks/e2e.sh stop | status | logs | env            # env：给应用的
 
 ## 账户（Q2）
 
-- **三个登录入口**：后台 `admin`（只接受管理员角色，`QB_ADMIN_ROLES`）、答题 App `app`（`QB_TAKER`，允许自助注册，未验证邮箱也能登录浏览）、商家后台 `sponsor`
+- **三个登录入口**：后台 `admin`（只接受管理员角色与首发的待命角色 `FIRST_LAUNCH_PENDING`，`QB_ADMIN_ROLES`；待命角色没有任何权限、要求二次验证，首发配置建的账号凭它登录并绑定二次验证，见 `docs/quizbuks/plans/impl/F-LAUNCH.md` §5.2）、答题 App `app`（`QB_TAKER`，允许自助注册，未验证邮箱也能登录浏览）、商家后台 `sponsor`
   （`QB_SPONSOR`，允许自助注册，**要求已验证邮箱**）。注册的角色由 `QB_SETUP` 建立：执行之前注册一律 422 `SIGN_UP_DISABLED`。
   升级说明：此前在后台登录的商家、答题人的测试账号改用各自的入口（App `/login`、商家后台 `/sponsor/login`）。
 - **邮件必须开启**才能激活：`JABIZ_MAIL_ENABLED=true` 并配置发件人与邮件服务器（`JABIZ_MAIL_FROM`、`SPRING_MAIL_*`）；
@@ -317,7 +317,7 @@ tools/quizbuks/e2e.sh stop | status | logs | env            # env：给应用的
 | `JABIZ_SECURITY_MFA_ADMINISTRATION` | 否 | `false` 时平台管理操作（含 `QB_SETUP`）不要求二次验证；只用于本机演示与 e2e |
 | `QUIZBUKS_PORT` / `QUIZBUKS_DB_PORT` | 否 | 本机端口，缺省 8080 / 5440 |
 | `LOGGING_STRUCTURED_FORMAT_CONSOLE` | 否 | `ecs` 输出 JSON 日志（compose 已设） |
-| `QB_ADMIN_ROLES` | 否 | 后台入口接受的角色，逗号分隔；缺省 `ADMIN,QB_ADMIN_SUPER,QB_ADMIN_CONTENT,QB_ADMIN_FINANCE`。**不得**含 `*`、`QB_TAKER`、`QB_SPONSOR`（启动错误） |
+| `QB_ADMIN_ROLES` | 否 | 后台入口接受的角色，逗号分隔；缺省 `ADMIN,QB_ADMIN_SUPER,QB_ADMIN_CONTENT,QB_ADMIN_FINANCE,FIRST_LAUNCH_PENDING`。**不得**含 `*`、`QB_TAKER`、`QB_SPONSOR`（启动错误） |
 | `QB_SESSION_IDLE_TIMEOUT` | 否 | 平台管理系统、发起方页面、运营商管理系统与 Shopify 内嵌页闲置多久后需要重新登录（四个入口共用这一个变量）；缺省 `PT24H`（App 不因闲置锁定）。不能为 `0`（平台管理系统的入口必须闲置锁定：启动错误），不能短于访问令牌的有效期 15 分钟（启动错误） |
 | `QB_SESSION_REFRESH_TOKEN_TTL` | 否 | 上述入口的刷新令牌自最后一次刷新起的有效期；缺省 `P2D`，须不短于 15 分钟加闲置时长（否则启动警告） |
 | `QB_APP_SELF_REGISTRATION` / `QB_SPONSOR_SELF_REGISTRATION` | 否 | 答题 App、商家后台是否允许自助注册，缺省 `true` |

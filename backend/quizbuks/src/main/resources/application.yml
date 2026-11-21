@@ -183,8 +183,11 @@ jabiz:
       key: ${JABIZ_SEAL_KEY:}
     # Sign-in entries (docs/design/10-security.md section 15; decision D36; docs/quizbuks/plans/Q2-accounts.md, D-Q2-1).
     # The administration accepts the administrators' roles only (QB_ADMIN_ROLES, comma-separated; ADMIN is the first
-    # administrator's): never QB_TAKER or QB_SPONSOR, which anybody can get by registering (the startup check refuses
-    # "*" or a registration role here while registration is on). The app (/) takes takers, who may sign in before
+    # administrator's; FIRST_LAUNCH_PENDING is the first launch's waiting role, no permissions and a second factor
+    # required, with which an account the first launch created signs in and sets up its second factor before its own
+    # roles are granted: F-LAUNCH plan section 5.2; until the platform's first launch creates it, the startup check
+    # warns that the role does not exist yet): never QB_TAKER or QB_SPONSOR, which anybody can get by registering
+    # (the startup check refuses "*" or a registration role here while registration is on). The app (/) takes takers, who may sign in before
     # verifying their address (to browse; every QuizBuks write needs it verified). The sponsor console (/sponsor/)
     # signs them in unverified too since Q40 (an account opened through Facebook or LINE verifies in its own session;
     # every sponsor write needs the address verified, VerifiedEmailWritesIT). Registration needs QB_SETUP to have run (the roles) and mail to be
@@ -210,7 +213,7 @@ jabiz:
       origins: ${QB_PASSKEY_ORIGINS:${quizbuks.passkeys.origins:}}
     entries:
       admin:
-        accepted-roles: ${QB_ADMIN_ROLES:ADMIN,QB_ADMIN_SUPER,QB_ADMIN_CONTENT,QB_ADMIN_FINANCE}
+        accepted-roles: ${QB_ADMIN_ROLES:ADMIN,QB_ADMIN_SUPER,QB_ADMIN_CONTENT,QB_ADMIN_FINANCE,FIRST_LAUNCH_PENDING}
         app-path: /admin/
         passkeys: ${QB_PASSKEYS:${quizbuks.passkeys.default:false}}
         session:
