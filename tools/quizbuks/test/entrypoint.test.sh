@@ -134,6 +134,26 @@ bare "$work/s5d" QB_BOOTSTRAP_ADMIN_DONE=true
 check "administrator exists, keys missing: refused" '[[ $status != 0 &&
   "$out" == *"not set: JABIZ_JWT_SECRET JABIZ_INTEGRITY_KEY JABIZ_MFA_KEY JABIZ_SEAL_KEY."* ]]'
 
+# First launch (F-LAUNCH, docs/quizbuks/first-launch-guide.md): the configuration makes the accounts, so there is no
+# first administrator. The platform's entrypoint would name one ('admin') and the first launch refuses that: the start
+# passes an empty user name on (the command line wins over application.yml) and a password nobody sees.
+FIRST_KEYS=(JABIZ_JWT_SECRET=a JABIZ_INTEGRITY_KEY=b JABIZ_MFA_KEY=c JABIZ_SEAL_KEY=d)
+bare "$work/s5e" "${FIRST_KEYS[@]}" JABIZ_FIRST_LAUNCH_CONFIG=/config/first-launch.yml
+check "first launch: started without a first administrator" '[[ $status == 0 &&
+  "$out" == *"next: --spring.main.banner-mode=off --jabiz.security.bootstrap-admin.user-name="* &&
+  "$(value JABIZ_BOOTSTRAP_ADMIN_PASSWORD)" =~ ^[0-9a-f]{24}$ && -z "$(ls -A "$work/s5e")" ]] &&
+  ! printed | grep -q "$(value JABIZ_BOOTSTRAP_ADMIN_PASSWORD)"'
+bare "$work/s5f" "${FIRST_KEYS[@]}" JABIZ_FIRST_LAUNCH_CONFIG=/config/first-launch.yml JABIZ_BOOTSTRAP_ADMIN_USER=admin
+check "first launch with a first administrator: refused" '[[ $status != 0 && "$out" == *"JABIZ_FIRST_LAUNCH_CONFIG"* &&
+  "$out" != *"next:"* ]]'
+bare "$work/s5g" "${FIRST_KEYS[@]}" JABIZ_FIRST_LAUNCH_CONFIG=/config/first-launch.yml JABIZ_BOOTSTRAP_ADMIN_PASSWORD=x
+check "first launch with an administrator password: refused" '[[ $status != 0 && "$out" != *"next:"* ]]'
+bare "$work/s5h" JABIZ_FIRST_LAUNCH_CONFIG=/config/first-launch.yml
+check "first launch, keys missing: refused" '[[ $status != 0 &&
+  "$out" == *"not set: JABIZ_JWT_SECRET JABIZ_INTEGRITY_KEY JABIZ_MFA_KEY JABIZ_SEAL_KEY."* ]]'
+run "$work/s5i"
+check "no first launch: no empty user name passed on" '[[ $status == 0 && "$out" != *"bootstrap-admin.user-name"* ]]'
+
 # Local demonstration: the platform's entrypoint generates the keys; the administrator's password is made here, in a
 # read-only file, and never printed.
 bare "$work/s6" QB_LOCAL_SECRETS=true

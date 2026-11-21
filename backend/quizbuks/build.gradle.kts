@@ -85,6 +85,8 @@ tasks.named<Test>("test") {
         "../quizbuks-web/sponsor/src/profile/package-plan-cases.json",
         "../quizbuks-web/sponsor/src/profile/package-plan-expected.json"))
     inputs.property("packagePlanCasesWrite", providers.environmentVariable("PACKAGE_PLAN_CASES_WRITE").orElse(""))
+    // F-LAUNCH Q4: the first-launch sample handed to the requester, which FirstLaunchScenarioTest runs as it is.
+    inputs.dir(rootProject.layout.projectDirectory.dir("../docs/quizbuks/first-launch-sample"))
 }
 
 // platformCheck starts the application with application.yml only: Stripe's webhook secrets, which come from the

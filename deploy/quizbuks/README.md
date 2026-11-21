@@ -98,6 +98,7 @@ tools/quizbuks/e2e.sh run                                   # 全部用例（约
 tools/quizbuks/e2e.sh run --keep -- tests/topup.spec.ts     # 只跑一个文件，跑完不停，下次直接重跑
 tools/quizbuks/e2e.sh run -- -g "tops up"                   # Playwright 的参数都放在 -- 之后
 tools/quizbuks/e2e.sh run --fresh                           # 先删掉 e2e 数据库（用例只增不删数据，平时不用）
+tools/quizbuks/e2e.sh first-launch                          # 首发配置的用例（F-LAUNCH）：另建的空库、空文件目录、没有首个管理员，以示例配置启动
 tools/quizbuks/e2e.sh stop | status | logs | env            # env：给应用的环境变量（密钥遮蔽）
 ```
 

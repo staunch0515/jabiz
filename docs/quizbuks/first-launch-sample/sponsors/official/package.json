@@ -1,0 +1,47 @@
+{
+  "format": "quizbuks.sponsor-package",
+  "version": 2,
+  "exportedAt": "2026-11-21T00:00:00Z",
+  "profile": {
+    "format": "quizbuks-profile", "schema": 1, "languages": ["zh"],
+    "basics": { "contactName": "示例 负责人", "company": "示例官方", "intro": { "zh": "平台官方的问卷。" }, "avatar": "avatar" },
+    "page": { "handle": "official-sample", "headline": { "zh": "来自示例官方的问卷" }, "website": null, "cover": "cover" },
+    "products": [],
+    "files": {
+      "avatar": { "type": "image/jpeg", "size": 866, "data": "/9j/4AAQSkZJRgABAgAAAQABAAD/2wBDAAgGBgcGBQgHBwcJCQgKDBQNDAsLDBkSEw8UHRofHh0aHBwgJC4nICIsIxwcKDcpLDAxNDQ0Hyc5PTgyPC4zNDL/2wBDAQkJCQwLDBgNDRgyIRwhMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjL/wAARCAAwAEADASIAAhEBAxEB/8QAHwAAAQUBAQEBAQEAAAAAAAAAAAECAwQFBgcICQoL/8QAtRAAAgEDAwIEAwUFBAQAAAF9AQIDAAQRBRIhMUEGE1FhByJxFDKBkaEII0KxwRVS0fAkM2JyggkKFhcYGRolJicoKSo0NTY3ODk6Q0RFRkdISUpTVFVWV1hZWmNkZWZnaGlqc3R1dnd4eXqDhIWGh4iJipKTlJWWl5iZmqKjpKWmp6ipqrKztLW2t7i5usLDxMXGx8jJytLT1NXW19jZ2uHi4+Tl5ufo6erx8vP09fb3+Pn6/8QAHwEAAwEBAQEBAQEBAQAAAAAAAAECAwQFBgcICQoL/8QAtREAAgECBAQDBAcFBAQAAQJ3AAECAxEEBSExBhJBUQdhcRMiMoEIFEKRobHBCSMzUvAVYnLRChYkNOEl8RcYGRomJygpKjU2Nzg5OkNERUZHSElKU1RVVldYWVpjZGVmZ2hpanN0dXZ3eHl6goOEhYaHiImKkpOUlZaXmJmaoqOkpaanqKmqsrO0tba3uLm6wsPExcbHyMnK0tPU1dbX2Nna4uPk5ebn6Onq8vP09fb3+Pn6/9oADAMBAAIRAxEAPwDu6KKKo+iCiitK00O8u4hKoSNCMqZDjcPwoJlOMFeTsZtFas/h6+hjLgRy46rGTn9QKyqBQqRnrF3CiiigsKKKKANLQ7SO71ELKAyIpcqRw3QY/X9K7KuR8PXKwaj5bsQsq7Rzxu6jP6j8a66kzyca37TUK5bxJaRwXUc8YC+cDuAHcd/xz+ldTXM+J50e4ghU5eMEt7ZxgfXj9RQicG37VWMGiiimewFFFFABW3aeJJ4IhHPEJsDAbdg/j1zWJRQZzpxqK0kb0/ieV4ysNusbn+Jm3Y+gwOawmZnYsxLMTkknJJpKKAp0oU/hQUUUUGh//9k=" },
+      "cover": { "type": "image/jpeg", "size": 866, "data": "/9j/4AAQSkZJRgABAgAAAQABAAD/2wBDAAgGBgcGBQgHBwcJCQgKDBQNDAsLDBkSEw8UHRofHh0aHBwgJC4nICIsIxwcKDcpLDAxNDQ0Hyc5PTgyPC4zNDL/2wBDAQkJCQwLDBgNDRgyIRwhMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjL/wAARCAAwAEADASIAAhEBAxEB/8QAHwAAAQUBAQEBAQEAAAAAAAAAAAECAwQFBgcICQoL/8QAtRAAAgEDAwIEAwUFBAQAAAF9AQIDAAQRBRIhMUEGE1FhByJxFDKBkaEII0KxwRVS0fAkM2JyggkKFhcYGRolJicoKSo0NTY3ODk6Q0RFRkdISUpTVFVWV1hZWmNkZWZnaGlqc3R1dnd4eXqDhIWGh4iJipKTlJWWl5iZmqKjpKWmp6ipqrKztLW2t7i5usLDxMXGx8jJytLT1NXW19jZ2uHi4+Tl5ufo6erx8vP09fb3+Pn6/8QAHwEAAwEBAQEBAQEBAQAAAAAAAAECAwQFBgcICQoL/8QAtREAAgECBAQDBAcFBAQAAQJ3AAECAxEEBSExBhJBUQdhcRMiMoEIFEKRobHBCSMzUvAVYnLRChYkNOEl8RcYGRomJygpKjU2Nzg5OkNERUZHSElKU1RVVldYWVpjZGVmZ2hpanN0dXZ3eHl6goOEhYaHiImKkpOUlZaXmJmaoqOkpaanqKmqsrO0tba3uLm6wsPExcbHyMnK0tPU1dbX2Nna4uPk5ebn6Onq8vP09fb3+Pn6/9oADAMBAAIRAxEAPwDu6KKKo+iCiitK00O8u4hKoSNCMqZDjcPwoJlOMFeTsZtFas/h6+hjLgRy46rGTn9QKyqBQqRnrF3CiiigsKKKKANLQ7SO71ELKAyIpcqRw3QY/X9K7KuR8PXKwaj5bsQsq7Rzxu6jP6j8a66kzyca37TUK5bxJaRwXUc8YC+cDuAHcd/xz+ldTXM+J50e4ghU5eMEt7ZxgfXj9RQicG37VWMGiiimewFFFFABW3aeJJ4IhHPEJsDAbdg/j1zWJRQZzpxqK0kb0/ieV4ysNusbn+Jm3Y+gwOawmZnYsxLMTkknJJpKKAp0oU/hQUUUUGh//9k=" }
+    }
+  },
+  "trees": [
+    { "key": "spring", "name": { "zh": "春季知识" }, "description": null, "nodes": [
+      { "key": "basics", "name": { "zh": "入门" }, "description": null, "condition": { "op": "ALL", "items": [{ "passed": true }] } },
+      { "key": "advanced", "name": { "zh": "进阶" }, "description": null,
+        "condition": { "op": "ALL", "items": [{ "node": "basics", "beforeAnswer": true }, { "passed": true }] } } ] }
+  ],
+  "quizzes": [
+    { "key": "spring", "versions": [
+      { "key": "v1", "label": "v1", "topics": [], "customTopics": [], "file": {
+        "format": "quizbuks.quiz", "formatVersion": 3, "exportedAt": "2026-11-21T00:00:00Z",
+        "quiz": { "kind": "QUIZ", "title": "春天的花", "intro": null, "timeLimitSec": null, "cover": null, "language": "zh" },
+        "materials": [],
+        "questions": [
+          { "stem": "东京的樱花一般几月开？", "image": null, "points": 1, "selection": null,
+            "options": [ { "text": "二月", "image": null, "correct": false }, { "text": "三月下旬", "image": null, "correct": true } ] },
+          { "stem": "下图是什么花？", "image": "img1", "points": 1, "selection": null,
+            "options": [ { "text": "梅花", "image": null, "correct": false }, { "text": "樱花", "image": null, "correct": true } ] },
+          { "stem": "郁金香是春天开的花吗？", "image": null, "points": 1, "selection": null,
+            "options": [ { "text": "是", "image": null, "correct": true }, { "text": "不是", "image": null, "correct": false } ] } ],
+        "files": { "img1": { "name": "flower.jpg", "type": "image/jpeg", "size": 866, "data": "/9j/4AAQSkZJRgABAgAAAQABAAD/2wBDAAgGBgcGBQgHBwcJCQgKDBQNDAsLDBkSEw8UHRofHh0aHBwgJC4nICIsIxwcKDcpLDAxNDQ0Hyc5PTgyPC4zNDL/2wBDAQkJCQwLDBgNDRgyIRwhMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjL/wAARCAAwAEADASIAAhEBAxEB/8QAHwAAAQUBAQEBAQEAAAAAAAAAAAECAwQFBgcICQoL/8QAtRAAAgEDAwIEAwUFBAQAAAF9AQIDAAQRBRIhMUEGE1FhByJxFDKBkaEII0KxwRVS0fAkM2JyggkKFhcYGRolJicoKSo0NTY3ODk6Q0RFRkdISUpTVFVWV1hZWmNkZWZnaGlqc3R1dnd4eXqDhIWGh4iJipKTlJWWl5iZmqKjpKWmp6ipqrKztLW2t7i5usLDxMXGx8jJytLT1NXW19jZ2uHi4+Tl5ufo6erx8vP09fb3+Pn6/8QAHwEAAwEBAQEBAQEBAQAAAAAAAAECAwQFBgcICQoL/8QAtREAAgECBAQDBAcFBAQAAQJ3AAECAxEEBSExBhJBUQdhcRMiMoEIFEKRobHBCSMzUvAVYnLRChYkNOEl8RcYGRomJygpKjU2Nzg5OkNERUZHSElKU1RVVldYWVpjZGVmZ2hpanN0dXZ3eHl6goOEhYaHiImKkpOUlZaXmJmaoqOkpaanqKmqsrO0tba3uLm6wsPExcbHyMnK0tPU1dbX2Nna4uPk5ebn6Onq8vP09fb3+Pn6/9oADAMBAAIRAxEAPwDu6KKKo+iCiitK00O8u4hKoSNCMqZDjcPwoJlOMFeTsZtFas/h6+hjLgRy46rGTn9QKyqBQqRnrF3CiiigsKKKKANLQ7SO71ELKAyIpcqRw3QY/X9K7KuR8PXKwaj5bsQsq7Rzxu6jP6j8a66kzyca37TUK5bxJaRwXUc8YC+cDuAHcd/xz+ldTXM+J50e4ghU5eMEt7ZxgfXj9RQicG37VWMGiiimewFFFFABW3aeJJ4IhHPEJsDAbdg/j1zWJRQZzpxqK0kb0/ieV4ysNusbn+Jm3Y+gwOawmZnYsxLMTkknJJpKKAp0oU/hQUUUUGh//9k=" } } } } ],
+      "current": null, "topics": [], "customTopics": [] }
+  ],
+  "publications": [
+    { "quiz": "spring", "version": "v1",
+      "settings": { "format": "quizbuks.publication-settings", "version": 1, "name": "春季答题", "fullScore": 3,
+        "durationDays": 30, "timeLimitSec": 300, "passScore": 2, "budgetCap": null, "maxWinners": 100,
+        "tiers": [ { "fromScore": 0, "toScore": 3, "reward": 0 } ], "rewardMethod": "OFFLINE_REDEEM",
+        "redeemDescription": "在店内出示结果页领取。", "audience": "PUBLIC", "regions": ["GLOBAL"], "languages": [],
+        "translations": {}, "conditions": [] },
+      "node": { "tree": "spring", "node": "basics", "name": { "zh": "入门" } },
+      "topics": null, "sharedVideo": null }
+  ]
+}

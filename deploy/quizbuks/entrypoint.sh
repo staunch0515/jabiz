@@ -76,6 +76,22 @@ if [ -z "${JABIZ_JWT_SECRET:-}" ]; then missing="$missing JABIZ_JWT_SECRET"; fi
 if [ -z "${JABIZ_INTEGRITY_KEY:-}" ]; then missing="$missing JABIZ_INTEGRITY_KEY"; fi
 if [ -z "${JABIZ_MFA_KEY:-}" ]; then missing="$missing JABIZ_MFA_KEY"; fi
 if [ -z "${JABIZ_SEAL_KEY:-}" ]; then missing="$missing JABIZ_SEAL_KEY"; fi
+# First launch (F-LAUNCH, docs/quizbuks/first-launch-guide.md): the configuration makes the accounts, so there is no
+# first administrator, and the first launch refuses one. The platform's entrypoint names one ('admin') when none is
+# given: an empty user name is passed on at the end (the command line wins over application.yml), and a password nobody
+# sees keeps the platform's entrypoint from making and printing one.
+first_launch=false
+if [ -n "${JABIZ_FIRST_LAUNCH_CONFIG:-}" ]; then
+    if [ -n "${JABIZ_BOOTSTRAP_ADMIN_USER:-}" ] || [ -n "${JABIZ_BOOTSTRAP_ADMIN_PASSWORD:-}" ]; then
+        echo "quizbuks: refusing to start: JABIZ_FIRST_LAUNCH_CONFIG is set together with" \
+            "JABIZ_BOOTSTRAP_ADMIN_USER or JABIZ_BOOTSTRAP_ADMIN_PASSWORD; a first launch makes its own accounts" \
+            "(remove the first administrator's settings)" >&2
+        exit 1
+    fi
+    first_launch=true
+    JABIZ_BOOTSTRAP_ADMIN_PASSWORD=$(random_text)
+    export JABIZ_BOOTSTRAP_ADMIN_PASSWORD
+fi
 if [ -z "${JABIZ_BOOTSTRAP_ADMIN_PASSWORD:-}" ]; then
     if $local_secrets; then
         if [ ! -s "$SECRETS/admin-password" ]; then
@@ -153,4 +169,7 @@ if $placeholders; then
     fi
 fi
 
+if $first_launch; then
+    exec "$NEXT" "$@" --jabiz.security.bootstrap-admin.user-name=
+fi
 exec "$NEXT" "$@"
