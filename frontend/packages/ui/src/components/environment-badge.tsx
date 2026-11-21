@@ -116,7 +116,7 @@ export function EnvironmentBadge({ environment, className }: EnvironmentBadgePro
             data-testid="environment-badge-collapse"
             aria-label={t('environment.collapse')}
             onClick={() => set(true)}
-            className="flex size-5 items-center justify-center rounded-full hover:bg-black/10 focus-visible:outline-2"
+            className="flex size-6 items-center justify-center rounded-full hover:bg-black/10 focus-visible:outline-2"
           >
             <X aria-hidden="true" className="size-3" />
           </button>
