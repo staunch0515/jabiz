@@ -9,7 +9,12 @@ export interface EnvironmentBadgeProps {
   /** The environment to show; the one the server tells (`useEnvironment`) when absent. */
   environment?: Environment
   className?: string
+  /** After how long the open capsule folds into its dot by itself; 0: never. */
+  autoCollapseMs?: number
 }
+
+/** Seconds of the open capsule before it folds into a dot by itself (17zz27): long enough to read, short enough to clear. */
+export const BADGE_AUTO_COLLAPSE_MS = 6000
 
 /** Where the badge's collapsed state is kept: per tab, not across them (a new tab shows the mark again). */
 const COLLAPSED_KEY = 'jabiz.environment-badge.collapsed'
@@ -55,18 +60,29 @@ function useTitlePrefix(name: string | undefined) {
  * Says that this is a test system and not the real one (platform phases 16zd and 17zz27) without taking any room of
  * the page: a small, slightly see-through capsule (90 %: enough for text to keep its contrast on a white page) fixed at the bottom left (the bottom right is where a video's full-screen
  * key and the usual action buttons are), with the environment's name; a click on its close button folds it into a
- * small dot, a click on the dot opens it again, and the choice is kept for the tab only (`sessionStorage`). The
+ * small dot (by itself after a few seconds), a click on the dot opens it again, and the choice is kept for the tab only
+ * (`sessionStorage`). The capsule lets every click through to what is under it; only its close key and the dot take one. The
  * document's title says it too. Nothing at all on production, and nothing while the environment is not known yet.
  * `AppShell` and `AuthFrame` render it themselves; a frontend with a frame of its own puts it in that frame (it is
  * fixed, so anywhere will do).
  */
-export function EnvironmentBadge({ environment, className }: EnvironmentBadgeProps) {
+export function EnvironmentBadge({ environment, className, autoCollapseMs = BADGE_AUTO_COLLAPSE_MS }: EnvironmentBadgeProps) {
   const { t } = useTranslation(UI_NAMESPACE)
   const known = useEnvironment()
   const shown = environment ?? known
   const test = shown && !shown.production ? shown : undefined
   const [collapsed, setCollapsed] = useState(readCollapsed)
   useTitlePrefix(test?.name)
+  const shownNow = !!test
+  useEffect(() => {
+    // Open, it folds by itself after a while, and stays folded for the tab: it is a mark, not a notice.
+    if (!shownNow || collapsed || autoCollapseMs <= 0) return
+    const timer = window.setTimeout(() => {
+      setCollapsed(true)
+      keepCollapsed(true)
+    }, autoCollapseMs)
+    return () => window.clearTimeout(timer)
+  }, [shownNow, collapsed, autoCollapseMs])
   if (!test) return null
   const set = (next: boolean) => {
     setCollapsed(next)
@@ -88,6 +104,8 @@ export function EnvironmentBadge({ environment, className }: EnvironmentBadgePro
         className,
       )}
     >
+      {/* Said to a screen reader in both states (the dot has only a picture). */}
+      {collapsed && <span className="sr-only">{`${test.name} ${message}`}</span>}
       {collapsed ? (
         <button
           type="button"
@@ -103,8 +121,9 @@ export function EnvironmentBadge({ environment, className }: EnvironmentBadgePro
         </button>
       ) : (
         <div
+          // The capsule itself lets every click through to what is under it; only its close key takes one.
           className={cn(
-            'bg-warning/90 text-warning-foreground pointer-events-auto flex items-center gap-1.5 rounded-full',
+            'bg-warning/90 text-warning-foreground pointer-events-none flex items-center gap-1.5 rounded-full',
             'py-0.5 pr-1 pl-2.5 text-xs font-bold tracking-wide shadow-sm backdrop-blur',
           )}
         >
@@ -116,7 +135,10 @@ export function EnvironmentBadge({ environment, className }: EnvironmentBadgePro
             data-testid="environment-badge-collapse"
             aria-label={t('environment.collapse')}
             onClick={() => set(true)}
-            className="flex size-6 items-center justify-center rounded-full hover:bg-black/10 focus-visible:outline-2"
+            className={cn(
+              'pointer-events-auto flex size-6 items-center justify-center rounded-full hover:bg-black/10',
+              'focus-visible:outline-2',
+            )}
           >
             <X aria-hidden="true" className="size-3" />
           </button>
