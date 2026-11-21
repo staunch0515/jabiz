@@ -70,6 +70,29 @@ class ArchitectureTest {
             .check(CLASSES);
     }
 
+    /** Acting as an account is the first launch's alone (decision D82). */
+    @Test
+    void onlyTheFirstLaunchActsAsAnAccount() {
+        noClasses().that().resideOutsideOfPackage("com.jabiz.runtime.firstlaunch")
+            .should().dependOnClassesThat().haveFullyQualifiedName("com.jabiz.runtime.firstlaunch.FirstLaunchActing")
+            .check(CLASSES);
+        noClasses().that().resideOutsideOfPackage("com.jabiz.runtime.firstlaunch")
+            .should().dependOnClassesThat().haveFullyQualifiedName("com.jabiz.runtime.firstlaunch.FirstLaunchFiles")
+            .check(CLASSES);
+    }
+
+    /**
+     * Files reach storage through the upload pipeline's entries alone: uploads and fetched links (runtime.file),
+     * external jobs' outputs (runtime.external) and the first launch's file steps (runtime.firstlaunch).
+     */
+    @Test
+    void onlyThePlatformsEntriesStoreFiles() {
+        noClasses().that().resideOutsideOfPackages("com.jabiz.runtime.file..", "com.jabiz.runtime.external..",
+                "com.jabiz.runtime.firstlaunch..")
+            .should().dependOnClassesThat().haveFullyQualifiedName("com.jabiz.runtime.file.FileUploadService")
+            .check(CLASSES);
+    }
+
     @Test
     void runtimeContainsNoBusinessConcepts() {
         noClasses().that().resideInAPackage(RUNTIME)
