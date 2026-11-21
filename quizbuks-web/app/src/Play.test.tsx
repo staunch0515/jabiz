@@ -4,6 +4,7 @@ import { act, cleanup, render, screen, waitFor, within } from '@testing-library/
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import App from './App'
+import { rawKeysIn } from './test/rawKeys'
 import { takeReferralFromAddress } from './referral/api'
 import { forgetRedeem, pendingRedeem, rememberRedeem, RESUME_FOR_MS } from './redeemReturn'
 import { placeholderIndex } from './qb/Illustrations'
@@ -1824,6 +1825,8 @@ describe('a result read later', () => {
       expect(await screen.findByTestId('result-pass-score')).toHaveTextContent('3')
       expect(screen.getByTestId('result-name')).toHaveTextContent('Capitals week')
       expect(posted('QB_ATTEMPT_RESULT')).toEqual([{ attemptId: ATTEMPT }])
+      // Texts only: no message key looked up in the wrong namespace shows through.
+      expect(rawKeysIn(document.body.textContent ?? '')).toEqual([])
     })
 
   it('waits while the server finishes an attempt whose time ran out', async () => {
