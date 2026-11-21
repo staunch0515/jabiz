@@ -213,6 +213,31 @@ FROM pg_stat_statements ORDER BY total_exec_time DESC LIMIT 20;
 
 **首发按两账号的做法初始化**（需求方 2026-11-17）：需求方本人用两个账号（超级管理员与负责人）完成初始化与日常运营，步骤与分工见 `two-account-setup.md`。本节下面的多人步骤保留，作为以后有了第二个人时的做法。
 
+**首发配置**（F-LAUNCH，平台 23、D82，`docs/guide/first-launch.md`；给需求方的一页说明 `first-launch-guide.md`；可改的示例 `first-launch-sample/`）：正式系统用一个配置目录初始化，代替下面第 2–6 步中由首个管理员与两位管理员手工做的部分（账号、`QB_SETUP`、受控参数与审批规则的首个值（职责分离规则除外）、默认运营商与负责人、直营发起方的内容与发布）。两账号的人数与角色照 `two-account-setup.md`，只是由配置建立。
+
+1. **准备**：复制 `first-launch-sample/`，按注释改 `first-launch.yml`（账号、`allowedEmailDomains`、运营商、直营发起方的包与发布的设置、首发可设的参数 `setup.FirstLaunchParams.SETTABLE`）；包在测试系统的发起方页面"概况 → 导入与导出 → 导出发起方包"导出。不写密码与兑换码（键名中带 password、secret、token、codes 等的一律被拒）。首发只允许线下兑换（兑换说明至多 500 字），发布的期间至多 366 天（`PublishingLimits.MAX_RUNNING`），发布须绑定知识结构图的节点，不能动钱。
+2. **试运行**：空库上加 `JABIZ_FIRST_LAUNCH_DRY_RUN=true` 启动：有问题即启动失败，日志逐条写"位置 | 问题 | 怎么改"；没有问题即列出步骤后退出，什么也不写。核对日志中的每个邮箱。
+3. **正式运行**：全新的空库与空的文件卷（`/var/lib/jabiz/files`），设 `JABIZ_FIRST_LAUNCH_CONFIG`（容器中的路径，目录以只读卷挂进容器），**不设** `JABIZ_BOOTSTRAP_ADMIN_USER` / `_PASSWORD`（镜像的入口脚本与平台都拒绝两者同时出现；入口脚本此时自己给平台入口脚本一个不打印的密码与空的首个管理员名）；四把密钥（§1.1）与邮件（§1.2，`JABIZ_MAIL_ENABLED=true`）照常。内容就位之前对外 503（`FIRST_LAUNCH_IN_PROGRESS`），完成时日志"首发：内容已就位，开始对外服务"。
+4. **出错即重来**：内容阶段任一步失败时日志写出步骤与原因并退出，之后每次启动同样失败（首发不续做）。按日志改配置（或程序）→ **清空数据库与文件卷** → 重新启动。
+5. **等人阶段**（任务 `jabiz.first-launch`，每分钟）：给每个账号寄邀请；本人设密码、在 `/admin/` 登录并绑定二次验证后一分钟内得到配置的角色（经 `SEC_USER_ROLE_ASSIGN`）。使人成为管理员的角色（持 `security.user-role.write` 等管理员权限，即 `QB_ADMIN_SUPER`，平台 D51）另须运维确认：日志 WARN 给出账号、姓名、邮箱、接受与绑定的时刻和 12 位指纹，与本人核对后把指纹写进 `JABIZ_FIRST_LAUNCH_CONFIRM_ADMINS`（逗号分隔）并重启。
+   - **邮箱写错**：该账号尚未接受邀请时，改配置中的 `email` 后重启即重寄（旧链接作废；仍受 `allowedEmailDomains` 约束）；其他改动不执行，日志说明，在平台管理系统中照常办理。
+   - **可疑的账号**：在平台管理系统中停用它，首发即不再为它邀请或授予，报告列出它。
+   - 未接受的账号 3 天后再邀请一次（`JABIZ_FIRST_LAUNCH_REMIND_AFTER`）。
+   - `members` 中的账号在得到角色之后才加入运营商（`QB_LAUNCH_MEMBER_ADD`，见下面"以首发配置初始化时的人工处理"）。
+6. **结束**：全部授予即 `DONE`；自内容阶段完成起 14 天（`JABIZ_FIRST_LAUNCH_DEADLINE`）仍未完成即 `EXPIRED`（待命角色 `FIRST_LAUNCH_PENDING` 停用）。两种结局都给 `report: true` 的账号寄报告 `jabiz.first-launch.report`，列出未完成的账号与剩下的人工事项：正式法律文本（`QB_LEGAL_PUBLISH`）、负责人自己在发起方页面"加入"、三条职责分离规则、等前提的参数（`FirstLaunchSwitches` 的 `prerequisite`）、剩下的金额类提议、公司认证、运营商价格、银行设定、赠送额度与其他奖励方式。
+7. **之后**：撤下配置目录与 `JABIZ_FIRST_LAUNCH_CONFIG`（留着只得到一行警告，有用户的库永不再执行），设 `QB_BOOTSTRAP_ADMIN_DONE=true`（没有首个管理员的密码时入口脚本要它）。部署新版本后照常执行 `QB_SETUP`（下面第 8 步）。
+
+| 变量 | 何时 | 说明 |
+|---|---|---|
+| `JABIZ_FIRST_LAUNCH_CONFIG` | 首发 | `first-launch.yml` 在容器中的路径 |
+| `JABIZ_FIRST_LAUNCH_DRY_RUN` | 试运行 | `true`：只校验并列出步骤 |
+| `JABIZ_FIRST_LAUNCH_CONFIRM_ADMINS` | 等人阶段 | 运维核对过的管理员指纹，逗号分隔 |
+| `JABIZ_FIRST_LAUNCH_DEADLINE` / `_REMIND_AFTER` / `_CONTENT_TIMEOUT` | 可选 | 缺省 14 天 / 3 天 / 10 分钟 |
+| `JABIZ_BOOTSTRAP_ADMIN_USER` / `_PASSWORD` | 首发时不设 | 与首发互斥 |
+| `QB_BOOTSTRAP_ADMIN_DONE` | 首发之后 | `true` |
+
+场景回放 `FirstLaunchScenarioTest`（`backend/quizbuks/src/test/resources/first-launch/`）以 `first-launch-sample/` 原样运行首发，示例因此总是能用。
+
 **以首发配置初始化时的人工处理**（F-LAUNCH Q3；配置与运行见首发的方案 `plans/impl/F-LAUNCH.md`）：
 - **运营商成员**：配置中列为某运营商成员的账号，在本人接受邀请、绑定二次验证并拿到角色之后，由首发以系统身份加入其负责人的运营商（`QB_LAUNCH_MEMBER_ADD`，经 `QB_OPERATOR_MEMBER_ADD`，每个账号只做一次）。已是该运营商成员的不再加入（总部此前若已把他设为负责人，不会被改回成员）。
   这一步失败时（`QB_OPERATOR_MEMBER_ELSEWHERE`：已是另一个运营商的成员；`QB_OPERATOR_MEMBERS_FULL`：运营商已满员），首发不重试：总部确认原因后在管理系统中手工执行 `QB_OPERATOR_MEMBER_ADD`。
@@ -1335,7 +1360,7 @@ Quiz 与发布有主题词（平台词表中的词与自定义词），学者可
   6. （运营商）为每个样板发起方**允许奖品方式**（到店兑换、电子奖品；包不带，缺省见 `PublicationEditing.allowedMethods`）。
   7. （发起方）电子奖品的**码 / 共用码**重新录入（包不带）；忘了的话，含码池的发布在提交时被拒（`DIGITAL_POOL_SHORT`），"提交全部草稿"会逐个列出原因，不会静默跳过。
   8. （发起方 + 运营商另一位成员）"提交全部草稿"：知识结构图进入运营商另一位成员的审核；图生效后**再点一次**提交绑定节点的发布（§7.33 第 6 步）。
-  9. （运营商另一位成员）逐个审核发布（30 个）；没有免审的特例，每项都要另一位成员做出决定。
+  9. （运营商另一位成员）逐个审核发布（30 个）；没有免审的特例，每项都要另一位成员做出决定。唯一的例外是正式系统的**首发配置**（§3"首发配置"，平台 D82）：它导入的直营发起方内容由平台以 `APPROVAL_FIRST_LAUNCH_DECIDE` 批准，只限这次运行自己提出的请求；测试系统的重置与恢复不用首发配置，照本步审核。
   10. （总部或运营商）含 YouTube 等境外视频的发布 / 发起方设**中国大陆例外**（§7.24；包不带例外；原因写"样板：测试中国大陆访问"）。设了例外才能在中国大陆答；不设就是规则本意：被拒。F-F11b 起发起方 / 发布详情页有"设中国大陆例外"的链接并预填，之前要粘贴发起方编号或发布编号。
   11. （视频提供方 + 总部）共享视频由提供方重新共享并审核（§7.33 第 7 步）。
 - **用时**：半小时指**人在系统里的操作时间**（账户、审核、确认、导入、提交），不是机器时间。机器时间已在测试中量过（`SampleRestoreIT`，本机、PostgreSQL 16 同机；见下面"实测"）；人的步骤数才是风险：

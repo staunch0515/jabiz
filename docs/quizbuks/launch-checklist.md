@@ -195,6 +195,12 @@
 
 ### 2.2 部署与首次启动
 
+- [ ] **首发配置已演练**（F-LAUNCH，`operations.md` §3"首发配置"，`first-launch-guide.md`）：在测试用的空库上试运行（`JABIZ_FIRST_LAUNCH_DRY_RUN=true`）没有问题、日志中的每个邮箱都核对过，并真正运行过一次（邀请收到、本人设密码与二次验证、角色到位、发布上线、学者能回答）
+      谁：需求方准备配置，运维启动；在哪里：服务器的 `.env` 与日志；怎么确认：日志"首发：内容已就位，开始对外服务"，`DONE` 的报告邮件
+      确认人： ／ 日期： ／ 依据：
+- [ ] **正式系统的首发**：空库、空的文件卷，设 `JABIZ_FIRST_LAUNCH_CONFIG`，没有 `JABIZ_BOOTSTRAP_ADMIN_*`；超级管理员的指纹经与本人核对后写进 `JABIZ_FIRST_LAUNCH_CONFIRM_ADMINS`；运行为 `DONE`，报告中剩下的人工事项各有人负责；之后撤下配置、设 `QB_BOOTSTRAP_ADMIN_DONE=true`
+      谁：运维与需求方；在哪里：服务器的 `.env`、日志、报告邮件；怎么确认：日志"系统已正式运行"；`.env` 中没有 `JABIZ_FIRST_LAUNCH_CONFIG`
+      确认人： ／ 日期： ／ 依据：
 - [ ] **首次启动**（`operations.md` §3）完成：`QB_SETUP` 的提案已发布，科目映射已设（含 Q87 的 `qb.journal.account.2160 / 1130 / 4120 / 2150`），审批规则已发布（含 `qb.fee-request.review`）
       谁：超级管理员或首个管理员执行 `QB_SETUP`，财务管理员发布（四眼）；在哪里：平台管理系统的流程页（`QB_SETUP`）与"数据 → SysControlChange"；`launch-day-platform-steps.md` 第 2 节；怎么确认：SysControlChange 中这些提案为已发布；启动日志没有 `QUIZBUKS | parameter …` 与 `Platform check failed`
       确认人： ／ 日期： ／ 依据：
@@ -214,7 +220,7 @@
 
 ### 2.3 安全与设置检查
 
-- [ ] **全部管理员都有二次验证**；管理员角色设了"要求二次验证"；没有共用账号；首个管理员的 `JABIZ_BOOTSTRAP_ADMIN_*` 已从环境中删去
+- [ ] **全部管理员都有二次验证**；管理员角色设了"要求二次验证"；没有共用账号；首个管理员的 `JABIZ_BOOTSTRAP_ADMIN_*` 已从环境中删去（用首发配置时从来没有设过）
       谁：超级管理员（角色设置），运维（删变量）；在哪里：平台管理系统的用户与角色页、"安全设置"；`.env`（`launch-day-platform-steps.md` 2.3、2.5、4.1）；怎么确认：每个管理员账号显示已绑定二次验证；`.env` 中没有这两个变量
       确认人： ／ 日期： ／ 依据：
 - [ ] **首发按两账号的做法有意不满足**（`two-account-setup.md`，需求方 2026-11-17；见本页末"带着未完成项上线的决定"）：首发只有一位超级管理员（账号 A），建立期不结束，三条职责分离规则保持待发布；`launch-day-check.sh` 的"至少两位超级管理员""建立期已结束"两项 FAIL 是预期的。以后有了第二个人时按下面原来的要求做：

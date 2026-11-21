@@ -50,6 +50,7 @@ expect_tests true 'a prompt document' docs/quizbuks/profile-package-prompts.md
 expect_tests true 'the other prompt document' docs/quizbuks/quiz-file-prompts.md
 expect_tests false 'other documents' docs/quizbuks/first-launch-spec.md docs/quizbuks/plans/impl/F-C7.md
 expect_tests true 'the daily checks table (F-M14b)' docs/quizbuks/operations.md
+expect_tests true 'the first launch sample (F-LAUNCH)' docs/quizbuks/first-launch-sample/sponsors/official/package.json
 expect_tests false 'code' backend/quizbuks/src/main/resources/quizbuks/help/manual-app.en.md
 expect_tests false 'nothing changed' ''
 

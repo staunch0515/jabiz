@@ -1,0 +1,29 @@
+# F-LAUNCH Q4 (docs/quizbuks/plans/impl/F-LAUNCH.md section 9, item 22): the sample handed to the requester
+# (docs/quizbuks/first-launch-sample/, two accounts, one operator, one sponsor) on a new database. FirstLaunchScenarioTest
+# starts the replay with it and waits for the content phase; these steps are the waiting phase. Nobody accepts the
+# invitation: the job invites both accounts, and once the deadline has passed it ends the run as EXPIRED and mails the
+# report. The snapshot is the run's record (its events, the accounts), the mails (the invitations and the report) and what
+# the content phase made.
+# Not under scenarios/: ScenarioTest replays those without a first-launch configuration.
+name: First launch
+properties:
+  jabiz.jobs.lock-at-least-for: 0s
+  jabiz.first-launch.await-interval: 100ms
+  jabiz.events.delivery.enabled: "true"
+  jabiz.mail.enabled: "true"
+  jabiz.mail.from: quizbuks@example.com
+  jabiz.mail.base-url: https://app.quizbuks.test
+  spring.mail.host: localhost
+  spring.mail.port: "3043"
+# The content phase ran at the test clock's start (2026-01-31T09:00Z); the waiting phase comes after it.
+clock: 2026-01-31T09:05:00Z
+actor: { id: system }
+steps:
+  # The job's first run invites each account (the content is in place: CONTENT_DONE).
+  - runJob: { job: jabiz.first-launch, at: 2026-01-31T09:05:00Z }
+  # Fourteen days on (jabiz.first-launch.deadline) nobody has accepted: EXPIRED, the waiting role disabled, the report.
+  - setClock: 2026-02-14T09:01:00Z
+  - runJob: { job: jabiz.first-launch, at: 2026-02-14T09:01:00Z }
+snapshot:
+  entities: [FirstLaunchEvent, FirstLaunchAccount, MailMessage, QbOperator, QbPublicationCard]
+  asOf: end
