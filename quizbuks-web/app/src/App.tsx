@@ -3,7 +3,7 @@ import {
   AppearanceProvider,
   Button,
   EntryLayoutProvider,
-  EnvironmentBanner,
+  EnvironmentBadge,
   Input,
   MAIL_LINK_PAGES,
   MailLinkPage,
@@ -88,7 +88,6 @@ import { PassPage } from './pass/PassPage'
 import { StaffHandledPage } from './staff/StaffHandledPage'
 import { PayoutPage } from './wallet/PayoutPage'
 import { WalletPage } from './wallet/WalletPage'
-import { ONE_LINE_BANNER } from './banner'
 import { MaintenanceRedirect } from './maintenance'
 import { MapPage, MapsPage } from './maps/MapsPage'
 import { mapOf, MAPS_PATH } from './maps/paths'
@@ -211,15 +210,12 @@ function Header({ search = false, welcome = false }: { search?: boolean; welcome
   if (searching) {
     return (
       <header className="bg-background sticky top-0 z-10 border-b">
-        <EnvironmentBanner className={ONE_LINE_BANNER} />
         <HeaderSearch initial={path === HOME ? searchOf(query) : ''} onClose={() => setSearching(false)} />
       </header>
     )
   }
   return (
     <header className="bg-background sticky top-0 z-10 border-b">
-      {/* A test system says so on every page (platform 16zd); the app's frame is its own, so it places the banner. */}
-      <EnvironmentBanner className={ONE_LINE_BANNER} />
       <div className="mx-auto flex max-w-md items-center gap-1 px-4 py-2">
         {/* Q64: a page opened from another (a quiz's start page, a result) goes back from here. */}
         {backable(path) && (
@@ -368,9 +364,10 @@ function PublicPage({ path, signedIn, sponsorSite = false, children }: { path: s
   const backLabel = signedIn ? tApp('public.back') : tApp('public.signIn')
   return (
     <div className="flex min-h-full flex-col">
-      {sponsorSite ? <EnvironmentBanner className={ONE_LINE_BANNER} /> : (
+      {/* A test system's mark (platform 17zz27) is a corner badge, outside the header: no room of the page. */}
+      <EnvironmentBadge />
+      {!sponsorSite && (
         <header className="bg-background sticky top-0 z-10 border-b" data-testid="public-header">
-          <EnvironmentBanner className={ONE_LINE_BANNER} />
           <div className="mx-auto flex max-w-md items-center gap-2 px-4 py-2">
             <Wordmark name={t('brand')} compact className="text-primary mr-auto" />
             <ThemeToggle />

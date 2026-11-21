@@ -6,7 +6,7 @@ import {
 } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useHasAppearance } from '../components/appearance'
-import { EnvironmentBanner } from '../components/environment-banner'
+import { EnvironmentBadge } from '../components/environment-badge'
 import { ThemeToggle } from '../components/theme-toggle'
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select'
@@ -29,7 +29,7 @@ export interface EntryIntro {
 }
 
 /**
- * A notice over the whole page (the environment banner comes first by itself): offline, the service not answering,
+ * A notice over the whole page: offline, the service not answering,
  * a new version, "open this in your browser" inside another app's browser, and the like — the application's nodes.
  * On a phone only the first active one is shown in full; the other active ones collapse to their one-line `summary`.
  */
@@ -110,7 +110,7 @@ export interface EntryLayoutProps extends EntryLayoutSettings {
 
 /**
  * The template of the pages before a session (phase 17zk; docs/design/12-frontend.md section 14): the notices over
- * the page (the environment banner first), a top bar with the brand and the language at the top right, on a wide
+ * the page, a top bar with the brand and the language at the top right, on a wide
  * screen a column about the application beside the form (one line above it on a phone, the form staying on the first
  * screen), the form's card with its title or tabs, a hint under the form, the way to the other side, and a footer with
  * the application's links, the appearance and the build. Without an intro the card stands alone in the middle.
@@ -137,11 +137,11 @@ export function EntryLayout(props: EntryLayoutProps) {
       data-layout={intro ? 'columns' : 'single'}
       className="bg-background text-foreground flex min-h-screen flex-col"
     >
+      {/* A test system's mark (phase 17zz27) is a corner badge: no room of the page. */}
+      <EnvironmentBadge />
       {/* The notices belong to the page's banner landmark, above its top bar. */}
       <header data-slot="entry-header" className="flex flex-col">
         <div data-slot="entry-notices" className="flex flex-col">
-          {/* A test system says so above everything (phase 16zd). */}
-          <EnvironmentBanner />
           {notices.length > 0 && (
             // No strip of its own while no notice shows anything.
             <div className={cn('mx-auto flex w-full max-w-6xl flex-col gap-2 px-4', anyActive && 'pt-3')}>

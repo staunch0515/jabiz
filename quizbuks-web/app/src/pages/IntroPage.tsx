@@ -1,4 +1,4 @@
-import { Button, EnvironmentBanner, ThemeToggle, cn } from '@jabiz/ui'
+import { Button, EnvironmentBadge, ThemeToggle, cn } from '@jabiz/ui'
 import { ChevronRight } from 'lucide-react'
 import { useState, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -6,7 +6,6 @@ import { PrizeArt, QuizArt, RewardArt, Wordmark } from '../qb/Illustrations'
 import { APP } from '../messages'
 import { QB } from '../qb/messages'
 import { navigate } from '../qb/router'
-import { ONE_LINE_BANNER } from '../banner'
 
 const SEEN_KEY = 'qb.intro.seen'
 
@@ -50,9 +49,9 @@ export function IntroPage() {
   }
   return (
     <div className="flex min-h-dvh flex-col" data-testid="intro" data-slide={slide.key}>
+      {/* A test system's mark (platform 17zz27) is a corner badge: the introduction too, no room of the page. */}
+      <EnvironmentBadge />
       <div className="from-qb-hero-from to-qb-hero-to text-qb-hero-foreground bg-linear-to-b">
-        {/* A test system says so on every page (platform 16zd), the introduction too. */}
-        <EnvironmentBanner className={ONE_LINE_BANNER} />
         <div className="mx-auto flex max-w-md items-center gap-2 px-4 py-3">
           <Wordmark name={tQb('brand')} compact className="mr-auto" />
           <ThemeToggle className="text-qb-hero-foreground hover:bg-qb-hero-foreground/10 hover:text-qb-hero-foreground" />

@@ -80,7 +80,7 @@ for (const appearance of ['light', 'dark'] as const) {
       if (appearance === 'dark') await expect(page.locator('html')).toHaveClass(/dark/)
       else await expect(page.locator('html')).not.toHaveClass(/dark/)
       // Not configured as production: every page says it is a test system (platform 16zd), the title too.
-      await expect(page.getByTestId('environment-banner')).toContainText('Test system, not the production system')
+      await expect(page.getByTestId('environment-badge')).toContainText('Test system, not the production system')
       await expect(page).toHaveTitle(/^\[TEST\] /)
       await expectAccessible(page, at(`app sign-in ${size}`))
       await page.goto('/taker/signup')
@@ -116,7 +116,7 @@ for (const appearance of ['light', 'dark'] as const) {
     await expect(page).toHaveURL(/\/login$/)
 
     await takerWithProfile(page, request)
-    await expect(page.getByTestId('environment-banner')).toBeVisible()
+    await expect(page.getByTestId('environment-badge')).toBeVisible()
     await expectAccessible(page, at('app home'))
     // The account is a menu with a page per part (Q56): the menu, then the sign-in and security page.
     await takerArea(page, 'me').click()
@@ -153,7 +153,7 @@ for (const appearance of ['light', 'dark'] as const) {
     await page.setViewportSize({ width: 1280, height: 900 })
     await page.goto('/sponsor/login')
     await expect(page.getByRole('button', { name: 'Sign in', exact: true })).toBeVisible()
-    await expect(page.getByTestId('environment-banner')).toContainText('test')
+    await expect(page.getByTestId('environment-badge')).toContainText('test')
     await expectAccessible(page, at('sponsor sign-in'))
     await page.goto('/sponsor/signup')
     await expect(page.getByRole('button', { name: 'Create the account' })).toBeVisible()

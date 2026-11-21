@@ -170,7 +170,9 @@ describe('EntryLayout', () => {
         expect(screen.getByRole('main')).toHaveClass('pt-20')
         expect(document.querySelector('[data-slot="entry-brand"]')!.className).not.toContain('truncate')
         const banner = screen.getByRole('banner')
-        expect(within(banner).getByTestId('environment-banner')).toBeInTheDocument()
+        // The test system's mark is a corner badge outside the notices' landmark: it takes no room of the page.
+        expect(screen.getByTestId('environment-badge')).toBeInTheDocument()
+        expect(within(banner).queryByTestId('environment-badge')).toBeNull()
         expect(within(banner).getByText('A notice')).toBeInTheDocument()
         await expectAccessible()
       } finally {

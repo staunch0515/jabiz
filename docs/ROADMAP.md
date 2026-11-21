@@ -5693,6 +5693,47 @@ QuizBuks 的 #545、#546、#547 用了 43.5–45 分钟，#545 到点被取消�
 
 **17zz26 状态**：草稿 PR 待合并。
 
+### 17zz27 测试系统的标志改为不占版面的角标（2026-11-21，需求方）
+
+**缘由**：16zd 的 `EnvironmentBanner` 是占着页面最上方一行的通栏横条，影响测试页面的版面（需求方："取消网站试测试的标志，换个提示方式，目前这个提示放在页面最上方，占位置，影响测试页面"）。改成固定在页面一角的小角标，仍让人一眼知道不是正式系统。
+
+| # | 内容 |
+|---|---|
+| 17zz27-1 | 设计：17 §3.2（测试系统的标志）、12 §（入口页的提示区）、指南 `app-spa.md` |
+| 17zz27-2 | `@jabiz/ui` 的 `EnvironmentBadge`：固定在左下角（让出安全区，不遮右下角）、略透明（90%）的小胶囊（警示图标 + 大写环境名，悬停与读屏给出"测试环境，不是正式版"），"收起"变小圆点、再点展开，收起状态只按标签页记在 `sessionStorage`（`try/catch`）；仍是 `role="note"` 带无障碍名称、文档标题前缀 `[名字]` 不变；正式系统与尚未读到时什么也不显示。`EnvironmentBanner` 保留为别名；`AppShell` 与 `AuthFrame`/`EntryLayout` 不再给它留版面 |
+| 17zz27-3 | 三语消息（收起、展开）；Vitest（`environment-badge.test.tsx`、`app-shell`、`entry`、`LoginPage` 受影响的断言）与 Playwright（`login.spec.ts`），亮暗两种外观过 axe |
+
+**验收**：前端 lint、typecheck、全部 Vitest 绿；`pnpm check:api` 不变；e2e 的登录页断言绿。QuizBuks 侧受影响的断言等同步后在 `1.3/quizbuks` 另提。
+
+**17zz27 状态**：✅ 已合并（#749）。后续修正（#755，不另立阶段号）：QuizBuks 的 e2e（axe 的 `target-size`）指出角标的收起键只有 20 px，改为 24 px（`size-6`），与收起后的小圆点一致。又一处修正（不另立阶段号）：QuizBuks 的 e2e 发现角标挡住了「我的」页的退出键。胶囊本体改为 `pointer-events-none`，只有收起键与小圆点接收点击，除此之外角标不截任何点击；展开 6 秒（`autoCollapseMs`，0 为不自动收起）后自动收成小圆点（照旧只按标签页记住），收起时读屏仍读到环境名与说明。测试：Vitest（`environment-badge.test.tsx`）与 Playwright（`login.spec.ts`，角标所在处取元素不是角标）。
+
+### 17zz28 CI 的 Gradle 依赖只下载一次（2026-11-21，#745 之后仍 429）
+
+**缘由**：每个作业的 `gradle/actions/setup-gradle` 缓存按作业名分键、拉取请求上只读，作业之间不共用；1.3/quizbuks 的推送上没有任何作业写缓存（`ci.yml` 只在 `*/platform` 的推送上跑，`quizbuks.yml` 只在拉取请求上跑），所以 QuizBuks 的拉取请求只取到旧条目（#751 的 e2e (1/3)：缓存恢复了，但没有 `spring-core:7.0.10`，向 Central 取即 429），几个拉取请求同时跑时一起冷下载。
+
+| # | 内容 |
+|---|---|
+| 17zz28-1 | 组合动作 `.github/actions/gradle-deps`：以 `backend/**/*.gradle.kts`、`gradle.properties`、包装器属性的哈希为键（`gradle-deps-v1-<OS>-<哈希>`，退回同前缀的最新条目），`actions/cache/restore` 取 `~/.gradle/caches/modules-2` 与 `~/.gradle/wrapper/dists`，`setup-gradle` 只校验包装器（`cache-disabled`）；`save: 'true'` 时停守护进程、去掉锁文件后 `actions/cache/save` |
+| 17zz28-2 | `ci.yml`：`build`、`build-application-shard`、`e2e` 都用它；`*/platform` 的推送在 `build` 通过后保存，拉取请求只读（不写进别人读的缓存） |
+| 17zz28-3 | 应用分支照用：1.3/quizbuks 另提，`quizbuks.yml` 在线分支的推送上加一个保存缓存的作业，其余作业只恢复 |
+
+**验收**：`*/platform` 推送后的运行里出现 `gradle-deps-v1-Linux-…` 的保存；之后拉取请求的 Gradle 作业恢复到它，构建日志里不再向 Central 下载已有的依赖。
+
+**17zz28 状态**：草稿 PR 待合并。
+
+### 17zz29 首发报告按说明列出就绪账号未运行的步骤（2026-11-21，QuizBuks #747）
+
+**缘由**：首发报告"就绪账号的应用步骤没有运行"一行列出的是步骤的键（`FirstLaunchStep.key`）。键是处理器自己的标识，随运行记录、不能含账号代号（QuizBuks 的成员步骤为 `::`），读报告的人看不懂。
+
+| # | 内容 |
+|---|---|
+| 17zz29-1 | `ReadySteps.notRunDescribed`：与 `notRun` 同一判断，按步骤的说明（`describedAs`，没有说明时即键）列出；报告（`FirstLaunchWaiting.remaining`）改用它。等待的判断（`waitingFor`）与运行记录仍用键 |
+| 17zz29-2 | `ReadyStepsTest.theReportNamesAStepByItsDescription`；`FirstLaunchReadyIT` 的步骤带说明，断言报告列出说明 |
+
+**验收**：`:runtime:test --tests '*ReadyStepsTest'`、`:app:test --tests '*FirstLaunchReady*' --tests '*FirstLaunchWaitingIT'` 绿。不需要迁移。
+
+**17zz29 状态**：草稿 PR 待合并。
+
 ### 线 1.3 的候选（未排期，2026-11-08 总控：首次上线前不做）
 
 | 候选 | 缘由 | 粗估 |

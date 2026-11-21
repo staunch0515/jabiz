@@ -57,6 +57,8 @@ export {
 } from './components/appearance'
 export type { Appearance } from './components/appearance'
 export { ThemeToggle } from './components/theme-toggle'
+export { EnvironmentBadge } from './components/environment-badge'
+export type { EnvironmentBadgeProps } from './components/environment-badge'
 export { EnvironmentBanner } from './components/environment-banner'
 export type { EnvironmentBannerProps } from './components/environment-banner'
 export { DataTable } from './components/data-table'

@@ -503,7 +503,7 @@ SCHEDULED / LIVE / PAUSED / FUNDS_SHORT ──到结束时间（Q4）、名额�
   所以没有 OpenAPI 生成的类型：流程的输入输出对照 Java record 手写在 `src/qb/api.ts`，由 e2e 覆盖。
 - PWA：`manifest.webmanifest`、图标、Service Worker 只缓存应用外壳与静态资源（不离线缓存数据，不做推送），由平台预设 `jabizSpa({ pwa })` 生成；放过 `/sponsor/`、`/admin/`。
 - 会话保存在设备上（入口 `app`：`persistence: device`、30 天、不按闲置锁定，缺省 Q12）。
-- 测试系统的标志（平台 16zd，2026-10-24）：三个前端的每一页顶部都显示 `@jabiz/ui` 的 `EnvironmentBanner`（警示色通栏："STAGING · 测试环境，不是正式版"，标题前加 `[STAGING]`），
+- 测试系统的标志（平台 16zd，2026-10-24）：三个前端的每一页顶部都显示 `@jabiz/ui` 的 `EnvironmentBanner`（警示色通栏："STAGING · 测试环境，不是正式版"，标题前加 `[STAGING]`）， **（2026-11-21：平台 17zz27 起是 `EnvironmentBadge`，页面左下角的角标，可收起成小圆点，不再占一行；三个前端的每一页仍有，标题前缀 `[STAGING]` 不变。）**
   正式环境的 `.env` 以 `JABIZ_WEB_ENVIRONMENT=production` 关掉它（`deploy/quizbuks/DEPLOY.md`、`operations.md` §1.1、上线检查清单）。发起方页面与平台管理系统经 `AppShell` / `AuthFrame` 自动得到，
   App 的两个外框（登录后的页头与公开页的页头）自己放置；登录、注册等页面经平台积木自动得到。
 - 发起方主页（`/s/<handle>`，Q60）的页面头部完全交给发起方（需求方 2026-11-21）：不显示公开页的页头，封面是页面的第一样东西。"返回 App"（未登录时为"登录"，回到本页）是封面左上悬浮的半透明圆形按钮（`sponsor-site-controls`，带无障碍名称与安全区，随滚动停在顶部，不占页面位置），亮暗两种外观都过 axe。这一页不再有外观切换（经需求方 2026-11-21 同意删除；"我的 → 设置"中照旧可切换）。测试系统的标志由平台另行处理（S4 #749 改为左下角角标）。其他公开页（帮助、条款、核实页、学者主页、分享页）的页头不变。

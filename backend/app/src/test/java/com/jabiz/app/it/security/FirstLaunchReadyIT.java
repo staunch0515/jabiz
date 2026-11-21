@@ -185,7 +185,8 @@ class FirstLaunchReadyIT extends SignUpItSupport {
                     FirstLaunchResults results) {
                     // Alice joins Carol's group; Carol "joins" her own, which fails.
                     return List.of(FirstLaunchStep.run("join", "FL_READY_IT_JOIN", found -> new Join(
-                        found.userId(account.key()), found.userId("fl-r-carol"))));
+                        found.userId(account.key()), found.userId("fl-r-carol")))
+                        .describedAs("Added to Carol's group"));
                 }
             };
         }
@@ -295,7 +296,7 @@ class FirstLaunchReadyIT extends SignUpItSupport {
         assertThat(query("SELECT max(attempt) AS attempts FROM sys_job_item_failure WHERE item_key LIKE 'r%'"))
             .singleElement().satisfies(row -> assertThat(((Number) row.get("attempts")).intValue()).isEqualTo(2));
         assertThat(text(to(A).getLast())).contains("#2 (user " + userId(C) + "): the application's steps for a ready"
-            + " account did not run").contains(": join");
+            + " account did not run").contains(": Added to Carol's group");
         assertThat(JOINED).hasSize(1);
     }
 }

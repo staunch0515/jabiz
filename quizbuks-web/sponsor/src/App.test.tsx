@@ -276,7 +276,7 @@ describe('the entry pages (platform 17zk; P4)', () => {
       expect(within(other).getByRole('link', { name: 'Open QuizBuks' })).toHaveAttribute('href', '/taker/login')
       expect(within(screen.getByTestId('entry-links')).getAllByRole('link').map((a) => a.getAttribute('href')))
         .toEqual(['/help', '/legal/sponsor-terms', '/legal/privacy', '/legal/commerce'])
-      expect(await screen.findByTestId('environment-banner')).toHaveTextContent('staging')
+      expect(await screen.findByTestId('environment-badge')).toHaveTextContent('staging')
       await expectAccessible()
     })
 
@@ -342,7 +342,7 @@ describe('the entry pages (platform 17zk; P4)', () => {
     expect(await screen.findByTestId('oidc-error')).toHaveTextContent('access_denied')
     expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('QuizBuks for Sponsors')
     expect(screen.getAllByRole('heading', { level: 2 })).toHaveLength(1)
-    expect(await screen.findByTestId('environment-banner')).toBeInTheDocument()
+    expect(await screen.findByTestId('environment-badge')).toBeInTheDocument()
     await expectAccessible()
   })
 
@@ -352,7 +352,7 @@ describe('the entry pages (platform 17zk; P4)', () => {
     window.history.replaceState(null, '', '/help')
     render(<App />)
     expect(await screen.findByTestId('faq-entry')).toBeInTheDocument()
-    expect(await screen.findByTestId('environment-banner')).toHaveTextContent('staging')
+    expect(await screen.findByTestId('environment-badge')).toHaveTextContent('staging')
   })
 
   it('keep the hint for takers on the second step too, as before 17zk (Q37)', async () => {
