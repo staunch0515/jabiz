@@ -50,7 +50,12 @@ class QbFirstLaunchChecksTest {
     }
 
     private static FirstLaunchConfig config(Map<String, Object> document, List<FirstLaunchAccount> accounts) {
-        return new FirstLaunchConfig("0".repeat(64), document, "en", List.of("example.co.jp"), accounts,
+        return config(document, accounts, "en");
+    }
+
+    private static FirstLaunchConfig config(Map<String, Object> document, List<FirstLaunchAccount> accounts,
+        String language) {
+        return new FirstLaunchConfig("0".repeat(64), document, language, List.of("example.co.jp"), accounts,
             new FirstLaunchConfig.Files() {
                 @Override
                 public byte[] read(String relativePath) {
@@ -261,7 +266,7 @@ class QbFirstLaunchChecksTest {
      */
     @Test
     void aMembersStepKeyHoldsNoAccountsKeyWhateverItIs() {
-        QbFirstLaunch handler = new QbFirstLaunch(JSON, null, java.time.Clock.systemUTC());
+        QbFirstLaunch handler = new QbFirstLaunch(JSON, CATALOG, java.time.Clock.systemUTC());
         for (String key : List.of("member", "qb", "m", "e", "r", "b", "0", "1", "-", "_", "M-0_x")) {
             Map<String, Object> document = valid();
             document.put("operators", List.of(
@@ -283,5 +288,27 @@ class QbFirstLaunchChecksTest {
             // A lead, or an account no operator names among its members, has no step.
             assertThat(handler.whenAccountReady(config, config.accounts().getFirst(), null)).isEmpty();
         }
+    }
+
+    private static final com.jabiz.i18n.MessageCatalog CATALOG = new com.jabiz.i18n.MessageCatalog(
+        List.of(com.jabiz.i18n.MessageCatalog.PLATFORM_BUNDLE, "messages"),
+        List.of(java.util.Locale.of("zh"), java.util.Locale.of("ja"), java.util.Locale.ENGLISH), java.util.Locale.ENGLISH,
+        QbFirstLaunchChecksTest.class.getClassLoader());
+
+    /** The member's step is described in the configuration's language, as the report and the log show it. */
+    @Test
+    void aMembersStepIsDescribedInTheConfigurationsLanguage() {
+        QbFirstLaunch handler = new QbFirstLaunch(JSON, CATALOG, java.time.Clock.systemUTC());
+        FirstLaunchAccount member = new FirstLaunchAccount("A", "a@example.co.jp", "A", "ja",
+            List.of("QB_ADMIN_SUPER"), true);
+        Map<String, String> expected = Map.of("zh", "加入运营商 Tokyo", "ja", "運営パートナー Tokyo のメンバーになる",
+            "en", "Member of the operator Tokyo");
+        expected.forEach((language, text) -> {
+            FirstLaunchConfig config = config(valid(), List.of(member,
+                new FirstLaunchAccount("B", "b@example.co.jp", "B", "ja", List.of("QB_OPERATOR"), false),
+                new FirstLaunchAccount("C", "c@example.co.jp", "C", "ja", List.of("QB_OPERATOR"), false)), language);
+            assertThat(handler.whenAccountReady(config, member, null)).as(language).singleElement()
+                .satisfies(step -> assertThat(step.describe()).isEqualTo(text));
+        });
     }
 }
