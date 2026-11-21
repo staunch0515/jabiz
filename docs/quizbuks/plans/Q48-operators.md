@@ -101,7 +101,7 @@
   - `QB_REVIEW_SPOT_CHECK`（总部抽查标记）；
   - `QB_OPERATOR_SETTLEMENT_RUN`（月度任务）与 `QB_OPERATOR_SETTLEMENT_PAY`（登记付款，审批后过账）。
 - **入口与前端**：
-  - `jabiz.security.entries.operator`（`accepted-roles: QB_OPERATOR`、`app-path: /operator/`、会话按标签页、闲置 30 分钟）；
+  - `jabiz.security.entries.operator`（`accepted-roles: QB_OPERATOR`、`app-path: /operator/`、会话按标签页、闲置 24 小时（需求方 2026-11-21，原为 30 分钟））；
   - `jabizApp { spa("/operator/", 管理后台的前端, entry = "operator") }`：同一份管理后台以入口 `operator` 另构建一次。
 - **账本**（02-design §4）：
   - 加维度"运营商"（位置 3）；
@@ -151,7 +151,7 @@
    - 总部对运营商下架的发布再暂停、对运营商封禁的用户再封禁，即变成总部的（D-Q48-5：总部优先）。
 5. **抽查**：运营商的决定 = 审批人在决定时是某运营商成员的平台审批决定（`ApprovalDecision`，按成员的加入、移除时间判断；移除的成员行保留）。模板 `qb.admin.operator-reviews`，`QB_REVIEW_SPOT_CHECK` 记 `OK` 或 `PROBLEM`（须写说明），每个决定一行、可再改。
 6. **运营商读不到用户资料**（无 `qb.admin.users.read`）：商户的列表、审核页的入驻内容与邮箱都经它自己的模板 `qb.operator.sponsors`；概况 `qb.operator.overview` 只给合计；团队经只读流程 `QB_OPERATOR_TEAM`（模板一个实体只能经一个数据视图读，而"调用者自己的成员关系"是单独的数据视图）。
-7. **入口与前端**：`jabiz.security.entries.operator`（只接受 `QB_OPERATOR`，角色要求二次验证，会话在标签页、闲置 30 分钟，不开放注册）；同一个管理后台前端以入口 `operator` 再构建一份挂在 `/operator/`，菜单按权限：运营商看到"运营商"组（首页、商户）与审核、Quiz、发布、兑换、电子奖品；看不到用户、答题记录、财务、法律文本、公告、AI、运营商管理。
+7. **入口与前端**：`jabiz.security.entries.operator`（只接受 `QB_OPERATOR`，角色要求二次验证，会话在标签页、闲置 24 小时（需求方 2026-11-21，原为 30 分钟），不开放注册）；同一个管理后台前端以入口 `operator` 再构建一份挂在 `/operator/`，菜单按权限：运营商看到"运营商"组（首页、商户）与审核、Quiz、发布、兑换、电子奖品；看不到用户、答题记录、财务、法律文本、公告、AI、运营商管理。
 8. **隐私政策**三语草稿已加：第2条第4项（事业者的公开信息）、第3条第8–9项、第5条两行（运营商、获客时的 Anthropic）、第8条一行（获客记录最后一次介绍后 1 年删除，退订的邮箱与域名无限期保存）。
 
 测试：`OperatorIT`（总部建运营商与成员、入口只放行当前成员、运营商下架与恢复、封禁与解封、改派、抽查）、`QbRolesTest`（运营商的权限清单）、扩展的 `operator.test.tsx`（五个页面与运营商看到的审核页）。

@@ -48,8 +48,8 @@ import static org.assertj.core.api.Assertions.assertThat;
  * 17): the job invites the accounts; the operators' leads accept, bind a second factor and get their roles; the super
  * administrator gets hers only once the operator confirmed the fingerprint; the run is done and its report mailed
  * with QuizBuks's items left for people; a taker passes a publication (offline redemption, no money); a start with
- * the configuration still there does nothing again. Operators' other members join through the platform's
- * account-ready hook (#743), tested once it is merged.
+ * the configuration still there does nothing again. An operator's other member joins once her roles are in effect
+ * (the platform's account-ready hook).
  */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.MOCK, properties = {
     "jabiz.first-launch.await-interval=100ms", "jabiz.jobs.lock-at-least-for=0s",
@@ -244,6 +244,17 @@ class QbFirstLaunchIT extends PostgresIntegrationTest {
         // Publications are reviewed: the switch is in effect at its declared value (no automatic approval).
         assertThat(String.valueOf(param("qb.review.publication.auto"))).contains("false");
 
+        // Every consumer of the approvals decided takes them in its stride, though the transfers' period has no value
+        // yet: the transfers' consumer recognises that none of them is a transfer's before it needs a setting.
+        assertThat(param("qb.transfer.hold-days")).isNull();
+        assertThat(query("SELECT 1 FROM sys_outbox_event WHERE event_type = 'jabiz.approval.approved'")).isNotEmpty();
+        while (deliverer.deliverPending().block() > 0) {
+            // until every event is delivered
+        }
+        assertThat(query("SELECT consumer, error FROM sys_outbox_attempt")).isEmpty();
+        assertThat(query("SELECT 1 FROM sys_event_consumption c JOIN sys_outbox_event e ON e.event_id = c.event_id"
+            + " WHERE e.event_type = 'jabiz.approval.approved' AND c.consumer = 'qb.transfer-approved'")).isNotEmpty();
+
         // Nothing moved money or was held for it (plan section 4).
         assertThat(query("SELECT 1 FROM ledger_transaction_version")).isEmpty();
         assertThat(query("SELECT 1 FROM ledger_entry_version")).isEmpty();
@@ -286,6 +297,9 @@ class QbFirstLaunchIT extends PostgresIntegrationTest {
 
     @Autowired
     com.jabiz.runtime.security.JwtService tokens;
+
+    @Autowired
+    com.jabiz.runtime.event.OutboxDeliverer deliverer;
 
     private static int round;
 
@@ -424,6 +438,9 @@ class QbFirstLaunchIT extends PostgresIntegrationTest {
         advance();
         assertThat(rolesOf(userOf(A))).doesNotContain("QB_ADMIN_SUPER");
         assertThat(run().state()).isEqualTo(FirstLaunchRun.State.CONTENT_DONE);
+        // Not ready yet, so not a member of any operator either.
+        assertThat(query("SELECT 1 FROM qb_operator_member WHERE user_id = ?::uuid", userOf(A))).isEmpty();
+        assertThat(query("SELECT 1 FROM sys_first_launch_ready")).isEmpty();
         java.time.Instant bound = ((java.sql.Timestamp) query("SELECT confirmed_time FROM sec_user_mfa_version"
             + " WHERE user_id = ?::uuid AND confirmed ORDER BY version_no DESC LIMIT 1", userOf(A)).getFirst()
             .get("confirmed_time")).toInstant();
@@ -432,6 +449,19 @@ class QbFirstLaunchIT extends PostgresIntegrationTest {
         advance();
         assertThat(rolesOf(userOf(A))).contains("QB_ADMIN_SUPER");
         advance();
+        // A, once her roles are in effect, joins the operator that names her among its members (account-ready hook).
+        String tokyo = String.valueOf(query("SELECT operator_id FROM qb_operator WHERE direct_sponsor_id = ?",
+            userOf(B)).getFirst().get("operator_id"));
+        assertThat(query("SELECT 1 FROM qb_operator_member WHERE operator_id = ? AND user_id = ?::uuid", tokyo, userOf(A)))
+            .hasSize(1);
+        assertThat(query("SELECT 1 FROM qb_operator_member WHERE user_id = ?::uuid", userOf(C))).hasSize(1);
+        // One step for the one member, run once: running the job again repeats nothing.
+        assertThat(query("SELECT user_id::text AS user_id, step_key FROM sys_first_launch_ready"))
+            .containsExactly(Map.of("user_id", userOf(A),
+                "step_key", com.jabiz.quizbuks.firstlaunch.QbFirstLaunch.MEMBER_STEP));
+        advance();
+        assertThat(query("SELECT 1 FROM sys_first_launch_ready")).hasSize(1);
+        assertThat(query("SELECT 1 FROM qb_operator_member WHERE user_id = ?::uuid", userOf(A))).hasSize(1);
 
         // Done: the report goes to A, with what is left for people (QuizBuks's items among them).
         assertThat(run().state()).isEqualTo(FirstLaunchRun.State.DONE);

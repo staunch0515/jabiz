@@ -45,6 +45,35 @@ public interface FirstLaunchHandler {
     }
 
     /**
+     * The steps to run for the configuration's account {@code account} once it is ready in the waiting phase - enabled,
+     * its user accepted the invitation (the address is proven) and bound a second factor, and a configured role of it in
+     * effect (docs/design/23-first-launch.md section 9) - such as adding it to what it is to be a member of. Empty by
+     * default. Asked with the configuration the instance started with, and only while it is the run's (the same shape
+     * apart from the addresses); otherwise the steps do not run and are reported.
+     *
+     * <p>Only {@link FirstLaunchStep#run} steps, each running a process of {@link #accountReadyProcesses()}, as the system;
+     * keys unique within the account, at most 200 characters and not holding the account's key (keys are recorded; the
+     * key is the user's name). {@code results} gives only {@link FirstLaunchResults#userId}: the content phase's
+     * outputs are not kept. Each step runs once per account (recorded); a failure is retried by the job with its
+     * backoff, and the run's end waits for it until it has failed {@code jabiz.first-launch.ready-attempts} (5) times
+     * in a row; then it is listed in the report. Not run (and reported) either for an account whose address in the
+     * configuration is not its address now (one it accepted cannot be changed there).
+     */
+    default List<FirstLaunchStep> whenAccountReady(FirstLaunchConfig config, FirstLaunchAccount account,
+        FirstLaunchResults results) {
+        return List.of();
+    }
+
+    /**
+     * The processes the steps of {@link #whenAccountReady} may run: sub-process-only or internal ones, not the
+     * platform's ({@code FIRST_LAUNCH_}), none of {@link #actingProcesses()} (startup check {@code FIRST_LAUNCH}).
+     * Empty by default.
+     */
+    default Set<String> accountReadyProcesses() {
+        return Set.of();
+    }
+
+    /**
      * The file policies a file step ({@link FirstLaunchStep#file}) may store under; the platform refuses any other and
      * the startup check {@code FIRST_LAUNCH} requires each to exist. Empty by default: no file steps.
      */

@@ -48,10 +48,12 @@ public class FirstLaunchRevisions implements ApplicationListener<ApplicationRead
     private final JsonMapper json;
     private final Environment environment;
     private final Clock clock;
+    private final org.springframework.beans.factory.ObjectProvider<com.jabiz.firstlaunch.FirstLaunchHandler> handlers;
 
     public FirstLaunchRevisions(WaitingSettings settings, FirstLaunchRuns runs, FirstLaunchAccountStore store,
         ConfigShape shape, ProcessExecutor processes,
-        JsonMapper json, Environment environment, Clock clock) {
+        JsonMapper json, Environment environment, Clock clock,
+        org.springframework.beans.factory.ObjectProvider<com.jabiz.firstlaunch.FirstLaunchHandler> handlers) {
         this.settings = settings;
         this.runs = runs;
         this.store = store;
@@ -60,12 +62,16 @@ public class FirstLaunchRevisions implements ApplicationListener<ApplicationRead
         this.json = json;
         this.environment = environment;
         this.clock = clock;
+        this.handlers = handlers;
     }
 
     @Override
     public void onApplicationEvent(ApplicationReadyEvent event) {
-        if (environment.getProperty("jabiz.ops.verify-restore.enabled", Boolean.class, false)
-            || settings.config().isEmpty()) {
+        if (environment.getProperty("jabiz.ops.verify-restore.enabled", Boolean.class, false)) {
+            return;
+        }
+        if (settings.config().isEmpty()) {
+            Schedulers.boundedElastic().schedule(this::warnWithoutConfig);
             return;
         }
         Schedulers.boundedElastic().schedule(() -> {
@@ -110,21 +116,14 @@ public class FirstLaunchRevisions implements ApplicationListener<ApplicationRead
                     user.acceptedAt() != null));
             }
         }
-        // A place whose user was deleted meanwhile is not compared: there is nobody left to correct.
-        java.util.Set<Integer> gone = new java.util.HashSet<>();
-        accounts.stream().filter(account -> !facts.containsKey(account.userId()))
-            .forEach(account -> gone.add(account.position()));
-        Map<String, String> emails = new LinkedHashMap<>();
-        for (int i = 0; i < config.accounts().size(); i++) {
-            if (!gone.contains(i)) {
-                emails.put("#" + (i + 1), config.accounts().get(i).email());
-            }
-        }
+        Map<String, String> emails = configuredEmails(config, accounts, facts.keySet());
         EmailRevision.Outcome outcome = EmailRevision.compare(recorded, emails, otherDifferences);
         if (!outcome.refusals().isEmpty()) {
             log.warn("First launch: the content phase is done; the configuration (hash {}) is not applied: {}. Only the"
                 + " address of an account that has not accepted its invitation may still be corrected here; do the"
-                + " rest in the administration as usual.", config.hash(), String.join("; ", outcome.refusals()));
+                + " rest in the administration as usual. While it differs, the application's steps for ready accounts"
+                + " do not run (for every account when more than an address differs, else for the accounts whose"
+                + " address differs).", config.hash(), String.join("; ", outcome.refusals()));
             return List.of();
         }
         if (outcome.revisions().isEmpty()) {
@@ -149,6 +148,43 @@ public class FirstLaunchRevisions implements ApplicationListener<ApplicationRead
             run.runId().toString(), "REVISED", null, null, null, config.hash(), json.writeValueAsString(detail))),
             "first-launch-" + run.runId() + "-revised").block();
         return List.copyOf(keys);
+    }
+
+    /**
+     * A run still waits but the configuration is gone (or does not read): the application's steps for ready accounts
+     * cannot run (section 9). Said at every start, and listed in the run's report.
+     */
+    private void warnWithoutConfig() {
+        try {
+            boolean waiting = asSystem(runs.current()).block()
+                .map(run -> run.state() == FirstLaunchRun.State.CONTENT_DONE).orElse(false);
+            if (waiting && handlers.orderedStream().anyMatch(handler -> !handler.accountReadyProcesses().isEmpty())) {
+                log.warn("First launch: the run still waits for its accounts, but the first-launch configuration"
+                    + " (JABIZ_FIRST_LAUNCH_CONFIG) is not there or does not read: the application's steps for ready"
+                    + " accounts cannot run. Put the configuration back and restart; until then they are listed as"
+                    + " left for people in the report.");
+            }
+        } catch (RuntimeException e) {
+            log.error("First launch: reading the run failed", e);
+        }
+    }
+
+    /**
+     * The configuration's addresses by place ({@code #1}, ...), leaving out the places whose user was deleted meanwhile:
+     * there is nobody left to correct, and the rest is compared as usual.
+     */
+    static Map<String, String> configuredEmails(FirstLaunchConfig config,
+        List<FirstLaunchAccountStore.Recorded> accounts, java.util.Set<java.util.UUID> users) {
+        java.util.Set<Integer> gone = new java.util.HashSet<>();
+        accounts.stream().filter(account -> !users.contains(account.userId()))
+            .forEach(account -> gone.add(account.position()));
+        Map<String, String> emails = new LinkedHashMap<>();
+        for (int i = 0; i < config.accounts().size(); i++) {
+            if (!gone.contains(i)) {
+                emails.put("#" + (i + 1), config.accounts().get(i).email());
+            }
+        }
+        return emails;
     }
 
     /** The hash of the configuration last applied: the latest revision's, or the run's. */

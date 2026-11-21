@@ -65,6 +65,13 @@ public class QbFirstLaunch implements FirstLaunchHandler {
 
     private static final String MESSAGES = "qb.firstLaunch.";
 
+    /**
+     * The key of an account's one step once it is ready ({@link QbFirstLaunchChecks} keeps an account to one
+     * operator). The platform records the key and refuses one that holds the account's key (its user's name), which
+     * is made of letters, digits, '-' and '_': this key has none of them, so no account's key is in it.
+     */
+    public static final String MEMBER_STEP = "::";
+
     private final JsonMapper json;
     private final MessageCatalog messages;
     private final Clock clock;
@@ -96,6 +103,33 @@ public class QbFirstLaunch implements FirstLaunchHandler {
     @Override
     public Set<String> actingProcesses() {
         return ACTING;
+    }
+
+    /** The waiting phase's steps: only adding the configured members to their operators. */
+    @Override
+    public Set<String> accountReadyProcesses() {
+        return Set.of(QbFirstLaunchProcesses.MEMBER);
+    }
+
+    /**
+     * Once an account's own roles are in effect (its address verified by the invitation, a second factor bound): it
+     * joins each operator that names it among its members (plan section 5.2). The operator is found by its lead, as
+     * the waiting phase keeps no output of the content phase.
+     */
+    @Override
+    public List<FirstLaunchStep> whenAccountReady(FirstLaunchConfig config, FirstLaunchAccount account,
+        FirstLaunchResults results) {
+        List<FirstLaunchStep> steps = new ArrayList<>();
+        for (QbFirstLaunchConfig.Operator operator : QbFirstLaunchConfig.of(config).operators()) {
+            if (operator.members().contains(account.key())) {
+                steps.add(FirstLaunchStep.run(MEMBER_STEP, QbFirstLaunchProcesses.MEMBER,
+                    ready -> new QbFirstLaunchProcesses.MemberInput(ready.userId(operator.lead()),
+                        ready.userId(account.key())))
+                    .describedAs("Member of operator " + operator.name()));
+                break;
+            }
+        }
+        return steps;
     }
 
     @Override
@@ -242,8 +276,8 @@ public class QbFirstLaunch implements FirstLaunchHandler {
     private static void params(QbFirstLaunchConfig sections, String reason, List<FirstLaunchStep> steps) {
         Map<String, Object> values = new LinkedHashMap<>(switchesAtLaunch());
         values.putAll(QbFirstLaunchChecks.values(sections));
-        // A settable parameter not configured, and one the launch's own processes read, take the value QB_SETUP
-        // proposed (the declared one; the processes read it from now on).
+        // A settable parameter not configured, and one fixed at its declared value, take the value QB_SETUP proposed
+        // (the declared one; the launch's own processes read it from now on).
         for (String key : asDeclared()) {
             if (QbParams.CONTROLLED.contains(key) && !values.containsKey(key)) {
                 steps.add(FirstLaunchStep.run("qb:param:" + key, ControlChanges.FIRST_LAUNCH_PUBLISH,
@@ -267,16 +301,14 @@ public class QbFirstLaunch implements FirstLaunchHandler {
     }
 
     /**
-     * Controlled parameters the first launch's own processes read (the reviews' switches: their declared value, no
-     * automatic approval, plan section 3.1), published as {@code QB_SETUP} proposed them.
+     * The parameters published as {@code QB_SETUP} proposed them: the settable ones unless configured, and those
+     * {@link FirstLaunchParams#FIXED_VALUES fixed} at their declared value (the publications' review: no automatic
+     * approval, plan section 3.1), which the configuration cannot set.
      */
-    static final List<String> READ_AT_LAUNCH = List.of(QbParams.REVIEW_PUBLICATION_AUTO);
-
-    /** The parameters published as {@code QB_SETUP} proposed them, unless configured. */
     static Set<String> asDeclared() {
         Set<String> keys = new LinkedHashSet<>();
         FirstLaunchParams.SETTABLE.stream().filter(QbParams.CONTROLLED::contains).forEach(keys::add);
-        READ_AT_LAUNCH.stream().filter(QbParams.CONTROLLED::contains).forEach(keys::add);
+        FirstLaunchParams.FIXED_VALUES.keySet().stream().filter(QbParams.CONTROLLED::contains).forEach(keys::add);
         return keys;
     }
 

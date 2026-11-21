@@ -27,6 +27,8 @@
 | `LOGGING_STRUCTURED_FORMAT_CONSOLE` | 建议 `ecs` | — | — | 文本日志 |
 | `JABIZ_STORAGE_WRITE_BATCHING_ENABLED` | **不设** | — | — | 缺省 `true`：平台在事务中缓冲写入（决策 D46，16p-2）。应急开关：只在怀疑写缓冲有缺陷时设 `false` 并重启，行为与保证不变，热门发布的容量约降 30 %（`perf/Q10a-load-test.md` §11） |
 | `QB_ADMIN_ROLES` | 否 | 缺省 `ADMIN,QB_ADMIN_SUPER,QB_ADMIN_CONTENT,QB_ADMIN_FINANCE,FIRST_LAUNCH_PENDING` | — | 用缺省（含首发的待命角色 `FIRST_LAUNCH_PENDING`：没有权限、要求二次验证，首发配置建的账号凭它登录并绑定二次验证；首发建立它之前启动检查警告"role FIRST_LAUNCH_PENDING does not exist (yet)"，可忽略）。**永远不要**加 `*`、`QB_TAKER`、`QB_SPONSOR`（自己注册的人会进入平台管理系统）。启动检查只在相应入口开放注册时拒绝（`SignInEntries`）：`*` 在 App 或发起方任一入口开放注册时、`QB_TAKER` 在 App 开放注册时（`QB_APP_SELF_REGISTRATION`）、`QB_SPONSOR` 在发起方开放注册时（`QB_SPONSOR_SELF_REGISTRATION`）启动失败；关掉注册后不再拦，但仍不要这样配置。也不得含测试的 `QB_E2E_*`（正式模式下启动失败） |
+| `QB_SESSION_IDLE_TIMEOUT` | 否 | 缺省 `PT24H`：平台管理系统、发起方页面、运营商管理系统与 Shopify 内嵌页闲置多久后需要重新登录（需求方 2026-11-21；App 不因闲置锁定，不受它影响） | — | 用缺省。四个入口共用这一个变量。**不能为 `0`**（平台管理系统的入口必须闲置锁定，`SignInEntries` 启动错误）、**不能短于访问令牌的有效期**（15 分钟，`SessionChecks` 启动错误）；改它时同时看 `QB_SESSION_REFRESH_TOKEN_TTL` |
+| `QB_SESSION_REFRESH_TOKEN_TTL` | 否 | 缺省 `P2D`：上述四个入口的刷新令牌自最后一次刷新起的有效期 | — | 须不短于访问令牌（15 分钟）加闲置时长，否则闲置的会话提前结束：启动检查 `QUIZBUKS \| jabiz.security.entries.<入口>.session.refresh-token-ttl` 警告（`identity.SessionLengthCheck`）；至多 90 天（平台） |
 | `QB_APP_SELF_REGISTRATION` / `QB_SPONSOR_SELF_REGISTRATION` | 否 | 缺省 `true` | — | — |
 | `QB_APP_EMAIL_LINK` | 否 | 缺省 `true` | — | App 以邮件中的链接登录（Q15 的分享链接，平台 D54）；关掉后分享页仍显示，但只能用密码登录 |
 | `JABIZ_PUBLIC_ENABLED` | 否 | 缺省 `true`（Q7b） | — | 设 `false` 时 `/api/public/**` 一律 404：帮助中心与条款、隐私政策页（App 与发起方页面，也给未登录的人看）都打不开。只有四个公开模板 `qb.public.*`（已发布的法律文本版本与已发布的 FAQ），没有公开的文件；按客户端地址限流（平台缺省每分钟 300 次），结果缓存 5 分钟 |
@@ -221,6 +223,7 @@ FROM pg_stat_statements ORDER BY total_exec_time DESC LIMIT 20;
    - **邮箱写错**：该账号尚未接受邀请时，改配置中的 `email` 后重启即重寄（旧链接作废；仍受 `allowedEmailDomains` 约束）；其他改动不执行，日志说明，在平台管理系统中照常办理。
    - **可疑的账号**：在平台管理系统中停用它，首发即不再为它邀请或授予，报告列出它。
    - 未接受的账号 3 天后再邀请一次（`JABIZ_FIRST_LAUNCH_REMIND_AFTER`）。
+   - `members` 中的账号在得到角色之后才加入运营商（`QB_LAUNCH_MEMBER_ADD`，见下面"以首发配置初始化时的人工处理"）。
 6. **结束**：全部授予即 `DONE`；自内容阶段完成起 14 天（`JABIZ_FIRST_LAUNCH_DEADLINE`）仍未完成即 `EXPIRED`（待命角色 `FIRST_LAUNCH_PENDING` 停用）。两种结局都给 `report: true` 的账号寄报告 `jabiz.first-launch.report`，列出未完成的账号与剩下的人工事项：正式法律文本（`QB_LEGAL_PUBLISH`）、负责人自己在发起方页面"加入"、三条职责分离规则、等前提的参数（`FirstLaunchSwitches` 的 `prerequisite`）、剩下的金额类提议、公司认证、运营商价格、银行设定、赠送额度与其他奖励方式。
 7. **之后**：撤下配置目录与 `JABIZ_FIRST_LAUNCH_CONFIG`（留着只得到一行警告，有用户的库永不再执行），设 `QB_BOOTSTRAP_ADMIN_DONE=true`（没有首个管理员的密码时入口脚本要它）。部署新版本后照常执行 `QB_SETUP`（下面第 8 步）。
 
@@ -234,6 +237,12 @@ FROM pg_stat_statements ORDER BY total_exec_time DESC LIMIT 20;
 | `QB_BOOTSTRAP_ADMIN_DONE` | 首发之后 | `true` |
 
 场景回放 `FirstLaunchScenarioTest`（`backend/quizbuks/src/test/resources/first-launch/`）以 `first-launch-sample/` 原样运行首发，示例因此总是能用。
+
+**以首发配置初始化时的人工处理**（F-LAUNCH Q3；配置与运行见首发的方案 `plans/impl/F-LAUNCH.md`）：
+- **运营商成员**：配置中列为某运营商成员的账号，在本人接受邀请、绑定二次验证并拿到角色之后，由首发以系统身份加入其负责人的运营商（`QB_LAUNCH_MEMBER_ADD`，经 `QB_OPERATOR_MEMBER_ADD`，每个账号只做一次）。已是该运营商成员的不再加入（总部此前若已把他设为负责人，不会被改回成员）。
+  这一步失败时（`QB_OPERATOR_MEMBER_ELSEWHERE`：已是另一个运营商的成员；`QB_OPERATOR_MEMBERS_FULL`：运营商已满员），首发不重试：总部确认原因后在管理系统中手工执行 `QB_OPERATOR_MEMBER_ADD`。
+- **转账审批**：转账审批的消费者（`QB_TRANSFER_APPROVAL_RESULT`）收到所有已决定的审批，首发期间转账的参数（`qb.transfer.enabled`、`qb.transfer.hold-days`、`qb.withdrawal.bank.enabled`）可能还没有值；这只影响转账，不影响内容的审批。
+  批准的转账若当时这些参数没有值，转账不会发出，而是以 `NOT_SENDABLE` 驳回，并给财务一条待办；学者随之暂停自动转账，财务确认参数已设好之后，以 `QB_TRANSFER_HOLD_RELEASE` 放行。
 
 1. 准备 §1 的全部变量（`QB_STRIPE_PLACEHOLDERS=false`）、HTTPS 的反向代理（`JABIZ_TRUSTED_PROXIES`）、邮件。先以**测试模式**启动（§4 之前），确认 `docker compose … logs app` 中没有 `Platform check failed`。
 2. 以 `JABIZ_BOOTSTRAP_ADMIN_USER` 登录 `/admin/`，在"安全设置"中**开启两步验证**（TOTP），保存恢复码。随后从环境中删去 `JABIZ_BOOTSTRAP_ADMIN_USER` 与 `JABIZ_BOOTSTRAP_ADMIN_PASSWORD` 并设 `QB_BOOTSTRAP_ADMIN_DONE=true`（密码与这一行都没有时镜像的入口脚本拒绝启动；共用服务器上的步骤见 `deploy/quizbuks/DEPLOY.md`）。
@@ -289,7 +298,7 @@ FROM pg_stat_statements ORDER BY total_exec_time DESC LIMIT 20;
 
 - [ ] `qb.reward.default-methods` 保持**空**（首次上线：新发起方缺省没有任何奖励方式，答平台图上"电子奖品" / "线下兑奖"的考试点亮节点后才开通，门槛参数见 §7.41）；发起方页面在没有 Kudos 方式时不显示学分钱包（资金 → 学分钱包），平台费账户与账单照常显示（F-F3）。要让所有发起方都能用某种方式，把它写进这个参数（逗号分隔，如 `OFFLINE_REDEEM,DIGITAL_PRIZE`）；只给某个发起方，在平台管理系统"发起方审核"页单独允许（`QB_SPONSOR_REWARD_METHODS_SET`，单个管理员，与缺省取并集）。
 - [ ] `qb.reward.max-per-attempt` = 法务给出的上限（Kudos 等值）。按答对与否给奖是景品表示法的"懸賞"而不是"総付"：与购买或到店挂钩的一般懸賞，单个景品至多交易额的 20 倍（交易额不足 5,000 日元）或 10 万日元（5,000 日元以上），总额不超过预计销售额的 2%；不要求购买的开放式懸賞没有上限（填 `0`）。线下兑换是否算与购买挂钩由法务认定。高于它的奖励档在保存时报 `QB_REWARD_ABOVE_MAX`、提交被拒。
-- [ ] `qb.review.sponsor.auto` = `true`、`qb.review.publication.auto` = **`false`**：发起方的入驻在推广期不逐个人工审核（线下奖品不经手资金；封禁照常可用），**发布一律在发布前审核**（需求方 2026-10-28，商店 App 的上架要求，`plans/Q49d-store.md` D-Q49d-7）。
+- [ ] `qb.review.sponsor.auto` = `true`、`qb.review.publication.auto` = **`false`**：发起方的入驻在推广期不逐个人工审核（线下奖品不经手资金；封禁照常可用），**发布一律在发布前审核**（需求方 2026-10-28，商店 App 的上架要求，`plans/Q49d-store.md` D-Q49d-7）。首发配置不能改它（`FirstLaunchParams.FIXED_VALUES`，写了即校验失败）；`qb.review.sponsor.auto` 可以在首发配置中设。
   审核员拒绝以酒类、烟草或毒品为题材或奖品的问卷（商店的内容分级按"没有受管制物质"申报，`docs/quizbuks/store/play-content-rating.md`）。
 - [ ] `qb.transfer.enabled` 保持 `false`、`qb.ai.enabled` 按上线检查清单。
 - [ ] 开始收费（招商网站价格页的"计划中"项）前：把 `qb.reward.default-methods` 改为所售套餐的方式（或按发起方单独开通），发布 `qb.creator-fee-rate`，并在网站去掉"计划中"。

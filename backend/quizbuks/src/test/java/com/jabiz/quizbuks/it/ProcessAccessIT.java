@@ -59,7 +59,7 @@ class ProcessAccessIT extends QbItSupport {
         Map.entry("QB_FIRST_LAUNCH_APPROVE", ProcessAccess.INTERNAL),
         Map.entry("QB_FIRST_LAUNCH_READY", ProcessAccess.INTERNAL),
         Map.entry("QB_FIRST_LAUNCH_LEAD", ProcessAccess.SUB_PROCESS_ONLY),
-        Map.entry("QB_FIRST_LAUNCH_MEMBER_ADD", ProcessAccess.SUB_PROCESS_ONLY),
+        Map.entry("QB_LAUNCH_MEMBER_ADD", ProcessAccess.SUB_PROCESS_ONLY),
         Map.entry("QB_FEE_CREDIT_VOID_LOT", ProcessAccess.SUB_PROCESS_ONLY),
         Map.entry("QB_FEE_CREDIT_NOTE_GIVE_BACK", ProcessAccess.SUB_PROCESS_ONLY),
         Map.entry("QB_SPONSOR_MONEY_CLOSE", ProcessAccess.INTERNAL),

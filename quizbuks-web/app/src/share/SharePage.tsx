@@ -76,7 +76,8 @@ export function SharePage({ publicationId }: { publicationId: string }) {
       <DescriptionList data-testid="share-facts" items={[
         ...(survey ? [{ key: 'kind', label: t('detail.kind'), value: t('detail.survey') }] : []),
         { key: 'questions', label: t('detail.questions'), value: p.pickCount != null
-          ? t('detail.pickCount', { count: p.pickCount, total: p.questionCount }) : p.questionCount },
+          // The text of the quiz's own page (namespace qbview), the same words wherever takers see the draw.
+          ? tView('detail.pickCount', { count: p.pickCount, total: p.questionCount }) : p.questionCount },
         { key: 'timeLimit', label: t('detail.timeLimit'), value: duration(p.timeLimitSec) },
         { key: 'maxReward', label: survey ? t('detail.surveyReward') : t('detail.maxReward'),
           value: formatKudos(p.maxReward) },

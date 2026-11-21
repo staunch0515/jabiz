@@ -119,6 +119,34 @@ describe("a Sponsor's page (Q60a)", () => {
     await expectAccessible()
   })
 
+  it("gives the whole top of the page to the Sponsor's site: no app bar, the way back floats", async () => {
+    server()
+    window.history.replaceState(null, '', '/s/acme-bakery')
+    render(<App />)
+    expect(await screen.findByTestId('sponsor-page-headline')).toBeInTheDocument()
+    // No app header above the Sponsor's own: no banner landmark, no app wordmark, the cover is the first thing shown.
+    expect(screen.queryByTestId('public-header')).toBeNull()
+    const main = screen.getByRole('main')
+    // The only header is the Sponsor's own, in the page.
+    for (const header of document.querySelectorAll('header')) expect(main.contains(header)).toBe(true)
+    const article = screen.getByTestId('sponsor-page')
+    expect(main.querySelector('[data-testid]:not([data-testid="offline-banner"])')).toBe(article)
+    expect(article.querySelector('[data-testid]')).toBe(screen.getByTestId('sponsor-page-cover-frame'))
+    // The way back (here: to sign in, and back to this page) floats over the top left of the cover as a round
+    // see-through button named for screen readers; it stays while scrolling and takes no room from the page. The
+    // appearance switch is not on this page (the requester, 2026-11-21).
+    const controls = screen.getByTestId('sponsor-site-controls')
+    expect(controls).toHaveClass('sticky', 'h-0')
+    expect(controls.compareDocumentPosition(main) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    const back = within(controls).getByTestId('public-back')
+    expect(back).toHaveAccessibleName('Sign in')
+    expect(back).toHaveAttribute('href', '/login?next=%2Fs%2Facme-bakery')
+    expect(back).toHaveClass('rounded-full')
+    expect(screen.queryByTestId('appearance-switch')).toBeNull()
+    expect(back.closest('header')).toBeNull()
+    await expectAccessible()
+  })
+
   it('makes no link of a website that is not https', async () => {
     server({ page: { ...PAGE, website: 'javascript:alert(1)' } })
     window.history.replaceState(null, '', '/s/acme-bakery')

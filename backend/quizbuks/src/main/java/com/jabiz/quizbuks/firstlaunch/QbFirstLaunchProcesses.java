@@ -37,9 +37,11 @@ import java.util.UUID;
  *       {@code APPROVAL_FIRST_LAUNCH_DECIDE} (which refuses a request the run did not make);</li>
  *   <li>{@value #READY}: whether the graphs, pages and publications made are in effect (the run waits on it);</li>
  *   <li>{@value #LEAD}: inside {@code QB_OPERATOR_SAVE}, a lead whose address is not verified yet is accepted only when
- *       the platform finds the account made by a first launch whose content phase goes on (plan section 5.1).</li>
+ *       the platform finds the account made by a first launch whose content phase goes on (plan section 5.1);</li>
+ *   <li>{@value #MEMBER}: in the waiting phase, once a configured member's own roles are applied, they join the
+ *       operator their lead leads (plan section 5.2; the platform's account-ready hook, run as the system).</li>
  * </ul>
- * None is open to a request: the first three are {@code internal()}, the last {@code subProcessOnly()}.
+ * None is open to a request: the first three are {@code internal()}, the last two {@code subProcessOnly()}.
  */
 public final class QbFirstLaunchProcesses {
 
@@ -47,7 +49,7 @@ public final class QbFirstLaunchProcesses {
     public static final String APPROVE = "QB_FIRST_LAUNCH_APPROVE";
     public static final String READY = "QB_FIRST_LAUNCH_READY";
     public static final String LEAD = "QB_FIRST_LAUNCH_LEAD";
-    public static final String MEMBER = "QB_FIRST_LAUNCH_MEMBER_ADD";
+    public static final String MEMBER = "QB_LAUNCH_MEMBER_ADD";
 
     /**
      * @param withdraw    the proposal {@code QB_SETUP} made of the parameter
@@ -102,6 +104,7 @@ public final class QbFirstLaunchProcesses {
     static final String PUBLICATIONS = "publications";
     static final String OPERATOR = "operator";
     static final String ADDED = "added";
+    static final String PLACE = "place";
 
     /** Publication states the first launch takes as in effect. */
     static final Set<String> IN_EFFECT = Set.of(PublicationStatus.LIVE, PublicationStatus.SCHEDULED);
@@ -212,7 +215,10 @@ public final class QbFirstLaunchProcesses {
     /**
      * The waiting phase's step for a configured member of an operator (plan section 5.2), once the member's own roles
      * are applied (the platform's account-ready hook, run as the system): added to the operator its lead leads, with
-     * {@code QB_OPERATOR_MEMBER_ADD}'s own checks (a verified address among them); one already a member is left.
+     * {@code QB_OPERATOR_MEMBER_ADD}'s own checks (a verified address among them). One already a member of that
+     * operator is left as they are: headquarters may have named them its lead in the meantime, which adding them
+     * again (not as a lead) would undo. One who is a member of another operator, or an operator that is full, fails
+     * the step; headquarters then names them by hand.
      */
     public static ProcessDefinition<MemberInput, com.jabiz.quizbuks.operator.OperatorProcesses.MemberOutput,
         ProcessContext> member() {
@@ -222,21 +228,41 @@ public final class QbFirstLaunchProcesses {
                 .permissions(QbPermissions.OPERATORS_WRITE)
                 .subProcessOnly()
                 .contextFactory(QbFirstLaunchProcesses::start)
-                .outputMapper(ctx -> ctx.get(ADDED, com.jabiz.quizbuks.operator.OperatorProcesses.MemberOutput.class))
-                .step("Load the lead's operator", QueryEntities.<ProcessContext>of(
-                    com.jabiz.quizbuks.operator.QbOperators.defaultDataset(
-                        com.jabiz.quizbuks.operator.QbOperators.OPERATOR),
-                    ctx -> EntityQuery.builder().where(new QueryPredicate.Eq("directSponsorId",
-                        ctx.get(INPUT, MemberInput.class).leadUserId())).limit(1).build(), OPERATOR))
-                .step("Add the member", CallProcess.<ProcessContext>of(
-                    com.jabiz.quizbuks.operator.OperatorProcesses.MEMBER_ADD, 1, ctx -> {
-                        List<EntityInstance> found = list(ctx, OPERATOR);
-                        if (found.isEmpty()) {
-                            throw new IllegalStateException("No operator is led by the configured lead");
-                        }
-                        return new com.jabiz.quizbuks.operator.OperatorProcesses.MemberInput(
-                            String.valueOf(found.getFirst().id()), ctx.get(INPUT, MemberInput.class).userId(), false);
-                    }, ADDED)));
+                .outputMapper(QbFirstLaunchProcesses::memberOutput)
+                .step("Load the lead's operator and the member's place", QueryEntities.<ProcessContext>all(
+                    QueryEntities.query(com.jabiz.quizbuks.operator.QbOperators.defaultDataset(
+                            com.jabiz.quizbuks.operator.QbOperators.OPERATOR),
+                        ctx -> EntityQuery.builder().where(new QueryPredicate.Eq("directSponsorId",
+                            ctx.get(INPUT, MemberInput.class).leadUserId())).limit(1).build(), OPERATOR),
+                    QueryEntities.query(com.jabiz.quizbuks.operator.QbOperators.defaultDataset(
+                            com.jabiz.quizbuks.operator.QbOperators.MEMBER),
+                        ctx -> com.jabiz.quizbuks.operator.OperatorChecks.current(
+                            ctx.get(INPUT, MemberInput.class).userId()), PLACE)))
+                .step("Add the member", CallProcess.<ProcessContext>when(ctx -> !alreadyMember(ctx),
+                    com.jabiz.quizbuks.operator.OperatorProcesses.MEMBER_ADD, 1,
+                    ctx -> new com.jabiz.quizbuks.operator.OperatorProcesses.MemberInput(leadOperator(ctx),
+                        ctx.get(INPUT, MemberInput.class).userId(), false), ADDED)));
+    }
+
+    private static String leadOperator(ProcessContext ctx) {
+        List<EntityInstance> found = list(ctx, OPERATOR);
+        if (found.isEmpty()) {
+            throw new IllegalStateException("No operator is led by the configured lead");
+        }
+        return String.valueOf(found.getFirst().id());
+    }
+
+    /** Whether the member already belongs to the lead's operator (as a lead or not). */
+    static boolean alreadyMember(ProcessContext ctx) {
+        List<EntityInstance> place = list(ctx, PLACE);
+        return !place.isEmpty()
+            && leadOperator(ctx).equals(String.valueOf((Object) place.getFirst().get("operatorId")));
+    }
+
+    private static com.jabiz.quizbuks.operator.OperatorProcesses.MemberOutput memberOutput(ProcessContext ctx) {
+        return ctx.contains(ADDED) ? ctx.get(ADDED, com.jabiz.quizbuks.operator.OperatorProcesses.MemberOutput.class)
+            : new com.jabiz.quizbuks.operator.OperatorProcesses.MemberOutput(ctx.get(INPUT, MemberInput.class).userId(),
+                leadOperator(ctx), false);
     }
 
     private static ParamInput input(ProcessContext ctx) {

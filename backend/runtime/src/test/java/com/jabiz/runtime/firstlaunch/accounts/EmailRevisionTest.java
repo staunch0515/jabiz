@@ -64,4 +64,35 @@ class EmailRevisionTest {
         assertThat(EmailRevision.compare(RECORDED, Map.of("A", "a.suzuki@example.co.jp"), false).refusals())
             .singleElement().asString().contains("C");
     }
+
+    /** A place whose user was deleted is left out: the other accounts' corrections still apply (review of #738). */
+    @Test
+    void aPlaceWhoseUserWasDeletedIsNotCompared() {
+        UUID run = UUID.fromString("0190a1b2-0000-7000-8000-0000000000f1");
+        com.jabiz.firstlaunch.FirstLaunchConfig config = new com.jabiz.firstlaunch.FirstLaunchConfig("h", Map.of(),
+            "en", List.of("example.co.jp"), List.of(
+                new com.jabiz.firstlaunch.FirstLaunchAccount("a", "a.suzuki@example.co.jp", "A", null, List.of("R"),
+                    true),
+                new com.jabiz.firstlaunch.FirstLaunchAccount("c", "c.yamada@example.co.jp", "C", null, List.of("R"),
+                    false)), new com.jabiz.firstlaunch.FirstLaunchConfig.Files() {
+                @Override
+                public byte[] read(String relativePath) {
+                    throw new UnsupportedOperationException();
+                }
+
+                @Override
+                public boolean exists(String relativePath) {
+                    return false;
+                }
+            });
+        List<FirstLaunchAccountStore.Recorded> accounts = List.of(
+            new FirstLaunchAccountStore.Recorded(run, A, 0, List.of("R"), true),
+            new FirstLaunchAccountStore.Recorded(run, C, 1, List.of("R"), false));
+        Map<String, String> emails = FirstLaunchRevisions.configuredEmails(config, accounts, java.util.Set.of(C));
+        assertThat(emails).containsOnlyKeys("#2");
+        Outcome outcome = EmailRevision.compare(List.of(new Recorded("#2", C, "c.yamda@example.co.jp", false)), emails,
+            false);
+        assertThat(outcome.refusals()).isEmpty();
+        assertThat(outcome.revisions()).containsExactly(new EmailRevision.Revision("#2", C, "c.yamada@example.co.jp"));
+    }
 }
