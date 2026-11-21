@@ -1,0 +1,53 @@
+# The Gradle wrapper and dependency downloads, shared by every job of every workflow (ROADMAP 17zz28).
+#
+# Why not setup-gradle's own cache: it keys each job apart (and a pull request only reads), so on a branch whose pushes
+# write nothing every job of a pull request downloads the whole dependency set at once, and Maven Central answers 429
+# when several pull requests do it together. Here one job on a push to a long-lived branch saves the downloads
+# (save: 'true', at its end) and every other job restores them; pull requests never save, so nothing they built is
+# read by anyone else. The key is the hash of what decides the dependencies; a changed build script restores the
+# newest older entry and downloads only what is new.
+name: Gradle dependencies
+description: Restores (or, with save, saves) the Gradle wrapper and dependency downloads, and sets up Gradle without its own cache.
+inputs:
+  save:
+    description: "'true': stop the daemon and save the downloads under the current key (at a job's end, on a push only)"
+    default: 'false'
+outputs:
+  key:
+    description: The cache key for the current build scripts
+    value: ${{ steps.key.outputs.key }}
+runs:
+  using: composite
+  steps:
+    - id: key
+      shell: bash
+      env:
+        HASH: ${{ hashFiles('backend/**/*.gradle.kts', 'backend/gradle.properties', 'backend/gradle/wrapper/gradle-wrapper.properties', 'backend/gradle/*.versions.toml') }}
+      run: echo "key=gradle-deps-v1-${RUNNER_OS}-${HASH}" >> "$GITHUB_OUTPUT"
+    - if: inputs.save != 'true'
+      uses: actions/cache/restore@v5
+      with:
+        path: |
+          ~/.gradle/caches/modules-2
+          ~/.gradle/wrapper/dists
+        key: ${{ steps.key.outputs.key }}
+        restore-keys: gradle-deps-v1-${{ runner.os }}-
+    # Wrapper validation as before; no cache of its own (cache-disabled), so it neither restores nor saves.
+    - if: inputs.save != 'true'
+      uses: gradle/actions/setup-gradle@v5
+      with:
+        cache-disabled: true
+    # The daemon holds the cache's locks; Gradle's lock and garbage-collection files are left out.
+    - if: inputs.save == 'true'
+      shell: bash
+      working-directory: backend
+      run: |
+        ./gradlew --stop
+        rm -f ~/.gradle/caches/modules-2/*.lock ~/.gradle/caches/modules-2/gc.properties
+    - if: inputs.save == 'true'
+      uses: actions/cache/save@v5
+      with:
+        path: |
+          ~/.gradle/caches/modules-2
+          ~/.gradle/wrapper/dists
+        key: ${{ steps.key.outputs.key }}
