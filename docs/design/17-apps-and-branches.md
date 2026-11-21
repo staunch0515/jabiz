@@ -144,10 +144,8 @@ jabizApp {
 - 同源的多个 SPA 共享 `localStorage` / `sessionStorage`：公开前端不存令牌（第 4 节），也不得读写后台的会话键。
 - **测试系统的标志**（16zd）：`jabiz.web.environment`（环境变量 `JABIZ_WEB_ENVIRONMENT`）是运行时设置，因为测试与正式环境运行同一镜像：`production` 为正式系统，
   其他名字为测试系统，缺省 `test`（没有声明自己是正式的系统永远不会看起来像正式的）；名字只允许字母、数字、空格、连字符，至多 32 字符（`SpaConfigCheck`）。
-  `GET /api/auth/entries/{name}` 返回它（`environment`），前端登录前就读到（`@jabiz/client` 的 `useEnvironment()`）。`@jabiz/ui` 的 `EnvironmentBanner` 是警示色的通栏横条
-  （环境名大写 + "测试环境，不是正式版"，三种语言；文档标题前加 `[TEST]`；正式系统与尚未读到时什么也不显示），`AppShell` 把它与顶栏一起固定在页面顶部、`AuthFrame` 放在卡片之上，
-  所以通用后台与建在这两者上的前端每一页都有；自带外框的前端（如手机式的 App）把它放在自己外框的顶部。部署时只有正式环境设置 `JABIZ_WEB_ENVIRONMENT=production`。
-  **应用的改写**（17ze）：`configureClient({ environment })` 让应用按页面的主机改变 `useEnvironment()` 给出的环境（横条、标题前缀、`AppShell` 与 `AuthFrame` 都随之），
+  `GET /api/auth/entries/{name}` 返回它（`environment`），前端登录前就读到（`@jabiz/client` 的 `useEnvironment()`）。`@jabiz/ui` 的 `EnvironmentBadge`（17zz27 取代通栏横条 `EnvironmentBanner`：横条占着页面最上方的一行，影响测试页面的版面；`EnvironmentBanner` 作为别名保留、渲染同一个角标）是**不占版面的角标**：固定在页面左下角（避开右下角的视频全屏键与常见的操作按钮、并让出手机的安全区）的半透明小胶囊，显示警示图标与大写的环境名，悬停与读屏给出"测试环境，不是正式版"（三种语言）；胶囊上的"收起"把它变成小圆点，再点展开，收起状态只按标签页记在 `sessionStorage`（读写都 `try/catch`，读不到就展开）；文档标题前仍加 `[环境名大写]`（如 `[STAGING]`）；它是 `role="note"`、有无障碍名称，亮暗两种外观都过 axe；正式系统与尚未读到时什么也不显示。`AppShell` 与 `AuthFrame` 各自渲染它，所以通用后台与建在这两者上的前端每一页都有（不再给它留版面）；自带外框的前端（如手机式的 App）在自己的外框里放一个 `<EnvironmentBadge />`（固定定位，放在哪里都行）。部署时只有正式环境设置 `JABIZ_WEB_ENVIRONMENT=production`。
+  **应用的改写**（17ze）：`configureClient({ environment })` 让应用按页面的主机改变 `useEnvironment()` 给出的环境（角标、标题前缀、`AppShell` 与 `AuthFrame` 都随之），
   用于暂时由测试系统的应用回答的公开地址；返回空或抛出即照服务器所说（应用的错误不能藏起测试系统）。通用后台不设，管理员看到的永远是服务器所说的。服务器的设置不变。
 - 构建：插件为每个 `spa(...)` 注册安装任务（平台前端为 `pnpmInstallPlatformFrontend`，其他目录为 `pnpmInstall<名>`）与 `spaBuild<名>`
   （`VITE_BASE=<前缀>/`，输出到本模块的 `build/spa/<名>`，因此两个应用可用不同的 base 构建同一个 `frontend/`；全部 pnpm 任务串行），

@@ -4,7 +4,7 @@ import { entryInfo, forgetEntryInfo } from './account'
 /**
  * The system the pages run on (platform phase 16zd): `jabiz.web.environment`, as `GET /api/auth/entries/{name}` tells
  * it before anyone signs in. `production` is the real system; any other name is a test system, which every page shows
- * in a banner (`EnvironmentBanner` of `@jabiz/ui`) so that nobody mistakes it for the real one.
+ * in a corner badge (`EnvironmentBadge` of `@jabiz/ui`) so that nobody mistakes it for the real one.
  */
 export interface Environment {
   /** The name as configured: `production`, `test`, `staging`, … */
