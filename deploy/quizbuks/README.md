@@ -318,6 +318,8 @@ tools/quizbuks/e2e.sh stop | status | logs | env            # env：给应用的
 | `QUIZBUKS_PORT` / `QUIZBUKS_DB_PORT` | 否 | 本机端口，缺省 8080 / 5440 |
 | `LOGGING_STRUCTURED_FORMAT_CONSOLE` | 否 | `ecs` 输出 JSON 日志（compose 已设） |
 | `QB_ADMIN_ROLES` | 否 | 后台入口接受的角色，逗号分隔；缺省 `ADMIN,QB_ADMIN_SUPER,QB_ADMIN_CONTENT,QB_ADMIN_FINANCE`。**不得**含 `*`、`QB_TAKER`、`QB_SPONSOR`（启动错误） |
+| `QB_SESSION_IDLE_TIMEOUT` | 否 | 平台管理系统、发起方页面、运营商管理系统与 Shopify 内嵌页闲置多久后需要重新登录；缺省 `PT24H`（App 不因闲置锁定） |
+| `QB_SESSION_REFRESH_TOKEN_TTL` | 否 | 上述入口的刷新令牌自最后一次刷新起的有效期；缺省 `P2D`，须不短于 15 分钟加闲置时长（否则启动警告） |
 | `QB_APP_SELF_REGISTRATION` / `QB_SPONSOR_SELF_REGISTRATION` | 否 | 答题 App、商家后台是否允许自助注册，缺省 `true` |
 | `JABIZ_MAIL_ENABLED` | 注册时必需 | `true` 开启邮件（缺省关闭：消息只记录为 `SKIPPED`） |
 | `JABIZ_MAIL_FROM` | 开启邮件时 | 发件人地址 |

@@ -191,8 +191,11 @@ jabiz:
     # on (jabiz.mail.*), or nobody can verify their address.
     # Sessions per entry (design default Q12; docs/quizbuks/plans/QP-pages.md section 2): the app keeps its taker
     # signed in on the device for 30 days and never locks for idleness (an attempt has its own time limit); the
-    # sponsor console and the administration lock after 30 minutes without activity and keep the session in the tab
-    # (the administration cannot keep it on the device).
+    # sponsor console, the administration, the operators' back office and the Shopify pages lock after 24 hours without
+    # activity (the requester, 2026-11-21; QB_SESSION_IDLE_TIMEOUT) and keep the session in the tab (the administration
+    # cannot keep it on the device). Their refresh tokens live QB_SESSION_REFRESH_TOKEN_TTL (2 days) from the last
+    # refresh, longer than the access token plus the idle timeout: a shorter one would end an idle session sooner
+    # (identity.SessionLengthCheck warns).
     # The app also signs in by a mailed link (Q15, decision D54): a publication's share link asks only for the address;
     # the link signs the taker in, or opens a verified account (self-registration on), and leads back to /p/<id>.
     # Passkeys (docs/quizbuks/plans/Q97-passkeys.md; platform decision D71, design 10 section 15.16): signing in with
@@ -211,7 +214,8 @@ jabiz:
         app-path: /admin/
         passkeys: ${QB_PASSKEYS:${quizbuks.passkeys.default:false}}
         session:
-          idle-timeout: PT30M
+          refresh-token-ttl: ${QB_SESSION_REFRESH_TOKEN_TTL:P2D}
+          idle-timeout: ${QB_SESSION_IDLE_TIMEOUT:PT24H}
       app:
         accepted-roles: QB_TAKER
         self-registration: ${QB_APP_SELF_REGISTRATION:true}
@@ -241,7 +245,8 @@ jabiz:
         passkeys: ${QB_PASSKEYS:${quizbuks.passkeys.default:false}}
         session:
           persistence: tab
-          idle-timeout: PT30M
+          refresh-token-ttl: ${QB_SESSION_REFRESH_TOKEN_TTL:P2D}
+          idle-timeout: ${QB_SESSION_IDLE_TIMEOUT:PT24H}
       # Operators (docs/quizbuks/plans/Q48-operators.md, Q48a): the agents' back office at /operator/, the admin
       # frontend built a second time for this entry. Only QB_OPERATOR, whose holders must have a second factor (the
       # role requires it); the sign-in guard also wants a current membership of an operator that runs. No
@@ -252,7 +257,8 @@ jabiz:
         passkeys: ${QB_PASSKEYS:${quizbuks.passkeys.default:false}}
         session:
           persistence: tab
-          idle-timeout: PT30M
+          refresh-token-ttl: ${QB_SESSION_REFRESH_TOKEN_TTL:P2D}
+          idle-timeout: ${QB_SESSION_IDLE_TIMEOUT:PT24H}
       # QuizBuks for Shopify (docs/quizbuks/shopify/S1-install.md; platform decision D59): the embedded pages sign in
       # with the session token Shopify gives them, as the staff member of the shop it names; the first sign-in opens the
       # account (no address, no password). The role QBS_SHOP comes from QB_SETUP. Sessions stay in the tab.
@@ -264,6 +270,8 @@ jabiz:
         app-path: /shopify/
         session:
           persistence: tab
+          refresh-token-ttl: ${QB_SESSION_REFRESH_TOKEN_TTL:P2D}
+          idle-timeout: ${QB_SESSION_IDLE_TIMEOUT:PT24H}
     # The Shopify app's session tokens (D59): signed with the app's secret, for its API key, both from the environment
     # only (SHOPIFY_API_SECRET, SHOPIFY_API_KEY; startup fails without them). The shop is the token's tenant.
     external-tokens:
