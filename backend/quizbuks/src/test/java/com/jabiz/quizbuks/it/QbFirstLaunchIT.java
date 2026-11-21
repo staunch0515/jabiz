@@ -44,14 +44,30 @@ import static org.assertj.core.api.Assertions.assertThat;
  * publishes the money switches at their first launch's values, the configured parameter and the approval rules,
  * makes the two operators with their leads as their own sponsors, imports each sponsor's package as that sponsor
  * (its images stored as uploaded by the sponsor), submits the pages and graphs, approves them, waits for them, then
- * the publications: the application opens with everything live, and no money moved.
+ * the publications: the application opens with everything live, and no money moved. Then the waiting phase (item
+ * 17): the job invites the accounts; the operators' leads accept, bind a second factor and get their roles; the super
+ * administrator gets hers only once the operator confirmed the fingerprint; the run is done and its report mailed
+ * with QuizBuks's items left for people; a taker passes a publication (offline redemption, no money); a start with
+ * the configuration still there does nothing again. Operators' other members join through the platform's
+ * account-ready hook (#743), tested once it is merged.
  */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.MOCK, properties = {
-    "jabiz.first-launch.await-interval=100ms", "jabiz.events.delivery.enabled=true", "jabiz.mail.enabled=true",
+    "jabiz.first-launch.await-interval=100ms", "jabiz.jobs.lock-at-least-for=0s",
+    "jabiz.events.delivery.enabled=true", "jabiz.mail.enabled=true",
     "jabiz.mail.from=quizbuks@example.com", "jabiz.mail.base-url=https://app.quizbuks.test",
     "spring.mail.host=localhost", "spring.mail.port=3043"})
 @Import(QbFirstLaunchIT.Exits.class)
+@org.junit.jupiter.api.TestMethodOrder(org.junit.jupiter.api.MethodOrderer.OrderAnnotation.class)
 class QbFirstLaunchIT extends PostgresIntegrationTest {
+
+    @org.junit.jupiter.api.extension.RegisterExtension
+    static final com.icegreen.greenmail.junit5.GreenMailExtension MAIL =
+        new com.icegreen.greenmail.junit5.GreenMailExtension(InvitationIT.patient(
+            new com.icegreen.greenmail.util.ServerSetup(3043, null, com.icegreen.greenmail.util.ServerSetup.PROTOCOL_SMTP)));
+
+    /** What the operator confirmed (JABIZ_FIRST_LAUNCH_CONFIRM_ADMINS), read anew at every use. */
+    static final java.util.concurrent.atomic.AtomicReference<String> CONFIRMED =
+        new java.util.concurrent.atomic.AtomicReference<>("");
 
     static final List<Integer> EXITS = new CopyOnWriteArrayList<>();
     static Path directory;
@@ -67,6 +83,7 @@ class QbFirstLaunchIT extends PostgresIntegrationTest {
     @DynamicPropertySource
     static void firstLaunch(DynamicPropertyRegistry registry) {
         registry.add("jabiz.first-launch.config", () -> example("kansai-direct"));
+        registry.add("jabiz.first-launch.confirm-admins", CONFIRMED::get);
     }
 
     /** The example written out, its packages made from the template with a real image. */
@@ -168,6 +185,7 @@ class QbFirstLaunchIT extends PostgresIntegrationTest {
     }
 
     @Test
+    @org.junit.jupiter.api.Order(1)
     void theExampleLaunchesEverythingLiveAndMovesNoMoney() {
         awaitContent();
         assertThat(run().state()).isEqualTo(FirstLaunchRun.State.CONTENT_DONE);
@@ -245,5 +263,230 @@ class QbFirstLaunchIT extends PostgresIntegrationTest {
                 .contextWrite(view -> RequestContexts.put(view, SYSTEM)).block())
             .isInstanceOf(com.jabiz.runtime.PermissionDeniedException.class);
         assertThat(query("SELECT 1 FROM qb_operator")).hasSize((int) operatorsBefore);
+    }
+
+    // ---- the waiting phase (plan section 9, item 17) ----------------------------------------------------------------
+
+    static final String A = "a.suzuki@example.co.jp";
+    static final String B = "b.tanaka@example.co.jp";
+    static final String C = "c.yamada@example.co.jp";
+    static final String OWN = "own horse battery staple";
+    static final java.util.regex.Pattern INVITE = java.util.regex.Pattern.compile(
+        "auth/invitation\\?entry=admin&token=([A-Za-z0-9_-]+)");
+
+    @Autowired
+    org.springframework.context.ApplicationContext context;
+
+    @Autowired
+    com.jabiz.runtime.job.JobRunner jobs;
+
+    @Autowired
+    @org.springframework.beans.factory.annotation.Qualifier("firstLaunchJob")
+    com.jabiz.job.JobDefinition<com.jabiz.runtime.firstlaunch.accounts.FirstLaunchWaiting.AdvanceInput> job;
+
+    @Autowired
+    com.jabiz.runtime.security.JwtService tokens;
+
+    private static int round;
+
+    private org.springframework.test.web.reactive.server.WebTestClient client() {
+        return org.springframework.test.web.reactive.server.WebTestClient.bindToApplicationContext(context)
+            .configureClient().responseTimeout(Duration.ofSeconds(60))
+            .defaultHeader(org.springframework.http.HttpHeaders.ACCEPT_LANGUAGE, "en").build();
+    }
+
+    @SuppressWarnings("unchecked")
+    private Map<String, Object> post(String path, String token, Map<String, ?> body, int status) {
+        var request = client().post().uri(path).contentType(org.springframework.http.MediaType.APPLICATION_JSON);
+        if (token != null) {
+            request = request.header(org.springframework.http.HttpHeaders.AUTHORIZATION, token);
+        }
+        return request.bodyValue(body).exchange().expectStatus().isEqualTo(status).expectBody(Map.class)
+            .returnResult().getResponseBody();
+    }
+
+    /** One run of the job at a scheduled time of its own, then a moment for the mail it queued to go out. */
+    private void advance() {
+        round++;
+        java.time.Instant scheduled = clock.instant().plus(Duration.ofMinutes(1))
+            .truncatedTo(java.time.temporal.ChronoUnit.MINUTES);
+        clock.set(scheduled.plusSeconds(1));
+        assertThat(jobs.run(job, scheduled)).isEqualTo(com.jabiz.runtime.job.JobRunner.Outcome.SUCCEEDED);
+    }
+
+    private List<jakarta.mail.internet.MimeMessage> to(String address) {
+        return java.util.Arrays.stream(MAIL.getReceivedMessages()).filter(message -> {
+            try {
+                return message.getAllRecipients()[0].toString().equalsIgnoreCase(address);
+            } catch (Exception e) {
+                throw new IllegalStateException(e);
+            }
+        }).toList();
+    }
+
+    /** Waits for the event delivery to send the mail to {@code address}. */
+    private List<jakarta.mail.internet.MimeMessage> awaitMail(String address, int count) throws InterruptedException {
+        long end = System.nanoTime() + Duration.ofSeconds(30).toNanos();
+        while (to(address).size() < count && System.nanoTime() < end) {
+            Thread.sleep(100);
+        }
+        assertThat(to(address)).as("mail to " + address).hasSizeGreaterThanOrEqualTo(count);
+        return to(address);
+    }
+
+    /** A mail's plain text, decoded. */
+    private static String text(jakarta.mail.internet.MimeMessage message) {
+        try {
+            String found = plain(message);
+            return found == null ? "" : found;
+        } catch (Exception e) {
+            throw new IllegalStateException(e);
+        }
+    }
+
+    private static String plain(jakarta.mail.Part part) throws Exception {
+        if (part.isMimeType("text/plain")) {
+            return String.valueOf(part.getContent());
+        }
+        if (part.getContent() instanceof jakarta.mail.Multipart multipart) {
+            for (int i = 0; i < multipart.getCount(); i++) {
+                String found = plain(multipart.getBodyPart(i));
+                if (found != null) {
+                    return found;
+                }
+            }
+        }
+        return null;
+    }
+
+    /** The token of the newest invitation to the address, waiting for it to be sent. */
+    private String invitation(String address) throws InterruptedException {
+        long end = System.nanoTime() + Duration.ofSeconds(30).toNanos();
+        do {
+            for (jakarta.mail.internet.MimeMessage message : to(address).reversed()) {
+                java.util.regex.Matcher matcher = INVITE.matcher(text(message));
+                if (matcher.find()) {
+                    return matcher.group(1);
+                }
+            }
+            Thread.sleep(100);
+        } while (System.nanoTime() < end);
+        throw new AssertionError("No invitation to " + address);
+    }
+
+    /** Accepts the invitation with a password of one's own, signs in and binds a second factor. */
+    private void acceptAndBind(String address) throws InterruptedException {
+        client().post().uri("/api/auth/invitation/confirm").contentType(org.springframework.http.MediaType.APPLICATION_JSON)
+            .bodyValue(Map.of("token", invitation(address), "password", OWN)).exchange().expectStatus().isNoContent();
+        Map<String, Object> first = post("/api/auth/login", null, Map.of("userName", address, "password", OWN,
+            "entry", "admin"), 200);
+        assertThat(first).containsEntry("status", "MFA_ENROLLMENT_REQUIRED");
+        String challenge = (String) first.get("challenge");
+        String secret = (String) post("/api/auth/challenge/enroll", null, Map.of("challenge", challenge), 200)
+            .get("secret");
+        post("/api/auth/challenge/enroll/confirm", null, Map.of("challenge", challenge, "code",
+            com.jabiz.security.Totp.code(com.jabiz.security.Base32.decode(secret),
+                com.jabiz.security.Totp.step(clock.instant()))), 200);
+    }
+
+    private static List<String> rolesOf(String userId) {
+        return query("""
+            SELECT r.role_code FROM (SELECT DISTINCT ON (user_role_id) role_id, is_deleted FROM sec_user_role_version
+                WHERE user_id = ?::uuid ORDER BY user_role_id, version_no DESC) v
+            JOIN (SELECT DISTINCT ON (role_id) role_id, role_code FROM sec_role_version
+                ORDER BY role_id, version_no DESC) r ON r.role_id = v.role_id WHERE NOT v.is_deleted""", userId)
+            .stream().map(row -> String.valueOf(row.get("role_code"))).toList();
+    }
+
+    @Test
+    @org.junit.jupiter.api.Order(2)
+    void theAccountsGetTheirRolesThenTheRunIsDoneAndATakerAnswers() throws Exception {
+        awaitContent();
+        String pending = com.jabiz.quizbuks.setup.FirstLaunchRoles.PENDING;
+        assertThat(rolesOf(userOf(B))).containsExactly(pending);
+        // The job invites every account once the content is in place.
+        advance();
+        invitation(A);
+        invitation(B);
+        invitation(C);
+
+        // B and C accept and bind a second factor: their roles are given, then the waiting role goes.
+        acceptAndBind(B);
+        acceptAndBind(C);
+        advance();
+        assertThat(rolesOf(userOf(B))).contains("QB_OPERATOR");
+        advance();
+        assertThat(rolesOf(userOf(B))).containsExactly("QB_OPERATOR");
+        assertThat(rolesOf(userOf(C))).containsExactly("QB_OPERATOR");
+
+        // A, the super administrator, only once the operator has confirmed the fingerprint.
+        acceptAndBind(A);
+        advance();
+        assertThat(rolesOf(userOf(A))).doesNotContain("QB_ADMIN_SUPER");
+        assertThat(run().state()).isEqualTo(FirstLaunchRun.State.CONTENT_DONE);
+        java.time.Instant bound = ((java.sql.Timestamp) query("SELECT confirmed_time FROM sec_user_mfa_version"
+            + " WHERE user_id = ?::uuid AND confirmed ORDER BY version_no DESC LIMIT 1", userOf(A)).getFirst()
+            .get("confirmed_time")).toInstant();
+        CONFIRMED.set(com.jabiz.runtime.firstlaunch.accounts.GrantPlan.fingerprint(run().runId().toString(),
+            java.util.UUID.fromString(userOf(A)), bound));
+        advance();
+        assertThat(rolesOf(userOf(A))).contains("QB_ADMIN_SUPER");
+        advance();
+
+        // Done: the report goes to A, with what is left for people (QuizBuks's items among them).
+        assertThat(run().state()).isEqualTo(FirstLaunchRun.State.DONE);
+        String report = text(awaitMail(A, 2).getLast());
+        assertThat(report).contains("QB_LEGAL_PUBLISH").contains("qb.sod.*").contains("QB_ADMIN_SUPER");
+        // Still no money moved.
+        assertThat(query("SELECT 1 FROM ledger_transaction_version")).isEmpty();
+
+        // A taker finds a publication and passes it (offline redemption: no Kudos move).
+        String taker = String.valueOf(post("/api/processes/SEC_USER_CREATE/latest",
+            com.jabiz.runtime.test.TestTokens.bearer(tokens, "it-admin", "*"), Map.of("userName", "fl-taker",
+                "displayName", "Taker", "email", "taker@example.com"), 200).get("output") instanceof Map<?, ?> out
+            ? out.get("userId") : null);
+        String takerToken = com.jabiz.runtime.test.TestTokens.bearer(tokens, taker,
+            com.jabiz.quizbuks.setup.QbRoles.of(com.jabiz.quizbuks.setup.QbRoles.TAKER).permissions()
+                .toArray(String[]::new));
+        String publicationId = String.valueOf(latest("qb_publication_version", "publication_id",
+            "sponsor_id = '" + userOf(B) + "'").getFirst().get("publication_id"));
+        @SuppressWarnings("unchecked")
+        Map<String, Object> started = (Map<String, Object>) post("/api/processes/QB_ATTEMPT_START/latest", takerToken,
+            Map.of("publicationId", publicationId), 200).get("output");
+        String attemptId = (String) started.get("attemptId");
+        // Answered as the App answers: by the options as this attempt shows them (their order is the attempt's).
+        Map<String, String> right = Map.of("When do cherries blossom in Tokyo?", "Late March",
+            "Which flower is this?", "Cherry", "Is a tulip a spring flower?", "Yes");
+        List<Object> answers = new java.util.ArrayList<>();
+        for (Object shown : (List<?>) started.get("questions")) {
+            Map<?, ?> question = (Map<?, ?>) shown;
+            Object option = ((List<?>) question.get("options")).stream().map(Map.class::cast)
+                .filter(o -> right.get(String.valueOf(question.get("stem"))).equals(o.get("text"))).findFirst()
+                .orElseThrow().get("no");
+            answers.add(Map.of("questionNo", question.get("no"), "selected", List.of(option)));
+        }
+        Map<String, Object> submission = new java.util.LinkedHashMap<>(Map.of("attemptId", attemptId,
+            "publicationId", publicationId, "answers", answers));
+        @SuppressWarnings("unchecked")
+        Map<String, Object> result = (Map<String, Object>) post("/api/processes/QB_ATTEMPT_SUBMIT/latest", takerToken,
+            submission, 200).get("output");
+        assertThat(result).containsEntry("passed", true);
+        assertThat(query("SELECT 1 FROM ledger_transaction_version")).isEmpty();
+
+        // Started again with the configuration still there: nothing is done again (a warning only).
+        long events = query("SELECT 1 FROM sys_first_launch_event").size();
+        FirstLaunchGate another = new FirstLaunchGate();
+        new com.jabiz.runtime.firstlaunch.FirstLaunchRunner(context.getEnvironment(), runs, another,
+            context.getBean(com.jabiz.runtime.process.ProcessExecutor.class),
+            context.getBeanProvider(com.jabiz.firstlaunch.FirstLaunchHandler.class),
+            context.getBeanProvider(com.jabiz.runtime.firstlaunch.FirstLaunchPlatformSteps.class),
+            context.getBean(com.jabiz.i18n.MessageCatalog.class), context.getBean(java.time.Clock.class),
+            context.getBeanProvider(FirstLaunchExit.class),
+            context.getBean(tools.jackson.databind.json.JsonMapper.class),
+            context.getBean(com.jabiz.runtime.firstlaunch.FirstLaunchPowers.class),
+            context.getBean(com.jabiz.runtime.firstlaunch.FirstLaunchFiles.class)).afterSingletonsInstantiated();
+        assertThat(another.isOpen()).isTrue();
+        assertThat(query("SELECT 1 FROM sys_first_launch_event")).hasSize((int) events);
+        assertThat(EXITS).isEmpty();
     }
 }
