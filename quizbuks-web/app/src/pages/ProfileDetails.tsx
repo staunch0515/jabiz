@@ -83,71 +83,81 @@ function DetailsForm({ answers }: { answers: Answer[] }) {
   const problem = save.isError ? (generalProblem(save.error, []) ?? problemText(save.error)) : undefined
 
   return (
-    <form noValidate onSubmit={submit} className="flex flex-col gap-4" data-testid="profile-details">
+    <form noValidate onSubmit={submit} className="flex flex-col gap-6" data-testid="profile-details">
       <p className="text-muted-foreground text-sm">{t('details.hint')}</p>
-      {CRITERIA.map((criterion) => {
-        const label = tQb(`audience.${criterion.key === 'age' ? 'birthYear' : criterion.key}`)
-        const chosen = values[criterion.key]?.options ?? []
-        if (criterion.kind === 'RANGE') {
+      {/* One grid for every answer: on a wide screen two columns of equal width, each control filling its column, so
+          the short choices and the birth year line up. Interests, a long list, take the whole row. */}
+      <div className="grid gap-x-4 gap-y-5 sm:grid-cols-2">
+        {CRITERIA.map((criterion) => {
+          const label = tQb(`audience.${criterion.key === 'age' ? 'birthYear' : criterion.key}`)
+          const chosen = values[criterion.key]?.options ?? []
+          if (criterion.kind === 'RANGE') {
+            return (
+              <div key={criterion.key} className="flex flex-col gap-2">
+                <Label htmlFor={`${id}-${criterion.key}`}>{label}</Label>
+                <Input id={`${id}-${criterion.key}`} inputMode="numeric" maxLength={4} value={birthYear}
+                  placeholder={t('details.birthYearPlaceholder')} autoComplete="bday-year"
+                  data-testid={`details-${criterion.key}`}
+                  onChange={(event) => {
+                    setSaved(false)
+                    setBirthYear(event.target.value.replace(/\D/g, ''))
+                  }} />
+              </div>
+            )
+          }
+          if (criterion.multiple) {
+            return (
+              <fieldset key={criterion.key} className="flex flex-col gap-2 sm:col-span-2"
+                data-testid={`details-${criterion.key}`}>
+                <legend className="mb-2 text-sm leading-none font-medium">{label}</legend>
+                <div className="grid grid-cols-2 gap-x-4 gap-y-3 sm:grid-cols-3">
+                  {criterion.options.map((option) => (
+                    <label key={option} className="flex items-center gap-2 text-sm">
+                      <Checkbox checked={chosen.includes(option)} data-testid={`details-${criterion.key}-${option}`}
+                        onCheckedChange={(checked) => choose(criterion, checked === true
+                          ? criterion.options.filter((o) => o === option || chosen.includes(o))
+                          : chosen.filter((o) => o !== option))} />
+                      {tQb(`audience.${criterion.key}Options.${option}`)}
+                    </label>
+                  ))}
+                </div>
+              </fieldset>
+            )
+          }
           return (
             <div key={criterion.key} className="flex flex-col gap-2">
               <Label htmlFor={`${id}-${criterion.key}`}>{label}</Label>
-              <Input id={`${id}-${criterion.key}`} inputMode="numeric" maxLength={4} value={birthYear}
-                placeholder={t('details.birthYearPlaceholder')} autoComplete="bday-year"
-                data-testid={`details-${criterion.key}`}
-                onChange={(event) => {
-                  setSaved(false)
-                  setBirthYear(event.target.value.replace(/\D/g, ''))
-                }} />
+              <Select value={chosen[0] ?? NOT_SET}
+                onValueChange={(value) => choose(criterion, value === NOT_SET ? [] : [value])}>
+                {/* The trigger fills its column (the control's default is only as wide as its text). */}
+                <SelectTrigger id={`${id}-${criterion.key}`} className="w-full" data-testid={`details-${criterion.key}`}>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={NOT_SET}>{t('details.notSet')}</SelectItem>
+                  {criterion.options.map((option) => (
+                    <SelectItem key={option} value={option}>{tQb(`audience.${criterion.key}Options.${option}`)}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
           )
-        }
-        if (criterion.multiple) {
-          return (
-            <fieldset key={criterion.key} className="flex flex-col gap-2" data-testid={`details-${criterion.key}`}>
-              <legend className="mb-2 text-sm font-medium">{label}</legend>
-              <div className="grid grid-cols-2 gap-2">
-                {criterion.options.map((option) => (
-                  <label key={option} className="flex items-center gap-2 text-sm">
-                    <Checkbox checked={chosen.includes(option)} data-testid={`details-${criterion.key}-${option}`}
-                      onCheckedChange={(checked) => choose(criterion, checked === true
-                        ? criterion.options.filter((o) => o === option || chosen.includes(o))
-                        : chosen.filter((o) => o !== option))} />
-                    {tQb(`audience.${criterion.key}Options.${option}`)}
-                  </label>
-                ))}
-              </div>
-            </fieldset>
-          )
-        }
-        return (
-          <div key={criterion.key} className="flex flex-col gap-2">
-            <Label htmlFor={`${id}-${criterion.key}`}>{label}</Label>
-            <Select value={chosen[0] ?? NOT_SET}
-              onValueChange={(value) => choose(criterion, value === NOT_SET ? [] : [value])}>
-              <SelectTrigger id={`${id}-${criterion.key}`} data-testid={`details-${criterion.key}`}>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value={NOT_SET}>{t('details.notSet')}</SelectItem>
-                {criterion.options.map((option) => (
-                  <SelectItem key={option} value={option}>{tQb(`audience.${criterion.key}Options.${option}`)}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-        )
-      })}
-      <p className="text-muted-foreground text-xs">{t('details.privacy')}</p>
-      {problem && <p className="text-destructive text-sm" role="alert" data-testid="details-error">{problem}</p>}
-      {saved && (
-        <p className="text-sm flex items-center gap-2" role="status" data-testid="details-saved">
-          <CircleCheck aria-hidden className="size-4" />{tQb('saved')}
-        </p>
-      )}
-      <Button type="submit" disabled={save.isPending || !emailVerified} data-testid="details-save">
-        {t('details.save')}
-      </Button>
+        })}
+      </div>
+      <div className="flex flex-col gap-3 border-t pt-4">
+        <p className="text-muted-foreground text-xs">{t('details.privacy')}</p>
+        {problem && <p className="text-destructive text-sm" role="alert" data-testid="details-error">{problem}</p>}
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          {saved
+            ? <p className="text-sm flex items-center gap-2" role="status" data-testid="details-saved">
+              <CircleCheck aria-hidden className="size-4" />{tQb('saved')}
+            </p>
+            : <span />}
+          <Button type="submit" disabled={save.isPending || !emailVerified} data-testid="details-save">
+            {t('details.save')}
+          </Button>
+        </div>
+      </div>
     </form>
   )
 }

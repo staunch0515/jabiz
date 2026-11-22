@@ -2,7 +2,7 @@ import { readPageProducts } from './api'
 import { ProductCards } from '../qb/view/ProductCards'
 import { QBVIEW } from '../qb/view/messages'
 import { formatDateTime, i18n } from '@jabiz/client'
-import { Button, MarkdownView, PageState } from '@jabiz/ui'
+import { MarkdownView, PageState, Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@jabiz/ui'
 import { keepPreviousData, useQuery } from '@tanstack/react-query'
 import { useEffect, useState } from 'react'
 import { ExternalLink, Trophy } from 'lucide-react'
@@ -91,28 +91,33 @@ export function SponsorPage({ handle, signedIn = false }: { handle: string; sign
               data-testid="sponsor-page-cover" />
             : <CoverPlaceholder seed={p.handle} className="absolute inset-0 size-full" />}
         </div>
-        {offered.length > 1 && (
-          <div className="flex flex-wrap items-center justify-end gap-1" role="group"
-            aria-label={t('sponsorPage.language')} data-testid="sponsor-page-languages">
-            {offered.map((language) => (
-              <Button key={language} type="button" size="sm" lang={language}
-                variant={language === shownIn ? 'secondary' : 'ghost'} aria-pressed={language === shownIn}
-                data-testid={`sponsor-page-language-${language}`} onClick={() => setChosen(language)}>
-                {tQb(`languages.${language}`)}
-              </Button>
-            ))}
-          </div>
-        )}
-        <div className="flex items-center gap-3">
+        {/* The logo, the company and the language choice share one row: the choice is one menu, at the row's end. */}
+        <div className="flex items-start gap-3">
           {p.logo && <FileImage fileId={p.logo} variant="w256" alt="" className="size-14 shrink-0 rounded-full border object-cover"
             data-testid="sponsor-page-logo" />}
-          <div className="flex min-w-0 flex-col">
+          <div className="flex min-w-0 flex-1 flex-col">
             <h1 id="sponsor-page-title" className="text-xl font-semibold" data-testid="sponsor-page-company">{p.company}</h1>
             {p.verifiedDomain && <VerifiedMark domain={p.verifiedDomain} />}
             {/* The sponsor's own words are in the page's language; the rest is the interface's. */}
             <p className="text-muted-foreground text-sm" lang={shownIn} data-testid="sponsor-page-headline">
               {p.headline}</p>
           </div>
+          {offered.length > 1 && (
+            <Select value={shownIn} onValueChange={setChosen}>
+              <SelectTrigger size="sm" className="shrink-0" aria-label={t('sponsorPage.language')}
+                data-testid="sponsor-page-languages">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {offered.map((language) => (
+                  <SelectItem key={language} value={language} lang={language}
+                    data-testid={`sponsor-page-language-${language}`}>
+                    {tQb(`languages.${language}`)}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
         </div>
         {website && (
           <a href={website} target="_blank" rel="noopener noreferrer nofollow ugc"
