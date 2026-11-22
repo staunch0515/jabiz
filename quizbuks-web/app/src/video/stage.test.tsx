@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it } from 'vitest'
 import '../qb/view/messages'
 import { VideoSlot, VideoStage } from './stage'
@@ -9,11 +9,11 @@ const YOUTUBE = 'https://www.youtube-nocookie.com/embed/firstFrame01'
 afterEach(cleanup)
 
 /** A card's video slot, with the one stage laid over it (as the app has them); `cover` as a card's has one. */
-function Card({ player, cover = false }: { player: string; cover?: boolean }) {
+function Card({ player, cover = false, playing = true }: { player: string; cover?: boolean; playing?: boolean }) {
   return (
     <>
-      <VideoSlot id={`card:${player}`} player={player} title="Clip" mode="card"
-        cover={cover ? <span data-testid="stage-cover">Cover</span> : undefined} />
+      {playing && <VideoSlot id={`card:${player}`} player={player} title="Clip" mode="card"
+        cover={cover ? <span data-testid="stage-cover">Cover</span> : undefined} />}
       <VideoStage />
     </>
   )
@@ -45,6 +45,19 @@ describe('the stage shows a player only once it has its first frame', () => {
     fireEvent(window, new MessageEvent('message', { source: frame.contentWindow,
       data: JSON.stringify({ event: 'infoDelivery', info: { playerState: 1 } }) }))
     expect(strip.style.transform).toBe('translateX(-50%)')
+  })
+
+  it('slides the cover back over the player when its card stops playing, and releases the player only after', async () => {
+    const { rerender } = render(<Card player={FILE} cover />)
+    fireEvent(await screen.findByTestId('video-stage-file'), new Event('loadeddata'))
+    const strip = screen.getByTestId('video-stage-strip')
+    expect(strip.style.transform).toBe('translateX(-50%)')
+    rerender(<Card player={FILE} cover playing={false} />)
+    // The cover comes back in place (its copy in the stage, already painted) while the player is still there to slide out.
+    expect(screen.getByTestId('video-stage-cover')).toContainElement(screen.getByTestId('stage-cover'))
+    expect(screen.getByTestId('video-stage')).toBeInTheDocument()
+    expect(strip.style.transform).toBe('translateX(0)')
+    await waitFor(() => expect(screen.queryByTestId('video-stage')).toBeNull())
   })
 
   it('shows a player on a place without a cover at once (the start page), with no cover to move', async () => {

@@ -51,9 +51,14 @@ interface StageState {
   soundOn: boolean
   /** Whether the player shown has its first frame: until it has, the stage is transparent (see `framedNow`). */
   framed: boolean
+  /**
+   * A card that stopped playing: its cover is kept on the stage while the player slides back under it, so the cover
+   * is already painted when the card's own picture takes over (the player is released once the slide is done).
+   */
+  returning: { cover: ReactNode } | null
 }
 
-let state: StageState = { slot: null, player: null, soundAsked: false, soundOn: false, framed: false }
+let state: StageState = { slot: null, player: null, soundAsked: false, soundOn: false, framed: false, returning: null }
 const listeners = new Set<() => void>()
 let frame: HTMLIFrameElement | null = null
 /** F-S15: the stage's `<video>` while the player is a video file. */
@@ -370,18 +375,23 @@ function claim(slot: Slot) {
   const same = state.player === slot.player
   const asked = !!wanted && wanted.player === slot.player && wanted.until >= Date.now()
   wanted = null
-  set({ slot, player: slot.player, ...(same ? {} : { soundAsked: asked, soundOn: false, framed: false }) })
+  set({ slot, player: slot.player, returning: null,
+    ...(same ? {} : { soundAsked: asked, soundOn: false, framed: false }) })
   // Q75: a slot that counts (the start page's) starts the counting afresh.
   startCounting()
 }
 
 function leave(slot: Slot) {
   if (state.slot?.element !== slot.element) return
-  set({ slot: null })
   // The next page's slot claims it within this tick when it shows the same video; else the player goes. A card's tap
   // waits longer: the start page it opens shows its slot only once its data has come.
   const wait = Math.max(0, handoffUntil - Date.now())
   handoffUntil = 0
+  // A framed card's player that is not handed on slides back under its cover, as it came: the cover is in place within
+  // the switch, and the player is released when the slide is done. Not one that never showed its frame (a failed file),
+  // nor a viewer who asked for less motion: those go at once.
+  const back = wait === 0 && !!slot.cover && state.framed && !prefersStillVideo()
+  set({ slot: null, returning: back ? { cover: slot.cover } : null })
   if (unknownTimer) {
     clearTimeout(unknownTimer)
     unknownTimer = null
@@ -393,11 +403,11 @@ function leave(slot: Slot) {
         clearTimeout(frameTimer)
         frameTimer = null
       }
-      set({ player: null, soundAsked: false, soundOn: false, framed: false })
+      set({ player: null, soundAsked: false, soundOn: false, framed: false, returning: null })
       heard = false
       playerPlaying = false
     }
-  }, wait)
+  }, back ? SWITCH_MS : wait)
 }
 
 export function useStage(): StageState {
@@ -512,11 +522,19 @@ export function VideoStage() {
   const clip = rect?.clip
   const hidden = !!clip && !!rect && rect.height > 0 && (clip.top + clip.bottom >= rect.height
     || clip.left + clip.right >= rect.width)
-  const visible = !!slot && !!rect && !hidden
+  // A card that stopped playing keeps the stage over its place while the player slides back under the cover.
+  const returning = stage.returning
+  const visible = (!!slot || !!returning) && !!rect && !hidden
+  // The cover on the stage: the slot's, or the one a returning player slides back under.
+  const cover = slot?.cover ?? returning?.cover
+  // The cover shows while there is none to show the player, and the player shows once framed (not while it returns).
+  const coverShown = !!cover && !(stage.framed && !returning)
   return createPortal(
     <div ref={box} data-testid="video-stage" data-mode={slot?.mode}
       style={{ position: 'absolute', top: rect?.top ?? 0, left: rect?.left ?? 0, width: rect?.width ?? 0,
         height: rect?.height ?? 0, visibility: visible ? 'visible' : 'hidden',
+        // Nothing of the stage is for touching once its card has let go of it.
+        pointerEvents: slot ? undefined : 'none',
         // The player comes in from the right and is clipped to the slot's place until its first frame (`framedNow`).
         overflow: 'hidden',
         // In full screen the player fills the screen: nothing of the home's place is cut off it.
@@ -527,8 +545,8 @@ export function VideoStage() {
           player comes in from the right, so nothing shows between them. Without a cover the player simply shows
           (the start page: its player is not held back until a frame). */}
       <div style={{ position: 'absolute', top: 0, left: 0, width: '200%', height: '100%', display: 'flex',
-        ...sideways(slot?.cover ? (stage.framed ? '-50%' : '0') : '-50%') }} data-testid="video-stage-strip">
-        <div className="relative h-full w-1/2 shrink-0" data-testid="video-stage-cover">{slot?.cover}</div>
+        ...sideways(coverShown ? '0' : '-50%') }} data-testid="video-stage-strip">
+        <div className="relative h-full w-1/2 shrink-0" data-testid="video-stage-cover">{cover}</div>
         <div className="relative h-full w-1/2 shrink-0" data-testid="video-stage-content"
           >
       {videoKind(stage.player) === 'file' ? (
