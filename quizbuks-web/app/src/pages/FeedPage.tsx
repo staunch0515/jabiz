@@ -280,15 +280,15 @@ function useMoreNearTheEnd(sentinel: HTMLElement | null, more: () => void) {
  * The playing card's video (Q65): the app's one player, which nothing on the card touches; a tap on it opens the
  * start page with the sound on, the same player playing on.
  */
-function CardVideo({ card, player }: { card: FeedCard; player: string }) {
+function CardVideo({ card, player, cover }: { card: FeedCard; player: string; cover: ReactNode }) {
   const { t } = useTranslation(QBVIEW)
   const open = useCallback(() => {
     openWithSound(player)
     navigate(`/p/${card.publicationId}`)
   }, [card.publicationId, player])
-  // No background of its own: the cover under it (`FeedCardView`) shows until the player has its first frame.
+  // No background of its own: the cover comes in the stage's strip beside the player (see `video/stage.tsx`).
   return <VideoSlot id={`card:${card.publicationId}`} player={player} mode="card" onOpen={open}
-    publicationId={card.publicationId} className="relative aspect-video w-full"
+    publicationId={card.publicationId} className="relative aspect-video w-full" cover={cover}
     title={t('feed.videoTitle', { name: card.name })} />
 }
 
@@ -626,7 +626,8 @@ export function FeedPage({ name, country }: { name: string; country: string | nu
                   <FeedCardView card={card} href={`/p/${card.publicationId}`}
                     playing={playing === card.publicationId} note={<CardProgressNote card={card} at={at} />}
                     menu={<BlockMenu item={card} />}
-                    video={trackable(card.video) && <CardVideo card={card} player={card.video!} />}
+                    video={trackable(card.video) ? (cover) => <CardVideo card={card} player={card.video!} cover={cover} />
+                      : undefined}
                     onOpen={trackable(card.video) ? () => openWithSound(card.video!) : undefined} />
                   {/* F-S10: a shelf of short videos after this card (the parameters' places). */}
                   {shelf && <ShortsShelf items={shelf.items} hrefOf={(c) => shortsPath(q, c.publicationId)}

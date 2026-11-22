@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore, type CSSProperties } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore, type CSSProperties,
+  type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { prefersStillVideo, VIMEO_PLAYER, videoKind } from '../qb/video'
 import { markVideoFailed } from '../qb/videoFailures'
@@ -37,6 +38,8 @@ interface Slot {
   publicationId: string | null
   /** The card's tap: the start page, the sound on. */
   onOpen?: () => void
+  /** The cover the player comes in beside: the two move as one strip (`VideoStage`). */
+  cover?: ReactNode
 }
 
 interface StageState {
@@ -411,7 +414,7 @@ export function stagePlayer(): { player: string | null; soundOn: boolean } {
  * `card`) the player cannot be touched: a tap anywhere on it is `onOpen`. On the start page (`page`) the player's
  * controls work.
  */
-export function VideoSlot({ id, player, title, mode, publicationId = null, active = true, onOpen, className }: {
+export function VideoSlot({ id, player, title, mode, publicationId = null, active = true, onOpen, cover, className }: {
   id: string
   player: string
   title: string
@@ -420,13 +423,19 @@ export function VideoSlot({ id, player, title, mode, publicationId = null, activ
   publicationId?: string | null
   active?: boolean
   onOpen?: () => void
+  /** The cover the player comes in beside (a card's): read as the slot is claimed, not a dependency. */
+  cover?: ReactNode
   className?: string
 }) {
   const ref = useRef<HTMLDivElement>(null)
+  const coverRef = useRef(cover)
+  useLayoutEffect(() => {
+    coverRef.current = cover
+  })
   useLayoutEffect(() => {
     const element = ref.current
     if (!element || !active) return
-    const slot: Slot = { key: id, player, title, mode, element, publicationId, onOpen }
+    const slot: Slot = { key: id, player, title, mode, element, publicationId, onOpen, cover: coverRef.current }
     claim(slot)
     return () => leave(slot)
   }, [id, player, title, mode, publicationId, active, onOpen])
@@ -514,7 +523,13 @@ export function VideoStage() {
         clipPath: clip && !fullscreen ? `inset(${clip.top}px ${clip.right}px ${clip.bottom}px ${clip.left}px)` : undefined,
         // F-S10: above the vertical mode's screens (which lie over the home at z-index 50).
         zIndex: slot?.mode === 'short' ? 55 : 5 }}>
-      <div className="size-full" style={sideways(stage.framed ? '0' : '100%')} data-testid="video-stage-content">
+      {/* A card's cover (its `cover`) and the player move as one strip: the cover slides out to the left while the
+          player comes in from the right, so nothing shows between them. Without a cover the player fades in. */}
+      <div style={{ position: 'absolute', top: 0, left: 0, width: '200%', height: '100%',
+        ...sideways(slot?.cover ? (stage.framed ? '-50%' : '0') : '-50%') }} data-testid="video-stage-strip">
+        <div className="relative h-full w-1/2" data-testid="video-stage-cover">{slot?.cover}</div>
+        <div className="relative h-full w-1/2" data-testid="video-stage-content"
+          style={slot?.cover ? undefined : { opacity: stage.framed ? 1 : 0 }}>
       {videoKind(stage.player) === 'file' ? (
         // F-S15: a video file, started muted; its controls on the start page and in the vertical mode only.
         <video
@@ -561,6 +576,7 @@ export function VideoStage() {
         // Above the browser's own control bar, whose full-screen key `controlsList` takes away where it can.
         <FullscreenButton target={box} video={media} className="bottom-[4.25rem]" />
       )}
+        </div>
       </div>
       {/* On a card nothing in the player is for touching: the whole of it opens the start page (not moved, so a tap
           before the first frame opens it too). */}
