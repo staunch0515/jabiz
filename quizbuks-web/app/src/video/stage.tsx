@@ -525,10 +525,10 @@ export function VideoStage() {
         zIndex: slot?.mode === 'short' ? 55 : 5 }}>
       {/* A card's cover (its `cover`) and the player move as one strip: the cover slides out to the left while the
           player comes in from the right, so nothing shows between them. Without a cover the player fades in. */}
-      <div style={{ position: 'absolute', top: 0, left: 0, width: '200%', height: '100%',
+      <div style={{ position: 'absolute', top: 0, left: 0, width: '200%', height: '100%', display: 'flex',
         ...sideways(slot?.cover ? (stage.framed ? '-50%' : '0') : '-50%') }} data-testid="video-stage-strip">
-        <div className="relative h-full w-1/2" data-testid="video-stage-cover">{slot?.cover}</div>
-        <div className="relative h-full w-1/2" data-testid="video-stage-content"
+        <div className="relative h-full w-1/2 shrink-0" data-testid="video-stage-cover">{slot?.cover}</div>
+        <div className="relative h-full w-1/2 shrink-0" data-testid="video-stage-content"
           style={slot?.cover ? undefined : { opacity: stage.framed ? 1 : 0 }}>
       {videoKind(stage.player) === 'file' ? (
         // F-S15: a video file, started muted; its controls on the start page and in the vertical mode only.

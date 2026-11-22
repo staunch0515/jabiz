@@ -28,6 +28,9 @@ describe('the stage shows a player only once it has its first frame', () => {
     // Until the frame is there the cover fills the place; the player waits to its right, clipped off the place.
     expect(stage).toHaveStyle({ overflow: 'hidden' })
     expect(screen.getByTestId('video-stage-cover')).toContainElement(screen.getByTestId('stage-cover'))
+    // The two halves lie side by side in a row (not one above the other), so the player is beside the cover.
+    expect(strip.style.display).toBe('flex')
+    expect(strip).toContainElement(screen.getByTestId('video-stage-content'))
     expect(strip.style.transform).toBe('translateX(0)')
     fireEvent(video, new Event('loadeddata'))
     // Both move together: the cover slides out to the left as the player comes in from the right.
