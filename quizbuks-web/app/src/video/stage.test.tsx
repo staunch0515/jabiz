@@ -47,12 +47,11 @@ describe('the stage shows a player only once it has its first frame', () => {
     expect(strip.style.transform).toBe('translateX(-50%)')
   })
 
-  it('fades a player in on a place without a cover, until its first frame is ready', async () => {
+  it('shows a player on a place without a cover at once (the start page), with no cover to move', async () => {
     render(<Card player={FILE} />)
-    const video = await screen.findByTestId('video-stage-file')
+    await screen.findByTestId('video-stage-file')
     const content = screen.getByTestId('video-stage-content')
-    expect(content).toHaveStyle({ opacity: '0' })
-    fireEvent(video, new Event('loadeddata'))
-    expect(content).toHaveStyle({ opacity: '1' })
+    expect(content.style.opacity).toBe('')
+    expect(screen.getByTestId('video-stage-strip').style.transform).toBe('translateX(-50%)')
   })
 })
