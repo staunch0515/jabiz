@@ -135,25 +135,10 @@ export function FeedCardView({ card, href, playing = false, note, video, onOpen,
             <RewardText card={card} />
             <span aria-hidden>·</span>
             <span data-testid="feed-card-completions">{t('feed.completions', { count: card.completions })}</span>
-            {/* Q75: the video is the one to watch before answering; in the facts, which stay while it plays (Q66). */}
-            {card.video && card.watchRequired && (
-              <>
-                <span aria-hidden>·</span>
-                <span data-testid="feed-card-watch">{t('feed.watchFirst')}</span>
-              </>
-            )}
             {note && (
               <>
                 <span aria-hidden>·</span>
                 {note}
-              </>
-            )}
-            {/* F-S15: a video file that does not play here: the file itself, in a new tab. */}
-            {failed && card.video && (
-              <>
-                <span aria-hidden>·</span>
-                <a href={card.video} target="_blank" rel="noopener noreferrer" data-testid="feed-card-open-video"
-                  className="underline underline-offset-2">{t('feed.openVideo')}</a>
               </>
             )}
           </span>

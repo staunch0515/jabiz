@@ -2092,13 +2092,13 @@ describe('the video to watch first (Q75)', () => {
     server({ feed: [{ ...CARD, video: PLAYER, watchRequired: true, videoDurationSec: 100 }], publicationPage: required })
     render(<App />)
     const card = await screen.findByTestId('feed-card')
-    // Q75: the card says the video must be watched.
-    expect(within(card).getByTestId('feed-card-watch')).toHaveTextContent('Watch to answer')
+    // The card does not say the video must be watched (no line about it on the home).
+    expect(within(card).queryByTestId('feed-card-watch')).toBeNull()
     io.fire(card, true, MIDDLE)
     const frame = await screen.findByTitle('Video: Capitals week') as HTMLIFrameElement
-    // And still says so while it plays (the player takes the picture's place).
+    // And still does while it plays (the player takes the picture's place).
     expect(card).toHaveAttribute('data-playing', 'true')
-    expect(within(card).getByTestId('feed-card-watch')).toHaveTextContent('Watch to answer')
+    expect(within(card).queryByTestId('feed-card-watch')).toBeNull()
     hear(frame, { event: 'infoDelivery', info: { playerState: 1, currentTime: 0, muted: true } })
     now.mockReturnValue(2_050_000)
     hear(frame, { event: 'infoDelivery', info: { currentTime: 50 } })
@@ -2288,11 +2288,8 @@ describe('a video file on any https address (F-S15)', () => {
     media(video, 'error')
     await waitFor(() => expect(card).not.toHaveAttribute('data-video'))
     expect(screen.queryByTestId('video-stage-file')).toBeNull()
-    const link = within(card).getByTestId('feed-card-open-video')
-    expect(link).toHaveAttribute('href', FILE)
-    expect(link).toHaveAttribute('target', '_blank')
-    expect(link).toHaveAttribute('rel', 'noopener noreferrer')
-    expect(link).toHaveTextContent('Open the video')
+    // No link to the file on the card (the start page keeps the file among the materials).
+    expect(within(card).queryByTestId('feed-card-open-video')).toBeNull()
     await expectAccessible()
     // The start page leads with the cover; the file is among the materials as a link.
     await userEvent.click(within(card).getByTestId('feed-card-link'))
