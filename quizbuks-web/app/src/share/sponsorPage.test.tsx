@@ -83,6 +83,8 @@ describe("a Sponsor's page (Q60a)", () => {
     expect(screen.getByTestId('sponsor-page').querySelector('[data-testid]')).toBe(frame)
     expect(frame).toHaveClass('-mt-4')
     expect(frame.compareDocumentPosition(choice) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    // A plain button-style menu: no border, the same as the text beside it.
+    expect(choice).toHaveClass('border-transparent', 'shadow-none')
     const row = screen.getByTestId('sponsor-page-company').closest('.flex.items-start')
     expect(row).toContainElement(choice)
     expect(choice).toHaveTextContent('English')

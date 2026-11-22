@@ -104,7 +104,7 @@ export function SponsorPage({ handle, signedIn = false }: { handle: string; sign
           </div>
           {offered.length > 1 && (
             <Select value={shownIn} onValueChange={setChosen}>
-              <SelectTrigger size="sm" className="shrink-0" aria-label={t('sponsorPage.language')}
+              <SelectTrigger size="sm" className="shrink-0 border-transparent bg-transparent shadow-none hover:bg-accent hover:text-accent-foreground dark:bg-transparent dark:hover:bg-accent" aria-label={t('sponsorPage.language')}
                 data-testid="sponsor-page-languages">
                 <SelectValue />
               </SelectTrigger>
