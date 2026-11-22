@@ -1368,6 +1368,11 @@ describe('customer matching (Q47)', () => {
     window.history.replaceState(null, '', '/account/details')
     render(<App />)
     const details = await screen.findByTestId('profile-details')
+    // The single choices and the birth year fill their columns, so they line up whatever their text is (were the
+    // choices only as wide as their text, the year alone would have stretched across the page).
+    for (const key of ['gender', 'occupation', 'age']) {
+      expect(within(details).getByTestId(`details-${key}`)).toHaveClass('w-full')
+    }
     expect(within(details).getByTestId('details-interest-PETS')).toBeChecked()
     expect(within(details).getByTestId('details-gender')).toHaveTextContent('Female')
     await userEvent.type(within(details).getByTestId('details-age'), '19x95')
@@ -1400,6 +1405,16 @@ describe('answering', () => {
     expect(screen.getByTestId('detail')).toHaveTextContent('首都')
     await userEvent.click(screen.getByTestId('detail-start'))
     await waitFor(() => expect(posted('QB_ATTEMPT_START')).toEqual([{ publicationId: PUB, language: 'zh' }]))
+  })
+
+  it('opens a start page at its top, however far the page it was reached from was scrolled', async () => {
+    server({ publicationPage: () => json(200, { items: [publication()], offset: 0, limit: 1 }) })
+    const scrollTo = vi.spyOn(window, 'scrollTo').mockImplementation(() => undefined)
+    window.history.replaceState(null, '', `/p/${PUB}`)
+    render(<App />)
+    await screen.findByTestId('detail')
+    expect(scrollTo).toHaveBeenCalledWith(0, 0)
+    scrollTo.mockRestore()
   })
 
   it('names the knowledge map node a publication is bound to, open to be lit or lit (F-S2d)', async () => {

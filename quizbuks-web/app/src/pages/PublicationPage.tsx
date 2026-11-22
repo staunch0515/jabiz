@@ -7,7 +7,7 @@ import { i18n, useAuth } from '@jabiz/client'
 import { Alert, AlertDescription, Button, ConfirmDialog, PageState } from '@jabiz/ui'
 import { keepPreviousData, useQuery } from '@tanstack/react-query'
 import { MailWarning, Play, UserRoundSearch } from 'lucide-react'
-import { useEffect, useRef, useState, type RefObject } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState, type RefObject } from 'react'
 import { useTranslation } from 'react-i18next'
 import { APP } from '../messages'
 import { playProblemText } from '../play/busy'
@@ -249,6 +249,11 @@ export function PublicationPage({ publicationId, country }: { publicationId: str
   const { t } = useTranslation(APP)
   const { t: tQb } = useTranslation(QB)
   const { emailVerified } = useAuth()
+  // A start page opens at its top: the page it was reached from (the feed, a list) may be scrolled down, and the
+  // browser keeps that position across the app's own navigation. Before paint, so the top is never seen.
+  useLayoutEffect(() => {
+    window.scrollTo(0, 0)
+  }, [publicationId])
   const [at] = useState(() => new Date().toISOString())
   // Q73b: the page in the language chosen on it, else the first of the taker's quiz languages it offers.
   const settings = useSoundSetting()
