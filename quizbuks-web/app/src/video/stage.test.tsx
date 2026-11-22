@@ -23,19 +23,21 @@ describe('the stage shows a player only once it has its first frame', () => {
     render(<Card player={FILE} />)
     const stage = await screen.findByTestId('video-stage')
     const video = screen.getByTestId('video-stage-file')
-    // Until the frame is there the stage is transparent, so the cover under the slot stays visible (no black frame).
-    expect(stage).toHaveStyle({ opacity: '0' })
+    // Until the frame is there the player waits to the right, clipped off the slot: the cover stays in view.
+    const content = screen.getByTestId('video-stage-content')
+    expect(stage).toHaveStyle({ overflow: 'hidden' })
+    expect(content.style.transform).toBe('translateX(100%)')
     fireEvent(video, new Event('loadeddata'))
-    expect(stage).toHaveStyle({ opacity: '1' })
+    expect(content.style.transform).toBe('translateX(0)')
   })
 
   it('keeps what is under a YouTube player until it plays, then shows the player', async () => {
     render(<Card player={YOUTUBE} />)
     const frame = await screen.findByTitle('Clip') as HTMLIFrameElement
-    const stage = screen.getByTestId('video-stage')
-    expect(stage).toHaveStyle({ opacity: '0' })
+    const content = screen.getByTestId('video-stage-content')
+    expect(content.style.transform).toBe('translateX(100%)')
     fireEvent(window, new MessageEvent('message', { source: frame.contentWindow,
       data: JSON.stringify({ event: 'infoDelivery', info: { playerState: 1 } }) }))
-    expect(stage).toHaveStyle({ opacity: '1' })
+    expect(content.style.transform).toBe('translateX(0)')
   })
 })

@@ -726,9 +726,10 @@ describe('the video to watch (Q19, Q63)', () => {
     expect(screen.getByTestId('video-open')).toHaveAccessibleName('Video: Capitals week')
     expect(within(card).getByTestId('video-slot')).toHaveAttribute('data-mode', 'card')
     expect(card).toHaveAttribute('data-playing', 'true')
-    // The cover stays under the player until the player has its first frame (no black frame in between).
+    // The cover stays under the player until the player has its first frame; the player waits to the right of it.
     expect(within(card).getByTestId('feed-card-playing')).toContainElement(within(card).getByTestId('feed-card-placeholder'))
-    expect(screen.getByTestId('video-stage')).toHaveStyle({ opacity: '0' })
+    expect(within(card).getByTestId('feed-card-cover').style.transform).toBe('translateX(0)')
+    expect(screen.getByTestId('video-stage-content').style.transform).toBe('translateX(100%)')
     // Q66: the reward is in the line of facts, the same whether the video plays or not.
     expect(within(card).getByTestId('feed-card-reward')).toHaveTextContent('Up to 100 Kudos')
     io.fire(card, false, MIDDLE)

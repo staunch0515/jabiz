@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore, type CSSProperties } from 'react'
 import { createPortal } from 'react-dom'
-import { VIMEO_PLAYER, videoKind } from '../qb/video'
+import { prefersStillVideo, VIMEO_PLAYER, videoKind } from '../qb/video'
 import { markVideoFailed } from '../qb/videoFailures'
 import { FullscreenButton, useFullscreen } from '../qb/view/FullscreenButton'
 import { recordPlayback, UNKNOWN_AFTER_MS, type PlaybackEvent } from './playback'
@@ -80,6 +80,18 @@ function framedNow() {
     frameTimer = null
   }
   if (state.player && !state.framed) set({ framed: true })
+}
+
+/** How long a switch between a cover and its player takes (the cover slides out, the player slides in). */
+export const SWITCH_MS = 400
+
+/**
+ * A part's place at an offset, moved within the switch (YouTube's: the cover slides out to the left, the player comes in
+ * from the right). Moved by `transform`, so nothing reloads; a viewer who asked for less motion sees it at once.
+ */
+export function sideways(offset: string): CSSProperties {
+  return { transform: `translateX(${offset})`,
+    transition: prefersStillVideo() ? undefined : `transform ${SWITCH_MS}ms ease-out` }
 }
 
 /** A new player is loaded: its first frame is awaited (see `framedNow`), for a while at most. */
@@ -496,12 +508,13 @@ export function VideoStage() {
     <div ref={box} data-testid="video-stage" data-mode={slot?.mode}
       style={{ position: 'absolute', top: rect?.top ?? 0, left: rect?.left ?? 0, width: rect?.width ?? 0,
         height: rect?.height ?? 0, visibility: visible ? 'visible' : 'hidden',
-        // Transparent until the player's first frame (`framedNow`): what lies under it stays in view meanwhile.
-        opacity: stage.framed ? 1 : 0,
+        // The player comes in from the right and is clipped to the slot's place until its first frame (`framedNow`).
+        overflow: 'hidden',
         // In full screen the player fills the screen: nothing of the home's place is cut off it.
         clipPath: clip && !fullscreen ? `inset(${clip.top}px ${clip.right}px ${clip.bottom}px ${clip.left}px)` : undefined,
         // F-S10: above the vertical mode's screens (which lie over the home at z-index 50).
         zIndex: slot?.mode === 'short' ? 55 : 5 }}>
+      <div className="size-full" style={sideways(stage.framed ? '0' : '100%')} data-testid="video-stage-content">
       {videoKind(stage.player) === 'file' ? (
         // F-S15: a video file, started muted; its controls on the start page and in the vertical mode only.
         <video
@@ -548,7 +561,9 @@ export function VideoStage() {
         // Above the browser's own control bar, whose full-screen key `controlsList` takes away where it can.
         <FullscreenButton target={box} video={media} className="bottom-[4.25rem]" />
       )}
-      {/* On a card nothing in the player is for touching: the whole of it opens the start page. */}
+      </div>
+      {/* On a card nothing in the player is for touching: the whole of it opens the start page (not moved, so a tap
+          before the first frame opens it too). */}
       {slot?.mode === 'card' && (
         <button type="button" className="absolute inset-0 size-full cursor-pointer" data-testid="video-open"
           aria-label={slot.title} onClick={() => slot.onOpen?.()} />
