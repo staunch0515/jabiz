@@ -46,9 +46,11 @@ interface StageState {
   /** Whether the viewer asked for the sound, and whether the player said it is on. */
   soundAsked: boolean
   soundOn: boolean
+  /** Whether the player shown has its first frame: until it has, the stage is transparent (see `framedNow`). */
+  framed: boolean
 }
 
-let state: StageState = { slot: null, player: null, soundAsked: false, soundOn: false }
+let state: StageState = { slot: null, player: null, soundAsked: false, soundOn: false, framed: false }
 const listeners = new Set<() => void>()
 let frame: HTMLIFrameElement | null = null
 /** F-S15: the stage's `<video>` while the player is a video file. */
@@ -63,6 +65,31 @@ let wanted: { player: string; until: number } | null = null
 let heard = false
 let playerPlaying = false
 let unknownTimer: ReturnType<typeof setTimeout> | null = null
+/** A player that says nothing of its first frame within this wait is shown anyway (its own error page, say). */
+const FRAME_WAIT_MS = 8_000
+let frameTimer: ReturnType<typeof setTimeout> | null = null
+
+/**
+ * The player's first frame is there: the stage shows it. Until then the stage is transparent, so what lies under its
+ * place (a card's cover) stays in view, rather than the player's black before its first frame. A player's own sound
+ * and counting do not wait for it.
+ */
+function framedNow() {
+  if (frameTimer) {
+    clearTimeout(frameTimer)
+    frameTimer = null
+  }
+  if (state.player && !state.framed) set({ framed: true })
+}
+
+/** A new player is loaded: its first frame is awaited (see `framedNow`), for a while at most. */
+function awaitFrame() {
+  if (frameTimer) clearTimeout(frameTimer)
+  frameTimer = setTimeout(() => {
+    frameTimer = null
+    framedNow()
+  }, FRAME_WAIT_MS)
+}
 
 /**
  * Q75 (D-Q75-3): the playback counts on the start page and (F-S10) in the vertical mode, or on a card once its sound
@@ -190,6 +217,7 @@ function listen(event: MessageEvent) {
   if (data?.event === 'onStateChange' && typeof data.info === 'number') youtubeState(data.info, at)
   if (data?.event === 'timeupdate' && vimeo && typeof vimeo.seconds === 'number') {
     heard = true
+    framedNow()
     if (typeof vimeo.duration === 'number' && vimeo.duration > 0) always({ type: 'duration', durationSec: vimeo.duration })
     // Vimeo reports the time only while playing (a `play` before the stage listened would not have been heard).
     playerPlaying = true
@@ -197,6 +225,7 @@ function listen(event: MessageEvent) {
   }
   if (data?.event === 'play' || data?.event === 'pause') {
     heard = true
+    if (data.event === 'play') framedNow()
     playerPlaying = data.event === 'play'
     report({ type: 'state', playing: playerPlaying, at })
   }
@@ -217,6 +246,10 @@ function mediaEvent(event: Event) {
   if (element !== media) return
   const at = Date.now()
   switch (event.type) {
+    case 'loadeddata':
+    case 'playing':
+      framedNow()
+      return
     case 'durationchange':
     case 'loadedmetadata':
       if (Number.isFinite(element.duration) && element.duration > 0) {
@@ -251,7 +284,11 @@ function mediaEvent(event: Event) {
   }
 }
 
-const MEDIA_EVENTS = ['durationchange', 'loadedmetadata', 'timeupdate', 'play', 'pause', 'ended', 'volumechange']
+/** The media element's `readyState` once the frame at the current position is there (HTML's HAVE_CURRENT_DATA). */
+const HAVE_CURRENT_DATA = 2
+
+const MEDIA_EVENTS = ['loadeddata', 'playing', 'durationchange', 'loadedmetadata', 'timeupdate', 'play', 'pause', 'ended',
+  'volumechange']
 
 /** F-S15: the stage's `<video>` comes or goes: a new player, nothing heard yet, its events listened to. */
 function attachMedia(element: HTMLVideoElement | null) {
@@ -262,12 +299,17 @@ function attachMedia(element: HTMLVideoElement | null) {
   MEDIA_EVENTS.forEach((type) => element.addEventListener(type, mediaEvent))
   heard = false
   playerPlaying = false
+  // A file already holding its frame (loaded before the stage listened) says so now.
+  if (element.readyState >= HAVE_CURRENT_DATA) framedNow()
+  else awaitFrame()
   if (state.soundAsked) soundOn()
   startCounting()
 }
 
 function youtubeState(playerState: number, at: number) {
   heard = true
+  // Playing, or paused on a frame: the player has its first frame (buffering or unstarted show none yet).
+  if (playerState === 1 || playerState === 2) framedNow()
   if (playerState === 0) {
     playerPlaying = false
     report({ type: 'ended' })
@@ -313,7 +355,7 @@ function claim(slot: Slot) {
   const same = state.player === slot.player
   const asked = !!wanted && wanted.player === slot.player && wanted.until >= Date.now()
   wanted = null
-  set({ slot, player: slot.player, ...(same ? {} : { soundAsked: asked, soundOn: false }) })
+  set({ slot, player: slot.player, ...(same ? {} : { soundAsked: asked, soundOn: false, framed: false }) })
   // Q75: a slot that counts (the start page's) starts the counting afresh.
   startCounting()
 }
@@ -332,7 +374,11 @@ function leave(slot: Slot) {
   release = setTimeout(() => {
     release = null
     if (!state.slot) {
-      set({ player: null, soundAsked: false, soundOn: false })
+      if (frameTimer) {
+        clearTimeout(frameTimer)
+        frameTimer = null
+      }
+      set({ player: null, soundAsked: false, soundOn: false, framed: false })
       heard = false
       playerPlaying = false
     }
@@ -450,6 +496,8 @@ export function VideoStage() {
     <div ref={box} data-testid="video-stage" data-mode={slot?.mode}
       style={{ position: 'absolute', top: rect?.top ?? 0, left: rect?.left ?? 0, width: rect?.width ?? 0,
         height: rect?.height ?? 0, visibility: visible ? 'visible' : 'hidden',
+        // Transparent until the player's first frame (`framedNow`): what lies under it stays in view meanwhile.
+        opacity: stage.framed ? 1 : 0,
         // In full screen the player fills the screen: nothing of the home's place is cut off it.
         clipPath: clip && !fullscreen ? `inset(${clip.top}px ${clip.right}px ${clip.bottom}px ${clip.left}px)` : undefined,
         // F-S10: above the vertical mode's screens (which lie over the home at z-index 50).
@@ -488,6 +536,7 @@ export function VideoStage() {
         onLoad={() => {
           // Q75: a new player: nothing heard yet; the wait starts where the counting does.
           heard = false
+          awaitFrame()
           playerPlaying = false
           greet()
           if (state.soundAsked) soundOn()

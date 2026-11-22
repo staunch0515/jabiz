@@ -286,8 +286,9 @@ function CardVideo({ card, player }: { card: FeedCard; player: string }) {
     openWithSound(player)
     navigate(`/p/${card.publicationId}`)
   }, [card.publicationId, player])
+  // No background of its own: the cover under it (`FeedCardView`) shows until the player has its first frame.
   return <VideoSlot id={`card:${card.publicationId}`} player={player} mode="card" onOpen={open}
-    publicationId={card.publicationId}
+    publicationId={card.publicationId} className="relative aspect-video w-full"
     title={t('feed.videoTitle', { name: card.name })} />
 }
 

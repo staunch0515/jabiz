@@ -56,13 +56,14 @@ export function FeedCardView({ card, href, playing = false, note, video, onOpen,
   const MethodIcon = REWARD_METHOD_ICONS[card.rewardMethod]
   // F-S15: a video file that failed to play: the cover, and a link to the file.
   const failed = useVideoFailed(card.video)
+  const cover = card.cover
+    ? <LazyImage fileId={card.cover} variant="w640" alt=""
+      className="absolute inset-0 size-full transition-transform duration-300 group-hover:scale-105" />
+    : <CoverPlaceholder seed={card.publicationId} className="absolute inset-0 size-full"
+      data-testid="feed-card-placeholder" />
   const picture = (
     <span className="group bg-muted relative block aspect-video overflow-hidden">
-      {card.cover
-        ? <LazyImage fileId={card.cover} variant="w640" alt=""
-          className="absolute inset-0 size-full transition-transform duration-300 group-hover:scale-105" />
-        : <CoverPlaceholder seed={card.publicationId} className="absolute inset-0 size-full"
-          data-testid="feed-card-placeholder" />}
+      {cover}
       <span className="absolute inset-x-0 top-0 flex flex-col items-start gap-1 p-2">
         {card.rewardMethod !== 'PLATFORM' && (
           <span className="bg-background/90 text-foreground inline-flex items-center gap-1 px-1.5 py-0.5 text-[11px] font-medium"
@@ -101,8 +102,12 @@ export function FeedCardView({ card, href, playing = false, note, video, onOpen,
     <li className="flex flex-col" data-testid="feed-card" data-publication={card.publicationId}
       data-video={plays || undefined} data-playing={(plays && playing) || undefined}>
       {plays && playing
-        ? video || <VideoPlayer player={card.video!} autoplay title={t('feed.videoTitle', { name: card.name })}
-          className="bg-muted aspect-video w-full overflow-hidden" />
+        // The cover stays under the player until the player has its first frame (the stage shows it then).
+        ? <span className="bg-muted relative block aspect-video w-full overflow-hidden" data-testid="feed-card-playing">
+          <span className="absolute inset-0 block" aria-hidden>{cover}</span>
+          {video || <VideoPlayer player={card.video!} autoplay title={t('feed.videoTitle', { name: card.name })}
+            className="bg-muted aspect-video w-full overflow-hidden" />}
+        </span>
         : href
           ? <Link to={href} aria-label={card.name} data-testid="feed-card-picture" onNavigate={onOpen}>{picture}</Link>
           : picture}
