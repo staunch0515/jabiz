@@ -41,9 +41,11 @@ describe('PublicationContent', () => {
   it('without tabs is one column: the parts folded or open, in the order they always had', () => {
     render(<PublicationContent publication={VIEW} tiers={[]} />)
     expect(screen.queryByTestId('detail-tabs')).toBeNull()
-    for (const id of ['materials', 'detail-intro', 'detail-reward', 'detail-stats', 'detail-sponsor-intro']) {
+    for (const id of ['materials', 'detail-intro', 'detail-reward', 'detail-stats']) {
       expect(screen.getByTestId(id)).toBeInTheDocument()
     }
+    // The sponsor's introduction is on their own page (the host's link to it), not repeated here.
+    expect(screen.queryByTestId('detail-sponsor-intro')).toBeNull()
     expect(screen.getByTestId('detail-reward').tagName).toBe('DETAILS')
   })
 
@@ -66,7 +68,7 @@ describe('PublicationContent', () => {
 
     await userEvent.click(screen.getByTestId('page-tab-materials'))
     expect(screen.getByTestId('material-title')).toHaveTextContent('Bean guide')
-    expect(screen.getByTestId('detail-sponsor-intro')).toHaveTextContent('We roast coffee.')
+    expect(screen.queryByTestId('detail-sponsor-intro')).toBeNull()
 
     await userEvent.click(screen.getByTestId('page-tab-rules'))
     expect(screen.getByTestId('detail-rules')).toHaveTextContent('Time limit')

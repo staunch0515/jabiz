@@ -247,7 +247,7 @@ describe('the wallet', () => {
       expect(window.location.pathname).toBe(`/wallet/${part}`)
       expect(await screen.findByTestId(testId)).toBeInTheDocument()
       expect(screen.getByTestId('bottom-bar-me')).toHaveAttribute('aria-current', 'page')
-      await user.click(screen.getByTestId('wallet-back'))
+      await user.click(screen.getByTestId('header-back'))
       expect(await screen.findByTestId('wallet-summary')).toBeInTheDocument()
     }
   })

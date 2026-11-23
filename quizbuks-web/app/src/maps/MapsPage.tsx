@@ -1,7 +1,6 @@
 import { i18n } from '@jabiz/client'
 import { Badge, Button, PageState } from '@jabiz/ui'
 import { useQuery } from '@tanstack/react-query'
-import { ArrowLeft } from 'lucide-react'
 import { useState, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 import { APP } from '../messages'
@@ -13,7 +12,7 @@ import { readMap, readMyMaps, readStartable, type MapSummary } from '../qb/tree/
 import { KnowledgeMap, type Startable } from '../qb/tree/KnowledgeMap'
 import { statesOf } from '../qb/tree/states'
 import { appPublicationPath } from '../qb/page'
-import { mapPath, MAPS_PATH } from './paths'
+import { mapPath } from './paths'
 import { AreaHeader } from '../frame/AreaHeader'
 import '../frame/messages'
 
@@ -73,10 +72,6 @@ export function MapPage({ treeId, country }: { treeId: string; country: string |
   const { t: tQb } = useTranslation(QB)
   return (
     <section className="flex flex-col gap-4" data-testid="map-page">
-      <Link to={MAPS_PATH} className="text-primary inline-flex w-fit items-center gap-1 text-sm underline"
-        data-testid="map-back">
-        <ArrowLeft aria-hidden className="size-4" />{t('maps.back')}
-      </Link>
       <PersonalMap treeId={treeId} country={country}
         missing={<PageState kind="notFound" titleAs="h1" description={t('maps.notFound')} />}
         failed={<PageState kind="error" description={tQb('failed')} />} />

@@ -51,7 +51,7 @@ for (const appearance of ['light', 'dark'] as const) {
     await expect(entry.getByTestId('ledger-amount')).toHaveText(`+${kudos.toLocaleString('en-US')} Kudos`)
     await expect(page.getByTestId('ledger')).not.toContainText('JPY')
     await expectAccessible(page, at('app transactions'))
-    await page.getByTestId('wallet-back').click()
+    await page.getByTestId('header-back').click()
 
     await page.getByTestId('wallet-payout').click()
     await expect(page).toHaveURL(/\/wallet\/payout$/)
@@ -70,7 +70,7 @@ for (const appearance of ['light', 'dark'] as const) {
     await expectAccessible(page, at('app payout enabled'))
     expect((await rows(request, me.token, MY_PAYOUT_ACCOUNT, []))[0]?.attributes.status).toBe('ENABLED')
 
-    await page.getByTestId('payout-back').click()
+    await page.getByTestId('header-back').click()
     await expect(page.getByTestId('wallet-payout')).toHaveAttribute('data-status', 'ENABLED')
   })
 }

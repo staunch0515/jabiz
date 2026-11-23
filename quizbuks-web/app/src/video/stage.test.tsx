@@ -19,52 +19,53 @@ function Card({ player, cover = false, playing = true }: { player: string; cover
   )
 }
 
+const HIDDEN = 'polygon(125% 0%, 125% 0%, 125% 100%, 100% 100%)'
+const SHOWN = 'polygon(0% 0%, 125% 0%, 125% 100%, -25% 100%)'
+
 describe('the stage shows a player only once it has its first frame', () => {
-  it('slides a video file in beside its cover once its first frame is ready, as one strip', async () => {
+  it('sweeps a video file in over its cover along a slanted edge once its first frame is ready', async () => {
     render(<Card player={FILE} cover />)
     const stage = await screen.findByTestId('video-stage')
     const video = screen.getByTestId('video-stage-file')
-    const strip = screen.getByTestId('video-stage-strip')
-    // Until the frame is there the cover fills the place; the player waits to its right, clipped off the place.
+    const content = screen.getByTestId('video-stage-content')
+    // Until the frame is there the cover fills the place; the player lies over it, cut off past its right side.
     expect(stage).toHaveStyle({ overflow: 'hidden' })
     expect(screen.getByTestId('video-stage-cover')).toContainElement(screen.getByTestId('stage-cover'))
-    // The two halves lie side by side in a row (not one above the other), so the player is beside the cover.
-    expect(strip.style.display).toBe('flex')
-    expect(strip).toContainElement(screen.getByTestId('video-stage-content'))
-    expect(strip.style.transform).toBe('translateX(0)')
+    expect(content).toContainElement(video)
+    expect(content.style.clipPath).toBe(HIDDEN)
     fireEvent(video, new Event('loadeddata'))
-    // Both move together: the cover slides out to the left as the player comes in from the right.
-    expect(strip.style.transform).toBe('translateX(-50%)')
+    // The slanted edge sweeps across: the player over the whole place, the cover still under it.
+    expect(content.style.clipPath).toBe(SHOWN)
+    expect(screen.getByTestId('video-stage-cover')).toBeInTheDocument()
   })
 
-  it('slides a YouTube player in beside its cover once it plays', async () => {
+  it('sweeps a YouTube player in over its cover once it plays', async () => {
     render(<Card player={YOUTUBE} cover />)
     const frame = await screen.findByTitle('Clip') as HTMLIFrameElement
-    const strip = screen.getByTestId('video-stage-strip')
-    expect(strip.style.transform).toBe('translateX(0)')
+    const content = screen.getByTestId('video-stage-content')
+    expect(content.style.clipPath).toBe(HIDDEN)
     fireEvent(window, new MessageEvent('message', { source: frame.contentWindow,
       data: JSON.stringify({ event: 'infoDelivery', info: { playerState: 1 } }) }))
-    expect(strip.style.transform).toBe('translateX(-50%)')
+    expect(content.style.clipPath).toBe(SHOWN)
   })
 
-  it('slides the cover back over the player when its card stops playing, and releases the player only after', async () => {
+  it('sweeps the player back off its cover when its card stops playing, and releases the player only after', async () => {
     const { rerender } = render(<Card player={FILE} cover />)
     fireEvent(await screen.findByTestId('video-stage-file'), new Event('loadeddata'))
-    const strip = screen.getByTestId('video-stage-strip')
-    expect(strip.style.transform).toBe('translateX(-50%)')
+    const content = screen.getByTestId('video-stage-content')
+    expect(content.style.clipPath).toBe(SHOWN)
     rerender(<Card player={FILE} cover playing={false} />)
-    // The cover comes back in place (its copy in the stage, already painted) while the player is still there to slide out.
+    // The cover stays in place (its copy in the stage, already painted) while the player sweeps off it.
     expect(screen.getByTestId('video-stage-cover')).toContainElement(screen.getByTestId('stage-cover'))
     expect(screen.getByTestId('video-stage')).toBeInTheDocument()
-    expect(strip.style.transform).toBe('translateX(0)')
+    expect(content.style.clipPath).toBe(HIDDEN)
     await waitFor(() => expect(screen.queryByTestId('video-stage')).toBeNull())
   })
 
-  it('shows a player on a place without a cover at once (the start page), with no cover to move', async () => {
+  it('shows a player on a place without a cover at once (the start page), with nothing cut off it', async () => {
     render(<Card player={FILE} />)
     await screen.findByTestId('video-stage-file')
-    const content = screen.getByTestId('video-stage-content')
-    expect(content.style.opacity).toBe('')
-    expect(screen.getByTestId('video-stage-strip').style.transform).toBe('translateX(-50%)')
+    expect(screen.getByTestId('video-stage-content').style.clipPath).toBe('')
+    expect(screen.queryByTestId('video-stage-cover')).toBeNull()
   })
 })

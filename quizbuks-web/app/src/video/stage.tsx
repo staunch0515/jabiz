@@ -38,7 +38,7 @@ interface Slot {
   publicationId: string | null
   /** The card's tap: the start page, the sound on. */
   onOpen?: () => void
-  /** The cover the player comes in beside: the two move as one strip (`VideoStage`). */
+  /** The cover the player comes in over, along a slanted edge (`VideoStage`). */
   cover?: ReactNode
 }
 
@@ -52,8 +52,8 @@ interface StageState {
   /** Whether the player shown has its first frame: until it has, the stage is transparent (see `framedNow`). */
   framed: boolean
   /**
-   * A card that stopped playing: its cover is kept on the stage while the player slides back under it, so the cover
-   * is already painted when the card's own picture takes over (the player is released once the slide is done).
+   * A card that stopped playing: its cover is kept on the stage while the player sweeps back off it, so the cover
+   * is already painted when the card's own picture takes over (the player is released once the sweep is done).
    */
   returning: { cover: ReactNode } | null
 }
@@ -90,16 +90,19 @@ function framedNow() {
   if (state.player && !state.framed) set({ framed: true })
 }
 
-/** How long a switch between a cover and its player takes (the cover slides out, the player slides in). */
-export const SWITCH_MS = 400
+/** How long a switch between a cover and its player takes (a slanted edge sweeps across the place). */
+export const SWITCH_MS = 450
 
 /**
- * A part's place at an offset, moved within the switch (YouTube's: the cover slides out to the left, the player comes in
- * from the right). Moved by `transform`, so nothing reloads; a viewer who asked for less motion sees it at once.
+ * The player over its cover, cut along a slanted edge: hidden, the edge lies past the place's right side; shown, past
+ * its left. The edge sweeps across between them, so the player takes the cover's place along one diagonal line and
+ * the cover stays painted wherever the player is not yet (nothing shows between them). Moved by `clip-path`, so
+ * nothing reloads; a viewer who asked for less motion sees it at once.
  */
-export function sideways(offset: string): CSSProperties {
-  return { transform: `translateX(${offset})`,
-    transition: prefersStillVideo() ? undefined : `transform ${SWITCH_MS}ms ease-out` }
+export function diagonal(shown: boolean): CSSProperties {
+  return { clipPath: shown ? 'polygon(0% 0%, 125% 0%, 125% 100%, -25% 100%)'
+    : 'polygon(125% 0%, 125% 0%, 125% 100%, 100% 100%)',
+  transition: prefersStillVideo() ? undefined : `clip-path ${SWITCH_MS}ms cubic-bezier(0.4, 0, 0.2, 1)` }
 }
 
 /** A new player is loaded: its first frame is awaited (see `framedNow`), for a while at most. */
@@ -387,8 +390,8 @@ function leave(slot: Slot) {
   // waits longer: the start page it opens shows its slot only once its data has come.
   const wait = Math.max(0, handoffUntil - Date.now())
   handoffUntil = 0
-  // A framed card's player that is not handed on slides back under its cover, as it came: the cover is in place within
-  // the switch, and the player is released when the slide is done. Not one that never showed its frame (a failed file),
+  // A framed card's player that is not handed on sweeps back off its cover, as it came: the cover is in place within
+  // the switch, and the player is released when the sweep is done. Not one that never showed its frame (a failed file),
   // nor a viewer who asked for less motion: those go at once.
   const back = wait === 0 && !!slot.cover && state.framed && !prefersStillVideo()
   set({ slot: null, returning: back ? { cover: slot.cover } : null })
@@ -433,7 +436,7 @@ export function VideoSlot({ id, player, title, mode, publicationId = null, activ
   publicationId?: string | null
   active?: boolean
   onOpen?: () => void
-  /** The cover the player comes in beside (a card's): read as the slot is claimed, not a dependency. */
+  /** The cover the player comes in over (a card's): read as the slot is claimed, not a dependency. */
   cover?: ReactNode
   className?: string
 }) {
@@ -522,10 +525,10 @@ export function VideoStage() {
   const clip = rect?.clip
   const hidden = !!clip && !!rect && rect.height > 0 && (clip.top + clip.bottom >= rect.height
     || clip.left + clip.right >= rect.width)
-  // A card that stopped playing keeps the stage over its place while the player slides back under the cover.
+  // A card that stopped playing keeps the stage over its place while the player sweeps back off the cover.
   const returning = stage.returning
   const visible = (!!slot || !!returning) && !!rect && !hidden
-  // The cover on the stage: the slot's, or the one a returning player slides back under.
+  // The cover on the stage: the slot's, or the one a returning player sweeps back off.
   const cover = slot?.cover ?? returning?.cover
   // The cover shows while there is none to show the player, and the player shows once framed (not while it returns).
   const coverShown = !!cover && !(stage.framed && !returning)
@@ -535,20 +538,17 @@ export function VideoStage() {
         height: rect?.height ?? 0, visibility: visible ? 'visible' : 'hidden',
         // Nothing of the stage is for touching once its card has let go of it.
         pointerEvents: slot ? undefined : 'none',
-        // The player comes in from the right and is clipped to the slot's place until its first frame (`framedNow`).
+        // The player is kept to the slot's place.
         overflow: 'hidden',
         // In full screen the player fills the screen: nothing of the home's place is cut off it.
         clipPath: clip && !fullscreen ? `inset(${clip.top}px ${clip.right}px ${clip.bottom}px ${clip.left}px)` : undefined,
         // F-S10: above the vertical mode's screens (which lie over the home at z-index 50).
         zIndex: slot?.mode === 'short' ? 55 : 5 }}>
-      {/* A card's cover (its `cover`) and the player move as one strip: the cover slides out to the left while the
-          player comes in from the right, so nothing shows between them. Without a cover the player simply shows
-          (the start page: its player is not held back until a frame). */}
-      <div style={{ position: 'absolute', top: 0, left: 0, width: '200%', height: '100%', display: 'flex',
-        ...sideways(coverShown ? '0' : '-50%') }} data-testid="video-stage-strip">
-        <div className="relative h-full w-1/2 shrink-0" data-testid="video-stage-cover">{cover}</div>
-        <div className="relative h-full w-1/2 shrink-0" data-testid="video-stage-content"
-          >
+      {/* A card's cover lies still under the player; the player comes in over it along a slanted edge (`diagonal`), so
+          the cover shows wherever the player does not yet, and nothing shows between them. Without a cover the player
+          simply shows (the start page: its player is not held back until a frame). */}
+      {cover && <div className="absolute inset-0" data-testid="video-stage-cover">{cover}</div>}
+      <div className="absolute inset-0" data-testid="video-stage-content" style={cover ? diagonal(!coverShown) : undefined}>
       {videoKind(stage.player) === 'file' ? (
         // F-S15: a video file, started muted; its controls on the start page and in the vertical mode only.
         <video
@@ -595,7 +595,6 @@ export function VideoStage() {
         // Above the browser's own control bar, whose full-screen key `controlsList` takes away where it can.
         <FullscreenButton target={box} video={media} className="bottom-[4.25rem]" />
       )}
-        </div>
       </div>
       {/* On a card nothing in the player is for touching: the whole of it opens the start page (not moved, so a tap
           before the first frame opens it too). */}

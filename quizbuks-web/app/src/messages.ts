@@ -102,7 +102,7 @@ const en = {
       litOn: 'Lit on {{date}}',
     },
   },
-  nav: { label: 'App', home: 'Home', history: 'History', account: 'Account', back: 'Back' },
+  nav: { label: 'App', home: 'Home', history: 'History', account: 'Account', back: 'Back', backTo: 'Back to {{name}}' },
   menu: { open: 'Menu' },
   becomeSponsor: {
     title: 'Become a Sponsor',
@@ -246,7 +246,7 @@ const en = {
     resumeText: 'It takes new answers again within its time.',
     cancel: 'Cancel',
   },
-  sponsorVisit: { title: 'Visit {{sponsor}}', hint: 'Their story and all their products', products: 'See their products and story' },
+  sponsorVisit: { title: "Visit {{sponsor}}'s Sponsor page", hint: 'Their story and all their products', products: 'See their products and story' },
   intro: {
     skip: 'Skip',
     next: 'Next',
@@ -793,7 +793,7 @@ const zh: typeof en = {
       litOn: '点亮于 {{date}}',
     },
   },
-  nav: { label: 'App', home: '首页', history: '记录', account: '账户', back: '返回' },
+  nav: { label: 'App', home: '首页', history: '记录', account: '账户', back: '返回', backTo: '返回{{name}}' },
   menu: { open: '菜单' },
   becomeSponsor: {
     title: '成为发起方',
@@ -937,7 +937,7 @@ const zh: typeof en = {
     resumeText: '在发布的时间内重新接受新的答题。',
     cancel: '取消',
   },
-  sponsorVisit: { title: '访问 {{sponsor}} 的店铺主页', hint: '店铺介绍与全部商品', products: '看看这家店的商品与介绍' },
+  sponsorVisit: { title: '访问 {{sponsor}} 的发起方主页', hint: '发起方介绍与全部商品', products: '看看这个发起方的商品与介绍' },
   intro: {
     skip: '跳过',
     next: '下一步',
@@ -1484,7 +1484,7 @@ const ja: typeof en = {
       litOn: '{{date}} に点灯',
     },
   },
-  nav: { label: 'アプリ', home: 'ホーム', history: '履歴', account: 'アカウント', back: '戻る' },
+  nav: { label: 'アプリ', home: 'ホーム', history: '履歴', account: 'アカウント', back: '戻る', backTo: '{{name}}に戻る' },
   menu: { open: 'メニュー' },
   becomeSponsor: {
     title: '主催者になる',
@@ -1628,7 +1628,7 @@ const ja: typeof en = {
     resumeText: '公開期間内であれば、新しい回答を再び受け付けます。',
     cancel: 'キャンセル',
   },
-  sponsorVisit: { title: '{{sponsor}} のページへ', hint: 'お店の紹介とすべての商品', products: 'このお店の商品と紹介を見る' },
+  sponsorVisit: { title: '{{sponsor}} の主催者ページへ', hint: '主催者の紹介とすべての商品', products: 'この主催者の商品と紹介を見る' },
   intro: {
     skip: 'スキップ',
     next: '次へ',

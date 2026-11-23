@@ -8,6 +8,9 @@ import {
   Input,
   Label,
   PageState,
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
   Select,
   SelectContent,
   SelectItem,
@@ -18,7 +21,7 @@ import {
   cn,
 } from '@jabiz/ui'
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { CheckCheck, Search } from 'lucide-react'
+import { CalendarDays, CheckCheck, Search } from 'lucide-react'
 import { useEffect, useId, useState, type FormEvent } from 'react'
 import { useTranslation } from 'react-i18next'
 import { APP } from '../messages'
@@ -154,61 +157,86 @@ export function InboxPage() {
     event.preventDefault()
     setFilter((current) => ({ ...current, q: text.trim() || undefined }))
   }
+  const dated = !!(filter.from || filter.to)
   const filtered = !!(filter.q || filter.category || filter.unread || filter.from || filter.to)
   return (
     <section className="flex flex-col gap-4" aria-labelledby="inbox-title" data-testid="inbox">
       {/* Q82: the conversations with sponsors are the other tab (F-F4). */}
       <AreaHeader area="messages" tab="inbox" id="inbox-title" title={t('frame.areas.messages')} />
-      <Button variant="outline" size="sm" className="self-end" disabled={all.isPending} onClick={() => all.mutate()}
-        data-testid="inbox-read-all">
-        <CheckCheck aria-hidden />
-        {t('inbox.readAll')}
-      </Button>
-      <p role="status" className="text-muted-foreground text-sm empty:hidden" data-testid="inbox-read-all-done">
-        {done ? t('inbox.readAllDone') : ''}
-      </p>
-      {all.isError && <p className="text-destructive text-sm" role="alert">{problemText(all.error)}</p>}
-      <form role="search" onSubmit={search} className="flex gap-2">
-        <Label htmlFor={`${id}-q`} className="sr-only">{t('inbox.search')}</Label>
-        <Input id={`${id}-q`} type="search" value={text} maxLength={100} placeholder={t('inbox.search')}
-          data-testid="inbox-search" onChange={(event) => setText(event.target.value)} />
-        <Button type="submit" variant="outline" size="icon" aria-label={t('inbox.searchButton')}>
-          <Search aria-hidden />
-        </Button>
-      </form>
-      <div className="flex flex-wrap items-center gap-3">
-        <Label htmlFor={`${id}-category`} className="sr-only">{t('inbox.show')}</Label>
-        <Select value={filter.category ?? 'all'}
-          onValueChange={(value) => setFilter((current) => ({ ...current,
-            category: value === 'all' ? undefined : value as Category }))}>
-          <SelectTrigger id={`${id}-category`} size="sm" data-testid="inbox-category" aria-label={t('inbox.show')}>
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {(sponsor ? SPONSOR_CATEGORIES : CATEGORIES).map((category) => (
-              <SelectItem key={category} value={category}>{t(`inbox.categories.${category}`)}</SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+      {/* The tools in two rows: the search and "mark all as read"; the kind, unread only and the dates (in a window of
+          their own, opened when wanted). */}
+      <div className="flex flex-col gap-2" data-testid="inbox-tools">
         <div className="flex items-center gap-2">
-          <Checkbox id={`${id}-unread`} checked={!!filter.unread} data-testid="inbox-unread-only"
-            onCheckedChange={(on) => setFilter((current) => ({ ...current, unread: on === true || undefined }))} />
-          <Label htmlFor={`${id}-unread`}>{t('inbox.unreadOnly')}</Label>
+          <form role="search" onSubmit={search} className="relative flex min-w-0 flex-1">
+            <Label htmlFor={`${id}-q`} className="sr-only">{t('inbox.search')}</Label>
+            <Input id={`${id}-q`} type="search" value={text} maxLength={100} placeholder={t('inbox.search')}
+              className="pr-9" data-testid="inbox-search" onChange={(event) => setText(event.target.value)} />
+            <Button type="submit" variant="ghost" size="icon" aria-label={t('inbox.searchButton')}
+              className="absolute inset-y-0 right-0 h-full">
+              <Search aria-hidden />
+            </Button>
+          </form>
+          <Button variant="outline" className="shrink-0" disabled={all.isPending} onClick={() => all.mutate()}
+            title={t('inbox.readAll')} data-testid="inbox-read-all">
+            <CheckCheck aria-hidden />
+            <span className="sr-only sm:not-sr-only">{t('inbox.readAll')}</span>
+          </Button>
         </div>
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+          <Label htmlFor={`${id}-category`} className="sr-only">{t('inbox.show')}</Label>
+          <Select value={filter.category ?? 'all'}
+            onValueChange={(value) => setFilter((current) => ({ ...current,
+              category: value === 'all' ? undefined : value as Category }))}>
+            <SelectTrigger id={`${id}-category`} size="sm" data-testid="inbox-category" aria-label={t('inbox.show')}>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {(sponsor ? SPONSOR_CATEGORIES : CATEGORIES).map((category) => (
+                <SelectItem key={category} value={category}>{t(`inbox.categories.${category}`)}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <div className="flex items-center gap-2">
+            <Checkbox id={`${id}-unread`} checked={!!filter.unread} data-testid="inbox-unread-only"
+              onCheckedChange={(on) => setFilter((current) => ({ ...current, unread: on === true || undefined }))} />
+            <Label htmlFor={`${id}-unread`} className="font-normal">{t('inbox.unreadOnly')}</Label>
+          </div>
+          <Popover>
+            <PopoverTrigger asChild>
+              <Button variant={dated ? 'secondary' : 'outline'} size="sm" className="ml-auto max-w-full"
+                data-testid="inbox-dates" data-active={dated || undefined}>
+                <CalendarDays aria-hidden />
+                <span className="truncate">{dated
+                  ? t('inbox.dateRange', { from: filter.from ?? '…', to: filter.to ?? '…' })
+                  : t('inbox.dates')}</span>
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent align="end" className="flex w-auto flex-col gap-3" data-testid="inbox-dates-window">
+              <fieldset className="flex flex-col gap-3">
+                <legend className="mb-1 text-sm font-medium">{t('inbox.dates')}</legend>
+                <div className="grid grid-cols-[auto_1fr] items-center gap-x-3 gap-y-2">
+                  <Label htmlFor={`${id}-from`} className="text-xs">{t('inbox.from')}</Label>
+                  <Input id={`${id}-from`} type="date" className="w-40" value={filter.from ?? ''} data-testid="inbox-from"
+                    onChange={(event) => setFilter((current) => ({ ...current, from: event.target.value || undefined }))} />
+                  <Label htmlFor={`${id}-to`} className="text-xs">{t('inbox.to')}</Label>
+                  <Input id={`${id}-to`} type="date" className="w-40" value={filter.to ?? ''} data-testid="inbox-to"
+                    onChange={(event) => setFilter((current) => ({ ...current, to: event.target.value || undefined }))} />
+                </div>
+              </fieldset>
+              {dated && (
+                <Button variant="ghost" size="sm" className="self-end" data-testid="inbox-dates-clear"
+                  onClick={() => setFilter((current) => ({ ...current, from: undefined, to: undefined }))}>
+                  {t('inbox.clearDates')}
+                </Button>
+              )}
+            </PopoverContent>
+          </Popover>
+        </div>
+        <p role="status" className="text-muted-foreground text-sm empty:hidden" data-testid="inbox-read-all-done">
+          {done ? t('inbox.readAllDone') : ''}
+        </p>
+        {all.isError && <p className="text-destructive text-sm" role="alert">{problemText(all.error)}</p>}
       </div>
-      <fieldset className="flex flex-wrap items-end gap-3">
-        <legend className="mb-1 text-sm font-medium">{t('inbox.dates')}</legend>
-        <div className="flex flex-col gap-1">
-          <Label htmlFor={`${id}-from`} className="text-xs">{t('inbox.from')}</Label>
-          <Input id={`${id}-from`} type="date" className="w-40" value={filter.from ?? ''} data-testid="inbox-from"
-            onChange={(event) => setFilter((current) => ({ ...current, from: event.target.value || undefined }))} />
-        </div>
-        <div className="flex flex-col gap-1">
-          <Label htmlFor={`${id}-to`} className="text-xs">{t('inbox.to')}</Label>
-          <Input id={`${id}-to`} type="date" className="w-40" value={filter.to ?? ''} data-testid="inbox-to"
-            onChange={(event) => setFilter((current) => ({ ...current, to: event.target.value || undefined }))} />
-        </div>
-      </fieldset>
       {inbox.isPending ? (
         <PageState kind="loading" />
       ) : inbox.isError ? (

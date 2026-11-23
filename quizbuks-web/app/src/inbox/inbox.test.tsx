@@ -272,9 +272,16 @@ describe('the inbox', () => {
     await user.click(screen.getByTestId('inbox-category'))
     await user.click(await screen.findByRole('option', { name: 'Promotions' }))
     await waitFor(() => expect(queryBodies('qb.app.inbox').at(-1)).toMatchObject({ params: { category: 'PROMO' } }))
-    await user.type(screen.getByTestId('inbox-from'), '2026-10-01')
+    // The dates are in a window of their own, opened from the tools' second row.
+    expect(screen.queryByTestId('inbox-from')).toBeNull()
+    await user.click(screen.getByTestId('inbox-dates'))
+    await user.type(await screen.findByTestId('inbox-from'), '2026-10-01')
     await waitFor(() => expect(queryBodies('qb.app.inbox').at(-1)).toMatchObject({
       params: { from: dayStart('2026-10-01') } }))
+    expect(screen.getByTestId('inbox-dates')).toHaveTextContent('2026-10-01 – …')
+    await user.click(screen.getByTestId('inbox-dates-clear'))
+    await waitFor(() => expect(queryBodies('qb.app.inbox').at(-1)?.params).not.toHaveProperty('from'))
+    await user.keyboard('{Escape}')
 
     await user.click(screen.getByTestId('inbox-read-all'))
     await waitFor(() => expect(processCalls('QB_INBOX_READ_ALL')).toHaveLength(1))

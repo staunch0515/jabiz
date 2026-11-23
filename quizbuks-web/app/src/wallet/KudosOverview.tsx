@@ -1,7 +1,7 @@
 import { formatDateTime, i18n } from '@jabiz/client'
 import { Button, PageState, SegmentedControl, Spinner } from '@jabiz/ui'
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query'
-import { ArrowLeft, Banknote, ChevronRight, Coins, Gift, Ticket, type LucideIcon } from 'lucide-react'
+import { Banknote, ChevronRight, Coins, Gift, Ticket, type LucideIcon } from 'lucide-react'
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { APP } from '../messages'
@@ -11,7 +11,6 @@ import { QB } from '../qb/messages'
 import { readHistory, type RewardMethod } from '../qb/play'
 import { problemText } from '../qb/problems'
 import { Link } from '../qb/router'
-import { walletPath } from './api'
 import { kudosPath, PERIODS, readKudos, totalOf, type KudosRow, type KudosTotals, type Period } from './kudos'
 import './messages'
 
@@ -141,11 +140,6 @@ export function KudosMethodPage({ method }: { method: RewardMethod }) {
   return (
     <section className="flex flex-col gap-4" aria-labelledby="kudos-method-title" data-testid="kudos-method"
       data-method={method}>
-      <Link to={walletPath('rewards')} data-testid="kudos-back"
-        className="text-muted-foreground hover:text-foreground inline-flex w-fit items-center gap-1 text-sm">
-        <ArrowLeft aria-hidden className="size-4" />
-        {t('kudos.back')}
-      </Link>
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h1 id="kudos-method-title" className="flex items-center gap-2 text-xl font-semibold">
           <Icon aria-hidden className="text-primary size-5" />

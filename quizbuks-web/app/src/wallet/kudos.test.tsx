@@ -126,7 +126,7 @@ describe('the wallet\'s Kudos by method (Q58)', () => {
     expect(within(page).getByRole('radio', { name: 'This month' })).toHaveAttribute('aria-checked', 'true')
     expect(screen.getByTestId('bottom-bar-me')).toHaveAttribute('aria-current', 'page')
     await expectAccessible()
-    await userEvent.click(within(page).getByTestId('kudos-back'))
+    await userEvent.click(screen.getByTestId('header-back'))
     expect(window.location.pathname).toBe('/wallet/rewards')
   })
 })

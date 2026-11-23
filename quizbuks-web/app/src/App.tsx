@@ -90,6 +90,9 @@ import { PayoutPage } from './wallet/PayoutPage'
 import { WalletPage } from './wallet/WalletPage'
 import { MaintenanceRedirect } from './maintenance'
 import { MapPage, MapsPage } from './maps/MapsPage'
+import { upOf } from './frame/up'
+import './frame/messages'
+import { ACCOUNT_PATH } from './pages/accountPaths'
 import { mapOf, MAPS_PATH } from './maps/paths'
 
 /** Where a signed-in taker starts. */
@@ -207,6 +210,7 @@ function Header({ search = false, welcome = false }: { search?: boolean; welcome
   const signOut = useSignOut()
   const { path, search: query } = useLocation()
   const [searching, setSearching] = useState(false)
+  const up = upOf(path)
   if (searching) {
     return (
       <header className="bg-background sticky top-0 z-10 border-b">
@@ -217,11 +221,18 @@ function Header({ search = false, welcome = false }: { search?: boolean; welcome
   return (
     <header className="bg-background sticky top-0 z-10 border-b">
       <div className="mx-auto flex max-w-md items-center gap-1 px-4 py-2">
-        {/* Q64: a page opened from another (a quiz's start page, a result) goes back from here. */}
-        {backable(path) && (
+        {/* Q64: a page opened from another (a quiz's start page, a result) goes back from here; a page under "Me" goes
+            up to the page above it (`upOf`): one back button, always in this place. */}
+        {backable(path) ? (
           <Button variant="ghost" size="icon-sm" className="-ml-2" aria-label={tApp('nav.back')} data-testid="header-back"
             onClick={goBack}>
             <ArrowLeft aria-hidden />
+          </Button>
+        ) : up && (
+          <Button asChild variant="ghost" size="icon-sm" className="-ml-2">
+            <Link to={up.path} aria-label={tApp('nav.backTo', { name: tApp(up.name) })} data-testid="header-back">
+              <ArrowLeft aria-hidden />
+            </Link>
           </Button>
         )}
         <Wordmark name={t('brand')} compact className="text-primary mr-auto" />
@@ -369,9 +380,21 @@ function PublicPage({ path, signedIn, sponsorSite = false, children }: { path: s
       {!sponsorSite && (
         <header className="bg-background sticky top-0 z-10 border-b" data-testid="public-header">
           <div className="mx-auto flex max-w-md items-center gap-2 px-4 py-2">
+            {/* Signed in, these pages are under "Me" (its settings): the same back button as the app's pages there
+                (`upOf`), in the same place. Signed out, the way to signing in. */}
+            {signedIn && (
+              <Button asChild variant="ghost" size="icon-sm" className="-ml-2">
+                <Link to={ACCOUNT_PATH} aria-label={tApp('nav.backTo', { name: tApp('frame.areas.me') })}
+                  data-testid="public-back">
+                  <ArrowLeft aria-hidden />
+                </Link>
+              </Button>
+            )}
             <Wordmark name={t('brand')} compact className="text-primary mr-auto" />
             <ThemeToggle />
-            <Link to={back} className="text-primary text-sm underline" data-testid="public-back">{backLabel}</Link>
+            {!signedIn && (
+              <Link to={back} className="text-primary text-sm underline" data-testid="public-back">{backLabel}</Link>
+            )}
           </div>
         </header>
       )}

@@ -1,7 +1,6 @@
 import type { IdentityLinked } from '@jabiz/client'
 import { AccountDeletion, PageState, PushPreferences } from '@jabiz/ui'
 import { useQuery } from '@tanstack/react-query'
-import { ArrowLeft } from 'lucide-react'
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { AppearanceChoice } from '../frame/AppearanceChoice'
@@ -15,7 +14,7 @@ import { readMyProfile } from '../qb/api'
 import { LanguageSelect } from '../qb/LanguageSelect'
 import { QB } from '../qb/messages'
 import { SoundSwitch } from '../qb/SoundSettings'
-import { Link, navigate, Redirect } from '../qb/router'
+import { navigate, Redirect } from '../qb/router'
 import { LikedTopics } from './LikedTopics'
 import { BlockList } from '../blocks/BlockList'
 import { ProfileDetails } from './ProfileDetails'
@@ -98,42 +97,24 @@ function partTitle(part: AccountPart, tApp: T): string {
   }
 }
 
-/** The way back to "Me" above a part's title. */
-function BackToMe() {
-  const { t } = useTranslation(APP)
-  return (
-    <Link to={ACCOUNT_PATH} data-testid="account-back"
-      className="text-muted-foreground hover:text-foreground inline-flex w-fit items-center gap-1 text-sm">
-      <ArrowLeft aria-hidden className="size-4" />
-      {t('account.back')}
-    </Link>
-  )
-}
-
 /** Deleting the account: what is erased and what stays, then the platform's block (the request, its notices). */
 function DeletionPage() {
   const { t: tApp } = useTranslation(APP)
   return (
     <section className="flex flex-col gap-6" aria-labelledby="account-part-title" data-testid="account-delete-page">
-      <div className="flex flex-col gap-2">
-        <BackToMe />
-        <AreaHeader area="me" id="account-part-title" title={tApp('account.deletion.title')} />
-      </div>
+      <AreaHeader area="me" id="account-part-title" title={tApp('account.deletion.title')} />
       <p className="text-muted-foreground text-sm">{tApp('account.deletion.hint')}</p>
       <AccountDeletion />
     </section>
   )
 }
 
-/** A part of the account on its own page, with the way back to the menu. */
+/** A part of the account on its own page (the way back to the menu is the header's, `frame/up.ts`). */
 function AccountPartPage({ part }: { part: AccountPart }) {
   const { t: tApp } = useTranslation(APP)
   return (
     <section className="flex flex-col gap-6" aria-labelledby="account-part-title" data-testid={`account-${part}-page`}>
-      <div className="flex flex-col gap-2">
-        <BackToMe />
-        <AreaHeader area="me" id="account-part-title" title={partTitle(part, tApp)} />
-      </div>
+      <AreaHeader area="me" id="account-part-title" title={partTitle(part, tApp)} />
       <PartContent part={part} />
     </section>
   )
