@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore, type CSSProperties,
   type ReactNode } from 'react'
+import { cn } from '@jabiz/ui'
 import { createPortal } from 'react-dom'
 import { prefersStillVideo, VIMEO_PLAYER, videoKind } from '../qb/video'
 import { markVideoFailed } from '../qb/videoFailures'
@@ -38,7 +39,7 @@ interface Slot {
   publicationId: string | null
   /** The card's tap: the start page, the sound on. */
   onOpen?: () => void
-  /** The cover the player comes in over, along a slanted edge (`VideoStage`). */
+  /** The cover the player fades in over (`VideoStage`, `crossFade`). */
   cover?: ReactNode
 }
 
@@ -52,8 +53,8 @@ interface StageState {
   /** Whether the player shown has its first frame: until it has, the stage is transparent (see `framedNow`). */
   framed: boolean
   /**
-   * A card that stopped playing: its cover is kept on the stage while the player sweeps back off it, so the cover
-   * is already painted when the card's own picture takes over (the player is released once the sweep is done).
+   * A card that stopped playing: its cover is kept on the stage while the player fades back to it, so the cover
+   * is already painted when the card's own picture takes over (the player is released once the fade is done).
    */
   returning: { cover: ReactNode } | null
 }
@@ -90,19 +91,25 @@ function framedNow() {
   if (state.player && !state.framed) set({ framed: true })
 }
 
-/** How long a switch between a cover and its player takes (a slanted edge sweeps across the place). */
+/** How long a switch between a cover and its player takes (one fades out while the other fades in). */
 export const SWITCH_MS = 450
 
 /**
- * The player over its cover, cut along a slanted edge: hidden, the edge lies past the place's right side; shown, past
- * its left. The edge sweeps across between them, so the player takes the cover's place along one diagonal line and
- * the cover stays painted wherever the player is not yet (nothing shows between them). Moved by `clip-path`, so
- * nothing reloads; a viewer who asked for less motion sees it at once.
+ * A frame's player (YouTube, Vimeo) says it plays a moment before its first frame is painted, black until then; its
+ * fade in starts after this beat, so the black is never what fades in. A file's `<video>` has its frame when it says so.
  */
-export function diagonal(shown: boolean): CSSProperties {
-  return { clipPath: shown ? 'polygon(0% 0%, 125% 0%, 125% 100%, -25% 100%)'
-    : 'polygon(125% 0%, 125% 0%, 125% 100%, 100% 100%)',
-  transition: prefersStillVideo() ? undefined : `clip-path ${SWITCH_MS}ms cubic-bezier(0.4, 0, 0.2, 1)` }
+export const FRAME_PAINT_MS = 250
+
+/**
+ * The cover and its player cross-fade: the cover fades out while the player fades in over it (and back again), so
+ * neither ever shows an empty or black place between them. Faded by `opacity`, so nothing reloads; a viewer who asked
+ * for less motion sees it at once. `settle` holds a fade in back by `FRAME_PAINT_MS` (a frame's player).
+ */
+export function crossFade(playerShown: boolean, settle: boolean): { player: CSSProperties; cover: CSSProperties } {
+  const still = prefersStillVideo()
+  const delay = playerShown && settle ? FRAME_PAINT_MS : 0
+  const transition = still ? undefined : `opacity ${SWITCH_MS}ms ease-in-out ${delay}ms`
+  return { player: { opacity: playerShown ? 1 : 0, transition }, cover: { opacity: playerShown ? 0 : 1, transition } }
 }
 
 /** A new player is loaded: its first frame is awaited (see `framedNow`), for a while at most. */
@@ -390,8 +397,8 @@ function leave(slot: Slot) {
   // waits longer: the start page it opens shows its slot only once its data has come.
   const wait = Math.max(0, handoffUntil - Date.now())
   handoffUntil = 0
-  // A framed card's player that is not handed on sweeps back off its cover, as it came: the cover is in place within
-  // the switch, and the player is released when the sweep is done. Not one that never showed its frame (a failed file),
+  // A framed card's player that is not handed on fades back to its cover, as it came: the cover is in place within
+  // the switch, and the player is released when the fade is done. Not one that never showed its frame (a failed file),
   // nor a viewer who asked for less motion: those go at once.
   const back = wait === 0 && !!slot.cover && state.framed && !prefersStillVideo()
   set({ slot: null, returning: back ? { cover: slot.cover } : null })
@@ -525,13 +532,14 @@ export function VideoStage() {
   const clip = rect?.clip
   const hidden = !!clip && !!rect && rect.height > 0 && (clip.top + clip.bottom >= rect.height
     || clip.left + clip.right >= rect.width)
-  // A card that stopped playing keeps the stage over its place while the player sweeps back off the cover.
+  // A card that stopped playing keeps the stage over its place while the player fades back to the cover.
   const returning = stage.returning
   const visible = (!!slot || !!returning) && !!rect && !hidden
-  // The cover on the stage: the slot's, or the one a returning player sweeps back off.
+  // The cover on the stage: the slot's, or the one a returning player fades back to.
   const cover = slot?.cover ?? returning?.cover
   // The cover shows while there is none to show the player, and the player shows once framed (not while it returns).
   const coverShown = !!cover && !(stage.framed && !returning)
+  const fade = cover ? crossFade(!coverShown, videoKind(stage.player) !== 'file') : null
   return createPortal(
     <div ref={box} data-testid="video-stage" data-mode={slot?.mode}
       style={{ position: 'absolute', top: rect?.top ?? 0, left: rect?.left ?? 0, width: rect?.width ?? 0,
@@ -544,11 +552,12 @@ export function VideoStage() {
         clipPath: clip && !fullscreen ? `inset(${clip.top}px ${clip.right}px ${clip.bottom}px ${clip.left}px)` : undefined,
         // F-S10: above the vertical mode's screens (which lie over the home at z-index 50).
         zIndex: slot?.mode === 'short' ? 55 : 5 }}>
-      {/* A card's cover lies still under the player; the player comes in over it along a slanted edge (`diagonal`), so
-          the cover shows wherever the player does not yet, and nothing shows between them. Without a cover the player
-          simply shows (the start page: its player is not held back until a frame). */}
-      {cover && <div className="absolute inset-0" data-testid="video-stage-cover">{cover}</div>}
-      <div className="absolute inset-0" data-testid="video-stage-content" style={cover ? diagonal(!coverShown) : undefined}>
+      {/* A card's cover and its player cross-fade (`crossFade`): the player fades in over the cover as the cover fades
+          out, once the player has its frame, and back when the card stops. Under the stage the card's own cover lies
+          still, so what shows through mid-fade is the cover too, never black. Without a cover the player simply shows
+          (the start page: its player is not held back until a frame). */}
+      {cover && <div className="absolute inset-0" data-testid="video-stage-cover" style={fade?.cover}>{cover}</div>}
+      <div className="absolute inset-0" data-testid="video-stage-content" style={fade?.player}>
       {videoKind(stage.player) === 'file' ? (
         // F-S15: a video file, started muted; its controls on the start page and in the vertical mode only.
         <video
@@ -557,7 +566,8 @@ export function VideoStage() {
           src={stage.player}
           title={slot?.title ?? ''}
           aria-label={slot?.title ?? ''}
-          className="size-full bg-black object-contain"
+          // On a card nothing black lies behind the picture (it would darken the cover mid-fade).
+          className={cn('size-full object-contain', slot?.mode !== 'card' && !returning && 'bg-black')}
           data-testid="video-stage-file"
           autoPlay
           muted
