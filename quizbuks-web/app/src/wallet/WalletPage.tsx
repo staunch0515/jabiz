@@ -3,14 +3,14 @@ import { AreaHeader } from '../frame/AreaHeader'
 import '../frame/messages'
 import { Badge, Button, Input, Label, PageState, SegmentedControl, Spinner } from '@jabiz/ui'
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query'
-import { ArrowLeft, Banknote, CreditCard, Gift, Hourglass, ReceiptText, Search, type LucideIcon } from 'lucide-react'
+import { Banknote, CreditCard, Gift, Hourglass, ReceiptText, Search, type LucideIcon } from 'lucide-react'
 import { useId, useState, type FormEvent } from 'react'
 import { useTranslation } from 'react-i18next'
 import { APP } from '../messages'
 import { formatKudos } from '../qb/kudos'
 import { QB } from '../qb/messages'
 import { problemText } from '../qb/problems'
-import { Link, Redirect } from '../qb/router'
+import { Redirect } from '../qb/router'
 import { MenuItem, MenuList } from '../pages/Menu'
 import { KudosOverview } from './KudosOverview'
 import {
@@ -197,14 +197,7 @@ function WalletPartPage({ part }: { part: WalletPart }) {
   const { t } = useTranslation(APP)
   return (
     <section className="flex flex-col gap-4" aria-labelledby="wallet-part-title" data-testid={`wallet-${part}-page`}>
-      <div className="flex flex-col gap-2">
-        <Link to={WALLET_PATH} data-testid="wallet-back"
-          className="text-muted-foreground hover:text-foreground inline-flex w-fit items-center gap-1 text-sm">
-          <ArrowLeft aria-hidden className="size-4" />
-          {t('wallet.back')}
-        </Link>
-        <AreaHeader area="me" id="wallet-part-title" title={partTitle(part, t)} />
-      </div>
+      <AreaHeader area="me" id="wallet-part-title" title={partTitle(part, t)} />
       {part === 'balance' ? <Balance /> : part === 'rewards' ? <KudosOverview /> : <Ledger />}
     </section>
   )

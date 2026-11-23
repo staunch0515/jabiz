@@ -1,7 +1,7 @@
 import { formatDateTime } from '@jabiz/client'
 import { MarkdownView, PageTabs, Table, TableBody, TableCell, TableHead, TableHeader, TableRow, cn,
   type PageTab, type PageTabLinkProps } from '@jabiz/ui'
-import { BookOpen, CalendarClock, ChevronDown, ListChecks, MailCheck, Network, Store, Target, Ticket, Timer, TrendingUp, Trophy, type LucideIcon } from 'lucide-react'
+import { BookOpen, CalendarClock, ChevronDown, ListChecks, MailCheck, Network, Target, Ticket, Timer, TrendingUp, Trophy, type LucideIcon } from 'lucide-react'
 import { useId, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 import { FileImage } from '../FileImage'
@@ -151,7 +151,7 @@ function TabbedBody({ tabs, p, draft, lead, rewardBody, statsBody, duration, nod
   const materials = p.materials.filter((m) => m.no !== lead)
   const survey = p.kind === 'SURVEY'
   const shown: ContentTab[] = CONTENT_TABS.filter((tab) =>
-    tab === 'reward' ? !draft : tab === 'materials' ? materials.length > 0 || !!p.sponsorIntro || !!extra.materials : true)
+    tab === 'reward' ? !draft : tab === 'materials' ? materials.length > 0 || !!extra.materials : true)
   const current = shown.includes(tabs.current) ? tabs.current : shown[0]
   const rules: [string, ReactNode][] = [
     [survey ? t('detail.kind') : t('detail.questions'), p.pickCount != null
@@ -192,18 +192,7 @@ function TabbedBody({ tabs, p, draft, lead, rewardBody, statsBody, duration, nod
             {rewardBody}
           </section>
         )}
-        {current === 'materials' && (
-          <>
-            <Materials materials={p.materials} exclude={lead} />
-            {p.sponsorIntro && (
-              <section aria-label={t('detail.aboutSponsor')} className="flex flex-col gap-1 text-sm"
-                data-testid="detail-sponsor-intro">
-                <h3 className="font-medium">{t('detail.aboutSponsor')}</h3>
-                <p className="whitespace-pre-line">{p.sponsorIntro}</p>
-              </section>
-            )}
-          </>
-        )}
+        {current === 'materials' && <Materials materials={p.materials} exclude={lead} />}
         {current === 'rules' && (
           <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-sm" data-testid="detail-rules">
             {rules.map(([label, value]) => (
@@ -415,11 +404,6 @@ export function PublicationContent({ publication: p, tiers, titleAs: Title = 'h1
         <span data-testid="detail-stats-line">{t('detail.statsLine', { recent: p.last24h, total: p.completions })}</span>}>
         {statsBody}
       </Disclosure>
-      {p.sponsorIntro && (
-        <Disclosure icon={Store} testId="detail-sponsor-intro" summary={t('detail.aboutSponsor')}>
-          <p className="text-sm whitespace-pre-line">{p.sponsorIntro}</p>
-        </Disclosure>
-      )}
       </>)}
     </>
   )

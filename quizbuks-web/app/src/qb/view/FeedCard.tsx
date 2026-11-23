@@ -10,17 +10,6 @@ import { LazyImage } from './LazyImage'
 import { QBVIEW } from './messages'
 import { VideoPlayer } from './VideoPlayer'
 import { useVideoFailed } from '../videoFailures'
-import { sideways, useStage } from '../../video/stage'
-
-/**
- * The cover of a playing card, under its player: it slides out to the left as the player comes in from the right, the
- * same move as the stage's cover (`video/stage.tsx`), so the two stay in place of each other and nothing shows through.
- */
-function PlayingCover({ children }: { children: ReactNode }) {
-  const { framed } = useStage()
-  return <span className="absolute inset-0 block" aria-hidden data-testid="feed-card-cover"
-    style={sideways(framed ? '-100%' : '0')}>{children}</span>
-}
 
 /** The icon of each way a reward is paid (Q34): on the cards, the quiz's page and the home's reward menu. */
 export const REWARD_METHOD_ICONS: Record<RewardMethod, LucideIcon> = {
@@ -114,9 +103,9 @@ export function FeedCardView({ card, href, playing = false, note, video, onOpen,
     <li className="flex flex-col" data-testid="feed-card" data-publication={card.publicationId}
       data-video={plays || undefined} data-playing={(plays && playing) || undefined}>
       {plays && playing
-        // The cover stays in view until the player has its first frame; then the two switch places (the stage).
+        // The cover stays still under the player, which comes in over it once it has its first frame (the stage).
         ? <span className="bg-muted relative block aspect-video w-full overflow-hidden" data-testid="feed-card-playing">
-          <PlayingCover>{cover}</PlayingCover>
+          <span className="absolute inset-0 block" aria-hidden data-testid="feed-card-cover">{cover}</span>
           {video ? video(cover) : <VideoPlayer player={card.video!} autoplay title={t('feed.videoTitle', { name: card.name })}
             className="bg-muted aspect-video w-full overflow-hidden" />}
         </span>

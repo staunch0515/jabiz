@@ -640,7 +640,7 @@ describe('a signed-in Taker', () => {
     expect(within(group).getByTestId('appearance-dark')).toHaveAttribute('aria-pressed', 'true')
     expect(within(group).getByTestId('appearance-light')).toHaveAttribute('aria-pressed', 'false')
     await expectAccessible()
-    await user.click(screen.getByTestId('account-back'))
+    await user.click(screen.getByTestId('header-back'))
     await user.click(await screen.findByTestId('sign-out'))
     await waitFor(() => expect(window.location.pathname).toBe('/login'))
   })
@@ -670,7 +670,10 @@ describe('a signed-in Taker', () => {
     expect(screen.getByTestId('account-email')).toHaveTextContent('mei@example.com')
     // The bottom menu still marks "Me".
     expect(screen.getByTestId('bottom-bar-me')).toHaveAttribute('aria-current', 'page')
-    await userEvent.click(screen.getByTestId('account-back'))
+    // The way back is the header's, the same on every page under "Me", and says where it goes.
+    expect(screen.getByTestId('header-back')).toHaveAccessibleName('Back to Me')
+    expect(screen.queryByTestId('account-back')).toBeNull()
+    await userEvent.click(screen.getByTestId('header-back'))
     expect(window.location.pathname).toBe('/account')
     expect(await screen.findByTestId('account-menu-profile')).toBeInTheDocument()
   })

@@ -46,8 +46,9 @@ export function RewardText({ card }: { card: FeedCard }) {
  */
 export function FeedCardView({ card, href, playing = false, note, video, onOpen, menu }: { card: FeedCard
   href: string | null; playing?: boolean; note?: ReactNode
-  /** Q65: the app's own place for the playing video (its one player); a plain player otherwise. */
-  video?: ReactNode
+  /** Q65: the app's own place for the playing video (its one player, given the cover it comes in beside); a plain
+      player otherwise. */
+  video?: (cover: ReactNode) => ReactNode
   onOpen?: () => void
   /** F-S8: the app's menu of the card (blocking), at the end of its line; none in a preview. */
   menu?: ReactNode }) {
@@ -56,13 +57,14 @@ export function FeedCardView({ card, href, playing = false, note, video, onOpen,
   const MethodIcon = REWARD_METHOD_ICONS[card.rewardMethod]
   // F-S15: a video file that failed to play: the cover, and a link to the file.
   const failed = useVideoFailed(card.video)
+  const cover = card.cover
+    ? <LazyImage fileId={card.cover} variant="w640" alt=""
+      className="absolute inset-0 size-full transition-transform duration-300 group-hover:scale-105" />
+    : <CoverPlaceholder seed={card.publicationId} className="absolute inset-0 size-full"
+      data-testid="feed-card-placeholder" />
   const picture = (
     <span className="group bg-muted relative block aspect-video overflow-hidden">
-      {card.cover
-        ? <LazyImage fileId={card.cover} variant="w640" alt=""
-          className="absolute inset-0 size-full transition-transform duration-300 group-hover:scale-105" />
-        : <CoverPlaceholder seed={card.publicationId} className="absolute inset-0 size-full"
-          data-testid="feed-card-placeholder" />}
+      {cover}
       <span className="absolute inset-x-0 top-0 flex flex-col items-start gap-1 p-2">
         {card.rewardMethod !== 'PLATFORM' && (
           <span className="bg-background/90 text-foreground inline-flex items-center gap-1 px-1.5 py-0.5 text-[11px] font-medium"
@@ -101,8 +103,12 @@ export function FeedCardView({ card, href, playing = false, note, video, onOpen,
     <li className="flex flex-col" data-testid="feed-card" data-publication={card.publicationId}
       data-video={plays || undefined} data-playing={(plays && playing) || undefined}>
       {plays && playing
-        ? video || <VideoPlayer player={card.video!} autoplay title={t('feed.videoTitle', { name: card.name })}
-          className="bg-muted aspect-video w-full overflow-hidden" />
+        // The cover stays still under the player, which comes in over it once it has its first frame (the stage).
+        ? <span className="bg-muted relative block aspect-video w-full overflow-hidden" data-testid="feed-card-playing">
+          <span className="absolute inset-0 block" aria-hidden data-testid="feed-card-cover">{cover}</span>
+          {video ? video(cover) : <VideoPlayer player={card.video!} autoplay title={t('feed.videoTitle', { name: card.name })}
+            className="bg-muted aspect-video w-full overflow-hidden" />}
+        </span>
         : href
           ? <Link to={href} aria-label={card.name} data-testid="feed-card-picture" onNavigate={onOpen}>{picture}</Link>
           : picture}
@@ -129,25 +135,10 @@ export function FeedCardView({ card, href, playing = false, note, video, onOpen,
             <RewardText card={card} />
             <span aria-hidden>·</span>
             <span data-testid="feed-card-completions">{t('feed.completions', { count: card.completions })}</span>
-            {/* Q75: the video is the one to watch before answering; in the facts, which stay while it plays (Q66). */}
-            {card.video && card.watchRequired && (
-              <>
-                <span aria-hidden>·</span>
-                <span data-testid="feed-card-watch">{t('feed.watchFirst')}</span>
-              </>
-            )}
             {note && (
               <>
                 <span aria-hidden>·</span>
                 {note}
-              </>
-            )}
-            {/* F-S15: a video file that does not play here: the file itself, in a new tab. */}
-            {failed && card.video && (
-              <>
-                <span aria-hidden>·</span>
-                <a href={card.video} target="_blank" rel="noopener noreferrer" data-testid="feed-card-open-video"
-                  className="underline underline-offset-2">{t('feed.openVideo')}</a>
               </>
             )}
           </span>

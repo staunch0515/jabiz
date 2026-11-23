@@ -165,6 +165,6 @@ describe('my knowledge maps (F-S3c)', () => {
     window.history.replaceState(null, '', '/maps/other')
     render(<App />)
     expect(await screen.findByText('This is not a map you can see.')).toBeInTheDocument()
-    expect(screen.getByTestId('map-back')).toHaveAttribute('href', expect.stringContaining('/maps'))
+    expect(screen.getByTestId('header-back')).toHaveAttribute('href', expect.stringContaining('/maps'))
   })
 })

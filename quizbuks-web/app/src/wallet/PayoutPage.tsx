@@ -1,12 +1,12 @@
 import { Alert, AlertDescription, Badge, Button, PageState } from '@jabiz/ui'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { ArrowLeft, ExternalLink, Loader2 } from 'lucide-react'
+import { ExternalLink, Loader2 } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { APP } from '../messages'
 import { noticeConsentProblem } from '../qb/ConsentGate'
 import { problemText } from '../qb/problems'
-import { Link, useLocation } from '../qb/router'
+import { useLocation } from '../qb/router'
 import {
   freshLink,
   onboardingReturn,
@@ -14,7 +14,6 @@ import {
   readPayoutAccount,
   readPayoutStatuses,
   startOnboarding,
-  WALLET_PATH,
   WALLET_QUERY,
   type PayoutAccount,
 } from './api'
@@ -130,15 +129,6 @@ export function PayoutPage() {
     }
   }
 
-  const backLink = (
-    <Button asChild variant="ghost" size="sm" className="w-fit">
-      <Link to={WALLET_PATH} data-testid="payout-back">
-        <ArrowLeft aria-hidden />
-        {t('payout.back')}
-      </Link>
-    </Button>
-  )
-
   if (account.isPending) return <PageState kind="loading" />
   const data = account.isSuccess ? account.data : null
   const status = data?.status ?? null
@@ -195,7 +185,6 @@ export function PayoutPage() {
 
   return (
     <section className="flex flex-col gap-4" aria-labelledby="payout-title" data-testid="payout">
-      {backLink}
       <AreaHeader area="me" id="payout-title" title={t('payout.title')} />
       <p className="text-muted-foreground text-sm">{t('payout.intro')}</p>
       {account.isError && (

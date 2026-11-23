@@ -726,9 +726,9 @@ describe('the video to watch (Q19, Q63)', () => {
     expect(screen.getByTestId('video-open')).toHaveAccessibleName('Video: Capitals week')
     expect(within(card).getByTestId('video-slot')).toHaveAttribute('data-mode', 'card')
     expect(card).toHaveAttribute('data-playing', 'true')
-    // The cover stays under the player until the player has its first frame; the player waits to the right of it.
+    // The cover stays under the player until the player has its first frame; the player is cut off it until then.
     expect(within(card).getByTestId('feed-card-playing')).toContainElement(within(card).getByTestId('feed-card-placeholder'))
-    expect(screen.getByTestId('video-stage-strip').style.transform).toBe('translateX(0)')
+    expect(screen.getByTestId('video-stage-content').style.clipPath).toContain('100% 100%)')
     // Q66: the reward is in the line of facts, the same whether the video plays or not.
     expect(within(card).getByTestId('feed-card-reward')).toHaveTextContent('Up to 100 Kudos')
     io.fire(card, false, MIDDLE)
@@ -1157,7 +1157,9 @@ describe('a publication\'s page', () => {
     expect(screen.getByTestId('detail-reward-line')).toHaveTextContent('Your reward: Kudos')
     expect(screen.getByTestId('detail-reward')).toHaveTextContent('Kudos paid by QuizBuks')
     await userEvent.click(screen.getByTestId('page-tab-materials'))
-    expect(screen.getByTestId('detail-sponsor-intro')).toHaveTextContent('A shop by the river.')
+    // The sponsor's introduction is on their own page, not on the start page.
+    expect(screen.queryByTestId('detail-sponsor-intro')).toBeNull()
+    expect(screen.queryByText('A shop by the river.')).toBeNull()
     await expectAccessible()
   })
 

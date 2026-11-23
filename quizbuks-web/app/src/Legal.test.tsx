@@ -319,6 +319,8 @@ describe('a signed-in Taker', () => {
     window.history.replaceState(null, '', '/help')
     window.dispatchEvent(new PopStateEvent('popstate'))
     expect(await screen.findByTestId('help-mail')).toHaveAttribute('href', 'mailto:help@quizbuks.example')
-    expect(screen.getByTestId('public-back')).toHaveAttribute('href', '/')
+    // Signed in, the help is under "Me": the back button goes up to it.
+    expect(screen.getByTestId('public-back')).toHaveAttribute('href', '/account')
+    expect(screen.getByTestId('public-back')).toHaveAccessibleName('Back to Me')
   })
 })

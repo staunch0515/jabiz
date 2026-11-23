@@ -9,13 +9,11 @@ import {
   RadioGroupItem,
 } from '@jabiz/ui'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { ArrowLeft } from 'lucide-react'
 import { useId, useState, type FormEvent } from 'react'
 import { useTranslation } from 'react-i18next'
 import { APP } from '../messages'
 import { formatKudos } from '../qb/kudos'
 import { problemText } from '../qb/problems'
-import { Link } from '../qb/router'
 import {
   ACCOUNT_TYPES,
   BANK_QUERY,
@@ -28,7 +26,6 @@ import {
   setPayoutMethod,
   transferable,
   usableFrom,
-  WALLET_PATH,
   WALLET_QUERY,
   type AccountType,
   type BankAccountForm,
@@ -50,18 +47,9 @@ const METHODS: PayoutMethod[] = ['STRIPE', 'BANK']
 export function BankPage() {
   const { t } = useTranslation(APP)
   const settings = useQuery({ queryKey: BANK_QUERY, queryFn: readBankSettings })
-  const back = (
-    <Button asChild variant="ghost" size="sm" className="w-fit">
-      <Link to={WALLET_PATH} data-testid="bank-back">
-        <ArrowLeft aria-hidden />
-        {t('bank.back')}
-      </Link>
-    </Button>
-  )
   if (settings.isPending) return <PageState kind="loading" />
   return (
     <section className="flex flex-col gap-4" aria-labelledby="bank-title" data-testid="bank">
-      {back}
       <AreaHeader area="me" id="bank-title" title={t('bank.title')} />
       {settings.isError && (
         <Alert variant="destructive"><AlertDescription>{problemText(settings.error)}</AlertDescription></Alert>
