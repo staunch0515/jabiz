@@ -41,6 +41,7 @@ import { WelcomePage } from './pages/WelcomePage'
 import { AboutPage } from './pages/AboutPage'
 import { IntroPage, introSeen, rememberSeen } from './pages/IntroPage'
 import { BrandMark, Wordmark } from './qb/Illustrations'
+import { StickyHead, SubHead, TakerAvatar, usePageHasOwnHead } from './frame/Header'
 import { inboxItemOf, INBOX_PATH } from './inbox/api'
 import { MY_SPONSOR_PATH, MY_SPONSOR_QUERY, readFigures, useMySponsor } from './mysponsor/api'
 import { MySponsorPage, SPONSOR_CONSOLE } from './mysponsor/MySponsorPage'
@@ -135,7 +136,7 @@ function HeaderSearch({ initial, onClose }: { initial: string; onClose: () => vo
     navigate(searchPath(text.trim()))
   }
   return (
-    <form role="search" onSubmit={submit} className="mx-auto flex max-w-md items-center gap-1 px-2 py-1.5"
+    <form role="search" onSubmit={submit} className="mx-auto flex w-full max-w-md items-center gap-1 px-2 py-1.5"
       data-testid="header-search">
       <Button type="button" variant="ghost" size="icon-sm" aria-label={t('feed.searchClose')} onClick={onClose}
         data-testid="search-close">
@@ -200,9 +201,11 @@ function SponsorEntry({ current }: { current: boolean }) {
 }
 
 /**
- * The app's header (Q62): the name, and at the right the home's filters and search and a Sponsor's own page. The menu
- * that was at its right end is gone (F-F4): scanning is in the bottom menu, the referrals, the appearance and signing
- * out are in "Me"; the welcome step, which has no menu, has its own way to sign out.
+ * The frame's head (Q62; Q113 §9.1, P4) for the pages that draw none of their own: the home's (the avatar, the mark in
+ * the middle, the filters, a Sponsor's own page and the search at the right), a quiz's start page and a result (the
+ * way back and the page's name), the welcome step (the mark, and signing out: it has no "Me"), and the other pages
+ * (the way back). A page with an `AreaHeader` draws its own, and this one stands back. The menu that was at its right
+ * end is gone (F-F4): scanning is in the bottom menu, the referrals, the appearance and signing out are in "Me".
  */
 function Header({ search = false, welcome = false }: { search?: boolean; welcome?: boolean }) {
   const { t } = useTranslation(QB)
@@ -210,52 +213,63 @@ function Header({ search = false, welcome = false }: { search?: boolean; welcome
   const signOut = useSignOut()
   const { path, search: query } = useLocation()
   const [searching, setSearching] = useState(false)
-  const up = upOf(path)
+  const own = usePageHasOwnHead()
+  if (own && !searching) return null
   if (searching) {
     return (
-      <header className="bg-background sticky top-0 z-10 border-b">
+      <StickyHead testId="header">
         <HeaderSearch initial={path === HOME ? searchOf(query) : ''} onClose={() => setSearching(false)} />
-      </header>
+      </StickyHead>
     )
   }
+  const mark = (
+    <span className="pointer-events-none absolute inset-x-0 flex justify-center" data-testid="head-mark">
+      <BrandMark className="size-(--x-avatar)" />
+      <span className="sr-only">{t('brand')}</span>
+    </span>
+  )
+  if (path === HOME || welcome) {
+    return (
+      <StickyHead testId="header">
+        <div className="relative mx-auto flex w-full max-w-md items-center gap-1 px-(--x-side)" data-head="home">
+          {search && <TakerAvatar />}
+          {mark}
+          <span className="mr-auto" />
+          {/* Q64: on the home, its filters (the way a reward is paid and the others) beside the search. */}
+          {search && <FeedFiltersButton />}
+          {/* Q68: a sponsor's own account, for a sponsor only; a dot when something needs them. */}
+          {search && <SponsorEntry current={false} />}
+          {/* Q63: the home's search is opened here, a magnifier. */}
+          {search && (
+            <Button variant="ghost" size="icon-sm" aria-label={tApp('feed.search')} data-testid="search-open"
+              onClick={() => setSearching(true)}>
+              <Search aria-hidden />
+            </Button>
+          )}
+          {/* F-F4: the welcome step has no bottom menu and so no "Me": signing out is here. */}
+          {welcome && (
+            <Button variant="ghost" size="sm" onClick={signOut} data-testid="sign-out">
+              <LogOut aria-hidden />
+              {t('signOut')}
+            </Button>
+          )}
+        </div>
+      </StickyHead>
+    )
+  }
+  // Q64: a page opened from another (a quiz's start page, a result) goes back in the history; a page under "Me" up to
+  // the page above it (`upOf`): one back button, always in this place.
+  const item = itemPage(path)
+  const up = upOf(path)
+  const back = backable(path) || !up
+    ? { onClick: goBack, label: tApp('nav.back') }
+    : { to: up.path, label: tApp('nav.backTo', { name: tApp(up.name) }) }
+  const title = item?.page === 'p' ? tApp('frame.heads.publication')
+    : item?.page === 'result' ? tApp('frame.heads.result') : undefined
   return (
-    <header className="bg-background sticky top-0 z-10 border-b">
-      <div className="mx-auto flex max-w-md items-center gap-1 px-4 py-2">
-        {/* Q64: a page opened from another (a quiz's start page, a result) goes back from here; a page under "Me" goes
-            up to the page above it (`upOf`): one back button, always in this place. */}
-        {backable(path) ? (
-          <Button variant="ghost" size="icon-sm" className="-ml-2" aria-label={tApp('nav.back')} data-testid="header-back"
-            onClick={goBack}>
-            <ArrowLeft aria-hidden />
-          </Button>
-        ) : up && (
-          <Button asChild variant="ghost" size="icon-sm" className="-ml-2">
-            <Link to={up.path} aria-label={tApp('nav.backTo', { name: tApp(up.name) })} data-testid="header-back">
-              <ArrowLeft aria-hidden />
-            </Link>
-          </Button>
-        )}
-        <Wordmark name={t('brand')} compact className="text-primary mr-auto" />
-        {/* Q64: on the home, its filters (the way a reward is paid and the others) beside the search. */}
-        {search && path === HOME && <FeedFiltersButton />}
-        {/* Q68: a sponsor's own account, for a sponsor only; a dot when something needs them. */}
-        {search && <SponsorEntry current={path === MY_SPONSOR_PATH} />}
-        {/* Q63: the home's search is opened here, a magnifier. */}
-        {search && (
-          <Button variant="ghost" size="icon-sm" aria-label={tApp('feed.search')} data-testid="search-open"
-            onClick={() => setSearching(true)}>
-            <Search aria-hidden />
-          </Button>
-        )}
-        {/* F-F4: the welcome step has no bottom menu and so no "Me": signing out is here. */}
-        {welcome && (
-          <Button variant="ghost" size="sm" onClick={signOut} data-testid="sign-out">
-            <LogOut aria-hidden />
-            {t('signOut')}
-          </Button>
-        )}
-      </div>
-    </header>
+    <div className="mx-auto w-full max-w-md">
+      <SubHead claim={false} back={back} title={title} id="frame-head-title" />
+    </div>
   )
 }
 

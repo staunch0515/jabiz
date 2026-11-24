@@ -9,6 +9,7 @@ import { APP } from '../messages'
 const en = {
   frame: {
     areas: { home: 'Home', history: 'Answered', scan: 'Scan', messages: 'Messages', me: 'Me' },
+    heads: { publication: 'Quiz', result: 'Result', avatar: 'Me' },
     sideNav: 'Main menu',
     messagesUnread: 'Messages, {{count}} unread',
     historyToCollect: 'Answered, {{count}} to collect',
@@ -57,6 +58,7 @@ const en = {
 const zh = {
   frame: {
     areas: { home: '首页', history: '已答', scan: '扫一扫', messages: '消息', me: '我的' },
+    heads: { publication: '答题详情', result: '答题结果', avatar: '我的' },
     sideNav: '主菜单',
     messagesUnread: '消息，{{count}} 条未读',
     historyToCollect: '已答，{{count}} 个待领奖',
@@ -105,6 +107,7 @@ const zh = {
 const ja = {
   frame: {
     areas: { home: 'ホーム', history: '回答済み', scan: 'スキャン', messages: 'メッセージ', me: 'マイページ' },
+    heads: { publication: 'クイズ', result: '結果', avatar: 'マイページ' },
     sideNav: 'メインメニュー',
     messagesUnread: 'メッセージ、未読{{count}}件',
     historyToCollect: '回答済み、受け取り待ち{{count}}件',

@@ -68,3 +68,57 @@ describe('the frame of the signed-in pages (F-F4)', () => {
     expect(screen.getByRole('main')).toHaveClass('pt-0', 'max-w-md')
   })
 })
+
+describe('the heads of the pages (Q113 §9.1, P4)', () => {
+  it('heads a first-level page with the avatar and the title, its tabs in the same sticky band', async () => {
+    frameServer()
+    window.history.replaceState(null, '', '/history')
+    render(<App />)
+    const title = await screen.findByRole('heading', { level: 1, name: 'Answered' })
+    const head = title.closest('[data-slot="x-head"]') as HTMLElement
+    expect(head.tagName).toBe('HEADER')
+    expect(head.querySelector('[data-head="top"]')).not.toBeNull()
+    expect(head.querySelector('[data-slot="page-tabs"]')).toHaveAttribute('data-indicator', 'label')
+    expect(head).toHaveClass('sticky', 'top-0')
+    // The frame's own head stands back: one head on the page.
+    expect(document.querySelectorAll('[data-slot="x-head"]')).toHaveLength(1)
+    await expectAccessible()
+  })
+
+  it('heads a page under another with the way back to the page above it', async () => {
+    frameServer()
+    window.history.replaceState(null, '', '/account/profile')
+    render(<App />)
+    const back = await screen.findByTestId('header-back')
+    expect(back.closest('[data-head="sub"]')).not.toBeNull()
+    expect(back).toHaveAttribute('href', '/account')
+    expect(back).toHaveAccessibleName('Back to Me')
+    expect(document.querySelectorAll('[data-slot="x-head"]')).toHaveLength(1)
+  })
+
+  it('heads the home with the avatar and the mark in the middle, the search at the right', async () => {
+    frameServer()
+    window.history.replaceState(null, '', '/')
+    render(<App />)
+    await screen.findByTestId('home')
+    const head = screen.getByRole('banner')
+    expect(head.querySelector('[data-head="home"]')).not.toBeNull()
+    expect(screen.getByTestId('head-avatar')).toHaveAttribute('href', '/account')
+    expect(screen.getByTestId('head-mark')).toHaveTextContent('QuizBuks')
+    expect(screen.getByTestId('search-open')).toBeInTheDocument()
+  })
+
+  it('names the spec\'s lengths once, as the frame\'s variables, and fades the bottom menu with the scrolling', async () => {
+    frameServer()
+    window.history.replaceState(null, '', '/history')
+    render(<App />)
+    await screen.findByTestId('history')
+    const frame = document.querySelector('[data-slot="x-frame"]') as HTMLElement
+    expect(frame.style.getPropertyValue('--x-header')).toBe('53px')
+    expect(frame.style.getPropertyValue('--x-back')).toBe('36px')
+    // At the top, the bar is all there; it takes the platform's fading (0.17 s).
+    const bar = document.querySelector('[data-slot="bottom-bar"]')!
+    expect(bar).toHaveStyle({ opacity: '1' })
+    expect(bar).toHaveClass('transition-opacity')
+  })
+})

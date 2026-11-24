@@ -52,9 +52,6 @@ export function MySponsorPage() {
   return (
     <section className="flex flex-col gap-6" aria-labelledby="my-sponsor-title" data-testid="my-sponsor">
       <AreaHeader area="me" id="my-sponsor-title" title={t('mySponsor.title')}
-        badge={sponsor.avatar
-          ? <LazyImage fileId={sponsor.avatar} variant="w128" alt="" className="size-12 shrink-0 rounded-full" />
-          : undefined}
         note={(
           <p className="text-muted-foreground flex flex-wrap items-center gap-2 text-sm">
             <span className="truncate" data-testid="my-sponsor-company">{sponsor.company ?? sponsor.contactName}</span>

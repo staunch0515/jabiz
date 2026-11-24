@@ -46,6 +46,8 @@ const TEXT: [string, string][] = [
   ['qb-hero-muted', 'qb-hero-from'],
   ['qb-hero-muted', 'qb-hero-to'],
   ['qb-ink', 'qb-sky'],
+  // The reward's text (Q113 P6) on the page.
+  ['qb-reward-foreground', 'background'],
   // The button on the hero band: the band's dark green on the band's white.
   ['qb-hero-from', 'qb-hero-foreground'],
 ]

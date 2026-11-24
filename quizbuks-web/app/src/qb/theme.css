@@ -11,6 +11,10 @@
   --color-qb-coin: var(--qb-coin);
   --color-qb-sky: var(--qb-sky);
   --color-qb-ink: var(--qb-ink);
+  /* Q113 §9.1: the outline of media and quiet buttons, and the reward colour (P6). */
+  --color-qb-outline: var(--qb-outline);
+  --color-qb-reward: var(--qb-reward);
+  --color-qb-reward-foreground: var(--qb-reward-foreground);
 }
 
 /*

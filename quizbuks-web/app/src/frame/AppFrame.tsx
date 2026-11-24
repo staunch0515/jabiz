@@ -8,6 +8,9 @@ import { Link, useLocation } from '../qb/router'
 import { badgeText } from '../inbox/api'
 import { AREA_TABS, AREAS, routeOf, type AreaKey } from './areas'
 import { FrameLink } from './FrameLink'
+import { HeadsProvider, useChromeOffset } from './Header'
+import { chromeOpacity } from './scrollChrome'
+import { xspecVariables } from './xspec'
 import { PRIZES_QUERY, useOpenPrizes } from './prizes'
 import './messages'
 
@@ -38,6 +41,8 @@ function useCurrentArea(): AreaKey | null {
 function BottomMenu({ badges }: { badges: Badges }) {
   const { t } = useTranslation(APP)
   const current = useCurrentArea()
+  // Q113 §9.1a: the bar fades with the header as the page scrolls on a phone, background and all, and stays usable.
+  const offset = useChromeOffset()
   const items: BottomBarItem[] = AREAS.map((area) => ({
     key: area.key,
     label: t(`frame.areas.${area.key}`),
@@ -54,7 +59,8 @@ function BottomMenu({ badges }: { badges: Badges }) {
   }
   return (
     <div className="md:hidden" data-testid="bottom-menu">
-      <BottomBar items={items} label={t('nav.label')} isActive={(path) => AREAS.find((a) => a.path === path)?.key === current}
+      <BottomBar items={items} label={t('nav.label')} dim={chromeOpacity(offset)}
+        isActive={(path) => AREAS.find((a) => a.path === path)?.key === current}
         renderLink={(item, props) => <FrameLink to={item.path} aria-label={nameOf(item.key)} {...props} />} />
     </div>
   )
@@ -124,7 +130,9 @@ export function AppFrame({ nav, children }: { nav: boolean; children: ReactNode 
     content.current?.querySelector<HTMLElement>('[data-slot="page-title"]')?.focus()
   }, [path, search, queryClient])
   return (
-    <>
+    // The spec's lengths (`xspec.ts`) as the variables of the frame's classes; the heads and the scrolling.
+    <HeadsProvider>
+      <div className="contents" style={xspecVariables()} data-slot="x-frame">
       {/* A test system's mark (platform 17zz27): a corner badge, clear of the bottom menu of a phone and of the left
           column of a wide screen, where it would cover the first area. */}
       <EnvironmentBadge className={nav
@@ -135,6 +143,7 @@ export function AppFrame({ nav, children }: { nav: boolean; children: ReactNode 
       </div>
       {nav && <SideRail badges={badges} />}
       {nav && <BottomMenu badges={badges} />}
-    </>
+      </div>
+    </HeadsProvider>
   )
 }

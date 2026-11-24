@@ -8,7 +8,6 @@ import { readCertificates, TAKER_CERTIFICATES } from '../qb/certificates'
 import { MY_SPONSOR_PATH, useMySponsor } from '../mysponsor/api'
 import { BecomeSponsor } from '../mysponsor/BecomeSponsor'
 import { MenuItem, MenuList } from '../pages/Menu'
-import { TitleBadge } from '../pages/TitleBadge'
 import { PROFILE_QUERY } from '../pages/ProfileForm'
 import { ACCOUNT_DELETION_PATH, ACCOUNT_PATH } from '../pages/accountPaths'
 import { APP } from '../messages'
@@ -109,7 +108,6 @@ export function MePage() {
   return (
     <section className="flex flex-col gap-6" aria-labelledby="account-title" data-testid="account">
       <AreaHeader area="me" id="account-title" title={t('frame.areas.me')}
-        badge={<TitleBadge>{(name || email || '?').trim().charAt(0).toUpperCase()}</TitleBadge>}
         note={(
           <p className="text-muted-foreground truncate text-sm" data-testid="account-who">
             {name && email ? `${name} · ${email}` : name || email}

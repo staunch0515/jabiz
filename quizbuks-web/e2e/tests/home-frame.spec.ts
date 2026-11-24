@@ -16,9 +16,9 @@ import { expect, prepareQuizbuks, run, setAppearance, signIn, test } from './sup
  *
  * Compared: the home's content (its section, with the cards' bleed to the screen's edges) at a phone's widths and a
  * desktop's, in both appearances, for a list of this test's own cards with a shelf of short videos and for no match;
- * and the header's left part (back, the wordmark, the test system's banner) on a phone. Not compared: the bottom menu
- * and the left column (what F-F4 changes), and the header's buttons at the right, which move one place when the menu
- * goes; their set is checked instead.
+ * and the home's head on a phone (Q113a-1: the avatar, the mark in the middle, the filters and the search). Not
+ * compared: the bottom menu and the left column (what F-F4 and Q113a-2 change); the head's set of buttons is checked
+ * too.
  *
  * The data are this test's alone: the home is searched by a token in the quizzes' titles (the cards do not show
  * titles), so other tests' publications in the shared database never show; names, the Sponsor, the rewards (`livePublication`'s) and covers
@@ -37,8 +37,6 @@ const HEADER_WIDTHS = [360, 390] as const
 const VIEWPORT_HEIGHT = 2400
 /** The main column's side padding (`px-4`): the cards bleed into it on a phone (`-mx-4`), and the clip takes it. */
 const MAIN_PADDING = 16
-/** Room after the wordmark in the header's clip, short of the first button at the right on a 360 px phone. */
-const WORDMARK_ROOM = 8
 /** "Pixel for pixel" (the spec's acceptance): not one pixel may differ. */
 const MAX_DIFF_PIXELS = 0
 /** The length of the run's token in the quizzes' titles: one length every run, so that nothing shifts by it. */
@@ -143,9 +141,9 @@ test('the home stays pixel for pixel as it was before F-F4', async ({ page, requ
       if ((HEADER_WIDTHS as readonly number[]).includes(width)) {
         await page.goto('/taker/')
         await expect(page.getByTestId('home')).toBeVisible()
-        const header = page.locator('header').first()
-        const wordmark = header.getByTestId('wordmark')
-        await expect(wordmark).toBeVisible()
+        const header = page.getByTestId('header')
+        await expect(header.getByTestId('head-mark')).toBeVisible()
+        await expect(header.getByTestId('head-avatar')).toBeVisible()
         // The buttons at the right: the filters and the search stay; the menu is gone (F-F4b), its entries are in the
         // bottom menu and in "Me".
         await expect(header.getByTestId('feed-filters-open')).toBeVisible()
@@ -153,9 +151,8 @@ test('the home stays pixel for pixel as it was before F-F4', async ({ page, requ
         await expect(page.getByTestId('app-menu')).toHaveCount(0)
         await expect(header.getByTestId('header-my-sponsor')).toHaveCount(0)
         const box = (await header.boundingBox())!
-        const mark = (await wordmark.boundingBox())!
         await expect(page).toHaveScreenshot(`header-${width}-${appearance}.png`, {
-          clip: { x: box.x, y: box.y, width: mark.x + mark.width + WORDMARK_ROOM - box.x, height: box.height },
+          clip: { x: box.x, y: box.y, width: box.width, height: box.height },
           animations: 'disabled', caret: 'hide', maxDiffPixels: MAX_DIFF_PIXELS })
       }
     }
