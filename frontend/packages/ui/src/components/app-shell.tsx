@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { Collapsible } from 'radix-ui'
 import { ChevronRightIcon, type LucideIcon } from 'lucide-react'
 
@@ -115,9 +115,16 @@ export function AppShell({
     content.current?.querySelector<HTMLElement>('[data-slot="page-title"]')?.focus()
   }, [routeKey])
   const withBottomBar = bottomBar !== undefined && mobile
-  const style = withBottomBar ? ({ '--bottom-bar-offset': 'var(--bottom-bar-height)' } as CSSProperties) : undefined
+  // The room the bottom menu takes, for the page's end, a floating button and a sticky bar of actions: the height of
+  // the bar shown, known from the bar itself (phase 17zz31: a bar of icons alone is lower, its border counted so that
+  // the floating button keeps 20 px from the bar's edge and from the side, as a timeline's does).
+  const offset = withBottomBar
+    ? cn('[--bottom-bar-offset:var(--bottom-bar-height)]',
+      'has-[[data-slot=bottom-bar][data-variant=icons]]:[--bottom-bar-offset:calc(var(--bottom-bar-icons-height)+1px)]',
+      'has-[[data-slot=bottom-bar][data-variant=icons]]:[--fab-inset:1.25rem]')
+    : undefined
   return (
-    <SidebarProvider style={style}>
+    <SidebarProvider className={offset}>
       {/*
         By default, collapsed, the sidebar leaves the screen (and is inert) rather than shrinking to icons: menu
         entries from the server have no icon. An application whose entries all have icons may ask for the strip.
@@ -149,7 +156,7 @@ export function AppShell({
           data-slot="app-shell-content"
           className={cn(
             'flex-1 p-4',
-            withBottomBar && 'pb-[calc(var(--bottom-bar-height)+env(safe-area-inset-bottom)+1rem)]',
+            withBottomBar && 'pb-[calc(var(--bottom-bar-offset)+env(safe-area-inset-bottom)+1rem)]',
             contentClassName,
           )}
         >
