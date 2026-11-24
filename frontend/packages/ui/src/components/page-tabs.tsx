@@ -32,6 +32,13 @@ export interface PageTabsProps {
   /** Renders a tab's link (a router's <Link>); a plain <a href> when absent. */
   renderLink?: (tab: PageTab, props: PageTabLinkProps) => ReactNode
   className?: string
+  /**
+   * Phase 17zz30 (12 §13.1): `label` marks the current tab with a bar 4 px high under its words, as wide as they are
+   * (56 px at least), on tabs 53 px high in 15 px type; `border` (the default) is the underline the row always had.
+   */
+  indicator?: 'border' | 'label'
+  /** With `indicator="label"`: the tabs share the whole row (a few tabs); else each is as wide as its words. */
+  fill?: boolean
 }
 
 function defaultLink(tab: PageTab, props: PageTabLinkProps) {
@@ -43,7 +50,7 @@ function defaultLink(tab: PageTab, props: PageTabLinkProps) {
  * widget: each tab is a route that can be opened and bookmarked, and the current one is `aria-current="page"`. The
  * row scrolls sideways when it is wider than the screen; the arrow keys, Home and End move between the tabs.
  */
-export function PageTabs({ tabs, current, label, renderLink = defaultLink, className }: PageTabsProps) {
+export function PageTabs({ tabs, current, label, renderLink = defaultLink, className, indicator = 'border', fill = false }: PageTabsProps) {
   const move = (event: KeyboardEvent<HTMLElement>) => {
     const row = event.currentTarget.closest('[data-slot="page-tabs"]')
     const links = Array.from(row?.querySelectorAll<HTMLElement>('[data-slot="page-tab"]') ?? [])
@@ -58,6 +65,47 @@ export function PageTabs({ tabs, current, label, renderLink = defaultLink, class
     if (next < 0) return
     event.preventDefault()
     links[next].focus()
+  }
+
+  if (indicator === 'label') {
+    return (
+      <nav aria-label={label} data-slot="page-tabs" data-indicator="label"
+        className={cn('overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden', className)}>
+        <ul className={cn('flex', fill ? 'w-full' : 'min-w-max')}>
+          {tabs.map((tab) => {
+            const active = tab.key === current
+            const content = (
+              <span className="relative flex h-full min-w-14 items-center justify-center gap-1.5" data-slot="page-tab-label">
+                <span>{tab.label}</span>
+                {tab.badge !== undefined && tab.badge > 0 && (
+                  <span className="bg-primary text-primary-foreground rounded-full px-1.5 text-xs leading-5 font-semibold">
+                    {tab.badge > 99 ? '99+' : tab.badge}
+                  </span>
+                )}
+                {active && <span aria-hidden data-slot="page-tab-indicator" className="bg-primary absolute inset-x-0 bottom-0 h-1 rounded-full" />}
+              </span>
+            )
+            return (
+              <li key={tab.key} className={cn('flex', fill && 'flex-1')}>
+                {renderLink(tab, {
+                  children: content,
+                  className: cn(
+                    'focus-visible:ring-ring flex h-[3.3125rem] items-stretch justify-center text-[0.9375rem] leading-5 whitespace-nowrap',
+                    'outline-none focus-visible:ring-2 focus-visible:ring-inset',
+                    fill ? 'w-full px-2' : 'px-4',
+                    active ? 'text-foreground font-bold' : 'text-muted-foreground hover:text-foreground font-medium',
+                  ),
+                  'aria-current': active ? 'page' : undefined,
+                  'data-testid': `page-tab-${tab.key}`,
+                  'data-slot': 'page-tab',
+                  onKeyDown: move,
+                })}
+              </li>
+            )
+          })}
+        </ul>
+      </nav>
+    )
   }
 
   return (
