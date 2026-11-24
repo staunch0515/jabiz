@@ -326,10 +326,11 @@ export function linkIn(text: string, path: string): URL {
 /** Registers at an entry's sign-up page (`base` is the SPA's prefix: `/` or `/sponsor/`). */
 export async function signUp(page: Page, base: string, email: string, name: string) {
   await page.goto(`${base}signup`)
-  await page.getByPlaceholder('E-mail address', { exact: true }).fill(email)
-  await page.getByPlaceholder('Your name', { exact: true }).fill(name)
-  await page.getByPlaceholder('New password', { exact: true }).fill(PASSWORD)
-  await page.getByPlaceholder('Repeat the new password', { exact: true }).fill(PASSWORD)
+  // By the field's name, not its placeholder: the app's open entry look (Q113f) labels the field inside its box.
+  await page.getByLabel('E-mail address', { exact: true }).fill(email)
+  await page.getByLabel('Your name', { exact: true }).fill(name)
+  await page.getByLabel('New password', { exact: true }).fill(PASSWORD)
+  await page.getByLabel('Repeat the new password', { exact: true }).fill(PASSWORD)
   await page.getByRole('button', { name: 'Create the account' }).click()
   await expect(page.getByTestId('sign-up-sent')).toBeVisible()
 }
@@ -344,7 +345,7 @@ export async function verifyByMail(page: Page, email: string, base: string) {
   // An account that registered itself confirms with its password that whoever reads the mailbox registered it
   // (decision D36 item 3).
   await expect(page.getByTestId('verify-password-hint')).toBeVisible()
-  await page.getByPlaceholder('Password', { exact: true }).fill(PASSWORD)
+  await page.getByLabel('Password', { exact: true }).fill(PASSWORD)
   await page.getByRole('button', { name: 'Verify my address' }).click()
   await expect(page.getByTestId('verify-state').locator('[data-state]')).toHaveAttribute('data-state', 'done')
 }

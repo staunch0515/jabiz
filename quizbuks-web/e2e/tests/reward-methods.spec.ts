@@ -146,7 +146,7 @@ test('a Taker collects a prize by scanning the code on the Sponsor\'s screen', a
   await page.goto(path)
   await expect(page).toHaveURL(/\/login\?next=/)
   await page.getByTestId('login-user-name').fill(owed.taker.email)
-  await page.getByPlaceholder('Password', { exact: true }).fill(PASSWORD)
+  await page.getByLabel('Password', { exact: true }).fill(PASSWORD)
   await page.getByRole('button', { name: 'Sign in', exact: true }).click()
   const redeem = page.getByTestId('redeem-page')
   await expect(redeem).toBeVisible()
