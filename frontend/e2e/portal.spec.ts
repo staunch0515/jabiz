@@ -125,7 +125,8 @@ test("the portal's frame on a phone in the timeline look", async ({ page, reques
   await page.setViewportSize({ width: 360, height: 740 })
   await signInToPortal(page, customer)
   await expect(page.getByTestId('orders-empty')).toBeVisible()
-  await page.goto(`${PORTAL}?look=open`)
+  // The orders page itself: the root forwards to it without the query, before the frame reads the look.
+  await page.goto(`${PORTAL}orders?look=open`)
   await expect(page.getByTestId('orders-empty')).toBeVisible()
 
   const bar = page.getByRole('navigation', { name: '快捷菜单' })
