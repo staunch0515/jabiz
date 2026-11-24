@@ -7,10 +7,10 @@
 
 | | 中文 | 日文 | 英文 |
 |---|---|---|---|
-| 发起方一侧，作名称 | 答题拼好价发起方 | クイズdeおトク 主催者 | QuizBuks for Sponsors |
+| 发起方一侧，作名称 | 好好学习吧发起方 | クイズdeおトク 主催者 | QuizBuks for Sponsors |
 | 发起方一侧，在句子中（如"请在发起方页面修改后重新申请"） | 发起方页面 | 主催者ページ | the Sponsor app |
 | 运营商一侧（`/operator/`，原"运营商后台"） | 运营商管理系统 | 運営会社管理システム | Operator Management System |
-| 平台管理（`/admin/`，原"管理后台 / 管理画面 / Administration"） | 答题拼好价平台管理系统 | クイズdeおトク 管理システム | QuizBuks Management System |
+| 平台管理（`/admin/`，原"管理后台 / 管理画面 / Administration"） | 好好学习吧平台管理系统 | クイズdeおトク 管理システム | QuizBuks Management System |
 
 ## 品牌（Q61）
 
@@ -19,7 +19,7 @@
 - SPA：`BRAND.names.<语言>`（`src/qb/brand.ts`），如发起方 SPA 的 `brand` 中文 `${BRAND.names.zh}发起方`、英文 `${BRAND.names.en} for Sponsors`、日文 `${BRAND.names.ja} 主催者`；
   平台管理系统中文 `${BRAND.names.zh}平台管理系统`、日文 `${BRAND.names.ja} 管理システム`、英文 `${BRAND.names.en} Management System`。
 - 服务端消息：记号 `@QB_BRAND_NAME@`（`processResources` 按语言替换）；招商网站：`src/brand.mjs`；后台扩展：`BRAND_NAMES.<语言>`。
-- **中文名称用中文品牌名**"答题拼好价"（不是 QuizBuks）：Q61 规定中文文字以中文名称呼产品，需求方表中的"答题拼好价平台管理系统"即按此写。
+- **中文名称用中文品牌名**"好好学习吧"（不是 QuizBuks）：Q61 规定中文文字以中文名称呼产品，需求方表中的"好好学习吧平台管理系统"即按此写。
 - Java 中的字典标签（公告与帮助的对象"App / 发起方"）取不到品牌名，用句子中的叫法：发起方页面 / 主催者ページ / Sponsor app。
 
 运营商管理系统不带品牌名（需求方的表如此）。

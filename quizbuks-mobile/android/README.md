@@ -13,7 +13,7 @@ Trusted Web Activity：用户的 Chrome 以全屏打开 `https://quizbuks.com/ta
 - **包名**上架后不能改。
 - **App Links** 只认 `/taker/` 前缀（`AndroidManifest.xml` 的 `pathPrefix`）：商家后台、招商站与管理后台的链接在浏览器中打开。
 - `LauncherActivity` 给本域名的每个启动地址（含邮件链接）加 `shell=android`，App 据此不显示安装提示。
-- 图标与启动画面由 `quizbuks-web/brands/quizbuks/public/icon-512.png`、`icon-maskable-512.png`（品牌档案，Q54） 缩放而成（尺寸同 Bubblewrap）；App 的图标改了就重新生成。
+- 图标与启动画面由品牌档案的矢量源按各自尺寸渲染（`quizbuks-web/brands/quizbuks/source/render.mjs`，尺寸同 Bubblewrap）；App 的图标改了就重新生成。
 
 ## 构建
 

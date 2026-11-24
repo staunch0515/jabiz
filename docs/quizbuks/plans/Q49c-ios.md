@@ -35,7 +35,7 @@
 
 1. 以个人注册 Apple Developer Program（每年 $99）。
 2. Certificates, Identifiers & Profiles → Identifiers → App ID `com.quizbuks.app`，勾选 Associated Domains、Push Notifications、Sign in with Apple。
-3. App Store Connect → App → 新建：名称同 Play（日 `QuizBuks – クイズで特典`、中 `QuizBuks – 答题拼好价`、英 `QuizBuks`），主要语言日文，Bundle ID 选上一步的。
+3. App Store Connect → App → 新建：名称同 Play（日 `QuizBuks – クイズで特典`、中 `QuizBuks – 好好学习吧`、英 `QuizBuks`），主要语言日文，Bundle ID 选上一步的。
 4. 用户和访问 → 集成 → App Store Connect API：新建"App 管理"角色的密钥。GitHub → Settings → Environments 新建 `appstore`（建议 Deployment branches 只允许 `1.3/quizbuks`）：
    secrets `APP_STORE_CONNECT_KEY_ID`、`APP_STORE_CONNECT_ISSUER_ID`、`APP_STORE_CONNECT_KEY_P8`（`.p8` 文件的全文，只能下载一次，自己另存一份），变量 `APPLE_TEAM_ID`（Membership 页的 Team ID）。
 5. GitHub 的 Environment `production` 设变量 `QUIZBUKS_IOS_APP_ID` = `<Team ID>.com.quizbuks.app`，部署 production 一次（`DEPLOY.md`"iOS App 的 apple-app-site-association"）。
