@@ -12,6 +12,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select'
 import { useIsMobile } from '../hooks/use-mobile'
 import { cn } from '../lib/utils'
+import { EntryLookContext, type EntryLook } from './look'
 import { AUTH_NAMESPACE } from './messages'
 
 /**
@@ -71,6 +72,14 @@ export interface EntryLayoutSettings {
   footer?: ReactNode
   /** Offers the appearance (light, dark, system) when an AppearanceProvider is around; default true. */
   appearance?: boolean
+  /**
+   * The pages' look (phase 17zz30, 12 §13.1): `open` draws no card — the mark and name centred above the form on a
+   * phone; on a wide screen a column with the name in large type and the form, the mark large beside it — with pill
+   * buttons and fields labelled inside. `card` (the default) is the look of before.
+   */
+  look?: EntryLook
+  /** The application's mark (its logo, decorative): beside the name on a phone, large beside the column on a wide screen (`open`). */
+  mark?: ReactNode
 }
 
 const EntryLayoutContext = createContext<EntryLayoutSettings>({})
@@ -106,6 +115,8 @@ export interface EntryLayoutProps extends EntryLayoutSettings {
   showOtherEntry?: boolean
   /** The content brings its own heading (`h2`, say a `PageState`): the card shows no title of its own. */
   ownHeading?: boolean
+  /** With the `open` look: the page's title is for screen readers only (the first step of signing in, as the brand says it). */
+  quietTitle?: boolean
 }
 
 /**
@@ -130,6 +141,102 @@ export function EntryLayout(props: EntryLayoutProps) {
   const phone = useIsMobile()
   const expanded = phone ? notices.find((n) => n.active !== false)?.key : undefined
   const anyActive = notices.some((n) => n.active !== false)
+  const look = props.look ?? shared.look ?? 'card'
+  const mark = props.mark ?? shared.mark
+
+  const noticesStrip = (
+    <div data-slot="entry-notices" className="flex flex-col">
+      {notices.length > 0 && (
+        // No strip of its own while no notice shows anything.
+        <div className={cn('mx-auto flex w-full max-w-6xl flex-col gap-2 px-4', anyActive && 'pt-3')}>
+          {notices.map((notice) => phone && notice.summary && notice.active !== false && notice.key !== expanded ? (
+            <details key={notice.key} data-slot="entry-notice" data-collapsed="" className="text-sm">
+              <summary className="text-muted-foreground cursor-pointer truncate py-1">{notice.summary}</summary>
+              {notice.content}
+            </details>
+          ) : (
+            <div key={notice.key} data-slot="entry-notice" className="empty:hidden">{notice.content}</div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+  const languageChoice = languages.length > 1 && (
+    <Select value={i18n.language} onValueChange={(lang) => void changeLanguage(lang as Language)}>
+      <SelectTrigger size="sm" aria-label={t('common.language')} data-testid="entry-language" className="shrink-0">
+        <SelectValue />
+      </SelectTrigger>
+      <SelectContent>
+        {languages.map((lang) => (
+          <SelectItem key={lang} value={lang} lang={lang}>
+            {LANGUAGE_NAMES[lang]}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
+  )
+
+  if (look === 'open') {
+    // Q113 §9.4 as measured on x.com: no card; pills 46 px, the main one near black; the column 384 px wide, 36 px in.
+    return (
+      <EntryLookContext.Provider value="open">
+        <div data-slot="entry-layout" data-look="open" data-layout={intro ? 'columns' : 'single'}
+          className="bg-background text-foreground flex min-h-screen flex-col">
+          <EnvironmentBadge />
+          <header data-slot="entry-header" className="flex flex-col">
+            {noticesStrip}
+            <div data-slot="entry-top" className="flex min-h-12 items-center justify-end px-2 pt-2">{languageChoice}</div>
+          </header>
+          <main data-slot="entry-main"
+            className={cn('flex flex-1 flex-col lg:flex-row lg:items-center lg:gap-8 lg:px-9 lg:py-8', className)}>
+            <div data-slot="entry-form" data-testid={testId}
+              className={cn('mx-auto flex w-full max-w-[24rem] flex-col gap-5 px-[38px] pb-8 lg:mx-0 lg:w-[24rem] lg:shrink-0 lg:px-0',
+                '[&_[data-slot=button].w-full]:h-[2.875rem] [&_[data-slot=button].w-full]:rounded-full [&_[data-slot=button].w-full]:text-[0.9375rem] [&_[data-slot=button].w-full]:font-bold')}>
+              <div className="flex items-center justify-center gap-2.5 lg:mb-5 lg:justify-start">
+                {mark && <span aria-hidden className="flex size-[30px] shrink-0 lg:hidden [&>*]:size-full">{mark}</span>}
+                <h1 data-slot="entry-brand"
+                  className="min-w-0 text-xl leading-6 font-bold break-words lg:text-[4rem] lg:leading-[1.15] lg:font-semibold lg:tracking-tight">
+                  {brand}
+                </h1>
+              </div>
+              {intro && <p data-slot="entry-intro-sentence" className="text-muted-foreground text-center lg:text-left">{intro.sentence}</p>}
+              {tabs}
+              {!ownHeading && (
+                <h2 data-slot="entry-title"
+                  className={cn('text-[1.9375rem] leading-9 font-extrabold', (props.quietTitle || tabs) && 'sr-only')}>
+                  {title}
+                </h2>
+              )}
+              {children}
+              {below && <div data-slot="entry-below" className="text-muted-foreground text-sm">{below}</div>}
+              {showOtherEntry && otherEntry && (
+                <p data-testid="entry-other" className="text-muted-foreground text-center text-sm">
+                  {otherEntry.text}{' '}
+                  <a href={otherEntry.href} className="text-primary font-bold underline-offset-4 hover:underline">
+                    {otherEntry.link ?? t('entry.goThere')}
+                  </a>
+                </p>
+              )}
+            </div>
+            {mark && (
+              <div data-slot="entry-mark" aria-hidden
+                className="hidden flex-1 items-center justify-center lg:flex [&>*]:size-auto [&>*]:max-h-[440px] [&>*]:w-full [&>*]:max-w-[440px]">
+                {mark}
+              </div>
+            )}
+          </main>
+          {(links || offerAppearance || footer) && (
+            <footer data-slot="entry-footer"
+              className="text-muted-foreground flex w-full flex-wrap items-center justify-center gap-x-3 gap-y-1 px-4 py-3 text-[0.6875rem]">
+              {links && <nav aria-label={t('entry.links')} data-testid="entry-links" className="flex flex-wrap justify-center gap-x-3 gap-y-1">{links}</nav>}
+              {offerAppearance && <ThemeToggle />}
+              {footer && <p data-testid="auth-footer">{footer}</p>}
+            </footer>
+          )}
+        </div>
+      </EntryLookContext.Provider>
+    )
+  }
 
   return (
     <div
@@ -141,38 +248,11 @@ export function EntryLayout(props: EntryLayoutProps) {
       <EnvironmentBadge />
       {/* The notices belong to the page's banner landmark, above its top bar. */}
       <header data-slot="entry-header" className="flex flex-col">
-        <div data-slot="entry-notices" className="flex flex-col">
-          {notices.length > 0 && (
-            // No strip of its own while no notice shows anything.
-            <div className={cn('mx-auto flex w-full max-w-6xl flex-col gap-2 px-4', anyActive && 'pt-3')}>
-              {notices.map((notice) => phone && notice.summary && notice.active !== false && notice.key !== expanded ? (
-                <details key={notice.key} data-slot="entry-notice" data-collapsed="" className="text-sm">
-                  <summary className="text-muted-foreground cursor-pointer truncate py-1">{notice.summary}</summary>
-                  {notice.content}
-                </details>
-              ) : (
-                <div key={notice.key} data-slot="entry-notice" className="empty:hidden">{notice.content}</div>
-              ))}
-            </div>
-          )}
-        </div>
+        {noticesStrip}
         <div data-slot="entry-top" className="mx-auto flex w-full max-w-6xl items-center justify-between gap-3 px-4 py-3">
           {/* A long name wraps, as the card's heading did. */}
           <h1 data-slot="entry-brand" className="min-w-0 text-xl font-semibold tracking-tight break-words">{brand}</h1>
-          {languages.length > 1 && (
-            <Select value={i18n.language} onValueChange={(lang) => void changeLanguage(lang as Language)}>
-              <SelectTrigger size="sm" aria-label={t('common.language')} data-testid="entry-language" className="shrink-0">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {languages.map((lang) => (
-                  <SelectItem key={lang} value={lang} lang={lang}>
-                    {LANGUAGE_NAMES[lang]}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          )}
+          {languageChoice}
         </div>
       </header>
       <main

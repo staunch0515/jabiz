@@ -33,6 +33,8 @@
   --content-form-max: 60rem;
   /* The height of the bottom menu on narrow screens; the floating button and the page's end keep clear of it. */
   --bottom-bar-height: 4rem;
+  /* 17zz30: the bar of icons alone (12 §13.1). */
+  --bottom-bar-icons-height: 3.3125rem;
   --background: #ffffff;
   --foreground: #0a0a0a;
   --card: #ffffff;

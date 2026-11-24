@@ -6,7 +6,9 @@ import { Spinner } from '../components/spinner'
 import { Alert, AlertDescription } from '../components/ui/alert'
 import { Button } from '../components/ui/button'
 import { Input } from '../components/ui/input'
+import { FloatingInput, type FloatingInputFieldProps } from '../components/floating-input'
 import { EntryLayout, type EntryLayoutProps } from './entry'
+import { useEntryLook } from './look'
 import { AUTH_NAMESPACE } from './messages'
 import { PasswordInput } from './PasswordInput'
 
@@ -70,6 +72,15 @@ export function AuthField({
   ...input
 }: { icon: LucideIcon; error?: string } & ComponentProps<'input'>) {
   const errorId = useId()
+  const look = useEntryLook()
+  if (look === 'open') {
+    // Phase 17zz30: the label inside the box, no icon (12 §13.1).
+    const { placeholder, ...rest } = input
+    return (
+      <FloatingInput {...rest} label={placeholder ?? ''} error={error} type={type}
+        renderInput={type === 'password' ? passwordField : undefined} />
+    )
+  }
   const field = {
     ...input,
     'aria-label': input.placeholder,
@@ -92,6 +103,13 @@ export function AuthField({
   )
 }
 
+/** A password field with its "show" button, for {@link FloatingInput} (the field's own type is the button's to set). */
+function passwordField(props: FloatingInputFieldProps) {
+  const field = { ...props }
+  delete field.type
+  return <PasswordInput {...field} />
+}
+
 /**
  * The submit button of these forms, busy while the form is sent; while the server asks to wait (`wait` seconds after
  * 429 RATE_LIMITED, phase 17zk) it is held and says how long.
@@ -99,8 +117,11 @@ export function AuthField({
 export function AuthSubmit({ busy, children, wait = 0 }: { busy: boolean; children: ReactNode; wait?: number }) {
   const { t } = useTranslation(AUTH_NAMESPACE)
   const waiting = wait > 0
+  const open = useEntryLook() === 'open'
   return (
-    <Button type="submit" size="lg" className="w-full" disabled={busy || waiting} aria-busy={busy || undefined}
+    <Button type="submit" size="lg"
+      className={open ? 'bg-foreground text-background hover:bg-foreground/90 w-full text-[1.0625rem]' : 'w-full'}
+      disabled={busy || waiting} aria-busy={busy || undefined}
       data-waiting={waiting ? wait : undefined}>
       {busy && <Spinner className="text-current" />}
       {waiting ? t('common.retryIn', { seconds: wait }) : children}
