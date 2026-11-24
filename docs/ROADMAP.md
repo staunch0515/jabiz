@@ -5734,6 +5734,23 @@ QuizBuks 的 #545、#546、#547 用了 43.5–45 分钟，#545 到点被取消�
 
 **17zz29 状态**：草稿 PR 待合并。
 
+### 17zz30 时间线式的外观：只有图标的底部菜单、文字宽的标签指示条、开放式入口页（2026-11-24，QuizBuks Q113）
+
+**缘由**：QuizBuks 的学者 App 照 X 的布局与操作改版（QuizBuks `docs/quizbuks/plans/Q113-taker-ui-tone.md`、`impl/Q113.md` 的阶段 P）。底部菜单只有图标且随滚动变淡、标签的指示条与文字同宽、
+登录页不画卡片而用胶囊按钮与框内标签的输入框，这些平台组件现在表达不了；应用不得自写组件（12 §11、D34），所以先在平台补为可选的外观。缺省不变。
+
+| # | 内容 |
+|---|---|
+| 17zz30-1 | 设计：12 §13.1 |
+| 17zz30-2 | `BottomBar`：`variant="icons"`、`activeIcon`、`dim`；token `--bottom-bar-icons-height` |
+| 17zz30-3 | `PageTabs`：`indicator="label"`、`fill` |
+| 17zz30-4 | `FloatingInput`；`EntryLayoutSettings.look` 与 `mark`；`SignInForm`、`SignUpForm`、邮件链接与找回密码的表单在 `look="open"` 时用胶囊按钮与 `FloatingInput` |
+| 17zz30-5 | Vitest 与 axe（亮暗）；示范门户的 `?look=open` |
+
+**验收**：前端 lint、typecheck、全部 Vitest 绿；缺省外观的现有测试一条不改；`pnpm check:api` 不变。
+
+**17zz30 状态**：✅ 已完成（PR #760，2026-11-25 合并；QuizBuks Q113f 首先使用开放式入口页）。
+
 ### 线 1.3 的候选（未排期，2026-11-08 总控：首次上线前不做）
 
 | 候选 | 缘由 | 粗估 |

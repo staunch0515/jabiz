@@ -87,7 +87,7 @@ describe('theme tokens (WCAG 2.2 AA, docs/design/12-frontend.md section 11)', ()
 })
 
 /** The layout tokens (phase 17zj): lengths, the same in both appearances. */
-const LAYOUT = ['content-max', 'content-form-max', 'bottom-bar-height']
+const LAYOUT = ['content-max', 'content-form-max', 'bottom-bar-height', 'bottom-bar-icons-height']
 
 describe('layout tokens', () => {
   it('are lengths in rem: the content widths and the bottom menu', () => {
