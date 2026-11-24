@@ -95,7 +95,8 @@ test('a video to watch is shown on the home with its reward and starts the quiz'
   await searchHome(page, name)
   const card = page.getByTestId('feed-card').filter({ hasText: name })
   await expect(card).toHaveAttribute('data-video', 'true')
-  await expect(card.getByTestId('feed-card-watch')).toHaveText('Watch to answer')
+  // The home card says nothing about watching first (the start page does).
+  await expect(card.getByTestId('feed-card-watch')).toHaveCount(0)
   // Q63: in the middle of the screen the card plays its video, muted.
   await card.evaluate((element) => element.scrollIntoView({ block: 'center' }))
   // Q65: the app's one player, laid over the card; started muted, with its interface on.

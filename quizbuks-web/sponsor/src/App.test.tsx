@@ -378,7 +378,7 @@ describe('the entry pages (platform 17zk; P4)', () => {
     await screen.findByTestId('login-user-name')
     await waitFor(() => expect(document.title).toMatch(/^(\[[A-Z]+\] )?QuizBuks for Sponsors$/))
     await act(() => changeLanguage('zh'))
-    await waitFor(() => expect(document.title).toMatch(/^(\[[A-Z]+\] )?答题拼好价发起方$/))
+    await waitFor(() => expect(document.title).toMatch(/^(\[[A-Z]+\] )?好好学习吧发起方$/))
     await act(() => changeLanguage('ja'))
     await waitFor(() => expect(document.title).toMatch(/^(\[[A-Z]+\] )?クイズdeおトク 主催者$/))
   })
@@ -386,7 +386,7 @@ describe('the entry pages (platform 17zk; P4)', () => {
   it('name the Sponsor app as the requester decided, in every language, never as a back office', async () => {
     server()
     window.history.replaceState(null, '', '/login')
-    for (const [language, name, other] of [['zh', '答题拼好价发起方', '我是学者，来答题的'],
+    for (const [language, name, other] of [['zh', '好好学习吧发起方', '我是学者，来答题的'],
       ['ja', 'クイズdeおトク 主催者', 'クイズに答えるテイカーの方'], ['en', 'QuizBuks for Sponsors', 'Answering quizzes as a Taker?']]) {
       await changeLanguage(language as 'zh' | 'ja' | 'en')
       const { unmount } = render(<App />)

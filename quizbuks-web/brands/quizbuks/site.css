@@ -24,6 +24,8 @@
   --qb-coin: var(--coin);
   --qb-coin-deep: var(--coin-deep);
   --qb-ink: var(--ink);
+  --qb-mark: #0f6b5c;
+  --qb-mark-foreground: #ffffff;
 }
 @media (prefers-color-scheme: dark) {
   :root {

@@ -4,7 +4,7 @@
 
 ## 名称
 
-QuizBuks – 答题拼好价
+QuizBuks – 好好学习吧
 
 ## 副标题
 

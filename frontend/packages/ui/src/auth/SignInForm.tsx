@@ -435,7 +435,7 @@ export function SignInForm(props: SignInFormProps) {
   })
 
   return (
-    <AuthFrame {...frame} title={t('login.title')} tabs={tabs} below={props.below} showOtherEntry>
+    <AuthFrame {...frame} title={t('login.title')} tabs={tabs} below={props.below} showOtherEntry quietTitle>
       {notice === 'idle' && step.notice !== 'enrolled' && (
         <Alert variant="warning" data-testid="idle-locked">
           <TriangleAlert aria-hidden />

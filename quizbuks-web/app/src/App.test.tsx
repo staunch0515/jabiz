@@ -186,27 +186,27 @@ describe('a visitor', () => {
     expect(await screen.findByTestId('environment-badge')).toHaveTextContent('staging')
   })
 
-  it('signs in and signs up with Google, Facebook and LINE as a row of icons on a phone (Q40)', async () => {
+  it('signs in and signs up with Google, Facebook and LINE as full-width buttons on a phone (Q40; Q113 §9.4)', async () => {
     window.localStorage.setItem('qb.intro.seen', '1')
-    // A phone: the sign-in's providers are a row of icons there (17zk, responsive), full-width buttons on a wide screen.
+    // A phone: the providers are full-width buttons at every width, as on x.com (the open look makes them pills).
     atWidth(390)
     server(undefined, [{ id: 'google', kind: 'google', label: 'Google' }, { id: 'facebook', kind: 'facebook',
       label: 'Facebook' }, { id: 'line', kind: 'line', label: 'LINE' }])
     render(<App />)
-    const row = await screen.findByTestId('oidc-icons')
+    const row = await screen.findByTestId('oidc-buttons')
     // In English they come first (17zk, suggestion ③): a group named "Other ways to sign in".
     expect(row).toHaveAccessibleName('Other ways to sign in')
-    expect(within(row).getAllByRole('button').map((b) => b.getAttribute('aria-label')))
-      .toEqual(['Google', 'Facebook', 'LINE'])
+    expect(within(row).getAllByRole('button').map((b) => b.getAttribute('data-kind'))).toEqual(['google', 'facebook', 'line'])
+    expect(within(row).getAllByRole('button').every((b) => b.classList.contains('w-full'))).toBe(true)
     cleanup()
     window.history.replaceState(null, '', '/signup')
     render(<App />)
-    // In the sign-up card, as on the sign-in page, under the words of signing up; with the terms' note (17u).
-    const signUp = await screen.findByTestId('oidc-icons')
+    // On the sign-up page, as on the sign-in page, under the words of signing up; with the terms' note (17u).
+    const signUp = await screen.findByTestId('oidc-buttons')
     expect(screen.getByTestId('sign-up')).toContainElement(signUp)
-    expect(signUp).toHaveTextContent('Other ways to sign up')
+    expect(screen.getByTestId('sign-up')).toHaveTextContent('or sign up with')
     expect(screen.getByTestId('sign-up')).toContainElement(screen.getByTestId('signup-terms'))
-    expect(await within(signUp).findByRole('button', { name: 'Facebook' })).toHaveAttribute('data-kind', 'facebook')
+    expect(await within(signUp).findByTestId('oidc-facebook')).toHaveAttribute('data-kind', 'facebook')
   })
 
   it('asks for the address, and in Chinese offers the mailed link first, before Google, Facebook and LINE (Q50)',
@@ -215,24 +215,26 @@ describe('a visitor', () => {
       atWidth(390)
       server(undefined, [{ id: 'google', kind: 'google', label: 'Google' }, { id: 'line', kind: 'line', label: 'LINE' }])
       const { unmount } = render(<App />)
-      await screen.findByTestId('oidc-icons')
-      expect(screen.getByTestId('login-user-name')).toHaveAttribute('placeholder', 'E-mail address')
+      await screen.findByTestId('oidc-buttons')
+      // The address's label is inside its box (the open look): the field's name.
+      expect(screen.getByTestId('login-user-name')).toHaveAccessibleName('E-mail address')
       // Not first in English: behind a button among the other ways (17zk gap 1), the form only once it is pressed.
       expect(screen.queryByTestId('email-link-form')).toBeNull()
-      expect(await screen.findByTestId('login-email-link-open')).toBeInTheDocument()
+      // In the timeline's words (Q113 §9.4): short enough for a pill one line high on a phone.
+      expect(await screen.findByTestId('login-email-link-open')).toHaveTextContent('Continue with a link by mail')
       unmount()
       await changeLanguage('zh')
       render(<App />)
       const mailed = await screen.findByTestId('email-link-form')
       const name = screen.getByTestId('login-user-name')
-      const icons = await screen.findByTestId('oidc-icons')
+      const buttons = await screen.findByTestId('oidc-buttons')
       // The mailed link, then the providers (17zk, suggestion ③ by language), then the password.
-      expect(mailed.compareDocumentPosition(icons) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
-      expect(icons.compareDocumentPosition(name) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
-      expect(name).toHaveAttribute('placeholder', '电子邮箱')
+      expect(mailed.compareDocumentPosition(buttons) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+      expect(buttons.compareDocumentPosition(name) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+      expect(name).toHaveAccessibleName('电子邮箱')
       expect(screen.getByTestId('login-or-password')).toHaveTextContent('或用密码登录')
       // The buttons stay.
-      expect(within(icons).getAllByRole('button').map((b) => b.getAttribute('aria-label'))).toEqual(['Google', 'LINE'])
+      expect(within(buttons).getAllByRole('button').map((b) => b.getAttribute('data-kind'))).toEqual(['google', 'line'])
       await expectAccessible()
     })
 
@@ -331,20 +333,22 @@ describe('the entry pages (platform 17zk; P4)', () => {
   const PROVIDERS = [{ id: 'google', kind: 'google', label: 'Google' }, { id: 'line', kind: 'line', label: 'LINE' }]
   beforeEach(() => window.localStorage.setItem('qb.intro.seen', '1'))
 
-  it('lay out the sign-in: the brand, the column about the app, the footer\'s links and the way to the Sponsor app',
+  it('lay out the sign-in in the open look: the name, the mark, the footer\'s links and the way to the Sponsor app (Q113 §9.4)',
     async () => {
       atWidth(1440)
       server(undefined, PROVIDERS)
       window.history.replaceState(null, '', '/login')
       render(<App />)
       await screen.findByTestId('login-user-name')
+      // No card: the brand's name is the page's heading (large on a wide screen), its mark large beside the column.
       const layout = document.querySelector('[data-slot="entry-layout"]')!
-      expect(layout).toHaveAttribute('data-layout', 'columns')
-      expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('QuizBuks')
-      expect(screen.getByRole('heading', { level: 2, name: 'Sign in' })).toBeInTheDocument()
-      expect(document.querySelector('[data-slot="entry-intro-sentence"]')).toHaveTextContent('Answer, learn, get rewarded')
-      expect(document.querySelectorAll('[data-slot="entry-intro-points"] li')).toHaveLength(3)
-      expect(document.querySelector('[data-slot="entry-intro-illustration"] svg')).toHaveAttribute('aria-hidden', 'true')
+      expect(layout).toHaveAttribute('data-look', 'open')
+      expect(layout.querySelector('[data-slot="card"]')).toBeNull()
+      expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent(/^QuizBuks$/)
+      expect(document.querySelector('[data-slot="entry-mark"] [data-testid="brand-mark"]')).not.toBeNull()
+      // The page's own title is for screen readers (the tabs say it).
+      expect(screen.getByRole('heading', { level: 2, name: 'Sign in' })).toHaveClass('sr-only')
+      expect(document.querySelector('[data-slot="entry-intro-sentence"]')).toBeNull()
       const other = screen.getByTestId('entry-other')
       expect(other).toHaveTextContent('Publishing quizzes as a Sponsor?')
       expect(within(other).getByRole('link', { name: 'Go to the Sponsor app' })).toHaveAttribute('href', '/sponsor/login')

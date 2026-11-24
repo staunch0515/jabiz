@@ -87,7 +87,7 @@ for (const appearance of ['light', 'dark'] as const) {
       await expect(page.getByRole('button', { name: 'Create the account' })).toBeVisible()
       await expectAccessible(page, at(`app sign-up ${size}`))
       await page.goto('/taker/password-reset')
-      await expect(page.getByPlaceholder('E-mail address', { exact: true })).toBeVisible()
+      await expect(page.getByLabel('E-mail address', { exact: true })).toBeVisible()
       await expectAccessible(page, at(`app password reset ${size}`))
       await page.goto('/taker/auth/verify-email?entry=app&token=not-a-real-token')
       await expect(page.getByTestId('verify-start')).toBeVisible()

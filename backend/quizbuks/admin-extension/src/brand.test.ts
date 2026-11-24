@@ -4,7 +4,7 @@ import { messages } from './messages'
 
 describe('the brand (Q55b)', () => {
   it('is QuizBuks unless the build chooses another profile', () => {
-    expect(BRAND_NAMES).toEqual({ en: 'QuizBuks', zh: '答题拼好价', ja: 'クイズdeおトク' })
+    expect(BRAND_NAMES).toEqual({ en: 'QuizBuks', zh: '好好学习吧', ja: 'クイズdeおトク' })
     // The platform shows the name in the interface's language (Q61).
     expect(adminBrand('sample')).toMatchObject({ name: { en: 'Sample Quiz', zh: '示例答题', ja: 'サンプルクイズ' } })
     expect(adminBrand('sample').logo).toMatch(/^data:image\/svg\+xml/)

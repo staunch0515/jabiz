@@ -15,6 +15,11 @@ export interface BottomBarItem {
   badge?: number
   /** Raised in the middle of the bar (the one thing done most, such as scanning a code). */
   raised?: boolean
+  /**
+   * The icon of the current entry (phase 17zz30): a solid one, as timelines mark the area shown; the entry's own
+   * icon with a bolder stroke when absent. Only the `icons` variant uses it.
+   */
+  activeIcon?: LucideIcon
 }
 
 /** What an entry's link receives: pass it all on to the element rendered (a router's <Link>). */
@@ -39,6 +44,17 @@ export interface BottomBarProps {
   more?: ReactNode
   /** Renders an entry's link (a router's <Link>); a plain <a href> when absent. */
   renderLink?: (item: BottomBarItem, props: BottomBarLinkProps) => ReactNode
+  /**
+   * Phase 17zz30 (12 §13.1): `icons` shows the icons alone (26 px, the names for screen readers only: give a badge's
+   * count in the link's name), on a bar 53 px high (`--bottom-bar-icons-height`); `labels` (the default) is the bar
+   * as it always was.
+   */
+  variant?: 'labels' | 'icons'
+  /**
+   * The bar's opacity, background and all (0 to 1, default 1), changed over 0.17 s: an application fades it as the
+   * page scrolls on. It stays where it is and can still be tapped.
+   */
+  dim?: number
 }
 
 function defaultLink(item: BottomBarItem, props: BottomBarLinkProps) {
@@ -60,9 +76,10 @@ function Badge({ count }: { count?: number }) {
  * entry may be raised in the middle, and "More" opens the whole menu in a sheet from below. The shell shows it on
  * narrow screens only, and keeps the page and the floating button clear of it.
  */
-export function BottomBar({ items, isActive, label, more, renderLink = defaultLink }: BottomBarProps) {
+export function BottomBar({ items, isActive, label, more, renderLink = defaultLink, variant = 'labels', dim }: BottomBarProps) {
   const { t } = useTranslation(UI_NAMESPACE)
   const [open, setOpen] = useState(false)
+  const icons = variant === 'icons'
   const cell =
     'relative flex min-w-0 flex-1 flex-col items-center justify-center gap-0.5 px-1 text-[0.6875rem] leading-tight outline-none focus-visible:ring-2 focus-visible:ring-ring'
   // A link followed in the sheet closes it, whatever element the menu renders.
@@ -73,13 +90,25 @@ export function BottomBar({ items, isActive, label, more, renderLink = defaultLi
     <nav
       aria-label={label}
       data-slot="bottom-bar"
-      className="bg-background fixed inset-x-0 bottom-0 z-30 border-t pb-[env(safe-area-inset-bottom)]"
+      data-variant={variant}
+      className={cn('bg-background fixed inset-x-0 bottom-0 z-30 border-t pb-[env(safe-area-inset-bottom)]',
+        dim !== undefined && 'transition-opacity duration-[170ms] ease-linear')}
+      style={dim !== undefined ? { opacity: Math.min(1, Math.max(0, dim)) } : undefined}
     >
-      <ul className="flex h-(--bottom-bar-height) items-stretch">
+      <ul className={cn('flex items-stretch', icons ? 'h-(--bottom-bar-icons-height)' : 'h-(--bottom-bar-height)')}>
         {items.map((item) => {
           const active = isActive(item.path)
           const Icon = item.icon
-          const content = item.raised ? (
+          const Shown = icons && active && item.activeIcon ? item.activeIcon : Icon
+          const content = icons ? (
+            <>
+              <span className="relative">
+                <Shown aria-hidden className="size-[1.625rem]" strokeWidth={active ? 2.6 : 1.9} />
+                <Badge count={item.badge} />
+              </span>
+              <span className="sr-only">{item.label}</span>
+            </>
+          ) : item.raised ? (
             <>
               <span className="bg-primary text-primary-foreground -mt-5 flex size-12 items-center justify-center rounded-full shadow-md">
                 <Icon aria-hidden className="size-6" />
@@ -99,7 +128,7 @@ export function BottomBar({ items, isActive, label, more, renderLink = defaultLi
             <li key={item.key} className="flex flex-1">
               {renderLink(item, {
                 children: content,
-                className: cn(cell, active ? 'text-primary' : 'text-muted-foreground'),
+                className: cn(cell, icons ? 'text-foreground' : active ? 'text-primary' : 'text-muted-foreground'),
                 'aria-current': active ? 'page' : undefined,
                 'data-testid': `bottom-bar-${item.key}`,
               })}
@@ -116,8 +145,8 @@ export function BottomBar({ items, isActive, label, more, renderLink = defaultLi
               onClick={() => setOpen(true)}
               data-testid="bottom-bar-more"
             >
-              <MenuIcon aria-hidden className="size-5" />
-              <span>{t('more')}</span>
+              <MenuIcon aria-hidden className={icons ? 'size-[1.625rem]' : 'size-5'} />
+              <span className={icons ? 'sr-only' : undefined}>{t('more')}</span>
             </button>
           </li>
         )}

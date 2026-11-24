@@ -1,4 +1,16 @@
-import type { SignInMethod } from '@jabiz/ui'
+import { addMessages } from '@jabiz/client'
+import { AUTH_NAMESPACE, type SignInMethod } from '@jabiz/ui'
+
+/*
+ * The button that opens the mailed link's form, in the words of the timeline's sign-in ("Continue with …", Q113 §9.4):
+ * the platform's longer text ("… (no password)") does not fit a pill one line high on a 360 px phone in English and
+ * Japanese. Changed for this app only, as the platform's texts allow (addMessages on its namespace).
+ */
+addMessages(AUTH_NAMESPACE, {
+  en: { entry: { emailLink: 'Continue with a link by mail' } },
+  zh: { entry: { emailLink: '通过邮件链接继续' } },
+  ja: { entry: { emailLink: 'メールのリンクで続ける' } },
+})
 
 /**
  * Whether the sign-in page offers the mailed link first (Q50; platform 17m): in Chinese, since Google, Facebook and LINE

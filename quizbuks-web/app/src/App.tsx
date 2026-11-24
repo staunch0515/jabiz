@@ -40,7 +40,7 @@ import { RedeemPage } from './pages/RedeemPage'
 import { WelcomePage } from './pages/WelcomePage'
 import { AboutPage } from './pages/AboutPage'
 import { IntroPage, introSeen, rememberSeen } from './pages/IntroPage'
-import { QuizArt, Wordmark } from './qb/Illustrations'
+import { BrandMark, Wordmark } from './qb/Illustrations'
 import { inboxItemOf, INBOX_PATH } from './inbox/api'
 import { MY_SPONSOR_PATH, MY_SPONSOR_QUERY, readFigures, useMySponsor } from './mysponsor/api'
 import { MySponsorPage, SPONSOR_CONSOLE } from './mysponsor/MySponsorPage'
@@ -427,8 +427,9 @@ function isPublic(path: string): boolean {
 
 /**
  * The pages before a session in the platform's entry pages' template (phase 17zk; P4, docs/design/12-frontend.md
- * section 14): the app's wordmark, a column about the app on a wide screen (one line on a phone), the notices over the
- * page (the way out of another app's browser first, then offline and a new version; the test system's banner is the
+ * section 14), in its open look (17zz30, Q113 §9.4 as measured on x.com): no card; the brand's mark and name above the
+ * column on a phone, the name large with the mark large beside the column on a wide screen; the notices over the page
+ * (the way out of another app's browser first, then offline and a new version; the test system's banner is the
  * template's own), the help and the texts in the footer, and the way to the Sponsor app.
  */
 function EntryPages({ children }: { children: ReactNode }) {
@@ -445,12 +446,9 @@ function EntryPages({ children }: { children: ReactNode }) {
   ]
   return (
     <EntryLayoutProvider
-      brand={<Wordmark name={t('brand')} className="text-primary" />}
-      intro={{
-        sentence: tApp('entry.sentence'),
-        points: [tApp('entry.point1'), tApp('entry.point2'), tApp('entry.point3')],
-        illustration: <QuizArt className="h-56 w-full max-w-md" />,
-      }}
+      look="open"
+      mark={<BrandMark className="size-full" />}
+      brand={t('brand')}
       notices={notices}
       links={<EntryLegalLinks kinds={LEGAL.appKinds} />}
       otherEntry={{ text: tApp('entry.toSponsor'), href: `${SPONSOR_CONSOLE}login`, link: tApp('entry.toSponsorLink') }}
@@ -468,7 +466,8 @@ function Routes() {
   const { path, search } = useLocation()
   // F-C10c: the AI help is told the page the Taker came from (a name of its list, never the path).
   useEffect(() => notePage(path, search), [path, search])
-  const brand = <Wordmark name={t('brand')} className="text-primary" />
+  // The name alone: the open look draws the mark itself, beside it on a phone and large on a wide screen.
+  const brand = t('brand')
   // Every entry page in the template, with the notices that were over the card before (offline, a new version, the
   // way out of another app's browser).
   const frame = (content: ReactNode) => <EntryPages>{content}</EntryPages>
@@ -545,7 +544,7 @@ function Routes() {
   if (path === '/signup') {
     return frame(<>
       <SignUpForm {...navigation} brand={brand} signInPath="/login" signUpPath="/signup" tabs
-        oidc={{ returnTo: HOME, layout: 'icons' }}
+        oidc={{ returnTo: HOME, layout: 'buttons' }}
         note={<span data-testid="signup-terms">
           {tApp('public.signUpTerms')}{' '}
           <LegalLink kind="TERMS_APP" />{' · '}<LegalLink kind="PRIVACY" />
@@ -564,8 +563,9 @@ function Routes() {
         navigate(to, { replace: true })
       }} passwordResetPath="/password-reset" signInPath="/login" signUpPath="/signup" tabs
       // Q50 and gap 1: in Chinese the mailed link first (Google, Facebook and LINE do not open in mainland China); in
-      // Japanese and English the providers first and the mailed link behind a button. Icons on a phone.
-      order={signInOrder} oidcLayout="responsive" emailLink userNameLabel="email" passkey />)
+      // Japanese and English the providers first and the mailed link behind a button. The providers as full-width
+      // pills at every width, as on x.com (Q113 §9.4).
+      order={signInOrder} oidcLayout="buttons" emailLink userNameLabel="email" passkey />)
   }
   // A visitor's first time at the root: the introduction (Q32), remembered on the device; then the sign-in.
   if (!signedIn && path === HOME && !introSeen()) return <IntroPage />

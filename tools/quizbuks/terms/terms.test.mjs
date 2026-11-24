@@ -48,7 +48,7 @@ const SCANNED = [
 
 /**
  * F-F5b (requester, 2026-11-07): no text a person reads calls a part of the product "后台" (back office) or the like.
- * The sponsor side is 答题拼好价发起方 / 发起方页面, the operators' 运营商管理系统, the platform's 答题拼好价平台管理系统
+ * The sponsor side is 好好学习吧发起方 / 发起方页面, the operators' 运营商管理系统, the platform's 好好学习吧平台管理系统
  * (and the same in Japanese and English, docs/quizbuks/glossary.md). Other companies' names for their own products
  * stay as they are: "Shopify 后台" / "Shopify 管理画面" (Shopify's admin), Google's "Play Console".
  * The English words are looked for in texts only (messages, content, Markdown, pages): code comments say "console".

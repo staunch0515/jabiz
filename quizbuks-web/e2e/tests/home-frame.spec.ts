@@ -81,8 +81,11 @@ async function searched(page: Page, words: string, cards: number) {
   await expect(page.getByTestId('feed-searched')).toBeVisible()
   if (cards > 0) await expect(home.getByTestId('feed-card')).toHaveCount(cards)
   else await expect(home.getByTestId('home-empty')).toBeVisible()
-  await expect.poll(() => home.evaluate((section) => [...section.querySelectorAll('img')]
-    .every((img) => img.complete && img.naturalWidth > 0)), { message: 'the pictures load' }).toBe(true)
+  // A picture still to come is a grey box with no <img> yet (LazyImage before it nears the screen, FileImage while it
+  // fetches): wait for none of those as well as for every <img> to have loaded.
+  await expect.poll(() => home.evaluate((section) => !section.querySelector('[data-slot="image-loading"]')
+    && [...section.querySelectorAll('img')].every((img) => img.complete && img.naturalWidth > 0)),
+  { message: 'the pictures load' }).toBe(true)
   await page.evaluate(() => document.fonts.ready)
   return home
 }

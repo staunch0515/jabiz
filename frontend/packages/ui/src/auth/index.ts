@@ -7,6 +7,8 @@
  * `onNavigate` / `hrefOf` and callbacks) and speak the namespace `auth` in every platform language.
  */
 export { AUTH_NAMESPACE, authMessages } from './messages'
+export { EntryLookContext, useEntryLook } from './look'
+export type { EntryLook } from './look'
 export { AuthFrame, AuthField, AuthSubmit, AuthLink, AuthError, Outcome, ContinueTo, navigateTo } from './frame'
 export type { AuthFrameProps, AuthNavigation } from './frame'
 export { EntryLayout, EntryLayoutProvider, EntryTabs, EntryLink, useEntryLayout, useRetryWait, useIsWide } from './entry'

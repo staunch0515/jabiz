@@ -25,5 +25,6 @@ export function LazyImage({ fileId, variant, alt, className }: {
     return () => observer.disconnect()
   }, [near])
   if (near) return <FileImage fileId={fileId} variant={variant} alt={alt} className={className} />
-  return <span ref={ref} aria-hidden className={cn('bg-muted inline-block', className)} />
+  // `image-loading` (as FileImage's while it fetches): tests wait until no picture is still to come.
+  return <span ref={ref} aria-hidden data-slot="image-loading" className={cn('bg-muted inline-block', className)} />
 }

@@ -105,7 +105,8 @@ test('a video file plays muted on the home and is the video to watch before the 
   await searchHome(page, name)
   const card = page.getByTestId('feed-card').filter({ hasText: name })
   await expect(card).toHaveAttribute('data-video', 'true')
-  await expect(card.getByTestId('feed-card-watch')).toHaveText('Watch to answer')
+  // The home card says nothing about watching first (the start page does).
+  await expect(card.getByTestId('feed-card-watch')).toHaveCount(0)
   // In the middle of the screen the card plays the file in the app's one player: muted, by itself, inline.
   await card.evaluate((element) => element.scrollIntoView({ block: 'center' }))
   const video = page.getByTestId('video-stage-file')
@@ -131,7 +132,7 @@ test('a video file plays muted on the home and is the video to watch before the 
   await expect(page.getByTestId('play-question')).toContainText('What did the video show?')
 })
 
-test('a video file that does not open falls back to its cover and a link', async ({ page, request }) => {
+test('a video file that does not open falls back to its cover', async ({ page, request }) => {
   test.setTimeout(120_000)
   await videoServer(page)
   const sponsor = await fundedSponsor(request)
@@ -144,11 +145,9 @@ test('a video file that does not open falls back to its cover and a link', async
   await searchHome(page, name)
   const card = page.getByTestId('feed-card').filter({ hasText: name })
   await card.evaluate((element) => element.scrollIntoView({ block: 'center' }))
-  // The player fails: the card shows its cover again, and a link to the file.
-  const link = card.getByTestId('feed-card-open-video')
-  await expect(link).toHaveAttribute('href', MISSING)
-  await expect(link).toHaveAttribute('target', '_blank')
+  // The player fails: the card shows its cover again; the home card has no link to the file (the start page keeps it).
   await expect(card).not.toHaveAttribute('data-video', 'true')
+  await expect(card.getByTestId('feed-card-open-video')).toHaveCount(0)
   await expect(page.getByTestId('video-stage-file')).toHaveCount(0)
   await expectAccessible(page, 'app home video file that does not open')
 })

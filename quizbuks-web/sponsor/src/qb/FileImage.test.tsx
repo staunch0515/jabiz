@@ -22,4 +22,16 @@ describe('FileImage', () => {
     expect(fetchFileContent).toHaveBeenCalledTimes(1)
     expect(URL.revokeObjectURL).not.toHaveBeenCalled()
   })
+
+  it('marks its grey box as a picture still to come until the image is there', async () => {
+    URL.createObjectURL = vi.fn(() => 'blob:other')
+    URL.revokeObjectURL = vi.fn()
+    let resolve!: (blob: Blob) => void
+    fetchFileContent.mockImplementationOnce(() => new Promise<Blob>((done) => { resolve = done }))
+    const { container } = render(<FileImage fileId="f2" alt="" data-testid="img" />)
+    expect(container.querySelector('[data-slot="image-loading"]')).not.toBeNull()
+    resolve(new Blob(['x'], { type: 'image/png' }))
+    expect(await screen.findByTestId('img')).toHaveAttribute('src', 'blob:other')
+    expect(container.querySelector('[data-slot="image-loading"]')).toBeNull()
+  })
 })

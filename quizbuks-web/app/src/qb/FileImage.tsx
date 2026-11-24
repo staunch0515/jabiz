@@ -100,6 +100,6 @@ export function FileImage({ fileId, variant, alt, className, ...rest }: {
   }, [key, fileId, variant])
   // An image already here shows from the first paint; one still coming shows once it is here.
   const url = loaded?.key === key ? loaded.url : cachedImage(fileId, variant)
-  if (!url) return <span aria-hidden className={cn('bg-muted inline-block', className)} />
+  if (!url) return <span aria-hidden data-slot="image-loading" className={cn('bg-muted inline-block', className)} />
   return <img src={url} alt={alt} className={cn('object-cover', className)} {...rest} />
 }
