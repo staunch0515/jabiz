@@ -86,7 +86,7 @@ function Shell({ path }: { path: string }) {
         renderLink={(item, props) => portalLink(item.path, props)} />}
       navigation={<ShellNav label={t('nav.label')} items={items} isActive={isActive}
         renderLink={(item, props) => portalLink(item.path, props)} />}
-      bottomBar={<BottomBar label={t('nav.quick')} isActive={isActive}
+      bottomBar={<BottomBar label={t('nav.quick')} isActive={isActive} variant={openLook() ? 'icons' : 'labels'}
         items={items.map((item) => ({ key: item.key, label: item.label, path: item.path!, icon: item.icon! }))}
         renderLink={(item, props) => portalLink(item.path, props)} />}
       header={
@@ -117,6 +117,30 @@ function Shell({ path }: { path: string }) {
 }
 
 /**
+ * Phase 17zz30 (12 §13.1): `?look=open` shows the timeline look (the open entry pages, the bottom menu of icons) for
+ * the rest of the tab's visit; `?look=card` goes back.
+ */
+function openLook(): boolean {
+  try {
+    const asked = new URLSearchParams(window.location.search).get('look')
+    if (asked === 'open' || asked === 'card') window.sessionStorage.setItem('portal.look', asked)
+    return window.sessionStorage.getItem('portal.look') === 'open'
+  } catch {
+    return false
+  }
+}
+
+/** The portal's mark in the open look: decorative. */
+function PortalMark() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+      <rect x="2" y="2" width="20" height="20" rx="7" className="fill-primary" />
+      <path d="M6 12.5l4 4 8-9" className="stroke-primary-foreground" strokeWidth="2.8" fill="none" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  )
+}
+
+/**
  * The pages before a session in the platform's entry pages' template (phase 17zk): the portal's name, a column about
  * it on a wide screen (one line on a phone), the offline and new-version notices over the page.
  */
@@ -125,6 +149,8 @@ function EntryPages({ children }: { children: ReactNode }) {
   const notices = useEntryNotices()
   return (
     <EntryLayoutProvider
+      look={openLook() ? 'open' : 'card'}
+      mark={<PortalMark />}
       brand={t('brand')}
       intro={{
         sentence: t('entry.sentence'),
