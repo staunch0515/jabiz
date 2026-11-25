@@ -26,6 +26,10 @@
   --qb-coin-deep: #d97706;
   --qb-sky: #eef2ff;
   --qb-ink: #312e81;
+  /* The outline and the reward colour (QuizBuks Q113 §9.1, P6). */
+  --qb-outline: #d4d4e8;
+  --qb-reward: #e3b23c;
+  --qb-reward-foreground: #6e4d00;
 }
 
 .dark {
@@ -51,4 +55,7 @@
   --qb-coin-deep: #f59e0b;
   --qb-sky: #24215a;
   --qb-ink: #e0e7ff;
+  --qb-outline: #3f3f46;
+  --qb-reward: #e3b23c;
+  --qb-reward-foreground: #f0c75e;
 }

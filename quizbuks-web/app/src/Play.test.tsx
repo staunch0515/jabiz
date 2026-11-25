@@ -919,23 +919,20 @@ describe('the video to watch (Q19, Q63)', () => {
 })
 
 describe('the pages of the bottom bar (Q67)', () => {
-  it('puts a round badge before the title of each area, with the icon of the bottom menu (Q67, F-F4)', async () => {
+  it('heads each area with the avatar and the title, no round badge (Q113 §9.1, P4; was Q67)', async () => {
     server()
     render(<App />)
     await screen.findByTestId('home')
     for (const [area, title] of [['history', 'history-title'], ['scan', 'scan-title'], ['messages', 'inbox-title'],
       ['me', 'account-title']]) {
-      const entry = screen.getByTestId(`bottom-bar-${area}`)
-      // lucide names its icons by class (`lucide-history`): the page's badge is the menu entry's icon.
-      const icon = [...entry.querySelector('svg')!.classList].find((name) => name.startsWith('lucide-') && name !== 'lucide')!
-      await userEvent.click(entry)
+      await userEvent.click(screen.getByTestId(`bottom-bar-${area}`))
       const heading = await screen.findByRole('heading', { level: 1 })
       expect(heading).toHaveAttribute('id', title)
-      const badge = heading.closest('section')!.querySelector('[data-testid="title-badge"]')!
-      expect(badge).toHaveAttribute('aria-hidden', 'true')
-      // The account has the initial in place of the icon.
-      if (area === 'me') expect(badge).toHaveTextContent('M')
-      else expect(badge.querySelector('svg')).toHaveClass(icon)
+      const head = heading.closest('[data-slot="x-head"]')!
+      expect(head.querySelector('[data-head="top"]')).not.toBeNull()
+      // The avatar leads to "Me" (the drawer's, from Q113a-2), with the taker's initial.
+      expect(within(head as HTMLElement).getByRole('link', { name: 'Me' })).toHaveTextContent('M')
+      expect(screen.queryByTestId('title-badge')).toBeNull()
     }
   })
 })

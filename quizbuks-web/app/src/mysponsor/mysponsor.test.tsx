@@ -104,9 +104,9 @@ afterEach(() => {
 })
 
 describe('a Sponsor in the app (Q68)', () => {
-  it('offers the Sponsor page in the header to a Sponsor only, with a dot when funds are short', async () => {
+  it('offers the Sponsor page in the home\'s head to a Sponsor only, with a dot when funds are short', async () => {
     server({ figures: { ...FIGURES, fundsShort: 1 } })
-    window.history.replaceState(null, '', '/inbox')
+    window.history.replaceState(null, '', '/')
     render(<App />)
     const entry = await screen.findByTestId('header-my-sponsor')
     expect(entry).toHaveAttribute('href', '/my-sponsor')
@@ -116,9 +116,9 @@ describe('a Sponsor in the app (Q68)', () => {
 
   it('shows nothing of the kind to a Taker who is no Sponsor', async () => {
     server({ account: null })
-    window.history.replaceState(null, '', '/inbox')
+    window.history.replaceState(null, '', '/')
     render(<App />)
-    expect(await screen.findByTestId('inbox')).toBeInTheDocument()
+    expect(await screen.findByTestId('home')).toBeInTheDocument()
     await waitFor(() => expect(screen.queryByTestId('header-my-sponsor')).toBeNull())
   })
 

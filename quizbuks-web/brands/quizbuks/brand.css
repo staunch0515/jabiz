@@ -8,19 +8,33 @@
  * the same tokens, which the SPAs import as @qb-brand/brand.css.
  */
 :root {
-  --primary: #047857;
+  /* Palette A of the timeline look (Q113 §9.1, light; the dark one comes with Q113e): ink, secondary grey, the
+     dividers and the accent, the accent marking the current tab, links and the floating button. Inputs keep the
+     platform's darker border (3:1 against white, WCAG 1.4.11); the spec's outline colour is --qb-outline. */
+  --foreground: #0f1a17;
+  --card-foreground: #0f1a17;
+  --popover-foreground: #0f1a17;
+  --muted-foreground: #53625d;
+  --border: #eff3f2;
+  --sidebar-border: #eff3f2;
+  --primary: #0f6b5c;
   --primary-foreground: #ffffff;
-  --ring: #047857;
-  --accent: #ecfdf5;
-  --accent-foreground: #064e3b;
-  --sidebar-primary: #047857;
+  --ring: #0f6b5c;
+  --accent: #eaf3f1;
+  --accent-foreground: #0f1a17;
+  --sidebar-primary: #0f6b5c;
   --sidebar-primary-foreground: #ffffff;
-  --sidebar-ring: #047857;
-  --sidebar-accent: #ecfdf5;
-  --sidebar-accent-foreground: #064e3b;
+  --sidebar-ring: #0f6b5c;
+  --sidebar-accent: #eaf3f1;
+  --sidebar-accent-foreground: #0f1a17;
+  /* The outline of media and quiet buttons (Q113 §9.1 "描边"), decorative; and the reward colour (P6): the fill,
+     and the text that reads on white. */
+  --qb-outline: #cfd9d6;
+  --qb-reward: #e3b23c;
+  --qb-reward-foreground: #6e4d00;
   /* The first chart series is the brand green; the second the coin amber, so two series stay apart (also for
      colour-vision deficiency, where the platform's two greens would not). */
-  --chart-1: #047857;
+  --chart-1: #0f6b5c;
   --chart-2: #fbbf24;
   /* The hero band: a gradient dark enough for white text (≥ 5.3:1 at its lightest). */
   --qb-hero-from: #065f46;
@@ -40,6 +54,16 @@
 }
 
 .dark {
+  /* The platform's dark values until Q113e designs the dark palette: the same tokens as the light appearance. */
+  --foreground: #fafafa;
+  --card-foreground: #fafafa;
+  --popover-foreground: #fafafa;
+  --muted-foreground: #a8a8b0;
+  --border: #3f3f46;
+  --sidebar-border: #3f3f46;
+  --qb-outline: #3f3f46;
+  --qb-reward: #e3b23c;
+  --qb-reward-foreground: #f0c75e;
   --primary: #6ee7b7;
   --primary-foreground: #052e16;
   --ring: #6ee7b7;
