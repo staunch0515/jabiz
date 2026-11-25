@@ -121,6 +121,7 @@ test.describe('the heads and the tabs (Q113 §9.1)', () => {
     expect((await head.boundingBox())!.height, 'two rows of 53 px and the border').toBeCloseTo(107, 0)
     expect(await style(page, '[data-slot="page-title"]', 'font-size')).toBe('20px')
     expect(await style(page, '[data-slot="page-title"]', 'font-weight')).toBe('700')
+    expect((await page.locator('[data-slot="page-title"]').boundingBox())!.x, 'the title is 72 px in').toBeCloseTo(72, 0)
     const tab = page.locator('[data-slot="page-tab"][aria-current="page"]').first()
     expect((await tab.boundingBox())!.height).toBeCloseTo(53, 0)
     const bar = (await page.locator('[data-slot="page-tab-indicator"]').boundingBox())!
@@ -134,6 +135,8 @@ test.describe('the heads and the tabs (Q113 §9.1)', () => {
     expect(back.width).toBeCloseTo(36, 0)
     expect(back.height).toBeCloseTo(36, 0)
     expect(back.x, 'the way back is 8 px in').toBeCloseTo(8, 0)
+    // The title starts 72 px in, as on a first-level page (the prototype's alignment).
+    expect((await page.locator('[data-slot="page-title"]').boundingBox())!.x).toBeCloseTo(72, 0)
     await expect(page.getByTestId('area-header').locator('[data-head="sub"]')).toBeVisible()
     // No round badge of the area before the title any more (P4).
     await expect(page.getByTestId('title-badge')).toHaveCount(0)

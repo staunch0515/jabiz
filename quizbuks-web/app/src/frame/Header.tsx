@@ -157,7 +157,8 @@ export function TopHead({ title, id, note, actions, tabs, bleed }: {
   useClaimHead()
   return (
     <StickyHead tabs={tabs} bleed={bleed} testId="area-header">
-      <div className="flex w-full items-center gap-6 px-(--x-side)" data-head="top">
+      <div className="flex w-full items-center gap-[calc(var(--x-title-inset)-var(--x-side)-var(--x-avatar))] px-(--x-side)"
+        data-head="top">
         <TakerAvatar />
         <HeadTitle id={id} title={title} note={note} />
         {actions}
@@ -204,7 +205,8 @@ function SubHeadBand({ title, id, note, back, actions, tabs, bleed, testId }: {
   const button = 'size-(--x-back) shrink-0 rounded-full'
   return (
     <StickyHead tabs={tabs} bleed={bleed} testId={testId}>
-      <div className="flex w-full items-center gap-4 pr-(--x-side) pl-(--x-back-inset)" data-head="sub">
+      <div className="flex w-full items-center gap-[calc(var(--x-title-inset)-var(--x-back-inset)-var(--x-back))] pr-(--x-side) pl-(--x-back-inset)"
+        data-head="sub">
         {'to' in back ? (
           <Button asChild variant="ghost" size="icon" className={button}>
             <FrameLink to={back.to} aria-label={back.label} data-testid="header-back"><ArrowLeft aria-hidden /></FrameLink>

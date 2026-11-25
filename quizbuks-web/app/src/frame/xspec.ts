@@ -18,6 +18,8 @@ export const XSPEC = {
   backButton: 36,
   backInset: 8,
   noteSize: 13,
+  /** Where the title starts in either head (the prototype's 72 px: after the avatar, or after the way back). */
+  titleInset: 72,
   /** §9.1 "头部": the header's white, 85 % opaque, blurred under it by 12 px (§9.1a). */
   headerOpacity: 0.85,
   headerBlur: 12,
@@ -54,6 +56,7 @@ export function xspecVariables(): CSSProperties {
     '--x-back': `${XSPEC.backButton}px`,
     '--x-back-inset': `${XSPEC.backInset}px`,
     '--x-note': `${XSPEC.noteSize}px`,
+    '--x-title-inset': `${XSPEC.titleInset}px`,
     '--x-header-opacity': `${XSPEC.headerOpacity * 100}%`,
     '--x-header-blur': `${XSPEC.headerBlur}px`,
     '--x-header-transition': `${XSCROLL.headerTransition}s`,
