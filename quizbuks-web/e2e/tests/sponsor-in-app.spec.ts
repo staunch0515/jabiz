@@ -13,8 +13,7 @@ import {
   test,
   tokenOf,
   unique,
-  takerArea,
-} from './support'
+  openTakerArea } from './support'
 
 /*
  * A sponsor in the taker app (Q68, docs/quizbuks/plans/Q68-sponsor-in-app.md): a sponsor who also uses the app (the
@@ -56,7 +55,7 @@ test('a Sponsor reads their publication in the app and pauses and resumes it', a
   await expect(row.getByTestId('my-sponsor-counts')).toContainText('Answered: 0')
   await expectAccessible(page, 'app Sponsor page')
   // F-F4: "Me" has the way to the Sponsor's page too (the header's icon stays).
-  await takerArea(page, 'me').click()
+  await openTakerArea(page, 'me')
   await page.getByTestId('account-menu-my-sponsor').click()
   await expect(page).toHaveURL(/\/my-sponsor$/)
 

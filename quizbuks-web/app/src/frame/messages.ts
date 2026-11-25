@@ -8,12 +8,16 @@ import { APP } from '../messages'
  */
 const en = {
   frame: {
-    areas: { home: 'Home', history: 'Answered', scan: 'Scan', messages: 'Messages', me: 'Me' },
-    heads: { publication: 'Quiz', result: 'Result', avatar: 'Me' },
+    areas: { home: 'Home', search: 'Search', history: 'Answered', scan: 'Scan', messages: 'Notifications', me: 'Me' },
+    heads: { publication: 'Quiz', result: 'Result', avatar: 'Open the menu' },
     sideNav: 'Main menu',
-    messagesUnread: 'Messages, {{count}} unread',
+    messagesUnread: 'Notifications, {{count}} unread',
     historyToCollect: 'Answered, {{count}} to collect',
-    tabsLabel: { history: 'Answered', scan: 'Scan', messages: 'Messages' },
+    tabsLabel: { history: 'Answered', scan: 'Scan', messages: 'Notifications' },
+    drawer: { title: 'Menu', counts: 'Your numbers', account: 'Your account' },
+    aside: { label: 'More', prizesTitle: 'To collect', prizes: 'Prizes waiting for you: {{count}}', prizesNone: 'Nothing to collect',
+      prizesOpen: 'See them' },
+    search: { title: 'Search', hint: 'Search quizzes by their name, their Sponsor or a word of their description.' },
     tabs: { answered: 'Answered', prizes: 'To collect', scan: 'Scan', pass: 'Show my pass', inbox: 'Inbox', conversations: 'Conversations' },
   },
   prizes: {
@@ -57,12 +61,15 @@ const en = {
 
 const zh = {
   frame: {
-    areas: { home: '首页', history: '已答', scan: '扫一扫', messages: '消息', me: '我的' },
-    heads: { publication: '答题详情', result: '答题结果', avatar: '我的' },
+    areas: { home: '首页', search: '搜索', history: '已答', scan: '扫一扫', messages: '通知', me: '我的' },
+    heads: { publication: '答题详情', result: '答题结果', avatar: '打开菜单' },
     sideNav: '主菜单',
-    messagesUnread: '消息，{{count}} 条未读',
+    messagesUnread: '通知，{{count}} 条未读',
     historyToCollect: '已答，{{count}} 个待领奖',
-    tabsLabel: { history: '已答', scan: '扫一扫', messages: '消息' },
+    tabsLabel: { history: '已答', scan: '扫一扫', messages: '通知' },
+    drawer: { title: '菜单', counts: '你的数字', account: '你的账号' },
+    aside: { label: '更多', prizesTitle: '待领奖', prizes: '有 {{count}} 个奖品等你领取', prizesNone: '没有待领的奖品', prizesOpen: '查看' },
+    search: { title: '搜索', hint: '按名称、发起方或说明中的词搜索 Quiz。' },
     tabs: { answered: '已答', prizes: '待领奖', scan: '扫码', pass: '出示领奖码', inbox: '收件箱', conversations: '对话' },
   },
   prizes: {
@@ -106,12 +113,16 @@ const zh = {
 
 const ja = {
   frame: {
-    areas: { home: 'ホーム', history: '回答済み', scan: 'スキャン', messages: 'メッセージ', me: 'マイページ' },
-    heads: { publication: 'クイズ', result: '結果', avatar: 'マイページ' },
+    areas: { home: 'ホーム', search: '検索', history: '回答済み', scan: 'スキャン', messages: 'お知らせ', me: 'マイページ' },
+    heads: { publication: 'クイズ', result: '結果', avatar: 'メニューを開く' },
     sideNav: 'メインメニュー',
-    messagesUnread: 'メッセージ、未読{{count}}件',
+    messagesUnread: 'お知らせ、未読{{count}}件',
     historyToCollect: '回答済み、受け取り待ち{{count}}件',
-    tabsLabel: { history: '回答済み', scan: 'スキャン', messages: 'メッセージ' },
+    tabsLabel: { history: '回答済み', scan: 'スキャン', messages: 'お知らせ' },
+    drawer: { title: 'メニュー', counts: 'あなたの数字', account: 'あなたのアカウント' },
+    aside: { label: 'その他', prizesTitle: '受け取り待ち', prizes: '受け取り待ちの景品が{{count}}件あります', prizesNone: '受け取り待ちの景品はありません',
+      prizesOpen: '見る' },
+    search: { title: '検索', hint: 'クイズを名前、主催者、説明の言葉で検索します。' },
     tabs: { answered: '回答済み', prizes: '受け取り待ち', scan: 'スキャン', pass: '引き換えパスを表示', inbox: '受信箱', conversations: '会話' },
   },
   prizes: {

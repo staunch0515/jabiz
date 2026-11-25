@@ -1,6 +1,4 @@
 import { Button, cn } from '@jabiz/ui'
-import { useAuth } from '@jabiz/client'
-import { useQuery } from '@tanstack/react-query'
 import { ArrowLeft } from 'lucide-react'
 import {
   createContext,
@@ -16,8 +14,7 @@ import {
 import { useTranslation } from 'react-i18next'
 import { APP } from '../messages'
 import { ACCOUNT_PATH } from '../pages/accountPaths'
-import { PROFILE_QUERY } from '../pages/ProfileForm'
-import { readMyProfile } from '../qb/api'
+import { Initial, useDrawer } from './Drawer'
 import { FrameLink } from './FrameLink'
 import { nextScrollChrome, SHOWN } from './scrollChrome'
 import { XSPEC } from './xspec'
@@ -130,37 +127,49 @@ function HeadTitle({ id, title, note }: { id?: string; title: string; note?: Rea
   )
 }
 
-/** The taker's initial in a 32 px circle: the way to "Me" (the drawer's, from Q113a-2). */
+/** The taker's initial in a 32 px circle: it opens the drawer (Q113 §9.2); "Me" itself outside the frame. */
 export function TakerAvatar() {
   const { t } = useTranslation(APP)
-  const { email } = useAuth()
-  const profile = useQuery({ queryKey: PROFILE_QUERY, queryFn: readMyProfile })
-  const initial = (profile.data?.displayName || email || '?').trim().charAt(0).toUpperCase()
+  const drawer = useDrawer()
+  const classes = 'focus-visible:ring-ring shrink-0 rounded-full outline-none focus-visible:ring-2'
+  const initial = <Initial className="size-(--x-avatar) text-sm" />
+  if (!drawer) {
+    return <FrameLink to={ACCOUNT_PATH} aria-label={t('frame.areas.me')} data-testid="head-avatar" className={classes}>{initial}</FrameLink>
+  }
   return (
-    <FrameLink to={ACCOUNT_PATH} aria-label={t('frame.heads.avatar')} data-testid="head-avatar"
-      className={cn('bg-primary text-primary-foreground flex size-(--x-avatar) shrink-0 items-center justify-center',
-        'focus-visible:ring-ring rounded-full text-sm font-semibold outline-none focus-visible:ring-2')}>
-      <span aria-hidden>{initial}</span>
-    </FrameLink>
+    <button type="button" aria-label={t('frame.heads.avatar')} aria-haspopup="dialog" aria-expanded={drawer.open}
+      data-testid="head-avatar" className={classes} onClick={() => drawer.setOpen(true)}>
+      {initial}
+    </button>
   )
 }
 
-/** The head of a first-level page: the avatar, the title, the page's icon buttons; the page's tabs under them. */
-export function TopHead({ title, id, note, actions, tabs, bleed }: {
+/**
+ * The head of a first-level page: the avatar, the title, the page's icon buttons; the page's tabs under them. A page
+ * whose head is a field (the search's box) gives `field`: the title is then for assistive technology only.
+ */
+export function TopHead({ title, id, note, actions, tabs, bleed, field }: {
   title: string
   id?: string
   note?: ReactNode
   actions?: ReactNode
   tabs?: ReactNode
   bleed?: boolean
+  field?: ReactNode
 }) {
   useClaimHead()
   return (
     <StickyHead tabs={tabs} bleed={bleed} testId="area-header">
-      <div className="flex w-full items-center gap-[calc(var(--x-title-inset)-var(--x-side)-var(--x-avatar))] px-(--x-side)"
+      <div className={cn('flex w-full items-center px-(--x-side)',
+        field ? 'gap-(--x-side)' : 'gap-[calc(var(--x-title-inset)-var(--x-side)-var(--x-avatar))]')}
         data-head="top">
         <TakerAvatar />
-        <HeadTitle id={id} title={title} note={note} />
+        {field ? (
+          <>
+            <h1 id={id} data-slot="page-title" tabIndex={-1} className="sr-only">{title}</h1>
+            <div className="min-w-0 flex-1">{field}</div>
+          </>
+        ) : <HeadTitle id={id} title={title} note={note} />}
         {actions}
       </div>
     </StickyHead>

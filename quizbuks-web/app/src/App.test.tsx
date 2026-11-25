@@ -585,41 +585,44 @@ describe('a signed-in Taker', () => {
     expect(await screen.findByTestId('home')).toHaveTextContent('Mei')
   })
 
-  it('keeps the header to the name, the filters and the search: no menu at the top right (F-F4)', async () => {
+  it('keeps the header to the avatar, the mark and the filters: no menu at the top right (F-F4, Q113 §9.2)', async () => {
     server({ profile: { displayName: 'Mei', countryCode: 'JP', city: null, preferredCurrency: 'JPY', revision: 3 } })
     window.history.replaceState(null, '', '/')
     render(<App />)
     expect(await screen.findByTestId('home')).toBeInTheDocument()
     const header = screen.getByRole('banner')
-    // Q63: the home's search at the right. Q64: the home's filters beside it.
+    // The avatar opens the drawer; Q64: the home's filters at the right. The search is a page of its own.
     expect(within(header).getAllByRole('button').map((b) => b.dataset.testid))
-      .toEqual(['feed-filters-open', 'search-open'])
+      .toEqual(['head-avatar', 'feed-filters-open'])
     expect(screen.queryByTestId('app-menu')).toBeNull()
     expect(within(header).queryByTestId('sign-out')).toBeNull()
     await expectAccessible()
   })
 
-  it('shows the bottom menu of five, scanning in the middle, and the left column beside it (F-F4)', async () => {
+  it('shows the bottom menu of four, the floating scan button, and the left column beside them (Q113 §9.2)', async () => {
     server({ profile: { displayName: 'Mei', countryCode: 'JP', city: null, preferredCurrency: 'JPY', revision: 3 } })
     window.history.replaceState(null, '', '/')
     render(<App />)
     expect(await screen.findByTestId('home')).toBeInTheDocument()
     const bottom = screen.getByRole('navigation', { name: 'App' })
     expect(within(bottom).getAllByRole('link').map((link) => link.dataset.testid)).toEqual([
-      'bottom-bar-home', 'bottom-bar-history', 'bottom-bar-scan', 'bottom-bar-messages', 'bottom-bar-me'])
+      'bottom-bar-home', 'bottom-bar-search', 'bottom-bar-history', 'bottom-bar-messages'])
     expect(within(bottom).getAllByRole('link').map((link) => link.textContent)).toEqual([
-      'Home', 'Answered', 'Scan', 'Messages', 'Me'])
+      'Home', 'Search', 'Answered', 'Notifications'])
     // The two are one frame switched by the width in CSS: the phone's by `md:hidden`, the wide screen's the other way.
     expect(screen.getByTestId('bottom-menu')).toHaveClass('md:hidden')
     const rail = screen.getByRole('navigation', { name: 'Main menu' })
     expect(rail).toHaveClass('hidden', 'md:flex')
+    // The mark, the four areas and "Me", then scanning as the main button.
     expect(within(rail).getAllByRole('link').map((link) => link.dataset.testid)).toEqual([
-      'side-rail-home', 'side-rail-history', 'side-rail-scan', 'side-rail-messages', 'side-rail-me'])
+      'side-rail-mark', 'side-rail-home', 'side-rail-search', 'side-rail-history', 'side-rail-messages', 'side-rail-me',
+      'side-rail-scan'])
     expect(within(rail).getByTestId('side-rail-home')).toHaveAttribute('aria-current', 'page')
-    await userEvent.click(within(bottom).getByTestId('bottom-bar-scan'))
+    await userEvent.click(screen.getByTestId('page-fab'))
     expect(window.location.pathname).toBe('/scan')
-    expect(within(screen.getByRole('navigation', { name: 'App' })).getByTestId('bottom-bar-scan'))
-      .toHaveAttribute('aria-current', 'page')
+    // A page under another: no entry marked, no floating button.
+    expect(within(screen.getByRole('navigation', { name: 'App' })).queryByRole('link', { current: 'page' })).toBeNull()
+    expect(screen.queryByTestId('page-fab')).toBeNull()
   })
 
   it('has no bottom menu or column on the welcome step, which signs out from its header', async () => {
@@ -672,8 +675,8 @@ describe('a signed-in Taker', () => {
     expect(window.location.pathname).toBe('/account/security')
     expect(await screen.findByRole('heading', { level: 1, name: 'Sign-in and security' })).toBeInTheDocument()
     expect(screen.getByTestId('account-email')).toHaveTextContent('mei@example.com')
-    // The bottom menu still marks "Me".
-    expect(screen.getByTestId('bottom-bar-me')).toHaveAttribute('aria-current', 'page')
+    // "Me" is the drawer's (Q113 §9.2): the left column of a wide screen marks it.
+    expect(screen.getByTestId('side-rail-me')).toHaveAttribute('aria-current', 'page')
     // The way back is the header's, the same on every page under "Me", and says where it goes.
     expect(screen.getByTestId('header-back')).toHaveAccessibleName('Back to Me')
     expect(screen.queryByTestId('account-back')).toBeNull()

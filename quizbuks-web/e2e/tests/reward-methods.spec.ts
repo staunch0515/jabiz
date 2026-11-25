@@ -9,8 +9,7 @@ import {
   run,
   signIn,
   takerArea,
-  test,
-} from './support'
+  test, openTakerArea } from './support'
 import { approvedSponsor, takerInJapan } from './wallet'
 import { reviewerFor } from './operators'
 
@@ -218,15 +217,15 @@ test('a Taker collects a prize by scanning the Sponsor\'s screen with the app\'s
     }, picture)
     await signIn(page, '/taker/', owed.taker.email)
     // On a 360 px phone the page is no wider than the screen (a wider one is zoomed out, and taps miss what they aim
-    // at). F-F4: the scanner is the bottom menu's middle entry, raised, and its tab is the camera.
+    // at). Q113 §9.2: the scanner is the floating button at the bottom right, 20 px from the side.
     await page.setViewportSize({ width: 360, height: 780 })
-    const open = page.getByTestId('bottom-bar-scan')
+    const open = page.getByTestId('page-fab')
     await expect(open).toBeVisible()
     await expect(open).toHaveAccessibleName('Scan')
     expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth))
       .toBeLessThanOrEqual(0)
     const box = (await open.boundingBox())!
-    expect(Math.abs(box.x + box.width / 2 - 180), 'scanning is in the middle').toBeLessThanOrEqual(1)
+    expect(Math.round(360 - box.x - box.width), 'scanning is 20 px from the side').toBe(20)
     await open.click()
     await expect(page.getByTestId('scan-page')).toBeVisible()
     await expectAccessible(page, 'app scanner')
@@ -264,7 +263,7 @@ test('a Taker finds the prize under "To collect" and shows the pass from the sca
     await expectAccessible(page, 'app to collect')
 
     // From the scanner: one prize to collect, so one tap on its button shows the pass.
-    await takerArea(page, 'scan').click()
+    await openTakerArea(page, 'scan')
     const show = page.getByTestId('pass-show')
     await expect(show).toContainText('Show my pass (1)')
     await show.click()
@@ -296,7 +295,7 @@ test('a Sponsor names a Taker to the staff by their ID, who hands out a prize at
     // Kai reads their ID in "Me" (once signed in: the home is shown): Settings, Staff counter (F-F4).
     await signIn(page, '/taker/', kai.email)
     await expect(page.getByTestId('home')).toBeVisible()
-    await takerArea(page, 'me').click()
+    await openTakerArea(page, 'me')
     await expectAccessible(page, 'app account menu')
     await page.getByTestId('account-menu-id').click()
     await expect(page).toHaveURL(/\/taker\/account\/id$/)
@@ -324,7 +323,7 @@ test('a Sponsor names a Taker to the staff by their ID, who hands out a prize at
     await signIn(page, '/taker/', kai.email)
     await expect(page.getByTestId('home')).toBeVisible()
     // F-F4: "Me", Settings, Staff counter, then the desk.
-    await takerArea(page, 'me').click()
+    await openTakerArea(page, 'me')
     await page.getByTestId('account-menu-id').click()
     await page.getByTestId('staff-desk-link').click()
     await expect(page).toHaveURL(/\/taker\/staff$/)

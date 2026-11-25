@@ -148,7 +148,8 @@ describe('my knowledge maps (F-S3c)', () => {
     expect(within(item).getByTestId('maps-progress')).toHaveTextContent('1 of 2 nodes lit')
     expect(asked.find((q) => q.path === '/api/queries/qb.app.trees')?.params).toEqual({})
     // The bottom menu keeps "Me" marked.
-    expect(screen.getByTestId('bottom-bar-me')).toHaveAttribute('aria-current', 'page')
+    // "Me" is the drawer's (Q113 §9.2): the left column of a wide screen marks it.
+    expect(screen.getByTestId('side-rail-me')).toHaveAttribute('aria-current', 'page')
     await expectAccessible()
     await userEvent.click(item)
     expect(await screen.findByTestId('map-title')).toHaveTextContent('Baking')

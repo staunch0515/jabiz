@@ -144,10 +144,10 @@ test('the home stays pixel for pixel as it was before F-F4', async ({ page, requ
         const header = page.getByTestId('header')
         await expect(header.getByTestId('head-mark')).toBeVisible()
         await expect(header.getByTestId('head-avatar')).toBeVisible()
-        // The buttons at the right: the filters and the search stay; the menu is gone (F-F4b), its entries are in the
-        // bottom menu and in "Me".
+        // The button at the right: the filters (Q64); the search is the bottom menu's (Q113a-2), the menu is gone
+        // (F-F4b), its entries are in the bottom menu and the drawer.
         await expect(header.getByTestId('feed-filters-open')).toBeVisible()
-        await expect(header.getByTestId('search-open')).toBeVisible()
+        await expect(header.getByTestId('search-open')).toHaveCount(0)
         await expect(page.getByTestId('app-menu')).toHaveCount(0)
         await expect(header.getByTestId('header-my-sponsor')).toHaveCount(0)
         const box = (await header.boundingBox())!

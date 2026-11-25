@@ -57,8 +57,9 @@ import { DEFAULT_PUSH_EVERY } from '../exposure/rules'
 /** The home's address, searched from the header (Q63): `/?q=<text>`. */
 export const HOME_PATH = '/'
 
-export function searchPath(q: string): string {
-  return q ? `${HOME_PATH}?q=${encodeURIComponent(q)}` : HOME_PATH
+/** The address of a search: on the search's page (Q113a-2), or on the home as before (`base`). */
+export function searchPath(q: string, base = HOME_PATH): string {
+  return q ? `${base}?q=${encodeURIComponent(q)}` : base
 }
 
 /** The search an address of the home carries; empty for none. */
@@ -70,12 +71,12 @@ export function searchOf(search: string): string {
  * F-S10: the home's address with the full-screen vertical mode open on a publication (`shorts=<id>`), the search
  * kept: the mode lies over the home, so that the browser's back closes it and the home is where it was.
  */
-export function shortsPath(q: string, publicationId: string | null): string {
+export function shortsPath(q: string, publicationId: string | null, base = HOME_PATH): string {
   const params = new URLSearchParams()
   if (q) params.set('q', q)
   if (publicationId) params.set('shorts', publicationId)
   const query = params.toString()
-  return query ? `${HOME_PATH}?${query}` : HOME_PATH
+  return query ? `${base}?${query}` : base
 }
 
 /** The publication the vertical mode is open on, from the home's address; null when it is closed. */
@@ -415,7 +416,14 @@ function FiltersSheet({ open, onOpenChange, value, onApply, method, onMethod }: 
  * name and title, sorted and filtered; more on request. The country is the profile's: without one (an unverified
  * taker who has not completed it) only publications aimed at everybody.
  */
-export function FeedPage({ name, country }: { name: string; country: string | null }) {
+export function FeedPage({ name, country, base = HOME_PATH }: {
+  name: string
+  country: string | null
+  /** The page the feed is on: the home, or the search's page (`/search`), whose own head names it (Q113a-2). */
+  base?: string
+}) {
+  // On the search's page the feed is the results alone: no greeting, no offers or notices of the home.
+  const results = base !== HOME_PATH
   const { t } = useTranslation(APP)
   const { t: tQb } = useTranslation(QB)
   // The feed is for the moment the page opened; a search or a new sort asks again for that moment.
@@ -502,20 +510,20 @@ export function FeedPage({ name, country }: { name: string; country: string | nu
   const shelfAfter = new Map<number, Shelf>(shelves.map((shelf) => [shelf.after, shelf]))
   const openShorts = useCallback((card: FeedCard) => {
     countShortsOpen(card)
-    navigate(shortsPath(q, card.publicationId))
-  }, [q])
+    navigate(shortsPath(q, card.publicationId, base))
+  }, [q, base])
   const closeShorts = useCallback(() => {
     void queryClient.invalidateQueries({ queryKey: ['qb', 'feed-pushes'] })
     if (canGoBack()) window.history.back()
-    else navigate(shortsPath(q, null), { replace: true })
-  }, [q, queryClient])
+    else navigate(shortsPath(q, null, base), { replace: true })
+  }, [q, base, queryClient])
   // F-S8: a block in the vertical mode moves it on to the next short the block leaves (the list is read again); none
   // left closes it.
   const blockedInShorts = (card: FeedCard, kind: BlockKind) => {
     const at = viewerCards.findIndex((c) => c.publicationId === card.publicationId)
     const next = [...viewerCards.slice(at + 1), ...viewerCards.slice(0, Math.max(0, at)).reverse()]
       .find((c) => !covers(kind, card, c))
-    if (next) navigate(shortsPath(q, next.publicationId), { replace: true })
+    if (next) navigate(shortsPath(q, next.publicationId, base), { replace: true })
     else closeShorts()
   }
   const viewing = shortsOpen !== null && viewerCards.some((card) => card.publicationId === shortsOpen)
@@ -529,14 +537,15 @@ export function FeedPage({ name, country }: { name: string; country: string | nu
   })
 
   return (
-    <section className="flex flex-col" aria-labelledby="home-title" data-testid="home">
+    <section className="flex flex-col" aria-labelledby={results ? 'search-title' : 'home-title'}
+      data-testid={results ? 'search-results' : 'home'}>
       {/* Q65: what comes before the cards takes room only when there is something to see: the first card is right
           under the header otherwise. */}
       <div className="flex flex-col gap-4 has-[>:not(.sr-only)]:pb-4" data-testid="home-top">
       {/* Q66: no greeting band; the page's heading is for assistive technology only. */}
-      <h1 id="home-title" className="sr-only">{t('home.greeting', { name })}</h1>
-      <HomeInstallOffer />
-      {openCash.length > 0 && (
+      {!results && <h1 id="home-title" className="sr-only">{t('home.greeting', { name })}</h1>}
+      {!results && <HomeInstallOffer />}
+      {!results && openCash.length > 0 && (
         <Alert variant={openCash.some((r) => r.status === 'OVERDUE') ? 'warning' : 'default'} data-testid="home-cash">
           <HandCoins aria-hidden />
           <AlertTitle>{t('cash.openTitle', { count: openCash.length })}</AlertTitle>
@@ -553,7 +562,7 @@ export function FeedPage({ name, country }: { name: string; country: string | nu
           </AlertDescription>
         </Alert>
       )}
-      {openPrizes.length > 0 && (
+      {!results && openPrizes.length > 0 && (
         <Alert data-testid="home-redeem">
           <Gift aria-hidden />
           <AlertTitle>{t('redeem.openTitle', { count: openPrizes.length })}</AlertTitle>
@@ -574,7 +583,7 @@ export function FeedPage({ name, country }: { name: string; country: string | nu
       {q && (
         <div className="flex items-center gap-2 text-sm" data-testid="feed-searched">
           <span className="min-w-0 truncate">{t('feed.searchedFor', { q })}</span>
-          <Button variant="ghost" size="sm" onClick={() => navigate(HOME_PATH)} data-testid="feed-search-clear">
+          <Button variant="ghost" size="sm" onClick={() => navigate(base)} data-testid="feed-search-clear">
             <X aria-hidden />
             {t('feed.clearSearch')}
           </Button>
@@ -630,7 +639,7 @@ export function FeedPage({ name, country }: { name: string; country: string | nu
                       : undefined}
                     onOpen={trackable(card.video) ? () => openWithSound(card.video!) : undefined} />
                   {/* F-S10: a shelf of short videos after this card (the parameters' places). */}
-                  {shelf && <ShortsShelf items={shelf.items} hrefOf={(c) => shortsPath(q, c.publicationId)}
+                  {shelf && <ShortsShelf items={shelf.items} hrefOf={(c) => shortsPath(q, c.publicationId, base)}
                     onOpen={openShorts} />}
                 </Fragment>
               )

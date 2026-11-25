@@ -50,11 +50,13 @@ F-F5（`docs/quizbuks/first-launch-spec.md`）固定的用词。界面、邮件�
 
 | 位置 | 中文 | 日文 | 英文 | 停用 |
 |---|---|---|---|---|
-| 底部菜单（宽屏为左侧一列） | 首页 / 已答 / 扫一扫 / 消息 / 我的 | ホーム / 回答済み / スキャン / メッセージ / マイページ | Home / Answered / Scan / Messages / Me | 记录、我的学分、账户（作底部菜单项）；右上角菜单 |
+| 底部菜单（宽屏为左列；Q113a-2 起只有图标，名称给读屏） | 首页 / 搜索 / 已答 / 通知 | ホーム / 検索 / 回答済み / お知らせ | Home / Search / Answered / Notifications | 记录、我的学分、账户（作底部菜单项）；右上角菜单；"消息"（Q113a-2 改为"通知"）；扫一扫与我的作底部菜单项（Q113a-2） |
+| 悬浮按钮（宽屏为左列的主按钮） | 扫一扫 | スキャン | Scan | |
+| 侧边抽屉（左上头像打开） | 我的 / 学分 / 待领奖 / 证书 / 我的图 / 推荐 / 我的发起方账号 / 帮助 / 退出登录 | マイページ / クドス / 受け取り待ち / 証明書 / マイマップ / 紹介 / 私のスポンサーアカウント / ヘルプ / ログアウト | Me / Kudos / To collect / Certificates / My maps / Referrals / My Sponsor account / Help / Sign out | |
 | 已答的标签 | 已答 / 待领奖 | 回答済み / 受け取り待ち | Answered / To collect | |
 | 扫一扫的标签 | 扫码 / 出示领奖码 | スキャン / 引き換えパスを表示 | Scan / Show my pass | |
 | 学者在柜台出示的码（Q89c） | 领奖码 | 引き換えパス | pass | 通行码 |
-| 消息的标签 | 收件箱 / 对话 | 受信箱 / 会話 | Inbox / Conversations | |
+| 通知的标签 | 收件箱 / 对话 | 受信箱 / 会話 | Inbox / Conversations | |
 | 我的：顶部三个数字 | 学分 / 待领奖品 / 证书 | クドス / 受け取り待ちの景品 / 証明書 | Kudos / Prizes to collect / Certificates | |
 | 学分还不能使用时的标注 | 即将开放 | 近日公開 | Coming soon | |
 | 我的：两组 | 我拥有的 / 设置 | 持っているもの / 設定 | What I have / Settings | |

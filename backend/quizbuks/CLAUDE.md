@@ -415,12 +415,14 @@
   显示条件只是隐藏（服务端照旧判断）：学分钱包只在可付 Kudos 时（Q28），合作权益只在 `qb.sponsor.benefit-access` 有角色开放时（没有角色的发起方由概况的 `BenefitsEntryCard` 带到 `/benefits`，入口不减少）；不显示的标签的地址转到该区域第一个显示的标签。
   **首页的"待我处理"**（F-F3b，`sponsor/src/home/`、模板 `qb.sponsor.todo`）：要发起方去做的事只经这一份清单——新的待办在 `todo.sql` 加一列（数据视图限本人；阈值用已有的参数，不写数字）、在 `home/api.ts` 的 `TODO_COLUMNS`、`home/todo.ts` 的 `TODO_ORDER` / `TODO_PATH`（直接链到处理它的页面）与三语 `home.todo.items.<列>` 各加一处，`SponsorTodoIT` 加一例；数目为 0 的不显示；不另建待办的页面或徽标。奖品与兑换的徽标 = 待确认的领取 + 待发送 / 有争议的电子奖品（`prizesBadge`）。
   发起方中心（Q79，`sponsor/src/profile/`）的各节是这个区域的标签（概况、基本信息、公开主页（含统计 `/profile/page/stats`）、店员、邮件服务器；商品是资源库的标签），由 `ProfileLayout` 给出页头，节内只用 h2；概况的完成度清单是纯函数 `profile/checklist.ts`，只读各节已有的读取。
-- **学者 App 的框架**（F-F4，`quizbuks-web/app/src/frame/`，`docs/quizbuks/plans/impl/F-F4.md`；Q113 照 X 的布局改版，`docs/quizbuks/plans/Q113-taker-ui-tone.md` §9 与 `impl/Q113.md`，
-  其规格的数值只在 `frame/xspec.ts`（lint 拒绝在 `frame/` 中写这些数），滚动规则只在 `frame/scrollChrome.ts`：手机上头部随向下滚动一比一移出、底部栏淡到 0.3，快速上划才恢复（§9.1a）；
+- **学者 App 的框架**（F-F4，`quizbuks-web/app/src/frame/`，`docs/quizbuks/plans/impl/F-F4.md`；Q113 照 X 的布局改版，`docs/quizbuks/plans/Q113-taker-ui-tone.md` §9 与 `impl/Q113.md`）：
+  规格的数值只在 `frame/xspec.ts`（lint 拒绝在 `frame/` 中写这些数），滚动规则只在 `frame/scrollChrome.ts`：手机上头部随向下滚动一比一移出、底部栏与悬浮按钮淡到 0.3，快速上划才恢复（§9.1a）；
   页面的头部只有三种（`frame/Header.tsx`：一级页、子页、沉浸页，品牌只在首页与导航中），区域里的页面用 `AreaHeader`，标签为平台 `PageTabs` 的 `indicator="label"`。
-  Q113a-2 起底部改为 4 项（首页 / 搜索 / 已答 / 通知）、扫一扫为悬浮按钮、"我的"为侧边抽屉，下面关于 5 项与"我的"的规则随之改写）：底部 5 项（首页 / 已答 / 扫一扫（正中、凸起）/ 消息 / 我的；平台 `BottomBar`），宽屏（≥ 平台断点 `md`）为左侧一列（`AppFrame` 中 App 自己的 `SideRail`，不用 `AppShell`：同一棵树以 CSS 在两种宽度间切换，转屏不重挂页面与播放器）。
-  区域、标签（`AREA_TABS`）、"我的"两组的条目（`ME_OWNED`、`ME_SETTINGS`）与每个页面属于哪个区域只在 `frame/areas.ts`，底部菜单的图标从它取（Q113a 起标题前不再有区域的大圆图标）。
-  **新功能加为某个区域里的标签或"我的"中的一项，不加底部菜单项，也不恢复右上角菜单**（退出登录在"我的"最下方，欢迎页的页头另有；外观在"设置 → App 设置"）。地址改动只经 `LEGACY_APP_PATHS`（`areas.test.ts` 逐条检查），`OLD_ROUTES` 只增不删（e2e `taker-frame.spec.ts` 逐条打开）。
+  导航（Q113a-2，§9.2）：手机底部 4 项，只有图标（首页 / 搜索 / 已答 / 通知；平台 `BottomBar` 的 `variant="icons"`，名称只给读屏）；扫一扫是一级页右下的悬浮按钮（平台 `Fab` 的 `variant="timeline"`，随底部栏变淡）；
+  左上头像打开侧边抽屉（平台 `Sheet`，左侧），抽屉里是"我的"的条目与退出登录；宽屏（≥ 平台断点 `md`）为三栏：左列导航（`md` 起只有图标，`xl` 起图标加文字、品牌与主按钮"扫一扫"）、中栏 600px、`xl` 起右栏（搜索与待领奖品）。
+  都在 `AppFrame` 中由 App 自己画，不用 `AppShell`：同一棵树以 CSS 在几种宽度间切换，转屏不重挂页面与播放器。
+  区域（底部与左列的 `BOTTOM_AREAS`；扫一扫与"我的"是不在底部的区域，它们的页面是子页）、标签（`AREA_TABS`）、抽屉的条目（`DRAWER_ROWS`）、"我的"两组的条目（`ME_OWNED`、`ME_SETTINGS`）与每个页面属于哪个区域只在 `frame/areas.ts`。
+  **新功能加为某个区域里的标签、抽屉或"我的"中的一项，不加底部菜单项，也不恢复右上角菜单**（退出登录在抽屉与"我的"最下方，欢迎页的页头另有；外观在"设置 → App 设置"）。搜索的结果在 `/search?q=`（首页的 `/?q=` 照旧可用）。地址改动只经 `LEGACY_APP_PATHS`（`areas.test.ts` 逐条检查），`OLD_ROUTES` 只增不删（e2e `taker-frame.spec.ts` 逐条打开）。
   首页（`FeedPage`）的改动须同时更新视觉对比基线并说明理由（`e2e/tests/home-frame.spec.ts`；框架本身的改动不得更新基线，Q113a 与 Q113b 的改版除外，其 PR 说明理由）。"我的图"在 `/maps`（F-S3c，不另设 `/account/map`）。
   待领奖只有一个来源：只读模板 `qb.app.prizes`（到店、现金、电子三种，`open` 与 `qb.app.redemptions` / `cash-rewards` 同一条件），已答的"待领奖"标签与两处徽标、"我的"的数字、扫一扫的"出示领奖码"都读它（`frame/prizes.ts`，同一个 query key，不轮询）；
   消息的徽标 = 收件箱未读 + 对话未读，由 `AppFrame` 问一次（`useUnread` / `useConversationsUnread`，进入、回到前台、每 5 分钟；标签上的数字只读缓存）。

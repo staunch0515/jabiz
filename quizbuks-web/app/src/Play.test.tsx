@@ -293,8 +293,8 @@ describe('the feed', () => {
     const { calls } = server()
     render(<App />)
     await screen.findByTestId('feed-card')
-    // The search and the filters are the header's; the home has no row of its own.
-    expect(screen.queryByRole('search')).toBeNull()
+    // The filters are the header's (the search is a page of its own); the home has no row of its own.
+    expect(within(screen.getByRole('main')).queryByRole('search')).toBeNull()
     expect(within(screen.getByRole('banner')).getByTestId('feed-filters-open')).toHaveAccessibleName('Filters')
     expect(screen.queryByTestId('feed-chips')).toBeNull()
     expect(screen.queryByTestId('feed-sort')).toBeNull()
@@ -334,23 +334,23 @@ describe('the feed', () => {
     const { calls } = server()
     render(<App />)
     await screen.findByTestId('feed-card')
-    // Q63: the magnifier beside the header's menu opens the box; a search shows the home's results.
-    await userEvent.click(within(screen.getByRole('banner')).getByTestId('search-open'))
-    await userEvent.type(screen.getByTestId('feed-search'), 'capital')
+    // Q63, Q113 §9.2: the search is the bottom menu's second entry, a page whose head is the box.
+    await userEvent.click(screen.getByTestId('bottom-bar-search'))
+    await userEvent.type(await screen.findByTestId('feed-search'), 'capital')
     await userEvent.click(screen.getByTestId('feed-search-submit'))
     await waitFor(() => expect(calls.some((c) =>
       (c.body as { params?: { q?: string } } | null)?.params?.q === 'capital')).toBe(true))
-    expect(window.location.search).toBe('?q=capital')
-    expect(screen.getByTestId('feed-searched')).toHaveTextContent('Results for “capital”')
-    expect(screen.queryByTestId('header-search')).toBeNull()
-    await expectAccessible()
-    // Opened again, it starts from the search; cleared, the home is the whole feed again.
-    await userEvent.click(screen.getByTestId('search-open'))
+    expect(window.location.pathname + window.location.search).toBe('/search?q=capital')
+    expect(await screen.findByTestId('feed-searched')).toHaveTextContent('Results for “capital”')
+    // The box keeps the words searched.
     expect(screen.getByTestId('feed-search')).toHaveValue('capital')
-    await userEvent.click(screen.getByTestId('search-close'))
+    await expectAccessible()
+    // Cleared, the search's page is empty again.
     await userEvent.click(screen.getByTestId('feed-search-clear'))
-    expect(window.location.search).toBe('')
+    expect(window.location.pathname + window.location.search).toBe('/search')
     await waitFor(() => expect(screen.queryByTestId('feed-searched')).toBeNull())
+    expect(screen.getByTestId('search-hint')).toBeInTheDocument()
+    expect(screen.getByTestId('feed-search')).toHaveValue('')
     expect(feedFilters({ ...NO_FILTERS, sponsor: ' 50%_off ', rewardMin: '10', rewardMax: 'x', minCompletions: '3',
       sponsorCountry: 'FR' })).toEqual([
       { field: 'sponsorCompany', op: 'like', value: '%50\\%\\_off%' },
@@ -923,17 +923,21 @@ describe('the pages of the bottom bar (Q67)', () => {
     server()
     render(<App />)
     await screen.findByTestId('home')
-    for (const [area, title] of [['history', 'history-title'], ['scan', 'scan-title'], ['messages', 'inbox-title'],
-      ['me', 'account-title']]) {
+    for (const [area, title] of [['history', 'history-title'], ['search', 'search-title'],
+      ['messages', 'inbox-title']]) {
       await userEvent.click(screen.getByTestId(`bottom-bar-${area}`))
       const heading = await screen.findByRole('heading', { level: 1 })
       expect(heading).toHaveAttribute('id', title)
       const head = heading.closest('[data-slot="x-head"]')!
       expect(head.querySelector('[data-head="top"]')).not.toBeNull()
-      // The avatar leads to "Me" (the drawer's, from Q113a-2), with the taker's initial.
-      expect(within(head as HTMLElement).getByRole('link', { name: 'Me' })).toHaveTextContent('M')
+      // The avatar opens the drawer (Q113 §9.2), with the taker's initial.
+      expect(within(head as HTMLElement).getByRole('button', { name: 'Open the menu' })).toHaveTextContent('M')
       expect(screen.queryByTestId('title-badge')).toBeNull()
     }
+    // Scanning and "Me" are reached from the floating button and the drawer: pages under another, the way back first.
+    await userEvent.click(screen.getByTestId('page-fab'))
+    expect(await screen.findByRole('heading', { level: 1 })).toHaveAttribute('id', 'scan-title')
+    expect(screen.getByTestId('header-back').closest('[data-head="sub"]')).not.toBeNull()
   })
 })
 

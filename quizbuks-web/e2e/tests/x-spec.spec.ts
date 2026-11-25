@@ -207,3 +207,83 @@ test('scrolling on a phone: the head follows down after 20 px, only a quick swip
   await to(0)
   await expect.poll(() => shiftOf(page, head)).toBeCloseTo(0, 0)
 })
+
+test.describe('the navigation (Q113 §9.1, §9.2)', () => {
+  test('a phone: the bottom menu of four icons, the floating scan button, the drawer of 280 px', async ({ page, request }) => {
+    const me = await takerInJapan(request, 'Nav')
+    await page.setViewportSize({ width: 390, height: 844 })
+    await signIn(page, '/taker/', me.email)
+    await expect(page.getByTestId('home')).toBeVisible()
+
+    // The bar: 53 px over a divider of 1, four entries of equal width, their icons 26 px, no names shown.
+    const bar = page.locator('[data-slot="bottom-bar"]')
+    const barBox = (await bar.locator('ul').boundingBox())!
+    expect(barBox.height, 'the bar is 53 px').toBeCloseTo(53, 0)
+    const entries = bar.getByRole('link')
+    await expect(entries).toHaveCount(4)
+    const widths = await entries.evaluateAll((links) => links.map((link) => link.getBoundingClientRect().width))
+    for (const width of widths) expect(width, 'the entries share the width').toBeCloseTo(390 / 4, 0)
+    const icon = (await page.getByTestId('bottom-bar-home').locator('svg').boundingBox())!
+    expect(icon.width, 'the icon is 26 px').toBeCloseTo(26, 0)
+    await expect(page.getByTestId('bottom-bar-home').getByText('Home')).toHaveClass(/sr-only/)
+
+    // The floating button: 56 px round, 20 px from the side and from the bar.
+    const fab = (await page.getByTestId('page-fab').boundingBox())!
+    expect(fab.width).toBeCloseTo(56, 0)
+    expect(fab.height).toBeCloseTo(56, 0)
+    expect(390 - (fab.x + fab.width), '20 px from the side').toBeCloseTo(20, 0)
+    const barTop = (await bar.boundingBox())!.y
+    expect(barTop - (fab.y + fab.height), '20 px above the bar').toBeCloseTo(20, 0)
+
+    // The drawer: from the left, 280 px, its rows 20 px bold.
+    await page.getByTestId('head-avatar').click()
+    const drawer = page.getByTestId('drawer')
+    await expect(drawer).toBeVisible()
+    await page.waitForTimeout(600)
+    const box = (await drawer.boundingBox())!
+    expect(box.x, 'from the left').toBeCloseTo(0, 0)
+    expect(box.width, 'the drawer is 280 px').toBeCloseTo(280, 0)
+    expect(await style(page, '[data-testid="drawer-me"]', 'font-size')).toBe('20px')
+    expect(await style(page, '[data-testid="drawer-me"]', 'font-weight')).toBe('700')
+    await page.getByTestId('drawer-me').click()
+    await expect(page).toHaveURL(/\/taker\/account$/)
+    await expect(drawer).toBeHidden()
+  })
+
+  test('a wide screen: the left column of 275 px, the page of 600, the right one of 350 at 30', async ({ page, request }) => {
+    const me = await takerInJapan(request, 'Columns')
+    await page.setViewportSize({ width: 1280, height: 900 })
+    await signIn(page, '/taker/', me.email)
+    await page.goto('/taker/history')
+    await expect(page.getByTestId('area-header')).toBeVisible()
+
+    const rail = (await page.getByTestId('side-rail').boundingBox())!
+    const column = (await page.getByTestId('x-column').boundingBox())!
+    const aside = (await page.getByTestId('side-aside').boundingBox())!
+    expect(rail.width, 'the left column').toBeCloseTo(275, 0)
+    expect(column.width, 'the middle column (its two dividers in)').toBeCloseTo(600, 0)
+    expect(aside.width, 'the right column').toBeCloseTo(350, 0)
+    expect(column.x, 'the page beside the left column').toBeCloseTo(rail.x + rail.width, 0)
+    expect(aside.x - (column.x + column.width), '30 px between the page and the right column').toBeCloseTo(30, 0)
+    expect(Math.abs(rail.x - (1280 - (aside.x + aside.width))), 'the three in the middle').toBeLessThanOrEqual(1)
+
+    // The rows: 58 px, a pill of 50, the icon 26, the name 20 px; the current one bold.
+    const row = (await page.getByTestId('side-rail-history').locator('..').boundingBox())!
+    expect(row.height, 'a row is 58 px').toBeCloseTo(58, 0)
+    expect((await page.getByTestId('side-rail-history').boundingBox())!.height, 'its pill 50').toBeCloseTo(50, 0)
+    expect((await page.getByTestId('side-rail-history').locator('svg').boundingBox())!.width).toBeCloseTo(26, 0)
+    expect(await style(page, '[data-testid="side-rail-history"]', 'font-weight')).toBe('700')
+    expect(await style(page, '[data-testid="side-rail-home"]', 'font-weight')).toBe('400')
+    // The main button: scanning, 233 × 52, near black, 17 px bold.
+    const scan = (await page.getByTestId('side-rail-scan').boundingBox())!
+    expect(scan.width).toBeCloseTo(233, 0)
+    expect(scan.height).toBeCloseTo(52, 0)
+    expect(await style(page, '[data-testid="side-rail-scan"]', 'font-size')).toBe('17px')
+
+    // A middle width: the left column of icons alone, no right column.
+    await page.setViewportSize({ width: 1000, height: 900 })
+    await expect(page.getByTestId('side-aside')).toBeHidden()
+    await expect(page.getByTestId('side-rail-history').getByText('Answered')).toBeHidden()
+    expect((await page.getByTestId('x-column').boundingBox())!.width).toBeCloseTo(600, 0)
+  })
+})
