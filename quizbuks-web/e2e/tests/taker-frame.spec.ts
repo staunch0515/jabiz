@@ -123,8 +123,9 @@ test('every address the app had is still a page, in the area that marks it', asy
     await page.goto(`/taker${path}`)
     await expect(page, path).toHaveURL(new RegExp(`/taker${path.replace(/[?/]/g, (c) => `\\${c}`)}$`))
     if (area === 'scan' || area === 'me') {
-      // Reached from the floating button and the drawer: the bottom menu is there, no entry of it marked.
-      await expect(page.getByTestId('bottom-menu'), path).toBeVisible()
+      // Reached from the floating button and the drawer: the bottom menu is there (the bar: its wrapper has no size of
+      // its own), no entry of it marked.
+      await expect(page.locator('[data-slot="bottom-bar"]'), path).toBeVisible()
       await expect(page.locator('[data-slot="bottom-bar"] [aria-current="page"]'), path).toHaveCount(0)
     } else if (area) await expect(takerArea(page, area), path).toHaveAttribute('aria-current', 'page')
     else await expect(page.getByTestId('bottom-menu'), path).toHaveCount(0)
