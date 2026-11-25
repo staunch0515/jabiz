@@ -38,10 +38,10 @@ test('a paid reward is a message in the inbox; the badge counts it until it is r
   await page.setViewportSize({ width: 390, height: 844 })
   await signIn(page, '/taker/', taker.email)
   await expect(page.getByTestId('home')).toBeVisible()
-  // F-F4: the number is on the bottom menu's Messages, whose name says it too.
-  await expect(takerArea(page, 'messages')).toContainText('Messages')
+  // F-F4: the number is on the bottom menu's Notifications (Q113a-2: an icon, its name for screen readers).
+  await expect(takerArea(page, 'messages')).toContainText('Notifications')
   await expect(takerArea(page, 'messages')).toContainText('1')
-  await expect(takerArea(page, 'messages')).toHaveAccessibleName('Messages, 1 unread')
+  await expect(takerArea(page, 'messages')).toHaveAccessibleName('Notifications, 1 unread')
   await takerArea(page, 'messages').click()
   const row = page.getByTestId('inbox-row').and(page.locator('[data-kind="MESSAGE"]'))
   await expect(row).toHaveAttribute('data-unread', 'true')
@@ -57,7 +57,7 @@ test('a paid reward is a message in the inbox; the badge counts it until it is r
   await expect(page.getByTestId('inbox-item-go')).toBeVisible()
   await page.getByTestId('inbox-back').click()
   await expect(row).toHaveAttribute('data-unread', 'false', { timeout: 15_000 })
-  await expect(takerArea(page, 'messages')).toHaveAccessibleName('Messages')
+  await expect(takerArea(page, 'messages')).toHaveAccessibleName('Notifications')
 })
 
 test('a Sponsor\'s notice reaches its Takers and counts readers without naming them; QuizBuks withdraws it',

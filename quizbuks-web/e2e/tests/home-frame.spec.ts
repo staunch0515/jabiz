@@ -73,17 +73,36 @@ async function quiz(request: APIRequestContext, sponsorToken: string, title: str
 
 /** The home searched for the run's token, once every picture in it has loaded. */
 async function searched(page: Page, words: string, cards: number) {
-  await page.goto(`/taker/?q=${encodeURIComponent(words)}`)
   const home = page.getByTestId('home')
-  await expect(home).toBeVisible()
-  await expect(page.getByTestId('feed-searched')).toBeVisible()
-  if (cards > 0) await expect(home.getByTestId('feed-card')).toHaveCount(cards)
-  else await expect(home.getByTestId('home-empty')).toBeVisible()
-  // A picture still to come is a grey box with no <img> yet (LazyImage before it nears the screen, FileImage while it
-  // fetches): wait for none of those as well as for every <img> to have loaded.
-  await expect.poll(() => home.evaluate((section) => !section.querySelector('[data-slot="image-loading"]')
-    && [...section.querySelectorAll('img')].every((img) => img.complete && img.naturalWidth > 0)),
-  { message: 'the pictures load' }).toBe(true)
+  // Now and then on CI one lazy cover of the shelf never starts (its grey box stays, with no request for it; the
+  // run of 2026-11-25 at a3b80e650, dark at 390 px, the second short; not seen on a page loaded again): the page is
+  // loaded again, at most twice, rather than the whole comparison failing on it.
+  for (let attempt = 1; ; attempt += 1) {
+    await page.goto(`/taker/?q=${encodeURIComponent(words)}`)
+    await expect(home).toBeVisible()
+    await expect(page.getByTestId('feed-searched')).toBeVisible()
+    if (cards > 0) await expect(home.getByTestId('feed-card')).toHaveCount(cards)
+    else await expect(home.getByTestId('home-empty')).toBeVisible()
+    // A picture still to come is a grey box with no <img> yet (LazyImage before it nears the screen, FileImage while
+    // it fetches): each is brought to the screen once, in the page (a placeholder is replaced by its picture as it
+    // loads, so a locator's own scrolling would wait for one that is gone), and then the page goes back to its top;
+    // wait for none of those as well as for every <img> to have loaded.
+    await home.evaluate(async (section) => {
+      for (const waiting of [...section.querySelectorAll('[data-slot="image-loading"]')]) {
+        if (!waiting.isConnected) continue
+        waiting.scrollIntoView({ block: 'center' })
+        await new Promise((resolve) => setTimeout(resolve, 150))
+      }
+      window.scrollTo(0, 0)
+    })
+    const loaded = await expect.poll(() => home.evaluate((section) => !section.querySelector('[data-slot="image-loading"]')
+      && [...section.querySelectorAll('img')].every((img) => img.complete && img.naturalWidth > 0)),
+    { message: 'the pictures load', timeout: 10_000 }).toBe(true).then(() => true, (error: unknown) => {
+      if (attempt >= 3) throw error
+      return false
+    })
+    if (loaded) break
+  }
   await page.evaluate(() => document.fonts.ready)
   return home
 }
@@ -144,10 +163,10 @@ test('the home stays pixel for pixel as it was before F-F4', async ({ page, requ
         const header = page.getByTestId('header')
         await expect(header.getByTestId('head-mark')).toBeVisible()
         await expect(header.getByTestId('head-avatar')).toBeVisible()
-        // The buttons at the right: the filters and the search stay; the menu is gone (F-F4b), its entries are in the
-        // bottom menu and in "Me".
+        // The button at the right: the filters (Q64); the search is the bottom menu's (Q113a-2), the menu is gone
+        // (F-F4b), its entries are in the bottom menu and the drawer.
         await expect(header.getByTestId('feed-filters-open')).toBeVisible()
-        await expect(header.getByTestId('search-open')).toBeVisible()
+        await expect(header.getByTestId('search-open')).toHaveCount(0)
         await expect(page.getByTestId('app-menu')).toHaveCount(0)
         await expect(header.getByTestId('header-my-sponsor')).toHaveCount(0)
         const box = (await header.boundingBox())!

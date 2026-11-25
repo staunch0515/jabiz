@@ -91,7 +91,8 @@ describe('"Me" (F-F4)', () => {
     expect(await screen.findByRole('heading', { level: 1, name: 'Blocks and topics' })).toBeInTheDocument()
     expect(screen.getByTestId('account-blocks')).toBeInTheDocument()
     expect(screen.getByTestId('account-topics')).toBeInTheDocument()
-    expect(screen.getByTestId('bottom-bar-me')).toHaveAttribute('aria-current', 'page')
+    // "Me" is the drawer's (Q113 §9.2): the left column of a wide screen marks it.
+    expect(screen.getByTestId('side-rail-me')).toHaveAttribute('aria-current', 'page')
     await expectAccessible()
   })
 })

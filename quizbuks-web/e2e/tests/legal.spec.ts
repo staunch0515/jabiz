@@ -12,8 +12,7 @@ import {
   tokenOf,
   unique,
   verifiedUser,
-  takerArea,
-} from './support'
+  takerArea, openTakerArea } from './support'
 
 /*
  * Terms, privacy and help (docs/quizbuks/plans/Q7-messages-legal.md, Q7b): anybody reads the help centre and the texts
@@ -102,7 +101,7 @@ test('after a change of substance a Taker accepts again on signing in; a rewordi
   expect(await refused.text()).toContain('QB_CONSENT_REQUIRED')
 
   // The page read the texts before the change: the server's refusal brings the prompt up at once (review M3).
-  await takerArea(page, 'me').click()
+  await openTakerArea(page, 'me')
   await page.getByTestId('me-number-kudos').click()
   await page.getByTestId('wallet-payout').click()
   await page.getByTestId('payout-onboard').click()

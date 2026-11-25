@@ -15,8 +15,7 @@ import { approvedSponsor, fund } from './wallet'
 import {
   accessibleInBoth, adminToken, expect, mailTo, openArea, PASSWORD, prepareQuizbuks, run, setControlledParam, signIn,
   signOut,
-  takerArea, test, tokenOf, unique,
-} from './support'
+  test, tokenOf, unique, openTakerArea } from './support'
 
 /*
  * The first launch's closed loop (docs/quizbuks/first-launch-spec.md F-F12, plan docs/quizbuks/plans/impl/F-F12.md):
@@ -266,7 +265,7 @@ test.describe.serial('the first launch\'s loop', () => {
 
         // "Me", then the maps: Sora's map is in the list, one node lit; its map has the basics lit and the advanced
         // node open (the lighting follows the answering by an event).
-        await takerArea(page, 'me').click()
+        await openTakerArea(page, 'me')
         await page.getByTestId('account-menu-maps').click()
         await expect(page).toHaveURL(/\/taker\/maps$/)
         const item = page.locator(`[data-testid="maps-item"][data-tree="${map!.treeId}"]`)
@@ -353,7 +352,7 @@ test.describe.serial('the first launch\'s loop', () => {
         await staff.page.goto('/taker/staff')
         await expect(staff.page.getByTestId('staff-desk')).toBeVisible()
         await accessibleInBoth(staff.page, 'app staff counter')
-        await takerArea(taker.page, 'scan').click()
+        await openTakerArea(taker.page, 'scan')
         await taker.page.getByTestId('pass-show').click()
         await expect(taker.page.getByTestId('pass-dialog')).toBeVisible()
         const digits = (await taker.page.getByTestId('pass-digits').textContent())!.trim()

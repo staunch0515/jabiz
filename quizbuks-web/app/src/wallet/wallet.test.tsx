@@ -238,15 +238,17 @@ describe('the wallet', () => {
     expect(screen.queryByTestId('kudos')).toBeNull()
     expect(await screen.findByTestId('wallet-payout')).toHaveAttribute('data-status', 'NONE')
     expect(screen.getByTestId('wallet-payout')).toHaveAttribute('href', '/wallet/payout')
-    expect(screen.getByTestId('bottom-bar-me')).toHaveTextContent('Me')
-    expect(screen.getByTestId('bottom-bar-me')).toHaveAttribute('aria-current', 'page')
+    expect(screen.getByTestId('side-rail-me')).toHaveAccessibleName('My page')
+    // "Me" is the drawer's (Q113 §9.2): the left column of a wide screen marks it.
+    expect(screen.getByTestId('side-rail-me')).toHaveAttribute('aria-current', 'page')
     await expectAccessible()
 
     for (const [part, testId] of [['balance', 'wallet-balance'], ['rewards', 'kudos'], ['history', 'ledger']]) {
       await user.click(screen.getByTestId(`wallet-menu-${part}`))
       expect(window.location.pathname).toBe(`/wallet/${part}`)
       expect(await screen.findByTestId(testId)).toBeInTheDocument()
-      expect(screen.getByTestId('bottom-bar-me')).toHaveAttribute('aria-current', 'page')
+      // "Me" is the drawer's (Q113 §9.2): the left column of a wide screen marks it.
+    expect(screen.getByTestId('side-rail-me')).toHaveAttribute('aria-current', 'page')
       await user.click(screen.getByTestId('header-back'))
       expect(await screen.findByTestId('wallet-summary')).toBeInTheDocument()
     }
@@ -296,7 +298,8 @@ describe('the wallet', () => {
     expect(rows[2]).toHaveTextContent('back in My Kudos')
     expect(document.body).not.toHaveTextContent('JPY')
     expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('Transactions')
-    expect(screen.getByTestId('bottom-bar-me')).toHaveAttribute('aria-current', 'page')
+    // "Me" is the drawer's (Q113 §9.2): the left column of a wide screen marks it.
+    expect(screen.getByTestId('side-rail-me')).toHaveAttribute('aria-current', 'page')
 
     await user.click(screen.getByRole('radio', { name: 'Payouts' }))
     await waitFor(() => expect(queryBodies('qb.app.ledger').at(-1)).toMatchObject({
@@ -316,7 +319,8 @@ describe('the payout account', () => {
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
     render(<App />)
     expect(await screen.findByTestId('payout-status')).toHaveTextContent('Being set up')
-    expect(screen.getByTestId('bottom-bar-me')).toHaveAttribute('aria-current', 'page')
+    // "Me" is the drawer's (Q113 §9.2): the left column of a wide screen marks it.
+    expect(screen.getByTestId('side-rail-me')).toHaveAttribute('aria-current', 'page')
     await user.click(screen.getByTestId('payout-onboard'))
     expect(screen.getByTestId('payout-state')).toHaveAttribute('data-state', 'preparing')
     await act(async () => {

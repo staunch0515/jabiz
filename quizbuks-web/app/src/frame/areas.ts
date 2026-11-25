@@ -5,14 +5,10 @@ import {
   Coins,
   FileText,
   Gift,
-  History,
-  House,
   IdCard,
   Info,
   Mail,
-  MessagesSquare,
   Network,
-  ScanLine,
   ShieldCheck,
   SlidersHorizontal,
   Sparkles,
@@ -41,9 +37,25 @@ import { sponsorPageOf } from '../share/SponsorPage'
 import { HANDLED_PATH, STAFF_PATH } from '../staff/api'
 import { BANK_PATH, PAYOUT_PATH, WALLET_PATH, walletPartOf } from '../wallet/api'
 import { kudosMethodOf } from '../wallet/kudos'
+import {
+  BellIcon,
+  CertificateIcon,
+  GiftIcon,
+  HistoryIcon,
+  HomeIcon,
+  KudosIcon,
+  MapIcon,
+  PersonIcon,
+  ReferIcon,
+  ScanIcon,
+  SearchIcon,
+  SettingsIcon,
+  SolidBellIcon,
+  SolidHomeIcon,
+} from './icons'
 
 /*
- * The taker app's frame (F-F4, docs/quizbuks/plans/impl/F-F4.md): its five areas, which area each page belongs to, and
+ * The taker app's frame (F-F4, docs/quizbuks/plans/impl/F-F4.md; Q113 §9.2 since Q113a-2): its areas, which area each page belongs to, and
  * the addresses that changed. The one place for all three: the bottom menu (the left column on a wide screen), the
  * areas' title icons and the redirects read it, and new pages are added here (backend/quizbuks/CLAUDE.md section 5).
  *
@@ -53,32 +65,54 @@ import { kudosMethodOf } from '../wallet/kudos'
  * `/maps` (not `/account/map`, which the plan had reserved).
  */
 
-/** The five areas, in the bottom menu's order (F-F4: scanning in the middle, raised). */
-export type AreaKey = 'home' | 'history' | 'scan' | 'messages' | 'me'
+/**
+ * The areas (Q113 §9.2): the four of the bottom menu and the left column (home, search, answered, notifications, whose
+ * key stays `messages`), and the two that are not in it: scanning (the floating button, the left column's main
+ * button) and "Me" (the drawer the avatar opens). A page belongs to one of them.
+ */
+export type AreaKey = 'home' | 'search' | 'history' | 'messages' | 'scan' | 'me'
 
 export interface Area {
   key: AreaKey
-  /** The area's page: the bottom menu's link. */
+  /** The area's page. */
   path: string
-  /** The bottom menu's icon, and the one before the titles of the area's pages. */
+  /** The area's icon in the bottom menu, the left column, the floating button and the drawer (the prototype's). */
   icon: LucideIcon
-  /** Raised in the middle of the bottom menu. */
-  raised?: true
+  /** The icon of the area shown, where the prototype marks it solid (home, notifications). */
+  solidIcon?: LucideIcon
 }
+
+/** The search's page (Q113 §9.2): the box, and the results under it (`/search?q=`). */
+export const SEARCH_PATH = '/search'
 
 /** The pages F-F4b added (F-F4 section 2): the prizes to collect, the passes to show, and blocks and topics. */
 export const PRIZES_PATH = '/history/prizes'
 export const MY_PASSES_PATH = '/scan/pass'
 export { ACCOUNT_BLOCKS_PATH }
 
-/** The bottom menu (the left column on a wide screen). New features become tabs or rows of "Me", never a sixth area. */
-export const AREAS: readonly Area[] = [
-  { key: 'home', path: '/', icon: House },
-  { key: 'history', path: '/history', icon: History },
-  { key: 'scan', path: SCAN_PATH, icon: ScanLine, raised: true },
-  { key: 'messages', path: INBOX_PATH, icon: MessagesSquare },
-  { key: 'me', path: ACCOUNT_PATH, icon: UserRound },
+/**
+ * The bottom menu of a phone and the left column of a wide screen, in their order. New features become tabs, rows
+ * of the drawer or of "Me", never a fifth entry.
+ */
+export const BOTTOM_AREAS: readonly Area[] = [
+  { key: 'home', path: '/', icon: HomeIcon, solidIcon: SolidHomeIcon },
+  { key: 'search', path: SEARCH_PATH, icon: SearchIcon },
+  { key: 'history', path: '/history', icon: HistoryIcon },
+  { key: 'messages', path: INBOX_PATH, icon: BellIcon, solidIcon: SolidBellIcon },
 ]
+
+/** Every area: the bottom menu's, then scanning and "Me". */
+export const AREAS: readonly Area[] = [
+  ...BOTTOM_AREAS,
+  { key: 'scan', path: SCAN_PATH, icon: ScanIcon },
+  { key: 'me', path: ACCOUNT_PATH, icon: PersonIcon },
+]
+
+/**
+ * The settings, as the drawer and the left column name them (the prototype's "设置"). Until Q113d gives them a page of
+ * their own they are the lower half of "Me", where the link leads.
+ */
+export const SETTINGS_ROW = { key: 'settings', path: ACCOUNT_PATH, icon: SettingsIcon, title: 'frame.drawer.rows.settings' }
 
 /** The area of a key. */
 export function areaOf(key: AreaKey): Area {
@@ -121,6 +155,30 @@ export const ME_OWNED: readonly MeRow[] = [
   { key: 'kudos', path: WALLET_PATH, icon: Coins, title: 'me.rows.kudos', hint: 'me.rows.kudosHint' },
 ]
 
+/**
+ * The drawer the avatar opens (Q113 §9.1 "侧边抽屉", §9.2; the prototype's Drawer): the taker's page, what they have,
+ * the settings, in rows of 20 px; under a divider the short rows of `DRAWER_MORE` and signing out.
+ */
+export const DRAWER_ROWS: readonly MeRow[] = [
+  { key: 'me', path: ACCOUNT_PATH, icon: PersonIcon, title: 'frame.drawer.rows.me' },
+  { key: 'kudos', path: WALLET_PATH, icon: KudosIcon, title: 'me.numbers.kudos' },
+  { key: 'prizes', path: PRIZES_PATH, icon: GiftIcon, title: 'me.rows.prizes' },
+  { key: 'certificates', path: `${ACCOUNT_PATH}/certificates`, icon: CertificateIcon, title: 'me.numbers.certificates' },
+  { key: 'maps', path: MAPS_PATH, icon: MapIcon, title: 'maps.menu' },
+  { key: 'referrals', path: REFERRALS_PATH, icon: ReferIcon, title: 'frame.drawer.rows.referrals' },
+  SETTINGS_ROW,
+]
+
+/**
+ * The drawer's short rows (15 px, no icon): the Sponsor account (a Sponsor's), the staff counter (a staff member's)
+ * and help; the drawer adds signing out.
+ */
+export const DRAWER_MORE: readonly (Omit<MeRow, 'icon'> & { only?: 'sponsor' | 'staff' })[] = [
+  { key: 'my-sponsor', path: MY_SPONSOR_PATH, title: 'frame.drawer.more.sponsor', only: 'sponsor' },
+  { key: 'staff', path: STAFF_PATH, title: 'frame.drawer.more.staff', only: 'staff' },
+  { key: 'help', path: '/help', ns: 'qb', title: 'help.title' },
+]
+
 /** "Settings": the account's parts, then help and the texts (public pages, readable without signing in too). */
 export const ME_SETTINGS: readonly MeRow[] = [
   { key: 'profile', path: `${ACCOUNT_PATH}/profile`, icon: UserRound, title: 'profile.title', hint: 'account.hints.profile' },
@@ -146,6 +204,8 @@ export const ME_SETTINGS: readonly MeRow[] = [
 export type PageName =
   // Home
   | 'home' | 'publication'
+  // Search
+  | 'search'
   // Answered
   | 'history' | 'prizes' | 'play' | 'result'
   // Scan
@@ -172,6 +232,7 @@ const route = (page: PageName, area: AreaKey | null, nav = area !== null): Route
 /** The fixed addresses of the app (the ones with an id are matched in {@link routeOf}). */
 const FIXED: Readonly<Record<string, Route>> = {
   '/': route('home', 'home'),
+  [SEARCH_PATH]: route('search', 'search'),
   '/history': route('history', 'history'),
   [PRIZES_PATH]: route('prizes', 'history'),
   [SCAN_PATH]: route('scan', 'scan'),

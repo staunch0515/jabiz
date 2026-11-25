@@ -1,11 +1,14 @@
 import { describe, expect, it } from 'vitest'
-import { History, House, MessagesSquare, ScanLine, UserRound } from 'lucide-react'
+import { BellIcon, HistoryIcon, HomeIcon, PersonIcon, ScanIcon, SearchIcon } from './icons'
 import { scanTarget, targetPath } from '../scan/target'
 import {
   ACCOUNT_BLOCKS_PATH,
   AREA_TABS,
   AREAS,
   areaOf,
+  BOTTOM_AREAS,
+  DRAWER_MORE,
+  DRAWER_ROWS,
   LEGACY_APP_PATHS,
   legacyTarget,
   ME_OWNED,
@@ -14,6 +17,7 @@ import {
   OLD_ROUTES,
   PRIZES_PATH,
   routeOf,
+  SEARCH_PATH,
   type AreaKey,
 } from './areas'
 
@@ -50,21 +54,30 @@ function split(address: string): [string, string] {
   return at < 0 ? [address, ''] : [address.slice(0, at), address.slice(at)]
 }
 
-describe('the areas of the taker app (F-F4)', () => {
-  it('are five, scanning in the middle and the only one raised', () => {
-    expect(AREAS.map((area) => area.key)).toEqual(['home', 'history', 'scan', 'messages', 'me'])
-    expect(AREAS[Math.floor(AREAS.length / 2)].key).toBe('scan')
-    expect(AREAS.filter((area) => area.raised).map((area) => area.key)).toEqual(['scan'])
+describe('the areas of the taker app (F-F4, Q113 §9.2)', () => {
+  it('are four in the bottom menu, scanning and "Me" outside it', () => {
+    expect(BOTTOM_AREAS.map((area) => area.key)).toEqual(['home', 'search', 'history', 'messages'])
+    expect(AREAS.map((area) => area.key)).toEqual(['home', 'search', 'history', 'messages', 'scan', 'me'])
+    expect(SEARCH_PATH).toBe('/search')
   })
 
   it('each have one icon, the same object wherever the area is named', () => {
-    expect(AREAS.map((area) => area.icon)).toEqual([House, History, ScanLine, MessagesSquare, UserRound])
+    // The prototype's own outlines (`frame/icons.ts`); home and notifications solid when current.
+    expect(AREAS.map((area) => area.icon)).toEqual([HomeIcon, SearchIcon, HistoryIcon, BellIcon, ScanIcon, PersonIcon])
+    expect(AREAS.filter((area) => area.solidIcon).map((area) => area.key)).toEqual(['home', 'messages'])
     for (const area of AREAS) expect(areaOf(area.key).icon).toBe(area.icon)
     expect(new Set(AREAS.map((area) => area.icon)).size).toBe(AREAS.length)
   })
 
   it('each lead to a page of their own area', () => {
     for (const area of AREAS) expect(routeOf(area.path)?.area).toBe(area.key)
+  })
+
+  it('give the drawer the prototype\'s rows: the taker\'s page, what they have, the settings, then the short ones', () => {
+    expect(DRAWER_ROWS.map((row) => row.key)).toEqual(['me', 'kudos', 'prizes', 'certificates', 'maps', 'referrals',
+      'settings'])
+    expect(DRAWER_MORE.map((row) => row.key)).toEqual(['my-sponsor', 'staff', 'help'])
+    for (const row of [...DRAWER_ROWS, ...DRAWER_MORE]) expect(routeOf(row.path), row.path).not.toBeNull()
   })
 })
 

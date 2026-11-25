@@ -411,20 +411,44 @@ export async function openArea(page: Page, area: string, tab?: string) {
 }
 
 /** The five areas of the taker app (F-F4). */
-export type TakerArea = 'home' | 'history' | 'scan' | 'messages' | 'me'
+export type TakerArea = 'home' | 'search' | 'history' | 'messages' | 'scan' | 'me'
 
 /**
- * The frame's entry for an area of the taker app: in the bottom menu on a phone, in the left column on a wide screen
- * (the page draws both and shows one by the width).
+ * The frame's entry for an area of the taker app (Q113 §9.2): the four of the bottom menu on a phone and of the left
+ * column on a wide screen (the page draws both and shows one by the width); scanning is the floating button of a
+ * phone's first-level page and the left column's main button; "Me" is the left column's, on a phone the drawer's
+ * (use {@link openTakerArea}).
  */
 export function takerArea(page: Page, area: TakerArea) {
+  if (area === 'scan') return page.locator('[data-testid="page-fab"]:visible, [data-testid="side-rail-scan"]:visible')
+  if (area === 'me') return page.locator('[data-testid="side-rail-me"]:visible')
   return page.locator(`[data-testid="bottom-bar-${area}"]:visible, [data-testid="side-rail-${area}"]:visible`)
 }
 
-/** Signs out of the taker app: "Me", then the button at the bottom of it (F-F4). */
+/**
+ * Goes to an area as a taker does: its entry; on a phone "Me" through the avatar's drawer, and scanning from the
+ * home's floating button when the page shown is one under another (it has none).
+ */
+export async function openTakerArea(page: Page, area: TakerArea) {
+  const entry = takerArea(page, area)
+  if (await entry.count() > 0) return entry.first().click()
+  if (area === 'scan') {
+    await takerArea(page, 'home').click()
+    return takerArea(page, 'scan').click()
+  }
+  if (area === 'me') {
+    if (await page.getByTestId('head-avatar').count() === 0) await takerArea(page, 'home').click()
+    await page.getByTestId('head-avatar').click()
+    return page.getByTestId('drawer-me').click()
+  }
+  return entry.click()
+}
+
+/** Signs out of the taker app: the drawer, then the button at the bottom of it (Q113 §9.2). */
 export async function signOutTaker(page: Page) {
-  await takerArea(page, 'me').click()
-  await page.getByTestId('sign-out').click()
+  if (await page.getByTestId('head-avatar').count() === 0) await takerArea(page, 'home').click()
+  await page.getByTestId('head-avatar').click()
+  await page.getByTestId('drawer-sign-out').click()
 }
 
 /** Signs out of the Sponsor app from the avatar menu at the top right (F-F3). */

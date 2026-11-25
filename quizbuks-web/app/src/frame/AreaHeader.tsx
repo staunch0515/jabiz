@@ -4,7 +4,7 @@ import { useTranslation } from 'react-i18next'
 import { APP } from '../messages'
 import { useConversationsUnreadShown } from '../inbox/useUnread'
 import { canGoBack, navigate, useLocation } from '../qb/router'
-import { AREA_TABS, AREAS, type AreaKey } from './areas'
+import { AREA_TABS, BOTTOM_AREAS, type AreaKey } from './areas'
 import { FrameLink } from './FrameLink'
 import { SubHead, TopHead, type Back } from './Header'
 import { useOpenPrizes } from './prizes'
@@ -39,10 +39,13 @@ export function AreaTabs({ area, current }: { area: AreaKey; current: string }) 
   )
 }
 
-/** Whether the page at the address is first-level (Q113 P4): an area's own page, or one of its tabs. */
+/**
+ * Whether the page at the address is first-level (Q113 P4, §9.2): the page of an area of the bottom menu, or one of
+ * its tabs. Scanning and "Me" are reached from the floating button and the drawer: their pages are under another.
+ */
 export function isFirstLevel(path: string): boolean {
-  return AREAS.some((area) => area.path === path)
-    || Object.values(AREA_TABS).some((tabs) => tabs?.some((tab) => tab.path === path))
+  return BOTTOM_AREAS.some((area) => area.path === path
+    || (AREA_TABS[area.key] ?? []).some((tab) => tab.path === path))
 }
 
 /** Back from a page reached from elsewhere: the page before within the app, the home when it was opened first. */

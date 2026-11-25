@@ -80,7 +80,8 @@ describe('the tab "Show my pass" (F-F4)', () => {
     expect(passes[0]).toHaveTextContent('Capitals week · Ramen B')
     expect(within(passes[1]).getByTestId('pass-show')).toBeInTheDocument()
     expect(screen.getByTestId('page-tab-pass')).toHaveAttribute('aria-current', 'page')
-    expect(screen.getByTestId('bottom-bar-scan')).toHaveAttribute('aria-current', 'page')
+    // Scanning is the floating button's (Q113 §9.2): no entry of the bottom menu is marked.
+    expect(document.querySelector('[data-slot="bottom-bar"] [aria-current]')).toBeNull()
     expect(navigator.mediaDevices.getUserMedia).not.toHaveBeenCalled()
     await expectAccessible()
     await userEvent.click(within(passes[0]).getByTestId('pass-show'))

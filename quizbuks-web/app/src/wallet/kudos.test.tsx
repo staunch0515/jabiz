@@ -124,7 +124,8 @@ describe('the wallet\'s Kudos by method (Q58)', () => {
     expect(bodies('qb.app.history').at(-1)).toMatchObject({
       filters: [{ field: 'rewardStatus', op: 'in', values: ['CASH'] }] })
     expect(within(page).getByRole('radio', { name: 'This month' })).toHaveAttribute('aria-checked', 'true')
-    expect(screen.getByTestId('bottom-bar-me')).toHaveAttribute('aria-current', 'page')
+    // "Me" is the drawer's (Q113 §9.2): the left column of a wide screen marks it.
+    expect(screen.getByTestId('side-rail-me')).toHaveAttribute('aria-current', 'page')
     await expectAccessible()
     await userEvent.click(screen.getByTestId('header-back'))
     expect(window.location.pathname).toBe('/wallet/rewards')

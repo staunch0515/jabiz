@@ -24,8 +24,7 @@ import {
   test,
   tokenOf,
   unique,
-  verifiedUser,
-} from './support'
+  verifiedUser, openTakerArea } from './support'
 
 /**
  * WCAG 2.2 A and AA on every page of the QuizBuks front ends (docs/quizbuks/plans/QP-pages.md section 6), in the light
@@ -119,7 +118,7 @@ for (const appearance of ['light', 'dark'] as const) {
     await expect(page.getByTestId('environment-badge')).toBeVisible()
     await expectAccessible(page, at('app home'))
     // The account is a menu with a page per part (Q56): the menu, then the sign-in and security page.
-    await takerArea(page, 'me').click()
+    await openTakerArea(page, 'me')
     await expect(page.getByTestId('account-menu-security')).toBeVisible()
     await expectAccessible(page, at('app account menu'))
     await page.getByTestId('account-menu-security').click()

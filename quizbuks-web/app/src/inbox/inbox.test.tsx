@@ -170,25 +170,25 @@ describe('the badge', () => {
     window.history.replaceState(null, '', '/')
     render(<App />)
     const nav = await screen.findByRole('navigation', { name: 'App' })
-    expect(within(nav).getAllByRole('link')).toHaveLength(5)
-    await waitFor(() => expect(screen.getByTestId('bottom-bar-messages')).toHaveAccessibleName('Messages, 3 unread'))
+    expect(within(nav).getAllByRole('link')).toHaveLength(4)
+    await waitFor(() => expect(screen.getByTestId('bottom-bar-messages')).toHaveAccessibleName('Notifications, 3 unread'))
     expect(screen.getByTestId('bottom-bar-messages')).toHaveTextContent('3')
     // The wide screen's column says it too.
-    expect(screen.getByTestId('side-rail-messages')).toHaveAccessibleName('Messages, 3 unread')
+    expect(screen.getByTestId('side-rail-messages')).toHaveAccessibleName('Notifications, 3 unread')
   })
 
   it('counts the conversations with something unread into the same badge (F-F4)', async () => {
     server({ unread: { messages: 1, broadcasts: 0 }, conversationsUnread: 2 })
     window.history.replaceState(null, '', '/')
     render(<App />)
-    await waitFor(() => expect(screen.getByTestId('bottom-bar-messages')).toHaveAccessibleName('Messages, 3 unread'))
+    await waitFor(() => expect(screen.getByTestId('bottom-bar-messages')).toHaveAccessibleName('Notifications, 3 unread'))
   })
 
   it('says 99+ when there are more', async () => {
     server({ unread: { messages: 99, broadcasts: 60 } })
     window.history.replaceState(null, '', '/')
     render(<App />)
-    await waitFor(() => expect(screen.getByTestId('bottom-bar-messages')).toHaveAccessibleName('Messages, 99+ unread'))
+    await waitFor(() => expect(screen.getByTestId('bottom-bar-messages')).toHaveAccessibleName('Notifications, 99+ unread'))
     expect(screen.getByTestId('bottom-bar-messages')).toHaveTextContent('99+')
   })
 
@@ -197,7 +197,7 @@ describe('the badge', () => {
     window.history.replaceState(null, '', '/')
     render(<App />)
     await waitFor(() => expect(queryBodies('qb.app.inbox-unread')).toHaveLength(1))
-    expect(screen.getByTestId('bottom-bar-messages')).toHaveAccessibleName('Messages')
+    expect(screen.getByTestId('bottom-bar-messages')).toHaveAccessibleName('Notifications')
     expect(screen.getByTestId('bottom-bar-messages')).not.toHaveTextContent(/\d/)
   })
 
@@ -205,7 +205,7 @@ describe('the badge', () => {
     server({ conversationsUnread: 2 })
     window.history.replaceState(null, '', '/inbox')
     render(<App />)
-    const tabs = await screen.findByRole('navigation', { name: 'Messages' })
+    const tabs = await screen.findByRole('navigation', { name: 'Notifications' })
     expect(within(tabs).getByTestId('page-tab-inbox')).toHaveAttribute('aria-current', 'page')
     expect(within(tabs).getByTestId('page-tab-conversations')).toHaveAttribute('href', '/conversations')
     await waitFor(() => expect(within(tabs).getByTestId('page-tab-conversations')).toHaveTextContent('2'))

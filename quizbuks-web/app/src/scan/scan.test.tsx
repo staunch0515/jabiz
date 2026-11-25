@@ -110,14 +110,14 @@ describe('what a scanned code opens (Q52)', () => {
 })
 
 describe('the scanner (Q52)', () => {
-  it('is the third entry of the bottom menu, starts the camera, ignores a foreign code and opens the scanned redeem code', async () => {
+  it('is the floating button of a first-level page, starts the camera, ignores a foreign code and opens the scanned redeem code', async () => {
     const { posted } = server()
     const { stopTrack, getUserMedia } = camera([null, 'https://evil.example/redeem/x', `${ORIGIN}/redeem/k1`])
-    window.history.replaceState(null, '', '/account')
+    window.history.replaceState(null, '', '/history')
     render(<App />)
-    // F-F4: scanning is in the bottom menu, in the middle and raised, no longer in a menu at the top.
+    // Q113 §9.2: scanning is the floating button (and the left column's main button), no longer in a menu at the top.
     expect(screen.queryByTestId('app-menu')).toBeNull()
-    await userEvent.click(await screen.findByTestId('bottom-bar-scan'))
+    await userEvent.click(await screen.findByTestId('page-fab'))
     expect(window.location.pathname).toBe('/scan')
     expect(await screen.findByTestId('scan-page')).toBeInTheDocument()
     // The back camera, no sound.
@@ -133,7 +133,8 @@ describe('the scanner (Q52)', () => {
     expect(posted.filter((p) => p.path === '/api/processes/QB_REDEEM_TOKEN_CHECK/latest').map((p) => p.body))
       .toEqual([{ scannedKey: 'k1' }])
     // The scanner is not in the history: back leaves the prize for where the person was. The prize is a page of scanning.
-    expect(screen.getByTestId('bottom-bar-scan')).toHaveAttribute('aria-current', 'page')
+    // Scanning is the floating button's (Q113 §9.2): no entry of the bottom menu is marked.
+    expect(document.querySelector('[data-slot="bottom-bar"] [aria-current]')).toBeNull()
   })
 
   it('opens a publication\'s page from a shop\'s poster', async () => {

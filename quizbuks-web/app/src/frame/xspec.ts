@@ -18,11 +18,40 @@ export const XSPEC = {
   backButton: 36,
   backInset: 8,
   noteSize: 13,
+  /** The mark in the middle of the home's head (the prototype's 30 px). */
+  headMark: 30,
   /** Where the title starts in either head (the prototype's 72 px: after the avatar, or after the way back). */
   titleInset: 72,
   /** §9.1 "头部": the header's white, 85 % opaque, blurred under it by 12 px (§9.1a). */
   headerOpacity: 0.85,
   headerBlur: 12,
+  /** §9.1 "底部栏（手机）": icons alone, 26 px, on a bar of 53 px (the platform's `BottomBar` `variant="icons"`). */
+  bottomBar: 53,
+  bottomIcon: 26,
+  /** §9.1 "悬浮按钮": 56 px round, 20 px from the side and from the bottom menu (the platform's `Fab` `timeline`). */
+  fab: 56,
+  fabInset: 20,
+  /** §9.1 "侧边抽屉": from the left, about 280 px wide; its rows' text 20 px bold. */
+  drawer: 280,
+  drawerText: 20,
+  /** §9.1 "宽屏": the left column, the middle column, the right one and the gap between the two. */
+  rail: 275,
+  column: 600,
+  aside: 350,
+  asideGap: 30,
+  /** The left column of a middle width, its icons alone (§5 "中等宽度"; x.com's own, 88 px, the spec measured none). */
+  railCompact: 88,
+  /** The left column's mark, its rows (58 px, a pill of 50 inside, 12 px in, the icon 26, the text 20, 20 apart). */
+  railMark: 52,
+  railItem: 58,
+  railPill: 50,
+  railPillInset: 12,
+  railText: 20,
+  railGap: 20,
+  /** The left column's main button: 233 × 52 px, near black, 17 px bold (scanning, §9.2). */
+  railButtonWidth: 233,
+  railButtonHeight: 52,
+  railButtonText: 17,
 } as const
 
 /** §9.1a: how the header and the bottom menu answer the page's scrolling on a phone (`scrollChrome.ts`). */
@@ -57,8 +86,26 @@ export function xspecVariables(): CSSProperties {
     '--x-back-inset': `${XSPEC.backInset}px`,
     '--x-note': `${XSPEC.noteSize}px`,
     '--x-title-inset': `${XSPEC.titleInset}px`,
+    '--x-head-mark': `${XSPEC.headMark}px`,
     '--x-header-opacity': `${XSPEC.headerOpacity * 100}%`,
     '--x-header-blur': `${XSPEC.headerBlur}px`,
     '--x-header-transition': `${XSCROLL.headerTransition}s`,
+    '--x-drawer': `${XSPEC.drawer}px`,
+    '--x-drawer-text': `${XSPEC.drawerText}px`,
+    '--x-rail': `${XSPEC.rail}px`,
+    '--x-rail-compact': `${XSPEC.railCompact}px`,
+    '--x-column': `${XSPEC.column}px`,
+    '--x-aside': `${XSPEC.aside}px`,
+    '--x-aside-gap': `${XSPEC.asideGap}px`,
+    '--x-rail-mark': `${XSPEC.railMark}px`,
+    '--x-rail-item': `${XSPEC.railItem}px`,
+    '--x-rail-pill': `${XSPEC.railPill}px`,
+    '--x-rail-pill-inset': `${XSPEC.railPillInset}px`,
+    '--x-rail-icon': `${XSPEC.bottomIcon}px`,
+    '--x-rail-text': `${XSPEC.railText}px`,
+    '--x-rail-gap': `${XSPEC.railGap}px`,
+    '--x-rail-button-width': `${XSPEC.railButtonWidth}px`,
+    '--x-rail-button-height': `${XSPEC.railButtonHeight}px`,
+    '--x-rail-button-text': `${XSPEC.railButtonText}px`,
   } as CSSProperties
 }

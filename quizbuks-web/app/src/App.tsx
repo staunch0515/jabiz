@@ -4,7 +4,6 @@ import {
   Button,
   EntryLayoutProvider,
   EnvironmentBadge,
-  Input,
   MAIL_LINK_PAGES,
   MailLinkPage,
   MailUnsubscribe,
@@ -23,14 +22,15 @@ import {
   useEntryNotices,
 } from '@jabiz/ui'
 import { QueryClientProvider, useQuery } from '@tanstack/react-query'
-import { ArrowLeft, LogIn, LogOut, Search, Store } from 'lucide-react'
-import { useEffect, useState, type FormEvent, type ReactNode } from 'react'
+import { ArrowLeft, LogIn, LogOut, Store } from 'lucide-react'
+import { useEffect, useState, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 import { APP } from './messages'
 import { takerHandleOf, TakerPage, verifyKeyOf, VerifyPage } from './certificates/PublicCertificates'
 import { ACCOUNT_SECURITY_PATH, AccountPage, isAccountPath, rememberLinked } from './pages/AccountPage'
 import { VideoStage } from './video/stage'
-import { FeedControlsProvider, FeedFiltersButton, FeedPage, searchOf, searchPath } from './pages/FeedPage'
+import { FeedControlsProvider, FeedFiltersButton, FeedPage } from './pages/FeedPage'
+import { SearchPage } from './pages/SearchPage'
 import { HistoryPage } from './pages/HistoryPage'
 import { PlayPage } from './pages/PlayPage'
 import { PublicationPage } from './pages/PublicationPage'
@@ -54,7 +54,7 @@ import { InboxPage } from './inbox/InboxPage'
 import { forgetAttempts } from './play/storage'
 import { itemPage } from './routes'
 import { AppFrame } from './frame/AppFrame'
-import { legacyTarget, MY_PASSES_PATH, PRIZES_PATH } from './frame/areas'
+import { legacyTarget, MY_PASSES_PATH, PRIZES_PATH, SEARCH_PATH } from './frame/areas'
 import { useSignOut } from './frame/signOut'
 import { PrizesPage } from './pages/PrizesPage'
 import { MyPassesPage } from './pass/MyPassesPage'
@@ -126,34 +126,6 @@ function toSignIn() {
   navigate('/login', { replace: true })
 }
 
-/** The header's search (Q63): the box in place of the header's row; a search shows the home's results. */
-function HeaderSearch({ initial, onClose }: { initial: string; onClose: () => void }) {
-  const { t } = useTranslation(APP)
-  const [text, setText] = useState(initial)
-  const submit = (event: FormEvent) => {
-    event.preventDefault()
-    onClose()
-    navigate(searchPath(text.trim()))
-  }
-  return (
-    <form role="search" onSubmit={submit} className="mx-auto flex w-full max-w-md items-center gap-1 px-2 py-1.5"
-      data-testid="header-search">
-      <Button type="button" variant="ghost" size="icon-sm" aria-label={t('feed.searchClose')} onClick={onClose}
-        data-testid="search-close">
-        <ArrowLeft aria-hidden />
-      </Button>
-      <Input type="search" value={text} maxLength={100} placeholder={t('feed.search')} aria-label={t('feed.search')}
-        autoFocus className="min-w-0 flex-1" data-testid="feed-search"
-        onChange={(event) => setText(event.target.value)}
-        onKeyDown={(event) => { if (event.key === 'Escape') onClose() }} />
-      <Button type="submit" variant="ghost" size="icon-sm" aria-label={t('feed.searchButton')}
-        data-testid="feed-search-submit">
-        <Search aria-hidden />
-      </Button>
-    </form>
-  )
-}
-
 /** The pages the header offers a way back from (Q64): a quiz's start page and a result. */
 function backable(path: string): boolean {
   const item = itemPage(path)
@@ -211,27 +183,19 @@ function Header({ search = false, welcome = false }: { search?: boolean; welcome
   const { t } = useTranslation(QB)
   const { t: tApp } = useTranslation(APP)
   const signOut = useSignOut()
-  const { path, search: query } = useLocation()
-  const [searching, setSearching] = useState(false)
+  const { path } = useLocation()
   const own = usePageHasOwnHead()
-  if (own && !searching) return null
-  if (searching) {
-    return (
-      <StickyHead testId="header">
-        <HeaderSearch initial={path === HOME ? searchOf(query) : ''} onClose={() => setSearching(false)} />
-      </StickyHead>
-    )
-  }
+  if (own) return null
   const mark = (
-    <span className="pointer-events-none absolute inset-x-0 flex justify-center" data-testid="head-mark">
-      <BrandMark className="size-(--x-avatar)" />
+    <span className={cn('pointer-events-none absolute inset-x-0 flex justify-center', search && 'md:hidden')} data-testid="head-mark">
+      <BrandMark className="size-(--x-head-mark)" />
       <span className="sr-only">{t('brand')}</span>
     </span>
   )
   if (path === HOME || welcome) {
     return (
       <StickyHead testId="header">
-        <div className="relative mx-auto flex w-full max-w-md items-center gap-1 px-(--x-side)" data-head="home">
+        <div className="relative flex w-full items-center gap-1 pr-(--x-back-inset) pl-(--x-side)" data-head="home">
           {search && <TakerAvatar />}
           {mark}
           <span className="mr-auto" />
@@ -239,13 +203,6 @@ function Header({ search = false, welcome = false }: { search?: boolean; welcome
           {search && <FeedFiltersButton />}
           {/* Q68: a sponsor's own account, for a sponsor only; a dot when something needs them. */}
           {search && <SponsorEntry current={false} />}
-          {/* Q63: the home's search is opened here, a magnifier. */}
-          {search && (
-            <Button variant="ghost" size="icon-sm" aria-label={tApp('feed.search')} data-testid="search-open"
-              onClick={() => setSearching(true)}>
-              <Search aria-hidden />
-            </Button>
-          )}
           {/* F-F4: the welcome step has no bottom menu and so no "Me": signing out is here. */}
           {welcome && (
             <Button variant="ghost" size="sm" onClick={signOut} data-testid="sign-out">
@@ -267,9 +224,7 @@ function Header({ search = false, welcome = false }: { search?: boolean; welcome
   const title = item?.page === 'p' ? tApp('frame.heads.publication')
     : item?.page === 'result' ? tApp('frame.heads.result') : undefined
   return (
-    <div className="mx-auto w-full max-w-md">
-      <SubHead claim={false} back={back} title={title} id="frame-head-title" />
-    </div>
+    <SubHead claim={false} back={back} title={title} id="frame-head-title" />
   )
 }
 
@@ -309,6 +264,7 @@ function SignedIn({ path }: { path: string }) {
   let page: ReactNode
   if (path === WELCOME) page = <WelcomePage profile={profile.data} />
   else if (path === HOME) page = <FeedPage name={complete?.displayName || displayName || ''} country={country} />
+  else if (path === SEARCH_PATH) page = <SearchPage name={complete?.displayName || displayName || ''} country={country} />
   else if (path === HISTORY) page = <HistoryPage />
   else if (path === PRIZES_PATH) page = <PrizesPage />
   else if (path === MY_PASSES_PATH) page = <MyPassesPage />
@@ -347,8 +303,8 @@ function SignedIn({ path }: { path: string }) {
           the header (Q66). */}
       <VideoStage />
       {/* Under the bottom menu of a phone the page keeps clear of it (F-F4); a wide screen has none. */}
-      <main className={cn('mx-auto flex w-full max-w-md flex-col gap-4 px-4 py-4',
-        nav && 'pb-[calc(var(--bottom-bar-height)+env(safe-area-inset-bottom)+1rem)] md:pb-4',
+      <main className={cn('flex w-full flex-col gap-4 px-4 py-4', !nav && 'mx-auto max-w-md',
+        nav && 'pb-[calc(var(--bottom-bar-offset)+env(safe-area-inset-bottom)+1rem)] md:pb-4',
         (path === HOME || item?.page === 'p') && 'pt-0')}>
         <OfflineBanner />
         <PwaUpdatePrompt />

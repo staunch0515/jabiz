@@ -1,5 +1,5 @@
 import type { APIRequestContext, Page } from '@playwright/test'
-import { expect, PASSWORD, rows, run, tokenOf, unique, verifiedUser } from './support'
+import { expect, PASSWORD, rows, run, takerArea, tokenOf, unique, verifiedUser } from './support'
 import { reviewerFor } from './operators'
 
 /*
@@ -67,9 +67,12 @@ export async function untilLive(request: APIRequestContext, token: string, publi
 }
 
 
-/** Searches the taker's home from the header's magnifier (Q63) and waits for the results. */
+/**
+ * Searches the feed as a taker does (Q63, Q113 §9.2): the search's entry of the bottom menu (the left column on a wide
+ * screen), the box in its head, and waits for the results (the home's cards, on the search's page).
+ */
 export async function searchHome(page: Page, text: string) {
-  await page.getByTestId('search-open').click()
+  await takerArea(page, 'search').click()
   await page.getByTestId('feed-search').fill(text)
   await page.getByTestId('feed-search-submit').click()
   await expect(page.getByTestId('feed-searched')).toBeVisible()

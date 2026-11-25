@@ -1,22 +1,24 @@
-import { expect, expectAccessible, prepareQuizbuks, signIn, takerArea, test, type TakerArea } from './support'
+import { expect, expectAccessible, prepareQuizbuks, signIn, takerArea, test, type TakerArea, openTakerArea } from './support'
 import { takerInJapan } from './wallet'
 
 /*
- * The taker app's frame (F-F4, docs/quizbuks/plans/impl/F-F4.md sections 2, 3 and 7): the bottom menu of five with
- * scanning raised in the middle on a phone, the left column on a wide screen, every area without a sideways scroll at
- * 360 px, every address the app had still a page of the right area, and the redirects of `LEGACY_APP_PATHS`.
+ * The taker app's frame (F-F4, docs/quizbuks/plans/impl/F-F4.md sections 2, 3 and 7; Q113 §9.2 since Q113a-2): the
+ * bottom menu of four icons and the floating scan button on a phone, "Me" in the avatar's drawer, the three columns on
+ * a wide screen, every area without a sideways scroll at 360 px, every address the app had still a page of the right
+ * area, and the redirects of `LEGACY_APP_PATHS`.
  */
 test.beforeEach(async ({ request }) => {
   await prepareQuizbuks(request)
 })
 
-const AREAS: TakerArea[] = ['home', 'history', 'scan', 'messages', 'me']
+/** The bottom menu's areas, in its order (Q113 §9.2). */
+const BOTTOM: TakerArea[] = ['home', 'search', 'history', 'messages']
 
 /** The width the page is wider than the screen by (zero or less when it fits). */
 const overflow = (page: import('@playwright/test').Page) =>
   page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)
 
-test('a phone has the bottom menu of five, scanning raised in the middle, and every area fits 360 px', async ({
+test('a phone has the bottom menu of four icons, scanning floating, "Me" in the drawer, and every area fits 360 px', async ({
   page, request,
 }) => {
   test.setTimeout(180_000)
@@ -26,22 +28,25 @@ test('a phone has the bottom menu of five, scanning raised in the middle, and ev
   await expect(page.getByTestId('home')).toBeVisible()
 
   const bar = page.getByRole('navigation', { name: 'App' })
-  await expect(bar.getByRole('link')).toHaveCount(AREAS.length)
+  await expect(bar.getByRole('link')).toHaveCount(BOTTOM.length)
   await expect(page.getByTestId('side-rail')).toBeHidden()
+  await expect(page.getByTestId('side-aside')).toBeHidden()
   await expect(page.getByTestId('bottom-bar-more')).toHaveCount(0)
+  await expect(page.getByTestId('page-fab')).toBeVisible()
 
-  // Scanning is in the middle of the screen (to a pixel), and raised above the others.
-  const scan = (await page.getByTestId('bottom-bar-scan').boundingBox())!
-  expect(Math.abs(scan.x + scan.width / 2 - 360 / 2), 'scanning is in the middle').toBeLessThanOrEqual(1)
-  const home = (await page.getByTestId('bottom-bar-home').locator('svg').boundingBox())!
-  const raised = (await page.getByTestId('bottom-bar-scan').locator('svg').boundingBox())!
-  expect(raised.y, 'scanning is raised above the others').toBeLessThan(home.y)
-
-  for (const area of AREAS) {
+  for (const area of BOTTOM) {
     await expect(page.getByTestId(`bottom-bar-${area}`)).toBeVisible()
     await page.getByTestId(`bottom-bar-${area}`).click()
     await expect(page.getByTestId(`bottom-bar-${area}`)).toHaveAttribute('aria-current', 'page')
-    if (area !== 'home') await expect(page.locator('[data-slot="page-title"]').first()).toBeVisible()
+    if (area !== 'home' && area !== 'search') await expect(page.locator('[data-slot="page-title"]').first()).toBeVisible()
+    await page.waitForLoadState('networkidle')
+    expect(await overflow(page), `${area} fits 360 px`).toBeLessThanOrEqual(0)
+  }
+  // Scanning from the floating button; "Me" from the drawer: pages under another, no entry of the menu marked.
+  for (const area of ['scan', 'me'] as const) {
+    await openTakerArea(page, area)
+    await expect(page.getByTestId('header-back')).toBeVisible()
+    await expect(bar.locator('[aria-current="page"]')).toHaveCount(0)
     await page.waitForLoadState('networkidle')
     expect(await overflow(page), `${area} fits 360 px`).toBeLessThanOrEqual(0)
   }
@@ -55,7 +60,9 @@ test('a phone has the bottom menu of five, scanning raised in the middle, and ev
   await expectAccessible(page, 'app wallet at 360px')
 })
 
-test('a wide screen has the left column of five and no bottom menu', async ({ page, request }) => {
+test('a wide screen has the three columns: the left one, the page and the right one, and no bottom menu', async ({
+  page, request,
+}) => {
   test.setTimeout(180_000)
   const me = await takerInJapan(request, 'Column')
   await page.setViewportSize({ width: 1280, height: 900 })
@@ -64,18 +71,18 @@ test('a wide screen has the left column of five and no bottom menu', async ({ pa
 
   const rail = page.getByTestId('side-rail')
   await expect(rail).toBeVisible()
-  await expect(rail.getByRole('link')).toHaveCount(AREAS.length)
+  await expect(page.getByTestId('side-aside')).toBeVisible()
   await expect(page.getByTestId('bottom-menu')).toBeHidden()
-  await expect(page.getByTestId('bottom-bar-scan')).toBeHidden()
-  // The column is at the left edge, and the page is in what it leaves.
+  await expect(page.getByTestId('page-fab')).toBeHidden()
+  // The left column, then the page beside it.
   const railBox = (await rail.boundingBox())!
-  expect(railBox.x).toBe(0)
   const homeBox = (await page.getByTestId('home').boundingBox())!
   expect(homeBox.x).toBeGreaterThanOrEqual(railBox.x + railBox.width)
 
-  for (const area of AREAS) {
+  for (const area of [...BOTTOM, 'me', 'scan'] as const) {
     await page.getByTestId(`side-rail-${area}`).click()
-    await expect(page.getByTestId(`side-rail-${area}`)).toHaveAttribute('aria-current', 'page')
+    if (area !== 'scan') await expect(page.getByTestId(`side-rail-${area}`)).toHaveAttribute('aria-current', 'page')
+    else await expect(page).toHaveURL(/\/taker\/scan$/)
   }
   await expectAccessible(page, 'app left column')
 })
@@ -87,6 +94,8 @@ test('a wide screen has the left column of five and no bottom menu', async ({ pa
  */
 const OLD_ROUTES: [string, TakerArea | null][] = [
   ['/', 'home'], ['/?q=sample', 'home'], ['/p/sample', 'home'],
+  // Q113a-2's new address.
+  ['/search', 'search'], ['/search?q=sample', 'search'],
   ['/history', 'history'], ['/result/sample', 'history'],
   ['/scan', 'scan'], ['/redeem/sample', 'scan'], ['/pass/sample', 'scan'],
   ['/inbox', 'messages'], ['/inbox/message/sample', 'messages'], ['/inbox/broadcast/sample', 'messages'],
@@ -113,7 +122,12 @@ test('every address the app had is still a page, in the area that marks it', asy
   for (const [path, area] of OLD_ROUTES) {
     await page.goto(`/taker${path}`)
     await expect(page, path).toHaveURL(new RegExp(`/taker${path.replace(/[?/]/g, (c) => `\\${c}`)}$`))
-    if (area) await expect(takerArea(page, area), path).toHaveAttribute('aria-current', 'page')
+    if (area === 'scan' || area === 'me') {
+      // Reached from the floating button and the drawer: the bottom menu is there (the bar: its wrapper has no size of
+      // its own), no entry of it marked.
+      await expect(page.locator('[data-slot="bottom-bar"]'), path).toBeVisible()
+      await expect(page.locator('[data-slot="bottom-bar"] [aria-current="page"]'), path).toHaveCount(0)
+    } else if (area) await expect(takerArea(page, area), path).toHaveAttribute('aria-current', 'page')
     else await expect(page.getByTestId('bottom-menu'), path).toHaveCount(0)
   }
 })
@@ -127,14 +141,14 @@ test('an address that changed leads to its page now', async ({ page, request }) 
   await expect(page).toHaveURL(/\/taker\/auth\/account-deletion$/)
   await page.goto('/taker/account?section=details')
   await expect(page).toHaveURL(/\/taker\/account\/details$/)
-  await expect(takerArea(page, 'me')).toHaveAttribute('aria-current', 'page')
+  await expect(page.getByTestId('header-back')).toHaveAccessibleName('Back to Me')
 })
 
 test('"Coming soon" beside the Kudos is the same on "Me" and on the wallet', async ({ page, request }) => {
   const me = await takerInJapan(request, 'Soon')
   await page.setViewportSize({ width: 390, height: 844 })
   await signIn(page, '/taker/', me.email)
-  await takerArea(page, 'me').click()
+  await openTakerArea(page, 'me')
   await expect(page.getByTestId('me-number-kudos-value')).not.toHaveText('–')
   const onMe = await page.getByTestId('me-number-kudos-note').count()
   await page.getByTestId('me-number-kudos').click()
@@ -149,16 +163,17 @@ test('the old menu is gone, and each of its entries has a place', async ({ page,
   await signIn(page, '/taker/', me.email)
   await expect(page.getByTestId('home')).toBeVisible()
   await expect(page.getByTestId('app-menu')).toHaveCount(0)
-  // Scanning: the middle entry. Referrals: "What I have". Appearance: App settings. Signing out: the bottom of "Me".
-  await takerArea(page, 'me').click()
+  // Scanning: the floating button. Referrals: "What I have". Appearance: App settings. Signing out: the drawer, and
+  // the bottom of "Me".
+  await openTakerArea(page, 'me')
   await page.getByTestId('account-menu-referrals').click()
   await expect(page).toHaveURL(/\/taker\/referrals$/)
-  await takerArea(page, 'me').click()
+  await openTakerArea(page, 'me')
   await page.getByTestId('account-menu-preferences').click()
   await page.getByTestId('appearance-dark').click()
   await expect(page.getByTestId('appearance-dark')).toHaveAttribute('aria-pressed', 'true')
   await page.getByTestId('appearance-light').click()
-  await takerArea(page, 'me').click()
+  await openTakerArea(page, 'me')
   await page.getByTestId('sign-out').click()
   await expect(page).toHaveURL(/\/login$/)
 })

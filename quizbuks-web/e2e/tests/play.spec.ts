@@ -119,9 +119,9 @@ test('a publication opens on its introduction, has the rules, reward and materia
   await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight))
   const last = (await page.getByTestId('detail-footer').boundingBox())!
   expect(last.y + last.height).toBeLessThanOrEqual((await start.boundingBox())!.y + 1)
-  // Back leaves the page, not the last tab.
+  // Back leaves the page, not the last tab: to the search's results it was opened from (Q113a-2).
   await page.goBack()
-  await expect(page.getByTestId('home')).toBeVisible()
+  await expect(page.getByTestId('search-results')).toBeVisible()
 })
 
 for (const appearance of ['light', 'dark'] as const) {
