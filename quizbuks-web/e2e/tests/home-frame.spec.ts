@@ -80,12 +80,17 @@ async function searched(page: Page, words: string, cards: number) {
   if (cards > 0) await expect(home.getByTestId('feed-card')).toHaveCount(cards)
   else await expect(home.getByTestId('home-empty')).toBeVisible()
   // A picture still to come is a grey box with no <img> yet (LazyImage before it nears the screen, FileImage while it
-  // fetches): each is brought to the screen once, so that it is asked for whatever the height of the cards, and then
-  // the page goes back to its top; wait for none of those as well as for every <img> to have loaded.
-  for (const waiting of await home.locator('[data-slot="image-loading"]').all()) {
-    await waiting.scrollIntoViewIfNeeded().catch(() => {})
-  }
-  await page.evaluate(() => window.scrollTo(0, 0))
+  // fetches): each is brought to the screen once, in the page (a placeholder is replaced by its picture as it loads,
+  // so a locator's own scrolling would wait for one that is gone), and then the page goes back to its top; wait for
+  // none of those as well as for every <img> to have loaded.
+  await home.evaluate(async (section) => {
+    for (const waiting of [...section.querySelectorAll('[data-slot="image-loading"]')]) {
+      if (!waiting.isConnected) continue
+      waiting.scrollIntoView({ block: 'center' })
+      await new Promise((resolve) => setTimeout(resolve, 150))
+    }
+    window.scrollTo(0, 0)
+  })
   await expect.poll(() => home.evaluate((section) => !section.querySelector('[data-slot="image-loading"]')
     && [...section.querySelectorAll('img')].every((img) => img.complete && img.naturalWidth > 0)),
   { message: 'the pictures load' }).toBe(true)
