@@ -188,7 +188,11 @@ describe('the application frame', () => {
     expect(within(bar).getByRole('link', { name: 'Scan' })).not.toHaveAttribute('aria-current')
     // The page and the floating button keep clear of the bar.
     const provider = document.querySelector('[data-slot="sidebar-wrapper"]') as HTMLElement
-    expect(provider.style.getPropertyValue('--bottom-bar-offset')).toBe('var(--bottom-bar-height)')
+    expect(provider).toHaveClass('[--bottom-bar-offset:var(--bottom-bar-height)]')
+    // A bar of icons alone (phase 17zz31) is lower, and its floating button keeps 20 px: asked of the bar itself.
+    expect(provider.className).toContain('has-[[data-slot=bottom-bar][data-variant=icons]]:[--bottom-bar-offset:calc(var(--bottom-bar-icons-height)+1px)]')
+    expect(provider.className).toContain('has-[[data-slot=bottom-bar][data-variant=icons]]:[--fab-inset:1.25rem]')
+    expect(screen.getByTestId('page-fab')).toHaveAttribute('data-variant', 'default')
     expect(screen.getByTestId('page-fab')).toBeInTheDocument()
     await expectAccessible()
 

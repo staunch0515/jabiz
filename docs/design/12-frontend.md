@@ -422,6 +422,10 @@ jabizApp {
 - **底部菜单 `BottomBar` 的 `variant="icons"`**：只显示图标（26px），名称只给读屏（每项链接以名称命名，徽标的数也在名称中由应用给出）；条高 53px
   （token `--bottom-bar-icons-height`，3.3125rem）加安全区；当前项用 `activeIcon`（应用给出实心的图标）或加粗的笔画，`aria-current="page"` 照旧。
   `dim`（0–1，缺省 1）：整条（含背景）的不透明度，0.17 秒线性过渡；应用随滚动传入（Q113 §9.1a），条仍可点按。`raised` 与"更多"照常可用。缺省 `variant="labels"` 即以前的样子。
+- **悬浮按钮 `Fab` 的 `variant="timeline"` 与 `dim`**（17zz31）：直径 56px 照旧，距屏幕右边与底部菜单各 20px（缺省 16px，变量 `--fab-inset`）；
+  `dim` 与底部菜单的相同（整个按钮的不透明度，0.17 秒线性），应用随滚动与底部菜单一起传入，按钮仍可点按。`AppShell` 留给底部菜单的高度（`--bottom-bar-offset`：
+  页面末尾的留白、悬浮按钮与表单页底部的操作栏都据此避开菜单）取自菜单本身：`variant="icons"` 的菜单是 53px 加 1px 上边线，其悬浮按钮同时取 20px；
+  其他菜单仍是 `--bottom-bar-height`。不用 `AppShell` 的应用（自己的框架）给 `Fab` 传 `variant="timeline"`，并自己设置 `--bottom-bar-offset`。
 - **页内标签 `PageTabs` 的 `indicator="label"`**：标签高 53px、文字 15px（当前项 700，其余 500 次要色）、当前项下方 4px 全圆角的指示条，宽度等于文字宽（至少 56px），
   强调色；`fill` 时各标签等分整行（标签少时），否则按内容宽度（左右 16px）横向滚动且不显示滚动条。缺省 `indicator="border"` 即以前的样子。
 - **入口页的 `look="open"`**（`EntryLayoutSettings`，`EntryLayoutProvider` 给出）：不画卡片。手机：顶部是标志（`mark`）与标题居中，语言选择在右上；
@@ -430,9 +434,10 @@ jabizApp {
   空时 17px，聚焦或有值时 12px 移到上方；聚焦时 2px 强调色边框；可带右侧按钮，如显示密码）。提示区、另一方入口、页脚链接、亮暗、429 的等待、第二步的返回地址等
   全部照旧（模板只管排列的原则不变）。缺省 `look="card"` 即以前的样子。
 - **`FloatingInput`**（`@jabiz/ui`）：上述的框内标签输入框；`<label>` 包住输入框，名称即标签文字，错误时 `aria-invalid` 与说明照旧。
-- **测试**：`bottom-bar.test.tsx`（只有图标、名称、实心当前项、`dim` 的不透明度与仍可点按、"更多"）、`page-tabs.test.tsx`（指示条与文字同宽、至少 56px、等分、键盘）、
+- **测试**：`bottom-bar.test.tsx`（只有图标、名称、实心当前项、`dim` 的不透明度与仍可点按、"更多"）、`page-action.test.tsx`（`Fab` 的 20px、`dim`、缺省不变）、
+  `app-frame.test.tsx`（`AppShell` 按菜单的版式设置留给它的高度）、门户 e2e（`?look=open` 的手机：菜单 53px、按钮距右边与菜单各 20px、页面末尾的留白）、`page-tabs.test.tsx`（指示条与文字同宽、至少 56px、等分、键盘）、
   `entry-open.test.tsx`（`look="open"`：无卡片、品牌标题与标志、登录第一步的标题只给读屏、胶囊按钮与框内标签、所有槽位仍在；`FloatingInput` 的聚焦与错误）；每例亮暗两种外观过 axe。
-- **示范**：示范门户的一个开关（`?look=open`）显示开放式入口页与只有图标的底部菜单；通用后台不变。
+- **示范**：示范门户的一个开关（`?look=open`）显示开放式入口页、只有图标的底部菜单与 20px 的悬浮按钮；通用后台不变。
 
 ## 14. 入口页模板（17zk，QuizBuks 首次上线 P4）
 
