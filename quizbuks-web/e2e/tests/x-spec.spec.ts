@@ -94,6 +94,16 @@ test('the entry pages on a wide screen: a column 384 px wide 36 px in, the name 
 const shiftOf = (page: Page, selector: string) =>
   page.locator(selector).first().evaluate((element) => new DOMMatrix(getComputedStyle(element).transform).m42)
 
+/**
+ * Makes the page long, as a full history is: 3000 px more of the page's own column, the one its head sticks in (a
+ * sticky head stays only within its column, so a longer <body> would take it away with a short column).
+ */
+const lengthen = (page: Page) => page.locator('[data-slot="x-head"]').first().evaluate((head) => {
+  const more = document.createElement('div')
+  more.style.height = '3000px'
+  head.parentElement!.append(more)
+})
+
 /** The bottom menu's opacity. */
 const barOpacity = (page: Page) =>
   page.locator('[data-slot="bottom-bar"]').evaluate((bar) => Number(getComputedStyle(bar).opacity))
@@ -147,7 +157,8 @@ test.describe('the heads and the tabs (Q113 §9.1)', () => {
     await page.setViewportSize({ width: 1280, height: 900 })
     await signIn(page, '/taker/', me.email)
     await page.goto('/taker/history')
-    await page.evaluate(() => { document.body.style.paddingBottom = '3000px' })
+    await expect(page.getByTestId('area-header')).toBeVisible()
+    await lengthen(page)
     await page.evaluate(() => window.scrollTo(0, 600))
     await page.waitForTimeout(500)
     expect(await shiftOf(page, '[data-slot="x-head"]')).toBe(0)
@@ -164,7 +175,7 @@ test('scrolling on a phone: the head follows down after 20 px, only a quick swip
   await page.goto('/taker/history')
   await expect(page.getByTestId('area-header')).toBeVisible()
   // A long page: the history of a new taker is short.
-  await page.evaluate(() => { document.body.style.paddingBottom = '3000px' })
+  await lengthen(page)
   const head = '[data-slot="x-head"]'
   const to = async (y: number) => {
     await page.evaluate((top) => window.scrollTo(0, top), y)

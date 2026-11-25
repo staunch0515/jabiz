@@ -448,7 +448,20 @@ export async function signOut(page: Page) {
  * `expect`.
  */
 export async function expectAccessible(page: Page, name: string) {
+  // Scrolled down, the taker app's bottom menu is faded to 0.3 on its way out (Q113 §9.1a, as on x.com): a passing
+  // state of the scrolling, which axe would read as text too faint. The page is checked with its frame shown (at the
+  // top), then put back where it was.
+  const at = await page.evaluate(() => {
+    const y = window.scrollY
+    if (y > 0) window.scrollTo(0, 0)
+    return y
+  })
+  if (at > 0) {
+    await expect.poll(() => page.evaluate(() => [...document.querySelectorAll('[data-slot="bottom-bar"]')]
+      .every((bar) => getComputedStyle(bar).opacity === '1')), { message: 'the bottom menu is shown' }).toBe(true)
+  }
   await expectAccessibleWith(page, name, { expect })
+  if (at > 0) await page.evaluate((y) => window.scrollTo(0, y), at)
 }
 
 /**
