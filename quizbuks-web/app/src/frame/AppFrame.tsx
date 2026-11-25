@@ -1,5 +1,6 @@
 import { BottomBar, cn, EnvironmentBadge, Fab, type BottomBarItem } from '@jabiz/ui'
 import { useAuth } from '@jabiz/client'
+import { Ellipsis } from 'lucide-react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useEffect, useRef, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -9,17 +10,21 @@ import { PROFILE_QUERY } from '../pages/ProfileForm'
 import { SearchForm } from '../pages/SearchPage'
 import { readMyProfile } from '../qb/api'
 import { BrandMark } from '../qb/Illustrations'
+import { formatKudos } from '../qb/kudos'
+import { legalPath } from '../qb/legal'
+import { rewardPath } from '../qb/play'
 import { QB } from '../qb/messages'
 import { Link, useLocation } from '../qb/router'
 import { badgeText } from '../inbox/api'
 import { isFirstLevel } from './AreaHeader'
-import { AREA_TABS, areaOf, BOTTOM_AREAS, PRIZES_PATH, routeOf, type Area, type AreaKey } from './areas'
-import { DrawerProvider, Initial, useDrawer } from './Drawer'
+import { AREA_TABS, areaOf, BOTTOM_AREAS, MY_PASSES_PATH, PRIZES_PATH, routeOf, SETTINGS_ROW, type Area, type AreaKey } from './areas'
+import { DrawerProvider, Initial, useKudosAtHand } from './Drawer'
+import { FabScanIcon, GiftIcon } from './icons'
 import { FrameLink } from './FrameLink'
 import { HeadsProvider, useChromeOffset } from './Header'
 import { chromeOpacity } from './scrollChrome'
 import { xspecVariables } from './xspec'
-import { PRIZES_QUERY, useOpenPrizes } from './prizes'
+import { PRIZES_QUERY, readPrizes, useOpenPrizes, type Prize } from './prizes'
 import './messages'
 
 type Badges = Partial<Record<AreaKey, number>>
@@ -66,6 +71,7 @@ function BottomMenu({ badges }: { badges: Badges }) {
     key: area.key,
     label: t(`frame.areas.${area.key}`),
     icon: area.icon,
+    activeIcon: area.solidIcon,
     path: area.path,
     badge: badges[area.key],
   }))
@@ -88,50 +94,67 @@ function ScanButton() {
   const scan = areaOf('scan')
   return (
     <Fab variant="timeline" dim={chromeOpacity(offset)} className="md:hidden"
-      action={{ label: t('frame.areas.scan'), icon: scan.icon,
+      action={{ label: t('frame.areas.scan'), icon: FabScanIcon,
         renderLink: (props) => <FrameLink to={scan.path} {...props} /> }} />
   )
 }
 
-/** A row of the left column: the icon, and from `xl` on its name, in a pill of 50 px inside a row of 58. */
-function RailEntry({ area, active, name }: { area: Area; active: boolean; name?: string }) {
-  const { t } = useTranslation(APP)
-  const Icon = area.icon
+/**
+ * A row of the left column (the prototype's Desktop): the icon (solid when current, where the bottom menu's is) with
+ * its count, and from `xl` on its name, in a pill of 50 px inside a row of 58; the current one bold.
+ */
+function RailEntry({ area, label, active, count, name, testId }: {
+  area: Pick<Area, 'path' | 'icon' | 'solidIcon'>
+  label: string
+  active: boolean
+  count?: number
+  /** The name with its count, read once. */
+  name?: string
+  testId: string
+}) {
+  const Icon = active && area.solidIcon ? area.solidIcon : area.icon
   return (
     <li className="flex h-(--x-rail-item) items-center">
-      <Link to={area.path} current={active} aria-label={name ?? t(`frame.areas.${area.key}`)}
-        data-testid={`side-rail-${area.key}`}
+      <Link to={area.path} current={active} aria-label={name ?? label} data-testid={testId}
         className={cn('hover:bg-accent focus-visible:ring-ring flex h-(--x-rail-pill) items-center gap-(--x-rail-gap) rounded-full',
           'px-(--x-rail-pill-inset) outline-none focus-visible:ring-2', active ? 'font-bold' : 'font-normal')}>
         <span className="relative">
-          <Icon aria-hidden className="size-(--x-rail-icon)" strokeWidth={active ? 2.6 : 1.9} />
-          {name && <span aria-hidden className="bg-primary absolute -top-0.5 -right-0.5 size-2 rounded-full" />}
+          <Icon aria-hidden className="size-(--x-rail-icon)" strokeWidth={active ? 2.4 : 1.9} />
+          {!!count && count > 0 && (
+            <span aria-hidden className={cn('bg-primary text-primary-foreground border-background absolute -top-1.5 -right-2 min-w-[18px]',
+              'rounded-full border-2 px-1 text-center text-[11px] leading-[14px] font-bold')}>
+              {badgeText(count)}
+            </span>
+          )}
         </span>
-        <span aria-hidden className="hidden pr-(--x-side) text-(length:--x-rail-text) leading-6 xl:inline">
-          {t(`frame.areas.${area.key}`)}
-        </span>
+        <span aria-hidden className="hidden pr-(--x-side) text-(length:--x-rail-text) leading-6 xl:inline">{label}</span>
       </Link>
     </li>
   )
 }
 
-/** The account at the foot of the left column: the initial, and from `xl` on the name and address; it opens the drawer. */
+/**
+ * The account at the foot of the left column (the prototype's Desktop): the initial, and from `xl` on the name, the
+ * Kudos at hand and the "more" mark; it leads to the taker's page.
+ */
 function RailAccount() {
   const { t } = useTranslation(APP)
-  const drawer = useDrawer()
   const { email } = useAuth()
   const profile = useQuery({ queryKey: PROFILE_QUERY, queryFn: readMyProfile })
+  const kudos = useKudosAtHand()
   const name = profile.data?.displayName || email || ''
   return (
-    <button type="button" aria-label={t('frame.heads.avatar')} aria-haspopup="dialog" aria-expanded={drawer?.open}
-      onClick={() => drawer?.setOpen(true)} data-testid="side-rail-account"
+    <FrameLink to={areaOf('me').path} aria-label={t('frame.drawer.rows.me')} data-testid="side-rail-account"
       className="hover:bg-accent focus-visible:ring-ring flex items-center gap-3 rounded-full p-(--x-rail-pill-inset) text-left outline-none focus-visible:ring-2">
-      <Initial className="size-10 text-base" />
-      <span className="hidden min-w-0 flex-col xl:flex">
+      <Initial className="size-10 text-[15px]" />
+      <span className="hidden min-w-0 flex-1 flex-col xl:flex">
         <span className="truncate text-[15px] leading-5 font-bold">{name}</span>
-        {email && name !== email && <span className="text-muted-foreground truncate text-[15px] leading-5">{email}</span>}
+        {kudos !== undefined && (
+          <span className="text-muted-foreground truncate text-[15px] leading-5">{kudos} {t('me.numbers.kudos')}</span>
+        )}
       </span>
-    </button>
+      <Ellipsis aria-hidden className="hidden size-[19px] shrink-0 xl:block" />
+    </FrameLink>
   )
 }
 
@@ -157,9 +180,11 @@ function SideRail({ badges }: { badges: Badges }) {
       </Link>
       <ul className="flex flex-col">
         {BOTTOM_AREAS.map((area) => (
-          <RailEntry key={area.key} area={area} active={area.key === current} name={nameOf(area.key)} />
+          <RailEntry key={area.key} area={area} label={t(`frame.areas.${area.key}`)} active={area.key === current}
+            count={badges[area.key]} name={nameOf(area.key)} testId={`side-rail-${area.key}`} />
         ))}
-        <RailEntry area={areaOf('me')} active={current === 'me'} />
+        <RailEntry area={areaOf('me')} label={t('frame.drawer.rows.me')} active={current === 'me'} testId="side-rail-me" />
+        <RailEntry area={SETTINGS_ROW} label={t(SETTINGS_ROW.title)} active={false} testId="side-rail-settings" />
       </ul>
       <FrameLink to={scan.path} aria-label={t('frame.areas.scan')} data-testid="side-rail-scan"
         className={cn('bg-foreground text-background focus-visible:ring-ring mt-4 flex items-center justify-center rounded-full outline-none',
@@ -176,33 +201,88 @@ function SideRail({ badges }: { badges: Badges }) {
   )
 }
 
+/** A prize waiting in the right column: the gift, its worth, the Sponsor and the date, the pass or the way to it. */
+function AsidePrize({ prize }: { prize: Prize }) {
+  const { t, i18n } = useTranslation(APP)
+  const pass = prize.kind === 'REDEEM' && prize.status === 'DUE'
+  const by = prize.expiresAt ?? prize.dueAt ?? prize.confirmBy
+  return (
+    <li className="flex items-center gap-3 px-(--x-side) py-3" data-testid="aside-prize">
+      <span aria-hidden className="bg-qb-reward/25 text-qb-reward-foreground flex size-10 shrink-0 items-center justify-center rounded-full">
+        <GiftIcon className="size-5" strokeWidth={2} />
+      </span>
+      <span className="flex min-w-0 flex-1 flex-col">
+        <b className="truncate">{t('frame.aside.worth', { amount: formatKudos(prize.amount) })}</b>
+        <span className="text-muted-foreground truncate">
+          {[prize.sponsorCompany ?? prize.publicationName, by && t('frame.aside.by', { date: shortDate(by, i18n.language) })]
+            .filter(Boolean).join(' · ')}
+        </span>
+      </span>
+      <FrameLink to={pass ? MY_PASSES_PATH : rewardPath({ attemptId: prize.attemptId, sourceKind: prize.sourceKind ?? undefined })}
+        data-testid="aside-prize-open"
+        className="bg-foreground text-background focus-visible:ring-ring h-8 shrink-0 rounded-full px-4 text-sm leading-8 font-bold outline-none focus-visible:ring-2 focus-visible:ring-offset-2">
+        {pass ? t('frame.aside.pass') : t('frame.aside.open')}
+      </FrameLink>
+    </li>
+  )
+}
+
+/** A day as the prototype writes it beside a prize: the month and the day ("1月1日", "Jan 1"). */
+function shortDate(at: string, language: string): string {
+  return new Date(at).toLocaleDateString(language, { month: 'short', day: 'numeric' })
+}
+
+/** How many waiting prizes the right column lists before "See all". */
+const ASIDE_PRIZES = 3
+
 /**
- * The right column of a wide screen (Q113 §9.1 "宽屏"): the search, and the prizes waiting. Modules on the page's
- * white with a border of the dividers and round corners; "Sponsors to follow" needs a query of its own (not Q113a).
+ * The right column of a wide screen (Q113 §9.1 "宽屏"; the prototype's Desktop): the search (a filled pill), the
+ * prizes waiting with their pass, and the help and the terms. Modules with a border of the dividers and round
+ * corners; "Sponsors to follow" needs a query of its own (not Q113a).
  */
 function Aside() {
   const { t } = useTranslation(APP)
-  const prizes = useOpenPrizes()
+  const { t: tQb } = useTranslation(QB)
   const { path } = useLocation()
+  const prizes = useQuery({ queryKey: [...PRIZES_QUERY, 'aside'], queryFn: () => readPrizes(true, 0, ASIDE_PRIZES) })
+  const rows = prizes.data?.items ?? []
   return (
     <aside aria-label={t('frame.aside.label')} data-testid="side-aside"
-      className="sticky top-0 ml-(--x-aside-gap) hidden w-(--x-aside) shrink-0 flex-col gap-4 self-start py-2 xl:flex">
+      className="sticky top-0 ml-(--x-aside-gap) hidden w-(--x-aside) shrink-0 flex-col gap-4 self-start pt-1.5 pb-6 xl:flex">
       {path !== areaOf('search').path && <SearchForm testId="aside-search" />}
-      <section aria-labelledby="aside-prizes" className="rounded-2xl border" data-testid="aside-prizes">
-        <h2 id="aside-prizes" className="px-(--x-side) pt-3 text-xl leading-6 font-extrabold">{t('frame.aside.prizesTitle')}</h2>
-        <p className="text-muted-foreground px-(--x-side) py-3 text-[15px] leading-5">
-          {prizes ? t('frame.aside.prizes', { count: prizes }) : t('frame.aside.prizesNone')}
-        </p>
-        {!!prizes && (
-          <FrameLink to={PRIZES_PATH} data-testid="aside-prizes-open"
-            className="text-primary hover:bg-accent focus-visible:ring-ring block rounded-b-2xl px-(--x-side) py-3 text-[15px] outline-none focus-visible:ring-2">
-            {t('frame.aside.prizesOpen')}
+      <section aria-labelledby="aside-prizes" className="overflow-hidden rounded-2xl border" data-testid="aside-prizes">
+        <h2 id="aside-prizes" className="px-(--x-side) py-3 text-xl leading-6 font-extrabold">{t('frame.aside.prizesTitle')}</h2>
+        {rows.length > 0 ? (
+          <ul>{rows.map((prize) => <AsidePrize key={`${prize.kind}:${prize.prizeId}`} prize={prize} />)}</ul>
+        ) : (
+          <p className="text-muted-foreground px-(--x-side) pb-3">{t('frame.aside.prizesNone')}</p>
+        )}
+        {(prizes.data?.total ?? 0) > rows.length && (
+          <FrameLink to={PRIZES_PATH} data-testid="aside-prizes-more"
+            className="text-primary hover:bg-accent focus-visible:ring-ring block px-(--x-side) py-3 outline-none focus-visible:ring-2 focus-visible:ring-inset">
+            {t('frame.aside.more')}
           </FrameLink>
         )}
       </section>
+      <nav aria-label={t('frame.aside.links')} className="text-muted-foreground mx-(--x-side) text-(length:--x-note) leading-4">
+        {ASIDE_LINKS.map((link, i) => (
+          <span key={link.path}>
+            {i > 0 && ' · '}
+            <FrameLink to={link.path} className="outline-none hover:underline focus-visible:underline">{tQb(link.title)}</FrameLink>
+          </span>
+        ))}
+      </nav>
     </aside>
   )
 }
+
+/** The links under the right column (the prototype's): the help centre and the texts a taker accepts. */
+const ASIDE_LINKS = [
+  { path: '/help', title: 'help.title' },
+  { path: legalPath('TERMS_APP'), title: 'legal.kinds.TERMS_APP' },
+  { path: legalPath('PRIVACY'), title: 'legal.kinds.PRIVACY' },
+  { path: legalPath('CONTEST_RULES'), title: 'legal.kinds.CONTEST_RULES' },
+]
 
 /**
  * The frame of the signed-in pages (F-F4, Q113 §9): on a phone the page, the bottom menu and on the first-level pages

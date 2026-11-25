@@ -18,6 +18,8 @@ export const XSPEC = {
   backButton: 36,
   backInset: 8,
   noteSize: 13,
+  /** The mark in the middle of the home's head (the prototype's 30 px). */
+  headMark: 30,
   /** Where the title starts in either head (the prototype's 72 px: after the avatar, or after the way back). */
   titleInset: 72,
   /** §9.1 "头部": the header's white, 85 % opaque, blurred under it by 12 px (§9.1a). */
@@ -84,6 +86,7 @@ export function xspecVariables(): CSSProperties {
     '--x-back-inset': `${XSPEC.backInset}px`,
     '--x-note': `${XSPEC.noteSize}px`,
     '--x-title-inset': `${XSPEC.titleInset}px`,
+    '--x-head-mark': `${XSPEC.headMark}px`,
     '--x-header-opacity': `${XSPEC.headerOpacity * 100}%`,
     '--x-header-blur': `${XSPEC.headerBlur}px`,
     '--x-header-transition': `${XSCROLL.headerTransition}s`,

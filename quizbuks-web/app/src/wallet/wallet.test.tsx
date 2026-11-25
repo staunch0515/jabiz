@@ -238,7 +238,7 @@ describe('the wallet', () => {
     expect(screen.queryByTestId('kudos')).toBeNull()
     expect(await screen.findByTestId('wallet-payout')).toHaveAttribute('data-status', 'NONE')
     expect(screen.getByTestId('wallet-payout')).toHaveAttribute('href', '/wallet/payout')
-    expect(screen.getByTestId('side-rail-me')).toHaveAccessibleName('Me')
+    expect(screen.getByTestId('side-rail-me')).toHaveAccessibleName('My page')
     // "Me" is the drawer's (Q113 §9.2): the left column of a wide screen marks it.
     expect(screen.getByTestId('side-rail-me')).toHaveAttribute('aria-current', 'page')
     await expectAccessible()

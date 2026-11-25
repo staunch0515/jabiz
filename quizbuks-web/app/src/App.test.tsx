@@ -613,10 +613,11 @@ describe('a signed-in Taker', () => {
     expect(screen.getByTestId('bottom-menu')).toHaveClass('md:hidden')
     const rail = screen.getByRole('navigation', { name: 'Main menu' })
     expect(rail).toHaveClass('hidden', 'md:flex')
-    // The mark, the four areas and "Me", then scanning as the main button.
+    // The prototype's: the mark, the four areas, the taker's page and the settings, scanning as the main button, the
+    // account at the foot.
     expect(within(rail).getAllByRole('link').map((link) => link.dataset.testid)).toEqual([
       'side-rail-mark', 'side-rail-home', 'side-rail-search', 'side-rail-history', 'side-rail-messages', 'side-rail-me',
-      'side-rail-scan'])
+      'side-rail-settings', 'side-rail-scan', 'side-rail-account'])
     expect(within(rail).getByTestId('side-rail-home')).toHaveAttribute('aria-current', 'page')
     await userEvent.click(screen.getByTestId('page-fab'))
     expect(window.location.pathname).toBe('/scan')

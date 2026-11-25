@@ -131,7 +131,8 @@ function HeadTitle({ id, title, note }: { id?: string; title: string; note?: Rea
 export function TakerAvatar() {
   const { t } = useTranslation(APP)
   const drawer = useDrawer()
-  const classes = 'focus-visible:ring-ring shrink-0 rounded-full outline-none focus-visible:ring-2'
+  // A wide screen has the account in the left column: no avatar in the heads (x.com's, and the prototype's Desktop).
+  const classes = 'focus-visible:ring-ring shrink-0 rounded-full outline-none focus-visible:ring-2 md:hidden'
   const initial = <Initial className="size-(--x-avatar) text-sm" />
   if (!drawer) {
     return <FrameLink to={ACCOUNT_PATH} aria-label={t('frame.areas.me')} data-testid="head-avatar" className={classes}>{initial}</FrameLink>

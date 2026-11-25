@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { History, House, MessagesSquare, ScanLine, Search, UserRound } from 'lucide-react'
+import { BellIcon, HistoryIcon, HomeIcon, PersonIcon, ScanIcon, SearchIcon } from './icons'
 import { scanTarget, targetPath } from '../scan/target'
 import {
   ACCOUNT_BLOCKS_PATH,
@@ -7,6 +7,7 @@ import {
   AREAS,
   areaOf,
   BOTTOM_AREAS,
+  DRAWER_MORE,
   DRAWER_ROWS,
   LEGACY_APP_PATHS,
   legacyTarget,
@@ -61,7 +62,9 @@ describe('the areas of the taker app (F-F4, Q113 §9.2)', () => {
   })
 
   it('each have one icon, the same object wherever the area is named', () => {
-    expect(AREAS.map((area) => area.icon)).toEqual([House, Search, History, MessagesSquare, ScanLine, UserRound])
+    // The prototype's own outlines (`frame/icons.ts`); home and notifications solid when current.
+    expect(AREAS.map((area) => area.icon)).toEqual([HomeIcon, SearchIcon, HistoryIcon, BellIcon, ScanIcon, PersonIcon])
+    expect(AREAS.filter((area) => area.solidIcon).map((area) => area.key)).toEqual(['home', 'messages'])
     for (const area of AREAS) expect(areaOf(area.key).icon).toBe(area.icon)
     expect(new Set(AREAS.map((area) => area.icon)).size).toBe(AREAS.length)
   })
@@ -70,9 +73,11 @@ describe('the areas of the taker app (F-F4, Q113 §9.2)', () => {
     for (const area of AREAS) expect(routeOf(area.path)?.area).toBe(area.key)
   })
 
-  it('give the drawer "Me" first, then what the taker has, each a page of the app', () => {
-    expect(DRAWER_ROWS.map((row) => row.key)).toEqual(['me', 'kudos', 'prizes', 'certificates', 'maps', 'referrals', 'help'])
-    for (const row of DRAWER_ROWS) expect(routeOf(row.path), row.path).not.toBeNull()
+  it('give the drawer the prototype\'s rows: the taker\'s page, what they have, the settings, then the short ones', () => {
+    expect(DRAWER_ROWS.map((row) => row.key)).toEqual(['me', 'kudos', 'prizes', 'certificates', 'maps', 'referrals',
+      'settings'])
+    expect(DRAWER_MORE.map((row) => row.key)).toEqual(['my-sponsor', 'staff', 'help'])
+    for (const row of [...DRAWER_ROWS, ...DRAWER_MORE]) expect(routeOf(row.path), row.path).not.toBeNull()
   })
 })
 

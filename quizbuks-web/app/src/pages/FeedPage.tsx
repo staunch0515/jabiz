@@ -23,7 +23,8 @@ import {
   Switch,
 } from '@jabiz/ui'
 import { useInfiniteQuery, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Gift, HandCoins, LayoutGrid, SlidersHorizontal, X, type LucideIcon } from 'lucide-react'
+import { Gift, HandCoins, LayoutGrid, X, type LucideIcon } from 'lucide-react'
+import { FilterIcon } from '../frame/icons'
 import { createContext, Fragment, useCallback, useContext, useEffect, useId, useMemo, useRef, useState, type FormEvent, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 import { ACCOUNT_BLOCKS_PATH } from './accountPaths'
@@ -198,10 +199,10 @@ export function FeedFiltersButton() {
   const { method, filters, setOpen } = useFeedControls()
   const count = activeFilterCount(filters) + (method === 'ALL' ? 0 : 1)
   return (
-    <Button variant="ghost" size="icon-sm" className="relative" data-testid="feed-filters-open"
+    <Button variant="ghost" size="icon" className="relative size-9 rounded-full" data-testid="feed-filters-open"
       aria-label={count > 0 ? `${t('feed.filters')}, ${t('feed.activeFilters', { count })}` : t('feed.filters')}
       onClick={() => setOpen(true)}>
-      <SlidersHorizontal aria-hidden />
+      <FilterIcon aria-hidden className="size-5" />
       {count > 0 && (
         <span aria-hidden className="bg-primary absolute top-0.5 right-0.5 size-2 rounded-full" data-testid="feed-filters-dot" />
       )}

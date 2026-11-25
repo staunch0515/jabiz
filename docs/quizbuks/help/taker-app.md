@@ -17,7 +17,7 @@
 - **已答**：你答过的 Quiz 和结果；旁边的"待领奖"标签列出还没领取、还要确认的奖品，有数字时表示有奖品在等你；
 - **通知**：收件箱，以及和发起方的对话（有未读时显示数字）；
 - 右下的圆形按钮是**扫一扫**：扫发起方店里的码；到店领奖时，点"出示领奖码"给店员看；
-- 左上的**头像**打开侧边菜单：**我的**（学分、待领奖品、证书三个数字，你拥有的东西和设置）、学分、待领奖、证书、知识结构图、推荐、帮助和退出登录。
+- 左上的**头像**打开侧边菜单：**我的主页**（学分、待领奖品、证书三个数字，你拥有的东西和设置）、学分、奖品、证书、知识结构图、推荐朋友、设置，下面是发起方账号（是发起方时）、店员柜台（是店员时）、帮助和退出登录。
 
 ### 中文 · 到店领奖时，怎样出示领奖码？
 
@@ -42,7 +42,7 @@
 - **回答済み**：答えたクイズとその結果です。隣の「受け取り待ち」タブには、まだ受け取っていない景品や確認が必要な景品が並びます。数字があるときは、景品があなたを待っています。
 - **お知らせ**：受信箱と、主催者との会話です。未読があると数字が出ます。
 - 右下の丸いボタンは**スキャン**：主催者のお店のコードを読み取ります。お店で景品を受け取るときは「引き換えパスを表示」を押してスタッフに見せます。
-- 左上の**アイコン**でサイドメニューが開きます：**マイページ**（クドス・受け取り待ちの景品・証明書の 3 つの数字と、持っているもの、設定）、クドス、受け取り待ち、証明書、知識マップ、紹介、ヘルプ、ログアウト。
+- 左上の**アイコン**でサイドメニューが開きます：**マイページ**（クドス・受け取り待ちの景品・証明書の 3 つの数字と、持っているもの、設定）、クドス、景品、証明書、知識マップ、友だちを紹介、設定。その下に主催者アカウント（主催者のとき）、スタッフカウンター（スタッフのとき）、ヘルプ、ログアウトがあります。
 
 ### 日本語 · お店で景品を受け取るとき、引き換えパスはどう見せる？
 
@@ -67,7 +67,7 @@
 - **Answered**: the quizzes you answered and their results; the "To collect" tab beside it lists the prizes you have not collected or still have to confirm, and a number means a prize is waiting for you;
 - **Notifications**: your inbox and your conversations with Sponsors (a number shows what is unread);
 - the round button at the bottom right is **Scan**: it scans a Sponsor's code at their place; to collect a prize in the shop, tap "Show my pass" and show it to the staff;
-- your **picture** at the top left opens the side menu: **Me** (three numbers: Kudos, prizes to collect, certificates; what you have and your settings), Kudos, To collect, Certificates, Knowledge maps, Referrals, Help and Sign out.
+- your **picture** at the top left opens the side menu: **My page** (three numbers: Kudos, prizes to collect, certificates; what you have and your settings), Kudos, Prizes, Certificates, Knowledge maps, Refer a friend and Settings, then Sponsor account (for a Sponsor), Staff counter (for staff), Help and Sign out.
 
 ### English · How do I show my pass when I collect a prize in a shop?
 

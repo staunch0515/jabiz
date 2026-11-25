@@ -187,15 +187,15 @@ function Header({ search = false, welcome = false }: { search?: boolean; welcome
   const own = usePageHasOwnHead()
   if (own) return null
   const mark = (
-    <span className="pointer-events-none absolute inset-x-0 flex justify-center" data-testid="head-mark">
-      <BrandMark className="size-(--x-avatar)" />
+    <span className={cn('pointer-events-none absolute inset-x-0 flex justify-center', search && 'md:hidden')} data-testid="head-mark">
+      <BrandMark className="size-(--x-head-mark)" />
       <span className="sr-only">{t('brand')}</span>
     </span>
   )
   if (path === HOME || welcome) {
     return (
       <StickyHead testId="header">
-        <div className="relative flex w-full items-center gap-1 px-(--x-side)" data-head="home">
+        <div className="relative flex w-full items-center gap-1 pr-(--x-back-inset) pl-(--x-side)" data-head="home">
           {search && <TakerAvatar />}
           {mark}
           <span className="mr-auto" />

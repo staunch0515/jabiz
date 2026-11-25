@@ -1,4 +1,4 @@
-import { Button, Input } from '@jabiz/ui'
+import { Button } from '@jabiz/ui'
 import { Search } from 'lucide-react'
 import { useState, type FormEvent } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -10,8 +10,9 @@ import { FeedFiltersButton, FeedPage, searchOf, searchPath } from './FeedPage'
 import '../frame/messages'
 
 /**
- * The search's box (Q63; Q113 §9.2): a round field with the magnifier, whose search opens the results on the search's
- * page (`/search?q=`). In the search page's head, and in the right column of a wide screen.
+ * The search's box (Q63; Q113 §9.2, the prototype's right column): a pill filled with the dividers' grey, the
+ * magnifier first, whose search opens the results on the search's page (`/search?q=`). In the search page's head, and
+ * in the right column of a wide screen.
  */
 export function SearchForm({ initial = '', autoFocus = false, testId = 'feed-search' }: {
   initial?: string
@@ -26,14 +27,16 @@ export function SearchForm({ initial = '', autoFocus = false, testId = 'feed-sea
     navigate(searchPath(text.trim(), SEARCH_PATH))
   }
   return (
-    <form role="search" onSubmit={submit} className="relative flex w-full items-center" data-testid={`${testId}-form`}>
-      <Input type="search" value={text} maxLength={100} placeholder={t('feed.search')} aria-label={t('feed.search')}
-        autoFocus={autoFocus} className="h-10 rounded-full pr-11 pl-4" data-testid={testId}
-        onChange={(event) => setText(event.target.value)} />
+    <form role="search" onSubmit={submit} data-testid={`${testId}-form`}
+      className="bg-border text-muted-foreground focus-within:ring-primary flex h-[42px] w-full items-center gap-3 rounded-full pr-4 pl-1.5 focus-within:ring-2">
       <Button type="submit" variant="ghost" size="icon-sm" aria-label={t('feed.searchButton')}
-        className="absolute right-1 rounded-full" data-testid={`${testId}-submit`}>
-        <Search aria-hidden />
+        className="size-8 shrink-0 rounded-full hover:bg-transparent" data-testid={`${testId}-submit`}>
+        <Search aria-hidden className="size-[18px]" />
       </Button>
+      <input type="search" value={text} maxLength={100} placeholder={t('frame.search.title')} aria-label={t('feed.search')}
+        autoFocus={autoFocus} data-testid={testId}
+        className="text-foreground placeholder:text-muted-foreground min-w-0 flex-1 bg-transparent text-[15px] outline-none"
+        onChange={(event) => setText(event.target.value)} />
     </form>
   )
 }
