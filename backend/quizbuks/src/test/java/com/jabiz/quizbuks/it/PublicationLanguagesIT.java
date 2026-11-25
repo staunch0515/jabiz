@@ -96,10 +96,12 @@ class PublicationLanguagesIT extends PlayItSupport {
         assertThat(feed(mei, "JP", Map.of("languages", "zh"))).filteredOn(row -> publicationId.equals(
             row.get("publicationId"))).singleElement().satisfies(row -> assertThat(row)
                 .containsEntry("name", "世界各国的首都").containsEntry("quizTitle", "首都")
-                .containsEntry("displayLanguage", "zh"));
+                // Q113b-1: the lead of the introduction in the language shown, frozen on the card.
+                .containsEntry("introLead", "两个首都。").containsEntry("displayLanguage", "zh"));
         assertThat(feed(mei, "JP", Map.of("languages", "ja,en"))).filteredOn(row -> publicationId.equals(
             row.get("publicationId"))).singleElement().satisfies(row -> assertThat(row)
-                .containsEntry("name", "Capitals of the world").containsEntry("displayLanguage", "en"));
+                .containsEntry("name", "Capitals of the world").containsEntry("introLead", "Two capitals.")
+                .containsEntry("displayLanguage", "en"));
         assertThat(feed(mei, "JP", Map.of("languages", "ja"))).noneMatch(row -> publicationId.equals(
             row.get("publicationId")));
 

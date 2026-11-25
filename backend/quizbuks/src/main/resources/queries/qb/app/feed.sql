@@ -38,6 +38,7 @@ results:
   publicationId:  { from: QbPublicationCard.publicationId }
   name:           { from: QbPublicationCard.name }
   quizTitle:      { from: QbPublicationCard.quizTitle }
+  introLead:      { from: QbPublicationCard.introLead }
   cover:          { from: QbPublicationCard.cover }
   video:          { from: QbPublicationCard.video }
   watchRequired:  { from: QbPublicationCard.watchRequired }
@@ -104,6 +105,9 @@ SELECT
              c.{{QbPublicationCard.name}}) AS name,
     coalesce(CAST(c.{{QbPublicationCard.translations}} AS jsonb) -> dl.lang ->> 'quizTitle',
              c.{{QbPublicationCard.quizTitle}}) AS quizTitle,
+    -- Q113b-1: the beginning of the introduction (publishing.IntroLeads), for the home's post.
+    coalesce(CAST(c.{{QbPublicationCard.translations}} AS jsonb) -> dl.lang ->> 'introLead',
+             c.{{QbPublicationCard.introLead}}) AS introLead,
     -- Q98b: the cover of the language shown, else the card's.
     coalesce(CASE dl.lang WHEN 'ja' THEN c.{{QbPublicationCard.coverJa}} WHEN 'zh' THEN c.{{QbPublicationCard.coverZh}}
         WHEN 'en' THEN c.{{QbPublicationCard.coverEn}} END, c.{{QbPublicationCard.cover}}) AS cover,

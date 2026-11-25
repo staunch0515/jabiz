@@ -43,6 +43,7 @@ import { QBVIEW } from '../qb/view/messages'
 import { openWithSound, VideoSlot } from '../video/stage'
 import { useSoundSetting } from '../qb/SoundSettings'
 import { HomeInstallOffer } from '../install'
+import { SharePostButton } from '../share/SharePostButton'
 import { useMainlandChina } from '../qb/region'
 import { countShortsOpen, readShorts } from '../shorts/api'
 import { placeShelves, type Shelf } from '../shorts/shelves'
@@ -626,8 +627,8 @@ export function FeedPage({ name, country, base = HOME_PATH }: {
         </div>
       ) : (
         <>
-          {/* Q63: one card a row across the screen; the one with a video in the middle of the screen plays. */}
-          <ul ref={setList} className="-mx-4 flex flex-col gap-4 sm:mx-0" data-testid="feed-list"
+          {/* Q113b-1: posts across the column, a divider between them (Q63: the one with a video in the middle of the screen plays). */}
+          <ul ref={setList} className="border-border -mx-4 flex flex-col border-t" data-testid="feed-list"
             aria-label={t('feed.listTitle')}>
             {cards.map((card, i) => {
               const shelf = shelfAfter.get(i + 1)
@@ -635,7 +636,8 @@ export function FeedPage({ name, country, base = HOME_PATH }: {
                 <Fragment key={card.publicationId}>
                   <FeedCardView card={card} href={`/p/${card.publicationId}`}
                     playing={playing === card.publicationId} note={<CardProgressNote card={card} at={at} />}
-                    menu={<BlockMenu item={card} />}
+                    menu={<BlockMenu item={card} className="text-muted-foreground hover:text-primary rounded-full" />} at={at}
+                    share={<SharePostButton publicationId={card.publicationId} name={card.name} />}
                     video={trackable(card.video) ? (cover) => <CardVideo card={card} player={card.video!} cover={cover} />
                       : undefined}
                     onOpen={trackable(card.video) ? () => openWithSound(card.video!) : undefined} />

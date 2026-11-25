@@ -260,20 +260,38 @@ describe('the feed', () => {
     expect(screen.getByTestId('bottom-bar-history')).toBeInTheDocument()
   })
 
-  it('shows a cover grid with a placeholder pattern, the reward badge, the Sponsor and the completions (Q32)', async () => {
+  it('shows each one as a post: the Sponsor, its age, the name and introduction, the picture, the facts (Q113b-1)', async () => {
     window.sessionStorage.clear()
-    server({ feed: [CARD, { ...CARD, publicationId: 'pub-2', name: 'Rivers', cover: 'file-1', sponsorAvatar: null }] })
+    server({ feed: [{ ...CARD, introLead: 'Two capitals of the world.' },
+      { ...CARD, publicationId: 'pub-2', name: 'Rivers', cover: 'file-1', sponsorAvatar: null }] })
     render(<App />)
     const cards = await screen.findAllByTestId('feed-card')
-    // Q63: one card a row, the picture across the screen, the name and the sponsor under it.
-    expect(screen.getByTestId('feed-list')).toHaveClass('flex-col')
-    // No cover: a pattern chosen by the publication's id, decorative.
+    // Q113 §9.1: one post a row across the column, a divider between them, no gap and no card.
+    expect(screen.getByTestId('feed-list')).toHaveClass('flex-col', 'border-t')
+    expect(screen.getByTestId('feed-list')).not.toHaveClass('gap-4')
+    expect(cards[0]).toHaveClass('border-b', 'px-4', 'py-3', 'gap-2')
+    // No cover: a pattern chosen by the publication's id, decorative; the picture with 16 px corners and an outline.
     expect(within(cards[0]).getByTestId('feed-card-placeholder')).toHaveAttribute('aria-hidden', 'true')
-    expect(cards[0]).toHaveTextContent('100 Kudos')
+    expect(within(cards[0]).getByTestId('feed-card-picture').firstElementChild).toHaveClass('rounded-[16px]', 'border', 'mt-3')
+    // The first line: the Sponsor and the post's age (a week and more: the date).
     expect(within(cards[0]).getByTestId('feed-card-sponsor')).toHaveTextContent('Capitals Inc')
-    expect(within(cards[0]).getByTestId('feed-card-completions')).toHaveTextContent('Completed: 2')
-    expect(within(cards[0]).getByTestId('feed-card-link')).toHaveAccessibleName('Capitals week')
+    expect(within(cards[0]).getByTestId('feed-card-age')).toHaveTextContent('Oct 1')
+    expect(within(cards[0]).getByTestId('feed-card-age')).toHaveAttribute('dateTime', CARD.startAt)
+    // The name in bold, the introduction after it; one without an introduction has the name only.
+    expect(within(cards[0]).getByTestId('feed-card-intro')).toHaveTextContent('Two capitals of the world.')
+    expect(within(cards[1]).queryByTestId('feed-card-intro')).toBeNull()
+    // The facts: the reward in its colour with how it is paid, how many answered, the time limit, sharing.
+    expect(within(cards[0]).getByTestId('feed-card-reward')).toHaveTextContent('Up to 100 Kudos')
+    expect(within(cards[0]).getByTestId('feed-card-reward')).toHaveClass('text-qb-reward-foreground')
+    expect(within(cards[0]).getByTestId('feed-card-method')).toHaveAttribute('data-method', 'PLATFORM')
+    expect(within(cards[0]).getByTestId('feed-card-completions')).toHaveTextContent('2 answered')
+    expect(within(cards[0]).getByTestId('feed-card-time-limit')).toHaveTextContent('Time limit 5 min')
+    expect(within(cards[0]).getByTestId('feed-card-share-button')).toHaveAccessibleName('Share')
+    // §9.3: the name and the introduction go to the quiz, as one link; so does the picture, named by the name.
+    expect(within(cards[0]).getByTestId('feed-card-link')).toHaveAccessibleName(/^Capitals week\s+Two capitals/)
     expect(within(cards[0]).getByTestId('feed-card-link')).toHaveAttribute('href', `/p/${PUB}`)
+    expect(within(cards[0]).getByTestId('feed-card-picture')).toHaveAccessibleName('Capitals week')
+    expect(within(cards[1]).getByTestId('feed-card-link')).toHaveAccessibleName('Rivers')
     expect(within(cards[0]).getByTestId('feed-card-name')).toHaveTextContent('Capitals week')
     // A cover: the image (loaded lazily), no placeholder.
     expect(within(cards[1]).queryByTestId('feed-card-placeholder')).toBeNull()

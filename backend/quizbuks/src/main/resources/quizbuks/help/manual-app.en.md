@@ -4,10 +4,11 @@ How to use the app as a Taker. Paths are pages of the app (they start with /take
 
 - Sign up with your e-mail address and open the link we send you; you can also sign in with a password or with Google. Verify your address before answering quizzes.
 - Complete your profile (/taker/welcome): your name and your country or region. Quizzes are offered by country and region.
-- The bottom of the app has Home (/taker/), History (/taker/history) and Account (/taker/account).
+- The bottom of the app has four icons: Home (/taker/), Search (/taker/search), Answered (/taker/history) and Notifications (/taker/inbox). The round button at the bottom right is Scan (/taker/scan). Your picture at the top left opens the side menu: Me (/taker/account), your Kudos, prizes, certificates, knowledge maps, referrals, settings, help and signing out.
 
 ## Finding a quiz (Home, /taker/)
 
+- Each quiz on Home is a post: the Sponsor's picture and name and how long ago it went up, then the quiz's name and the beginning of its introduction, its picture or video, and a line with the reward, how many answered, the time limit and a share button. Tap the Sponsor's picture or name for their page; tap the name, the text or the picture to open the quiz.
 - Home lists the quizzes you can answer. Use Search, Sort (newest, reward, most completed…) and Filters (Sponsor, the Sponsor's country or region, reward, how many completed it).
 - Quizzes you have answered are hidden; turn on "Show quizzes I answered" to see them.
 - Shorts: a shelf of short videos on Home. Tap one to watch in full screen and answer from there.
@@ -32,7 +33,7 @@ Each quiz says how its reward is paid. At the first launch, Kudos are shown but 
 
 - Kudos (once they open): paid into My Kudos as soon as you pass. When the Sponsor's budget has run out, the reward is pending and is paid once they top up.
 - Cash from the Sponsor: after passing you get a code. Show it when the Sponsor pays you, then confirm in the app that you received it, or report a problem. Until you confirm or report it in time, you cannot start new quizzes.
-- Prize at the Sponsor's place: at their place, open the menu at the top right, tap "Scan" (/taker/scan), scan the code on their screen or poster and tap the prize you are collecting. Collect it before its deadline.
+- Prize at the Sponsor's place: at their place, tap the round "Scan" button at the bottom right (/taker/scan), scan the code on their screen or poster and tap the prize you are collecting. Collect it before its deadline.
 - Digital prize: a code, voucher or link appears in the app. Tap "Show prize", then confirm it works or report a problem.
 - History (/taker/history) lists every quiz you answered with its result and reward.
 

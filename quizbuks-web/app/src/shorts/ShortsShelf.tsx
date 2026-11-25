@@ -21,9 +21,9 @@ export function ShortsShelf({ items, hrefOf: addressOf, onOpen }: {
   const { t } = useTranslation(APP)
   const title = useId()
   return (
-    <li className="flex flex-col gap-2 py-1" data-testid="shorts-shelf" aria-labelledby={title}>
-      <h2 id={title} className="px-4 text-base font-semibold sm:px-1">{t('shorts.title')}</h2>
-      <ul className="flex snap-x gap-3 overflow-x-auto px-4 pb-2 sm:px-1" data-testid="shorts-shelf-items">
+    <li className="border-border flex flex-col gap-2 border-b py-3" data-testid="shorts-shelf" aria-labelledby={title}>
+      <h2 id={title} className="px-4 text-base font-semibold">{t('shorts.title')}</h2>
+      <ul className="flex snap-x gap-3 overflow-x-auto px-4 pb-2" data-testid="shorts-shelf-items">
         {items.map((card) => (
           <li key={card.publicationId} className="w-36 shrink-0 snap-start sm:w-40" data-testid="shorts-card"
             data-publication={card.publicationId}>
