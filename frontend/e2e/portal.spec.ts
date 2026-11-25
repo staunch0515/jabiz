@@ -115,3 +115,31 @@ for (const appearance of ['light', 'dark'] as const) {
     await expectAccessible(page, `portal account on a phone (${appearance})`, { expect })
   })
 }
+
+/**
+ * The timeline look on a phone (phases 17zz30 and 17zz31, 12 §13.1): the bottom menu of icons is 53 px high, the page
+ * and the floating button keep clear of that height, and the button is 20 px from the side and from the bar.
+ */
+test("the portal's frame on a phone in the timeline look", async ({ page, request }) => {
+  const customer = await portalCustomer(request)
+  await page.setViewportSize({ width: 360, height: 740 })
+  await signInToPortal(page, customer)
+  await expect(page.getByTestId('orders-empty')).toBeVisible()
+  // The orders page itself: the root forwards to it without the query, before the frame reads the look.
+  await page.goto(`${PORTAL}orders?look=open`)
+  await expect(page.getByTestId('orders-empty')).toBeVisible()
+
+  const bar = page.getByRole('navigation', { name: '快捷菜单' })
+  await expect(bar).toHaveAttribute('data-variant', 'icons')
+  const fab = page.getByTestId('page-fab')
+  await expect(fab).toBeVisible()
+  const [barBox, fabBox] = [(await bar.boundingBox())!, (await fab.boundingBox())!]
+  expect(barBox.height, 'the bar is 53 px high and 1 px of border').toBeCloseTo(54, 0)
+  expect(fabBox.width, 'the button is 56 px across').toBeCloseTo(56, 0)
+  expect(360 - (fabBox.x + fabBox.width), 'the button is 20 px from the side').toBeCloseTo(20, 0)
+  expect(barBox.y - (fabBox.y + fabBox.height), 'and 20 px above the bar').toBeCloseTo(20, 0)
+  // The page's end keeps clear of the lower bar: its height, its border and 16 px.
+  const padding = await page.locator('[data-slot="app-shell-content"]').evaluate((element) => getComputedStyle(element).paddingBottom)
+  expect(padding).toBe('70px')
+  await expectAccessible(page, 'portal orders on a phone in the timeline look', { expect })
+})
