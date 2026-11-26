@@ -15,12 +15,13 @@ import {
   notify,
 } from '@jabiz/ui'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Flag, MessagesSquare } from 'lucide-react'
+import { Flag, MessageCircle, MessagesSquare } from 'lucide-react'
 import { useEffect, useId, useState, type FormEvent } from 'react'
 import { useTranslation } from 'react-i18next'
 import { APP } from '../messages'
 import { QB } from '../qb/messages'
 import { problemText } from '../qb/problems'
+import { SponsorPicture } from '../qb/view/SponsorPicture'
 import { Link, navigate } from '../qb/router'
 import { AreaHeader } from '../frame/AreaHeader'
 import '../frame/messages'
@@ -63,7 +64,7 @@ export function ConversationsPage() {
       ) : list.data.length === 0 ? (
         <p className="text-muted-foreground text-sm" data-testid="conversations-empty">{t('conversation.list.empty')}</p>
       ) : (
-        <ul className="flex flex-col gap-2">
+        <ul className="border-border -mx-4 flex flex-col border-t">
           {list.data.map((conversation) => <ConversationRow key={conversation.conversationId}
             conversation={conversation} />)}
         </ul>
@@ -73,23 +74,37 @@ export function ConversationsPage() {
   )
 }
 
+/**
+ * One conversation (Q113d-1, as a notification): the conversation's icon in a column of its own, the sponsor's
+ * picture (32 px), "sponsor · time", the quiz and the last message; a new one on the accent's tint.
+ */
 function ConversationRow({ conversation }: { conversation: Conversation }) {
   const { t } = useTranslation(APP)
+  const company = conversation.sponsorCompany || t('conversation.sponsor')
   return (
-    <li>
+    <li className="border-border border-b">
       <Link to={conversationPath(conversation.conversationId)} data-testid="conversation-row"
         data-unread={conversation.unread ? 'true' : 'false'}
-        className="hover:bg-accent flex flex-col gap-1 rounded-lg border p-3">
-        <span className="flex items-center gap-2">
-          <span className={cn('min-w-0 flex-1 truncate', conversation.unread && 'font-semibold')}>
-            {conversation.sponsorCompany || t('conversation.sponsor')}
-          </span>
-          {conversation.unread && <Badge data-testid="conversation-unread">{t('conversation.list.new')}</Badge>}
-          {conversation.status === 'CLOSED' && <Badge variant="outline">{t('conversation.closed')}</Badge>}
+        className={cn('hover:bg-accent/60 flex gap-2 px-4 py-3', conversation.unread && 'bg-accent/40')}>
+        <span className="flex w-10 shrink-0 justify-end">
+          <MessageCircle aria-hidden className="text-primary size-[30px]" strokeWidth={1.6} />
         </span>
-        <span className="text-muted-foreground truncate text-sm">{conversation.publicationName}</span>
-        {conversation.lastBody && <span className="truncate text-sm">{conversation.lastBody}</span>}
-        <span className="text-muted-foreground text-xs">{formatDateTime(conversation.lastMessageAt)}</span>
+        <span className="flex min-w-0 flex-1 flex-col">
+          <SponsorPicture avatar={null} name={company} size={32} />
+          <span className="mt-3 flex min-w-0 items-center gap-1">
+            <span className={cn('truncate font-bold')}>{company}</span>
+            <span aria-hidden className="text-muted-foreground">·</span>
+            <span className="text-muted-foreground shrink-0">{formatDateTime(conversation.lastMessageAt)}</span>
+            {conversation.status === 'CLOSED' && (
+              <Badge variant="outline" className="ml-auto shrink-0">{t('conversation.closed')}</Badge>
+            )}
+          </span>
+          <span className="text-muted-foreground truncate">{conversation.publicationName}</span>
+          {conversation.lastBody && (
+            <span className={cn('line-clamp-2', conversation.unread && 'font-semibold')}>{conversation.lastBody}</span>
+          )}
+          {conversation.unread && <span className="sr-only" data-testid="conversation-unread">{t('conversation.list.new')}</span>}
+        </span>
       </Link>
     </li>
   )

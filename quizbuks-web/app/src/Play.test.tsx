@@ -1964,9 +1964,37 @@ describe('the history', () => {
     expect(within(item).getByTestId('history-open')).toHaveTextContent('')
     await expectAccessible()
     expect(screen.getByTestId('bottom-bar-history')).toHaveAttribute('aria-current', 'page')
-    await userEvent.click(screen.getByRole('radio', { name: 'Unfinished' }))
-    await waitFor(() => expect(calls.some((c) => JSON.stringify(c.body).includes('"values":["IN_PROGRESS","TIMED_OUT"]')))
+    // Q113d-1: the sponsor's name beside their picture, the category as a gold pill; "Finished" still filters "All".
+    expect(within(item).getByTestId('history-category')).toHaveClass('text-qb-reward-foreground')
+    await userEvent.click(screen.getByRole('radio', { name: 'Finished' }))
+    await waitFor(() => expect(calls.some((c) => JSON.stringify(c.body).includes('"values":["PASSED","FAILED"]')))
       .toBe(true))
+    // The search opens from the header's button.
+    expect(screen.queryByTestId('history-search')).toBeNull()
+    await userEvent.click(screen.getByTestId('history-search-open'))
+    expect(await screen.findByTestId('history-search')).toHaveFocus()
+  })
+
+  it('has the unfinished attempts as a tab of their own (Q113d-1)', async () => {
+    const { calls } = server({ history: [row({ sponsorCompany: 'Capitals Inc' })] })
+    window.history.replaceState(null, '', '/history/unfinished')
+    render(<App />)
+    const item = await screen.findByTestId('history-row')
+    expect(within(item).getByTestId('history-sponsor')).toHaveTextContent('Capitals Inc')
+    expect(screen.getByTestId('page-tab-unfinished')).toHaveAttribute('aria-current', 'page')
+    expect(screen.queryByTestId('history-show')).toBeNull()
+    expect(calls.some((c) => JSON.stringify(c.body).includes('"values":["IN_PROGRESS","TIMED_OUT"]'))).toBe(true)
+    await expectAccessible()
+  })
+
+  it('shows a prize to collect as a box under its row, leading to the result (Q113d-1)', async () => {
+    server({ history: [row({ rewardStatus: 'REDEEM', rewardMethod: 'OFFLINE_REDEEM', redeemStatus: 'DUE' })] })
+    window.history.replaceState(null, '', '/history')
+    render(<App />)
+    const prize = await screen.findByTestId('history-prize')
+    expect(prize).toHaveAttribute('href', `/result/${ATTEMPT}`)
+    expect(prize).toHaveTextContent('A prize worth 100 Kudos to collect')
+    await expectAccessible()
   })
 
   it('says where a cash reward stands (Q22)', async () => {

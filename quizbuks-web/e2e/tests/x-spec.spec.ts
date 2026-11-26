@@ -2,8 +2,8 @@ import type { Page } from '@playwright/test'
 import { PNG, POLICY, upload } from './content'
 import { fund, taker, untilLive } from './play'
 import { approvedSponsor, livePublication } from './publishing'
-import { expect, prepareQuizbuks, run, signIn, test } from './support'
-import { takerInJapan } from './wallet'
+import { expect, expectAccessible, prepareQuizbuks, run, signIn, test } from './support'
+import { earnReward, takerInJapan } from './wallet'
 
 /*
  * The taker app measured against the timeline's layout (docs/quizbuks/plans/Q113-taker-ui-tone.md section 9, as measured
@@ -382,4 +382,59 @@ test('the home post at 390 px: the avatar 40 px at 16, the text 8 px after it, i
   expect(start.height, 'the start is 36 px').toBeCloseTo(36, 0)
   expect(390 - (start.x + start.width), '16 px from the side').toBeCloseTo(16, 0)
   expect(parseFloat(await style(page, '[data-testid="detail-start"]', 'border-top-left-radius'))).toBeGreaterThanOrEqual(18)
+})
+
+test('answered, notifications and the result at 390 px: rows across the screen, 12 / 16 px in, the picture 40 px (32 in '
+  + 'a notification after its icon of 40), the score 31 px and the reward in a box of 16 px corners (Q113d-1)',
+async ({ page, request }) => {
+  test.setTimeout(120_000)
+  const me = await takerInJapan(request, 'Rows')
+  const name = await earnReward(request, me.token, 10)
+  await page.setViewportSize({ width: 390, height: 844 })
+  await signIn(page, '/taker/', me.email)
+
+  // Answered: three tabs, the row across the screen, the sponsor's picture 40 px at 16, the text 8 px after it.
+  await page.goto('/taker/history')
+  await expect(page.locator('[data-slot="page-tab"]')).toHaveCount(3)
+  const row = page.getByTestId('history-row').filter({ hasText: name })
+  await expect(row).toHaveCount(1)
+  const rowBox = (await row.boundingBox())!
+  expect(rowBox.width, 'the row spans the screen').toBeCloseTo(390, 0)
+  const picture = (await row.locator(':scope > :first-child').boundingBox())!
+  expect(picture.width).toBeCloseTo(40, 0)
+  expect(picture.x - rowBox.x, '16 px in').toBeCloseTo(16, 0)
+  expect(picture.y - rowBox.y, '12 px down').toBeCloseTo(12, 0)
+  const text = (await row.locator(':scope > :nth-child(2)').boundingBox())!
+  expect(text.x - (picture.x + picture.width), '8 px after the picture').toBeCloseTo(8, 0)
+  await expect(row.getByTestId('history-category')).toHaveCSS('border-radius', /9999px|3\.35544e\+07px/)
+  await expect(row.getByTestId('history-category')).toHaveCSS('height', '24px')
+  await expectAccessible(page, 'app answered (Q113d-1)')
+  const result = await row.getByTestId('history-open').getAttribute('href')
+
+  // Notifications: the kind's icon in a column of 40 px, then the picture of 32 px.
+  await page.goto('/taker/inbox')
+  await expect(page.locator('[data-slot="page-tab"]')).toHaveCount(3)
+  const message = page.getByTestId('inbox-row').and(page.locator('[data-kind="MESSAGE"]')).first()
+  await expect(message).toBeVisible()
+  const link = (await message.getByRole('link').boundingBox())!
+  expect(link.width).toBeCloseTo(390, 0)
+  const icon = (await message.getByTestId('inbox-icon').boundingBox())!
+  expect(icon.x - link.x).toBeCloseTo(16, 0)
+  expect(icon.width).toBeCloseTo(40, 0)
+  const small = (await message.getByTestId('inbox-icon').locator('xpath=following-sibling::*[1]/*[1]').boundingBox())!
+  expect(small.width, 'the picture is 32 px').toBeCloseTo(32, 0)
+  expect(small.x - (icon.x + icon.width), '8 px after the icon').toBeCloseTo(8, 0)
+  await page.getByTestId('inbox-filter-open').click()
+  await expect(page.getByTestId('inbox-filters')).toBeVisible()
+  await expectAccessible(page, 'app notifications filters (Q113d-1)')
+  await page.keyboard.press('Escape')
+  await expectAccessible(page, 'app notifications (Q113d-1)')
+
+  // The result: the score in 31 px, the reward in a box of 16 px corners, the questions a list across the screen.
+  await page.goto(result!.startsWith('/taker/') ? result! : `/taker${result}`)
+  await expect(page.getByTestId('result-score')).toHaveCSS('font-size', '31px')
+  await expect(page.getByTestId('result-reward')).toHaveCSS('border-radius', '16px')
+  const question = (await page.getByTestId('result-question').first().boundingBox())!
+  expect(question.width).toBeCloseTo(390, 0)
+  await expectAccessible(page, 'app result (Q113d-1)')
 })

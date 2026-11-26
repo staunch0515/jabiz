@@ -54,7 +54,7 @@ import { InboxPage } from './inbox/InboxPage'
 import { forgetAttempts } from './play/storage'
 import { itemPage } from './routes'
 import { AppFrame } from './frame/AppFrame'
-import { legacyTarget, MY_PASSES_PATH, PRIZES_PATH, SEARCH_PATH } from './frame/areas'
+import { INBOX_REWARDS_PATH, legacyTarget, MY_PASSES_PATH, PRIZES_PATH, SEARCH_PATH, UNFINISHED_PATH } from './frame/areas'
 import { useSignOut } from './frame/signOut'
 import { PrizesPage } from './pages/PrizesPage'
 import { MyPassesPage } from './pass/MyPassesPage'
@@ -265,7 +265,8 @@ function SignedIn({ path }: { path: string }) {
   if (path === WELCOME) page = <WelcomePage profile={profile.data} />
   else if (path === HOME) page = <FeedPage name={complete?.displayName || displayName || ''} country={country} />
   else if (path === SEARCH_PATH) page = <SearchPage name={complete?.displayName || displayName || ''} country={country} />
-  else if (path === HISTORY) page = <HistoryPage />
+  else if (path === HISTORY) page = <HistoryPage tab="answered" />
+  else if (path === UNFINISHED_PATH) page = <HistoryPage tab="unfinished" />
   else if (path === PRIZES_PATH) page = <PrizesPage />
   else if (path === MY_PASSES_PATH) page = <MyPassesPage />
   else if (path === PAYOUT_PATH) page = <PayoutPage />
@@ -273,7 +274,8 @@ function SignedIn({ path }: { path: string }) {
   else if (kudosMethodOf(path)) page = <KudosMethodPage key={path} method={kudosMethodOf(path)!} />
   else if (isWalletPath(path)) page = <WalletPage path={path} />
   else if (isAccountPath(path)) page = <AccountPage path={path} />
-  else if (path === INBOX_PATH) page = <InboxPage />
+  else if (path === INBOX_PATH) page = <InboxPage tab="inbox" />
+  else if (path === INBOX_REWARDS_PATH) page = <InboxPage tab="rewards" />
   else if (path === STAFF_PATH) page = <StaffDeskPage />
   else if (path === HANDLED_PATH) page = <StaffHandledPage />
   else if (path === MY_SPONSOR_PATH) page = <MySponsorPage />

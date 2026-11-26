@@ -35,7 +35,7 @@ Each quiz says how its reward is paid. At the first launch, Kudos are shown but 
 - Cash from the Sponsor: after passing you get a code. Show it when the Sponsor pays you, then confirm in the app that you received it, or report a problem. Until you confirm or report it in time, you cannot start new quizzes.
 - Prize at the Sponsor's place: at their place, tap the round "Scan" button at the bottom right (/taker/scan), scan the code on their screen or poster and tap the prize you are collecting. Collect it before its deadline.
 - Digital prize: a code, voucher or link appears in the app. Tap "Show prize", then confirm it works or report a problem.
-- History (/taker/history) lists every quiz you answered with its result and reward.
+- Answered (/taker/history) lists every quiz you answered with its result and reward; a prize still to collect or confirm shows in a box under its row. The tab "To collect" (/taker/history/prizes) lists the prizes waiting for you, and "Not finished" (/taker/history/unfinished) the quizzes you have not finished.
 
 ## My Kudos (/taker/wallet)
 
@@ -45,7 +45,7 @@ Each quiz says how its reward is paid. At the first launch, Kudos are shown but 
 
 ## Messages and people
 
-- Inbox (/taker/inbox): messages from the platform and announcements from Sponsors.
+- Notifications (/taker/inbox): messages from the platform and announcements from Sponsors. The tab "Rewards" (/taker/inbox/rewards) lists only the reward messages. The buttons at the top right mark everything as read, filter (text, kind, unread only, dates) and open the notification settings (whether to show promotions).
 - Conversations with Sponsors (/taker/conversations): from the result of a quiz you completed, "Contact the Sponsor" asks about the quiz or your prize. Messages are plain text; do not share contact details. You can close a conversation, block the Sponsor or report the conversation.
 - "Report this quiz" on a quiz's page tells us what is wrong with it; the Sponsor is not told who reported it.
 - Refer a friend (/taker/referrals): some quizzes offer a referral link once you have answered or passed them yourself. If your friend passes in time, you get the referral reward.

@@ -1,4 +1,5 @@
 import { configureClient, session } from '@jabiz/client'
+import { expectAccessible } from '@jabiz/ui/testing'
 import { act, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -253,11 +254,13 @@ describe('the inbox', () => {
     const rows = await screen.findAllByTestId('inbox-row')
     expect(rows).toHaveLength(3)
     expect(rows[0]).toHaveTextContent('You received 100 Kudos')
-    expect(rows[0]).toHaveTextContent('From QuizBuks')
+    // Q113d-1: the sender's name beside its picture, the kind's icon in the first column.
+    expect(rows[0]).toHaveTextContent('QuizBuks')
+    expect(within(rows[0]).getByTestId('inbox-icon')).toHaveAttribute('data-category', 'REWARD')
     expect(within(rows[0]).getByTestId('inbox-unread')).toBeInTheDocument()
     // A notice written in Japanese only is shown so, marked as Japanese.
     expect(rows[1]).toHaveTextContent('新しいクイズ')
-    expect(rows[1]).toHaveTextContent('From Capitals Inc')
+    expect(rows[1]).toHaveTextContent('Capitals Inc')
     expect(rows[1].querySelector('[lang="ja"]')).not.toBeNull()
     expect(within(rows[2]).queryByTestId('inbox-unread')).toBeNull()
     expect(screen.getByTestId('bottom-bar-messages')).toHaveAttribute('aria-current', 'page')
@@ -265,23 +268,26 @@ describe('the inbox', () => {
     // The device's clock is no parameter (review L1).
     expect(queryBodies('qb.app.inbox').at(-1)?.params).not.toHaveProperty('at')
 
-    await user.type(screen.getByTestId('inbox-search'), 'Kudos{Enter}')
+    // Q113d-1: the filters are in a panel the header's button opens.
+    expect(screen.queryByTestId('inbox-search')).toBeNull()
+    await user.click(screen.getByTestId('inbox-filter-open'))
+    await user.type(await screen.findByTestId('inbox-search'), 'Kudos{Enter}')
     await waitFor(() => expect(queryBodies('qb.app.inbox').at(-1)).toMatchObject({ params: { q: 'Kudos' } }))
     await user.click(screen.getByTestId('inbox-unread-only'))
     await waitFor(() => expect(queryBodies('qb.app.inbox').at(-1)).toMatchObject({ params: { unread: true } }))
     await user.click(screen.getByTestId('inbox-category'))
     await user.click(await screen.findByRole('option', { name: 'Promotions' }))
     await waitFor(() => expect(queryBodies('qb.app.inbox').at(-1)).toMatchObject({ params: { category: 'PROMO' } }))
-    // The dates are in a window of their own, opened from the tools' second row.
-    expect(screen.queryByTestId('inbox-from')).toBeNull()
-    await user.click(screen.getByTestId('inbox-dates'))
-    await user.type(await screen.findByTestId('inbox-from'), '2026-10-01')
+    await user.type(screen.getByTestId('inbox-from'), '2026-10-01')
     await waitFor(() => expect(queryBodies('qb.app.inbox').at(-1)).toMatchObject({
       params: { from: dayStart('2026-10-01') } }))
-    expect(screen.getByTestId('inbox-dates')).toHaveTextContent('2026-10-01 – …')
+    expect(screen.getByTestId('inbox-dates')).toHaveAttribute('data-active', 'true')
     await user.click(screen.getByTestId('inbox-dates-clear'))
     await waitFor(() => expect(queryBodies('qb.app.inbox').at(-1)?.params).not.toHaveProperty('from'))
-    await user.keyboard('{Escape}')
+    await user.click(screen.getByTestId('inbox-filters-done'))
+    await waitFor(() => expect(screen.queryByTestId('inbox-filters')).toBeNull())
+    // A filter chosen: the button says so.
+    expect(screen.getByTestId('inbox-filter-open')).toHaveAttribute('data-active', 'true')
 
     await user.click(screen.getByTestId('inbox-read-all'))
     await waitFor(() => expect(processCalls('QB_INBOX_READ_ALL')).toHaveLength(1))
@@ -293,6 +299,9 @@ describe('the inbox', () => {
     window.history.replaceState(null, '', '/inbox')
     const user = userEvent.setup()
     render(<App />)
+    // Q113d-1: in the settings' panel, beside the way to the mail's settings.
+    await user.click(await screen.findByTestId('inbox-settings-open'))
+    expect(await screen.findByTestId('inbox-mail-settings')).toHaveAttribute('href', expect.stringContaining('/account/mail'))
     const toggle = await screen.findByTestId('inbox-promotions')
     await waitFor(() => expect(toggle).toBeEnabled())
     expect(toggle).toHaveAttribute('aria-checked', 'true')
@@ -301,6 +310,22 @@ describe('the inbox', () => {
     await waitFor(() => expect(processCalls('QB_INBOX_SETTINGS_SAVE')).toHaveLength(1))
     expect(processCalls('QB_INBOX_SETTINGS_SAVE')[0].body).toEqual({ promoOff: true })
     await waitFor(() => expect(screen.getByTestId('inbox-promotions')).toHaveAttribute('aria-checked', 'false'))
+  })
+
+  it('has the rewards as a tab of their own, the kind REWARD whatever was chosen (Q113d-1)', async () => {
+    const { queryBodies } = server()
+    window.history.replaceState(null, '', '/inbox/rewards')
+    const user = userEvent.setup()
+    render(<App />)
+    await screen.findAllByTestId('inbox-row')
+    expect(screen.getByTestId('page-tab-rewards')).toHaveAttribute('aria-current', 'page')
+    expect(queryBodies('qb.app.inbox').at(-1)).toMatchObject({ params: { category: 'REWARD' } })
+    // No kind to choose there; the button is not "on" for the tab's own kind.
+    expect(screen.getByTestId('inbox-filter-open')).not.toHaveAttribute('data-active')
+    await user.click(screen.getByTestId('inbox-filter-open'))
+    await screen.findByTestId('inbox-search')
+    expect(screen.queryByTestId('inbox-category')).toBeNull()
+    await expectAccessible()
   })
 
   it('says so when there is nothing', async () => {

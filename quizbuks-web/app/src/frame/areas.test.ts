@@ -165,13 +165,14 @@ describe('the tabs of the areas (F-F4)', () => {
   it('are the pages of their area, the first being the area\'s own page', () => {
     expect(Object.keys(AREA_TABS)).toEqual(['history', 'scan', 'messages'])
     for (const [key, tabs] of Object.entries(AREA_TABS)) {
-      expect(tabs!.length, key).toBe(2)
+      // Q113d-1: "Answered" and "Notifications" have three (the prototype's).
+      expect(tabs!.length, key).toBe(key === 'scan' ? 2 : 3)
       expect(tabs![0].path, key).toBe(areaOf(key as AreaKey).path)
       for (const tab of tabs!) expect(routeOf(tab.path)?.area, tab.path).toBe(key)
     }
-    expect(AREA_TABS.history!.map((tab) => tab.path)).toEqual(['/history', PRIZES_PATH])
+    expect(AREA_TABS.history!.map((tab) => tab.path)).toEqual(['/history', PRIZES_PATH, '/history/unfinished'])
     expect(AREA_TABS.scan!.map((tab) => tab.path)).toEqual(['/scan', MY_PASSES_PATH])
-    expect(AREA_TABS.messages!.map((tab) => tab.path)).toEqual(['/inbox', '/conversations'])
+    expect(AREA_TABS.messages!.map((tab) => tab.path)).toEqual(['/inbox', '/inbox/rewards', '/conversations'])
   })
 })
 

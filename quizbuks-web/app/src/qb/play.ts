@@ -916,6 +916,10 @@ export interface HistoryRow {
   quizTitle: string
   cover: string | null
   kind: QuizKind
+  /** Q113d-1: who published it, as the home's posts show. */
+  sponsorName?: string | null
+  sponsorCompany?: string | null
+  sponsorAvatar?: string | null
   status: string
   category: HistoryCategory
   passed: boolean | null
@@ -982,6 +986,9 @@ export async function readHistory(request: HistoryRequest): Promise<QueryPage<Hi
       quizTitle: String(row.quizTitle ?? ''),
       cover: textOrNull(row.cover),
       kind: kindOf(row.kind),
+      sponsorName: textOrNull(row.sponsorName),
+      sponsorCompany: textOrNull(row.sponsorCompany),
+      sponsorAvatar: textOrNull(row.sponsorAvatar),
       status: String(row.status ?? ''),
       category: String(row.category) as HistoryCategory,
       passed: row.passed === null || row.passed === undefined ? null : row.passed === true || row.passed === 'true',

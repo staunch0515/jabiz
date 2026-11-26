@@ -183,6 +183,8 @@ describe('a Sponsor in the app (Q68)', () => {
     server()
     window.history.replaceState(null, '', '/inbox')
     render(<App />)
+    // Q113d-1: in the panel of the filters.
+    await userEvent.click(await screen.findByTestId('inbox-filter-open'))
     await userEvent.click(await screen.findByTestId('inbox-category'))
     expect(await screen.findByRole('option', { name: 'Sponsor' })).toBeInTheDocument()
   })

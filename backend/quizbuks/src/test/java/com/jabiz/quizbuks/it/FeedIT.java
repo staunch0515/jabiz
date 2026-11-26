@@ -251,7 +251,9 @@ class FeedIT extends PlayItSupport {
                 org.assertj.core.groups.Tuple.tuple("History passed", "PASSED"));
         Map<String, Object> first = history.getLast();
         assertThat(first).containsEntry("rewardStatus", "PAID").containsEntry("score", 5)
-            .containsEntry("fullScore", 5).containsEntry("passed", true);
+            .containsEntry("fullScore", 5).containsEntry("passed", true)
+            // Q113d-1: who published it, as the home's posts show.
+            .containsEntry("sponsorCompany", "Company of " + sponsor).containsKey("sponsorAvatar");
         assertThat(items("qb.app.history", token, Map.of("params", Map.of("q", "failed"))))
             .extracting(row -> row.get("name")).containsExactly("History failed");
         assertThat(items("qb.app.history", token, Map.of("filters", List.of(Map.of("field", "category", "op", "eq",

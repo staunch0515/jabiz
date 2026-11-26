@@ -87,6 +87,12 @@ export const SEARCH_PATH = '/search'
 
 /** The pages F-F4b added (F-F4 section 2): the prizes to collect, the passes to show, and blocks and topics. */
 export const PRIZES_PATH = '/history/prizes'
+
+/** The attempts not finished yet (Q113d-1: a tab of "Answered", the former filter). */
+export const UNFINISHED_PATH = '/history/unfinished'
+
+/** The inbox's rewards (Q113d-1: a tab of "Notifications", the kind `REWARD`). */
+export const INBOX_REWARDS_PATH = '/inbox/rewards'
 export const MY_PASSES_PATH = '/scan/pass'
 export { ACCOUNT_BLOCKS_PATH }
 
@@ -127,9 +133,11 @@ export interface AreaTab {
 
 /** The areas that have tabs under their title (F-F4 section 2.2); the first tab is the area's own page. */
 export const AREA_TABS: Readonly<Partial<Record<AreaKey, readonly AreaTab[]>>> = {
-  history: [{ key: 'answered', path: '/history' }, { key: 'prizes', path: PRIZES_PATH }],
+  history: [{ key: 'answered', path: '/history' }, { key: 'prizes', path: PRIZES_PATH },
+    { key: 'unfinished', path: UNFINISHED_PATH }],
   scan: [{ key: 'scan', path: SCAN_PATH }, { key: 'pass', path: MY_PASSES_PATH }],
-  messages: [{ key: 'inbox', path: INBOX_PATH }, { key: 'conversations', path: CONVERSATIONS_PATH }],
+  messages: [{ key: 'inbox', path: INBOX_PATH }, { key: 'rewards', path: INBOX_REWARDS_PATH },
+    { key: 'conversations', path: CONVERSATIONS_PATH }],
 }
 
 /**
@@ -207,11 +215,11 @@ export type PageName =
   // Search
   | 'search'
   // Answered
-  | 'history' | 'prizes' | 'play' | 'result'
+  | 'history' | 'unfinished' | 'prizes' | 'play' | 'result'
   // Scan
   | 'scan' | 'myPasses' | 'redeem' | 'pass'
   // Messages
-  | 'inbox' | 'inboxItem' | 'conversations' | 'conversation'
+  | 'inbox' | 'inboxRewards' | 'inboxItem' | 'conversations' | 'conversation'
   // Me
   | 'account' | 'accountPart' | 'accountBlocks' | 'accountDeletion' | 'wallet' | 'walletPart' | 'kudosMethod'
   | 'payout' | 'bank' | 'referrals' | 'referral' | 'mySponsor' | 'staffDesk' | 'staffHandled' | 'maps' | 'map'
@@ -235,9 +243,11 @@ const FIXED: Readonly<Record<string, Route>> = {
   [SEARCH_PATH]: route('search', 'search'),
   '/history': route('history', 'history'),
   [PRIZES_PATH]: route('prizes', 'history'),
+  [UNFINISHED_PATH]: route('unfinished', 'history'),
   [SCAN_PATH]: route('scan', 'scan'),
   [MY_PASSES_PATH]: route('myPasses', 'scan'),
   [INBOX_PATH]: route('inbox', 'messages'),
+  [INBOX_REWARDS_PATH]: route('inboxRewards', 'messages'),
   [CONVERSATIONS_PATH]: route('conversations', 'messages'),
   [ACCOUNT_PATH]: route('account', 'me'),
   [ACCOUNT_BLOCKS_PATH]: route('accountBlocks', 'me'),
