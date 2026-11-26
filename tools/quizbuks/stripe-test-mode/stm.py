@@ -613,23 +613,36 @@ class Run:
                          f"at the {entry} entry) or STRIPE_TM_MAILPIT_URL to register a new one")
         email = f"stm-{kind.lower()}-{self.id}-{secrets.token_hex(3)}@quizbuks.test"
         password = secret(secrets.token_urlsafe(18))
-        self.app.call("POST", "/api/auth/register", {"email": email, "password": password, "displayName": name,
-                                                     "locale": "en", "entry": entry})
+        base = mailpit.rstrip('/')
 
-        def mail():
-            found = http("GET", f"{mailpit.rstrip('/')}/api/v1/search?query="
-                         + urllib.parse.quote(f'to:"{email}"'))
-            for message in found.get("messages") or []:
-                if re.search(r"verify|confirm|address", message["Subject"], re.I):
-                    return message["ID"]
-            return None
+        def mailed(subject, path):
+            def mail():
+                found = http("GET", f"{base}/api/v1/search?query=" + urllib.parse.quote(f'to:"{email}"'))
+                for message in found.get("messages") or []:
+                    if re.search(subject, message["Subject"], re.I):
+                        return message["ID"]
+                return None
 
-        text = http("GET", f"{mailpit.rstrip('/')}/api/v1/message/{wait_for('the verification mail', mail, 60)}")
-        link = next(m for m in re.findall(r"https?://[^\s<>\"')\]]+", text["Text"]) if "/auth/verify-email" in m)
-        token = secret(urllib.parse.parse_qs(urllib.parse.urlsplit(link.replace("&amp;", "&")).query)["token"][0])
-        check = self.app.call("POST", "/api/auth/verify-email/check", {"token": token})
-        body = {"token": token, "password": password} if check.get("passwordRequired") else {"token": token}
-        self.app.call("POST", "/api/auth/verify-email", body)
+            text = http("GET", f"{base}/api/v1/message/{wait_for(f'the mail to {email}', mail, 60)}")
+            link = next(m for m in re.findall(r"https?://[^\s<>\"')\]]+", text["Text"]) if path in m)
+            return secret(urllib.parse.parse_qs(urllib.parse.urlsplit(link.replace("&amp;", "&")).query)["token"][0])
+
+        if entry == "app":
+            # The app signs up only through "continue" and the mailed link (Q113f-2; platform D84); the password is
+            # then chosen through "forgot your password".
+            self.app.call("POST", "/api/auth/email-link", {"email": email, "entry": entry, "locale": "en"})
+            self.app.call("POST", "/api/auth/email-link/confirm", {
+                "token": mailed(r"link", "/auth/email-link"), "displayName": name, "locale": "en"})
+            self.app.call("POST", "/api/auth/password-reset/request", {"email": email, "entry": entry})
+            self.app.call("POST", "/api/auth/password-reset/confirm", {
+                "token": mailed(r"password", "/auth/password-reset"), "password": password})
+        else:
+            self.app.call("POST", "/api/auth/register", {"email": email, "password": password, "displayName": name,
+                                                         "locale": "en", "entry": entry})
+            token = mailed(r"verify|confirm|address", "/auth/verify-email")
+            check = self.app.call("POST", "/api/auth/verify-email/check", {"token": token})
+            body = {"token": token, "password": password} if check.get("passwordRequired") else {"token": token}
+            self.app.call("POST", "/api/auth/verify-email", body)
         self.fact(f"{kind.lower()}Email", email)
         return Session(self.app, email, password, entry)
 

@@ -172,24 +172,41 @@ def setup():
         print("  qb.reward.default-methods = PLATFORM (the demo pays the platform's Kudos)")
 
 
-def verified_user(entry, email, name):
-    """Registers at the entry and opens the mailed link, as the person would; nothing when the address exists."""
-    token = login(email, DEMO_PASSWORD, entry)
-    if token:
-        return token
-    call("POST", "/api/auth/register", {"email": email, "password": DEMO_PASSWORD, "displayName": name,
-                                        "locale": "en", "entry": entry})
+def mailed_link(email, subject, path):
+    """The newest mailed link to the address whose subject matches and whose address ends in the path."""
 
     def mail():
         found = call("GET", f"{MAILPIT}/api/v1/search?query={urllib.parse.quote(f'to:{email}')}")
         for message in found.get("messages") or []:
-            if re.search(r"verify|confirm|address", message["Subject"], re.I):
+            if re.search(subject, message["Subject"], re.I):
                 return message["ID"]
         return None
 
     text = call("GET", f"{MAILPIT}/api/v1/message/{wait_for(f'the mail to {email}', mail)}")["Text"]
-    link = next(m for m in re.findall(r"https?://[^\s<>\"')\]]+", text) if "/auth/verify-email" in m)
-    verification = urllib.parse.parse_qs(urllib.parse.urlparse(link.replace("&amp;", "&")).query)["token"][0]
+    link = next(m for m in re.findall(r"https?://[^\s<>\"')\]]+", text) if path in m)
+    return urllib.parse.parse_qs(urllib.parse.urlparse(link.replace("&amp;", "&")).query)["token"][0]
+
+
+def verified_user(entry, email, name):
+    """Signs up at the entry as the person would, through the mailed link; nothing when the address exists.
+
+    The app's one "continue" (Q113f-2; platform D84) has no password registration: the taker signs up by the link,
+    then chooses the demo password through "forgot your password". Other entries register with the password.
+    """
+    token = login(email, DEMO_PASSWORD, entry)
+    if token:
+        return token
+    if entry == "app":
+        call("POST", "/api/auth/email-link", {"email": email, "entry": entry, "locale": "en"})
+        call("POST", "/api/auth/email-link/confirm", {
+            "token": mailed_link(email, r"link", "/auth/email-link"), "displayName": name, "locale": "en"})
+        call("POST", "/api/auth/password-reset/request", {"email": email, "entry": entry})
+        call("POST", "/api/auth/password-reset/confirm", {
+            "token": mailed_link(email, r"password", "/auth/password-reset"), "password": DEMO_PASSWORD})
+        return login(email, DEMO_PASSWORD, entry)
+    call("POST", "/api/auth/register", {"email": email, "password": DEMO_PASSWORD, "displayName": name,
+                                        "locale": "en", "entry": entry})
+    verification = mailed_link(email, r"verify|confirm|address", "/auth/verify-email")
     check = call("POST", "/api/auth/verify-email/check", {"token": verification})
     body = {"token": verification, "password": DEMO_PASSWORD} if check.get("passwordRequired") else {
         "token": verification}

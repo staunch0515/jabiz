@@ -93,12 +93,13 @@ test('the Taker button opens a phone-sized window on a desktop, the Sponsor butt
     page.getByRole('link', { name: 'Start answering — it’s free' }).click(),
   ])
   await phone.waitForLoadState()
-  expect(new URL(phone.url()).pathname).toBe('/taker/signup')
+  // Signing up is the sign-in page's one "continue" (Q113f-2).
+  expect(new URL(phone.url()).pathname).toBe('/taker/login')
   // Playwright gives a popup the context's viewport, so the window features are not observable here: the named
   // window is the one `window.open` was asked for, and it is the only one (no blocked-popup fallback fired too).
   expect(await phone.evaluate(() => window.name)).toBe('quizbuks-taker')
   expect(context.pages()).toHaveLength(2)
-  await expect(phone.getByRole('button', { name: 'Create the account' })).toBeVisible()
+  await expect(phone.getByRole('button', { name: 'Continue', exact: true })).toBeVisible()
   await phone.close()
 
   const [tab] = await Promise.all([
@@ -169,7 +170,8 @@ test('on a phone the Taker button navigates in place', async ({ browser }) => {
   const page = await context.newPage()
   await page.goto('/biz/')
   await page.getByRole('link', { name: 'Start answering — it’s free' }).click()
-  await expect(page).toHaveURL(/\/taker\/signup$/)
+  // Signing up is the sign-in page's one "continue" (Q113f-2).
+  await expect(page).toHaveURL(/\/taker\/login(\?|$)/)
   await context.close()
 })
 

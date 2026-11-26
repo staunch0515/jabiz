@@ -22,11 +22,11 @@ test.beforeEach(async ({ request }) => {
 const style = (page: Page, selector: string, property: string) =>
   page.locator(selector).first().evaluate((element, name) => getComputedStyle(element).getPropertyValue(name), property)
 
-/** The sign-in page at a size, in English (the providers first, then the mailed link behind a button, then the password). */
+/** The sign-in page at a size, in English (the providers first, then the address and its "Continue", Q113f-2). */
 async function signInPage(page: Page, width: number, height: number) {
   await page.setViewportSize({ width, height })
   await page.goto('/taker/login')
-  await expect(page.getByTestId('login-user-name')).toBeVisible()
+  await expect(page.getByTestId('continue-email')).toBeVisible()
   await page.evaluate(() => document.fonts.ready)
 }
 
@@ -58,7 +58,7 @@ test('the entry pages on a phone: the name and the mark at the top, a column of 
       .toBeGreaterThanOrEqual(box.height / 2)
   }
   // The address: 62 px high, corners of 6 px, its label inside the box.
-  const field = page.getByTestId('login-user-name')
+  const field = page.getByTestId('continue-email')
   expect((await field.boundingBox())!.height).toBeCloseTo(62, 0)
   expect(await field.evaluate((input) => getComputedStyle(input).borderTopLeftRadius)).toBe('6px')
   await expect(field).toHaveAccessibleName('E-mail address')

@@ -35,6 +35,12 @@ interface Me {
 /** Whether the entry takes passkeys (Q97): off unless a test turns it on. */
 let entryPasskeys = false
 
+/** Whether the entry signs in and signs up with one "continue" (Q113f-2): off unless a test turns it on. */
+let entryUnified = false
+
+/** What the check of a mailed link says (Q113f-2): whether it opens an account that needs its name first. */
+let linkSignUp = false
+
 /** What the account's deletion says (Q71): off unless a test turns it on. */
 let deletionStatus: Record<string, unknown> = { available: false, pending: null, notices: [] }
 
@@ -56,7 +62,11 @@ function server(me?: Me, providers: unknown[] = []) {
     if (request.method === 'POST') posted.push({ path, body })
     switch (path) {
       case '/api/auth/entries/app':
-        return json(200, { ...ENTRY, passkeys: entryPasskeys })
+        return json(200, { ...ENTRY, passkeys: entryPasskeys, unifiedSignIn: entryUnified })
+      case '/api/auth/email-link':
+        return new Response(null, { status: 202, headers: { 'Content-Length': '0' } })
+      case '/api/auth/email-link/check':
+        return json(200, { signUp: linkSignUp })
       case '/api/auth/oidc/providers':
         return json(200, providers)
       case '/api/auth/account/passkeys':
@@ -118,6 +128,8 @@ function server(me?: Me, providers: unknown[] = []) {
 beforeAll(() => configureClient({ entry: 'app' }))
 beforeEach(() => {
   entryPasskeys = false
+  entryUnified = false
+  linkSignUp = false
   // The entry is read once a page load (configuring the entry forgets it): each test's server answers it again.
   configureClient({ entry: 'app' })
   session.clear()
@@ -464,6 +476,69 @@ describe('the entry pages (platform 17zk; P4)', () => {
     expect(note.closest('details')).toBeNull()
     const collapsed = document.querySelector('[data-slot="entry-notice"][data-collapsed]')!
     expect(collapsed.querySelector('summary')).toHaveTextContent('offline')
+    await expectAccessible()
+  })
+})
+
+describe('one "continue" for signing in and signing up (Q113f-2; platform D84)', () => {
+  const PROVIDERS = [{ id: 'google', kind: 'google', label: 'Google' }, { id: 'line', kind: 'line', label: 'LINE' }]
+  /** The first way of signing in on the page: the providers' buttons or the address's form. */
+  const first = (container: HTMLElement) => container.querySelector(
+    '[data-slot="entry-form"] [data-testid="oidc-buttons"], [data-slot="entry-form"] [data-testid="continue-form"]')
+
+  it('puts the address and "Continue" where the password was, by language, with the texts under it', async () => {
+    window.localStorage.setItem('qb.intro.seen', '1')
+    entryUnified = true
+    const { posted } = server(undefined, PROVIDERS)
+    window.history.replaceState(null, '', '/login?next=%2Fp%2Fabc')
+    for (const language of ['ja', 'en'] as const) {
+      await changeLanguage(language)
+      configureClient({ entry: 'app' })
+      const { container, unmount } = render(<App />)
+      const form = await screen.findByTestId('continue-form')
+      const buttons = await screen.findByTestId('oidc-buttons')
+      expect(first(container)).toBe(buttons)
+      expect(buttons.compareDocumentPosition(form) & Node.DOCUMENT_POSITION_FOLLOWING)
+        .toBeTruthy()
+      unmount()
+    }
+    await changeLanguage('zh')
+    configureClient({ entry: 'app' })
+    const { container } = render(<App />)
+    await screen.findByTestId('continue-form')
+    await screen.findByTestId('oidc-buttons')
+    expect(first(container)).toBe(screen.getByTestId('continue-form'))
+    // The mailed link's own button, the password form, the sign-up tab and its link give way.
+    for (const gone of ['login-email-link', 'login-email-link-open', 'login-user-name', 'sign-up-link', 'sign-in-link']) {
+      expect(screen.queryByTestId(gone)).toBeNull()
+    }
+    expect(screen.getByTestId('signup-terms')).toBeInTheDocument()
+    await expectAccessible()
+
+    await userEvent.type(screen.getByTestId('continue-email'), 'mei@example.com{Enter}')
+    expect(await screen.findByTestId('continue-link-sent')).toHaveTextContent('mei@example.com')
+    expect(posted.filter((p) => p.path === '/api/auth/email-link')).toEqual([{ path: '/api/auth/email-link',
+      body: { email: 'mei@example.com', entry: 'app', to: '/p/abc', locale: 'zh' } }])
+  })
+
+  it('sends the old sign-up address to the sign-in, query and all', async () => {
+    entryUnified = true
+    server()
+    window.history.replaceState(null, '', '/signup?next=%2Fp%2Fabc')
+    render(<App />)
+    expect(await screen.findByTestId('continue-form')).toBeInTheDocument()
+    expect(window.location.pathname).toBe('/login')
+    expect(window.location.search).toBe('?next=%2Fp%2Fabc')
+  })
+
+  it('finishes signing up at a new address\'s link, saying where the texts are', async () => {
+    entryUnified = true
+    linkSignUp = true
+    server()
+    window.history.replaceState(null, '', '/auth/email-link?entry=app&token=t0k&to=%2Fp%2Fabc')
+    render(<App />)
+    expect(await screen.findByTestId('complete-sign-up')).toBeInTheDocument()
+    expect(screen.getByTestId('complete-sign-up-note')).toContainElement(screen.getByTestId('signup-terms'))
     await expectAccessible()
   })
 })

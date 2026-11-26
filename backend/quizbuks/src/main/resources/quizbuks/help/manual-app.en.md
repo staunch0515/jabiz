@@ -2,7 +2,7 @@ How to use the app as a Taker. Paths are pages of the app (they start with /take
 
 ## Getting started
 
-- Sign up with your e-mail address and open the link we send you; you can also sign in with a password or with Google. Verify your address before answering quizzes.
+- Signing in and signing up are one page (/taker/login): enter your e-mail address and press "Continue". We send a link to that address; open it on the same device. A new address gives its name there to finish signing up. On the same step you can "Use your password instead" ("Forgot your password?" sets one), and the page also offers Google, LINE, Facebook and "Sign in with a passkey". On a device where you last signed in with your password, "Continue" asks for it straight away.
 - Complete your profile (/taker/welcome): your name and your country or region. Quizzes are offered by country and region.
 - The bottom of the app has four icons: Home (/taker/), Search (/taker/search), Answered (/taker/history) and Notifications (/taker/inbox). The round button at the bottom right is Scan (/taker/scan). Your picture at the top left opens the side menu: Me (/taker/account), your Kudos, prizes, certificates, knowledge maps, referrals, settings, help and signing out.
 

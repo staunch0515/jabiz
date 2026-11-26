@@ -58,7 +58,9 @@ describe('the rendered pages', () => {
   it('open the app in the page\'s language, and each try-it quiz in its own (Q59b)', () => {
     const ja = renderPage({ language: 'ja', page: 'home', content: contentOf('ja'), base: '/biz/', tryQuizzes, assets, siteUrl })
     expect(ja).toContain('href="/taker/login?lang=ja"')
-    expect(ja).toContain('href="/taker/signup?lang=ja"')
+    // Signing up is the app's sign-in page's one "continue" (Q113f-2): "start answering" leads there too.
+    expect(ja).toMatch(/href="\/taker\/login\?lang=ja" data-signup="taker"/)
+    expect(ja).not.toContain('/taker/signup')
     expect(ja).not.toMatch(/href="\/taker\/[^"?]*"/)
     // The Chinese quiz opens in Chinese on the Japanese page too.
     expect(ja).toContain('href="https://quizbuks.com/taker/p/abc?lang=zh"')
@@ -89,7 +91,8 @@ describe('the rendered pages', () => {
       const content = contentOf(language)
       const html = renderPage({ language, page: 'home', content, base: '/biz/', tryQuizzes, assets, siteUrl })
       // The taker's opens the phone-sized window, the merchant's a new tab, as the sign-ups do.
-      expect(html.match(new RegExp(`href="/taker/login\\?lang=${language}" data-signup="taker"`, 'g'))).toHaveLength(2)
+      // Two sign-ins and, since Q113f-2 (signing up is the sign-in page's "continue"), the two "start answering".
+      expect(html.match(new RegExp(`href="/taker/login\\?lang=${language}" data-signup="taker"`, 'g'))).toHaveLength(4)
       expect(html.match(/href="\/sponsor\/login" data-signup="sponsor" target="_blank" rel="noopener"/g)).toHaveLength(2)
       expect(html).toContain(content.signIn.taker)
       expect(html).toContain(content.signIn.sponsor)

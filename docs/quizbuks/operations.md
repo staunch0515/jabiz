@@ -31,6 +31,7 @@
 | `QB_SESSION_REFRESH_TOKEN_TTL` | 否 | 缺省 `P2D`：上述四个入口的刷新令牌自最后一次刷新起的有效期 | — | 须不短于访问令牌（15 分钟）加闲置时长，否则闲置的会话提前结束：启动检查 `QUIZBUKS \| jabiz.security.entries.<入口>.session.refresh-token-ttl` 警告（`identity.SessionLengthCheck`）；至多 90 天（平台） |
 | `QB_APP_SELF_REGISTRATION` / `QB_SPONSOR_SELF_REGISTRATION` | 否 | 缺省 `true` | — | — |
 | `QB_APP_EMAIL_LINK` | 否 | 缺省 `true` | — | App 以邮件中的链接登录（Q15 的分享链接，平台 D54）；关掉后分享页仍显示，但只能用密码登录 |
+| `QB_APP_UNIFIED_SIGN_IN` | 否 | 缺省 `true` | — | App 的登录与注册是同一个"继续"（Q113f-2，平台 D84）：寄链接、同一步可改用密码，新地址在链接处填名字开户，App 不接受口令注册。须同时开启 `QB_APP_EMAIL_LINK`（否则启动失败）；设为 `false` 即回到登录与注册两个标签 |
 | `JABIZ_PUBLIC_ENABLED` | 否 | 缺省 `true`（Q7b） | — | 设 `false` 时 `/api/public/**` 一律 404：帮助中心与条款、隐私政策页（App 与发起方页面，也给未登录的人看）都打不开。只有四个公开模板 `qb.public.*`（已发布的法律文本版本与已发布的 FAQ），没有公开的文件；按客户端地址限流（平台缺省每分钟 300 次），结果缓存 5 分钟 |
 
 - `JABIZ_WEB_ENVIRONMENT`（平台 16zd）：页面上的系统标志。只有正式环境设 `production`；其他值（`staging`、`local`，不设即 `test`）让 App、发起方页面与平台管理系统的

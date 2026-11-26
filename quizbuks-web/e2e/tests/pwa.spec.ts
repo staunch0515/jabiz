@@ -72,7 +72,7 @@ test('the app\'s worker leaves the Sponsor console, the administration and the A
   await page.goto('/admin/login')
   await expect(page.locator('#root')).not.toBeEmpty()
   await page.goto('/taker/login')
-  await expect(page.getByRole('button', { name: 'Sign in', exact: true })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Continue', exact: true })).toBeVisible()
   expect(fromWorker).toEqual([])
 
   // The caches hold the app's shell only: nothing of the API, of the other front ends, or a page with a token.
@@ -95,7 +95,7 @@ test('offline, the app shows its shell and says so', async ({ page, context }) =
   await controlled(page)
   await context.setOffline(true)
   try {
-    await page.goto('/taker/signup')
+    await page.goto('/taker/password-reset')
     await expect(page.getByTestId('offline-banner')).toBeVisible()
   } finally {
     await context.setOffline(false)

@@ -225,6 +225,11 @@ jabiz:
         registration-roles: QB_TAKER
         require-verified-email: false
         email-link: ${QB_APP_EMAIL_LINK:true}
+        # Q113f-2 (Q113 section 9.4; platform decision D84): signing in and signing up are one "continue". The address
+        # gets a link (a new one finishes signing up with a name first, a sponsor's joins the app), the password is the
+        # other way on the same step, and nobody registers with a password here. QB_APP_UNIFIED_SIGN_IN=false brings
+        # back the tabs and password registration (needs QB_APP_EMAIL_LINK).
+        unified-sign-in: ${QB_APP_UNIFIED_SIGN_IN:true}
         # Q71: takers may ask for the deletion of their account in the app or, without it, at /taker/delete-account
         # (Apple 5.1.1(v), Google Play's account deletion policy; platform D62). Off by default, as for sponsors: it
         # needs the maintenance connection that purges personal data (deploy/quizbuks/DEPLOY.md section 1a).

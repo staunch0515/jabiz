@@ -32,15 +32,15 @@ test('a Sponsor reads their publication in the app and pauses and resumes it', a
   const name = unique('In the app ')
   await livePublication(request, sponsor.token, quiz.quizId, name)
 
-  // The same address registers at the app: the mail of an address in use joins it to the app's entry.
-  const registered = await request.post('/api/auth/register', {
-    data: { email: sponsor.email, password: PASSWORD, displayName: 'Sora', locale: 'en', entry: 'app' },
-  })
-  expect(registered.status(), await registered.text()).toBe(202)
-  const mail = await mailTo(request, sponsor.email, /already have an account/i)
-  const token = linkIn(mail.text, '/auth/join').searchParams.get('token')!
-  const joined = await request.post('/api/auth/join', { data: { token } })
-  expect(joined.status(), await joined.text()).toBe(204)
+  // The same address continues at the app (Q113f-2; platform D84): its mailed link joins it to the app's entry.
+  const asked = await request.post('/api/auth/email-link', { data: { email: sponsor.email, entry: 'app', locale: 'en' } })
+  expect(asked.status(), await asked.text()).toBe(202)
+  const mail = await mailTo(request, sponsor.email, /link/i)
+  const token = linkIn(mail.text, '/auth/email-link').searchParams.get('token')!
+  const check = await request.post('/api/auth/email-link/check', { data: { token } })
+  expect(await check.json()).toEqual({ signUp: false })
+  const joined = await request.post('/api/auth/email-link/confirm', { data: { token } })
+  expect(joined.status(), await joined.text()).toBe(200)
   const app = await tokenOf(request, sponsor.email, PASSWORD, 'app')
   await run(request, app, 'QB_PROFILE_SAVE', { displayName: 'Sora', countryCode: 'JP', preferredCurrency: 'JPY' })
 

@@ -4,13 +4,13 @@ import {
   expect,
   expectAccessible,
   openArea,
-  PASSWORD,
   prepareQuizbuks,
   run,
   signIn,
   takerArea,
   test, openTakerArea,
   openTakerSettings,
+  fillSignIn,
 } from './support'
 import { approvedSponsor, takerInJapan } from './wallet'
 import { reviewerFor } from './operators'
@@ -146,9 +146,7 @@ test('a Taker collects a prize by scanning the code on the Sponsor\'s screen', a
   const path = new URL(link).pathname
   await page.goto(path)
   await expect(page).toHaveURL(/\/login\?next=/)
-  await page.getByTestId('login-user-name').fill(owed.taker.email)
-  await page.getByLabel('Password', { exact: true }).fill(PASSWORD)
-  await page.getByRole('button', { name: 'Sign in', exact: true }).click()
+  await fillSignIn(page, owed.taker.email)
   const redeem = page.getByTestId('redeem-page')
   await expect(redeem).toBeVisible()
   await expect(redeem).toHaveAttribute('data-kind', 'ROTATING')

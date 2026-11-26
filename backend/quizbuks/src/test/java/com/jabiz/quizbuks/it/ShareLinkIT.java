@@ -96,7 +96,12 @@ class ShareLinkIT extends PlayItSupport {
         String publicationId = livePublication(sponsorA(), "Linked");
         Map<String, Object> entry = client.get().uri("/api/auth/entries/app").exchange().expectStatus().isOk()
             .expectBody(MAP).returnResult().getResponseBody();
-        assertThat(entry).containsEntry("emailLink", true);
+        // Q113f-2: one "continue" signs in and signs up (platform D84); nobody registers with a password at the app.
+        assertThat(entry).containsEntry("emailLink", true).containsEntry("unifiedSignIn", true);
+        client.post().uri("/api/auth/register").contentType(MediaType.APPLICATION_JSON)
+            .bodyValue(Map.of("entry", "app", "email", unique("pw").toLowerCase() + "@example.com",
+                "password", "correct horse battery"))
+            .exchange().expectStatus().isEqualTo(422);
         assertThat(client.get().uri("/api/auth/entries/sponsor").exchange().expectStatus().isOk()
             .expectBody(MAP).returnResult().getResponseBody()).containsEntry("emailLink", false);
 
@@ -109,8 +114,15 @@ class ShareLinkIT extends PlayItSupport {
         assertThat(link.find()).as("a sign-in link").isTrue();
         assertThat(link.group(2)).isEqualTo("%2Ftaker%2Fp%2F" + publicationId);
 
+        // A new address finishes signing up first: the link asks for a name, and stays good until it has one.
+        assertThat(client.post().uri("/api/auth/email-link/check").contentType(MediaType.APPLICATION_JSON)
+            .bodyValue(Map.of("token", link.group(1))).exchange().expectStatus().isOk().expectBody(MAP)
+            .returnResult().getResponseBody()).containsEntry("signUp", true);
+        client.post().uri("/api/auth/email-link/confirm").contentType(MediaType.APPLICATION_JSON)
+            .bodyValue(Map.of("token", link.group(1))).exchange().expectStatus().isEqualTo(422);
         Map<String, Object> session = client.post().uri("/api/auth/email-link/confirm")
-            .contentType(MediaType.APPLICATION_JSON).bodyValue(Map.of("token", link.group(1))).exchange()
+            .contentType(MediaType.APPLICATION_JSON)
+            .bodyValue(Map.of("token", link.group(1), "displayName", "Sora", "locale", "ja")).exchange()
             .expectStatus().isOk().expectBody(MAP).returnResult().getResponseBody();
         assertThat(session).containsEntry("status", "SIGNED_IN");
         Map<String, Object> me = client.get().uri("/api/auth/me")
