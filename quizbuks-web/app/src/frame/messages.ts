@@ -20,7 +20,7 @@ const en = {
     aside: { label: 'More', prizesTitle: 'Prizes to collect', prizesNone: 'Nothing to collect', worth: 'Worth {{amount}}', by: 'by {{date}}',
       pass: 'Pass', open: 'Open', more: 'See all', links: 'Help and terms' },
     search: { title: 'Search', hint: 'Search quizzes by their name, their Sponsor or a word of their description.' },
-    tabs: { answered: 'Answered', prizes: 'To collect', scan: 'Scan', pass: 'Show my pass', inbox: 'Inbox', conversations: 'Conversations' },
+    tabs: { answered: 'All', prizes: 'To collect', unfinished: 'Not finished', rewards: 'Rewards', scan: 'Scan', pass: 'Show my pass', inbox: 'All', conversations: 'Conversations' },
   },
   prizes: {
     intro: 'Prizes you won that still need something: to collect at a Sponsor\'s place, to confirm or to settle.',
@@ -75,7 +75,7 @@ const zh = {
     aside: { label: '辅助栏', prizesTitle: '待领奖品', prizesNone: '没有待领的奖品', worth: '价值 {{amount}}', by: '{{date}}前', pass: '领奖码',
       open: '查看', more: '查看全部', links: '帮助与条款' },
     search: { title: '搜索', hint: '按名称、发起方或说明中的词搜索 Quiz。' },
-    tabs: { answered: '已答', prizes: '待领奖', scan: '扫码', pass: '出示领奖码', inbox: '收件箱', conversations: '对话' },
+    tabs: { answered: '全部', prizes: '待领奖', unfinished: '未完成', rewards: '奖励', scan: '扫码', pass: '出示领奖码', inbox: '全部', conversations: '对话' },
   },
   prizes: {
     intro: '你赢得、还需要处理的奖品：到发起方处领取、确认收到或等待结算。',
@@ -130,7 +130,7 @@ const ja = {
     aside: { label: 'サブメニュー', prizesTitle: '受け取り待ちの景品', prizesNone: '受け取り待ちの景品はありません',
       worth: '{{amount}}相当', by: '{{date}}まで', pass: '引き換えパス', open: '開く', more: 'すべて見る', links: 'ヘルプと規約' },
     search: { title: '検索', hint: 'クイズを名前、主催者、説明の言葉で検索します。' },
-    tabs: { answered: '回答済み', prizes: '受け取り待ち', scan: 'スキャン', pass: '引き換えパスを表示', inbox: '受信箱', conversations: '会話' },
+    tabs: { answered: 'すべて', prizes: '受け取り待ち', unfinished: '未完了', rewards: '報酬', scan: 'スキャン', pass: '引き換えパスを表示', inbox: 'すべて', conversations: '会話' },
   },
   prizes: {
     intro: '獲得した景品のうち、対応が必要なもの：主催者の店頭での受け取り、受領の確認、精算待ち。',

@@ -30,6 +30,8 @@ export interface InboxItem {
   sender: string | null
   /** The company of a sponsor's notice. */
   sponsorName: string | null
+  /** Q113d-1: the picture of a sponsor's notice. */
+  sponsorAvatar?: string | null
   title: I18nText
   body: I18nText
   /** Markdown (QuizBuks's texts) or plain text (a sponsor's notice, never rendered). */
@@ -144,6 +146,7 @@ function item(row: Row): InboxItem {
     kind: str(row.kind),
     sender: str(row.sender),
     sponsorName: str(row.sponsorName),
+    sponsorAvatar: str(row.sponsorAvatar),
     title: text(row.title),
     body: text(row.body),
     markdown: row.markdown === true,

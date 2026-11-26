@@ -1,13 +1,14 @@
 /*---
 id: qb.app.history
 description: The taker's own attempts (U-40 – U-42), newest first, with their results and rewards
-entities: [QbAttempt, QbPublicationCard, QbCashReward, QbRedemption, QbDigitalPrize]
+entities: [QbAttempt, QbPublicationCard, QbCashReward, QbRedemption, QbDigitalPrize, QbSponsor]
 datasets:
   QbAttempt: urn:jabiz:dataset:taker:QbAttempt
   QbPublicationCard: urn:jabiz:dataset:default:QbPublicationCard
   QbCashReward: urn:jabiz:dataset:taker:QbCashReward
   QbRedemption: urn:jabiz:dataset:taker:QbRedemption
   QbDigitalPrize: urn:jabiz:dataset:taker:QbDigitalPrize
+  QbSponsor: urn:jabiz:dataset:default:QbSponsor
 params:
   at: { kind: { type: temporal, role: EVENT_TIME }, description: "The client's now: an attempt in progress past its deadline is waiting to be finished" }
   q:  { kind: { type: text, maxLength: 100 }, description: Only attempts whose publication's name or quiz title contains this text }
@@ -18,6 +19,9 @@ results:
   quizTitle:    { from: QbPublicationCard.quizTitle }
   cover:        { from: QbPublicationCard.cover }
   kind:         { from: QbPublicationCard.kind }
+  sponsorName:    { from: QbSponsor.contactName }
+  sponsorCompany: { from: QbSponsor.company }
+  sponsorAvatar:  { from: QbSponsor.avatar }
   status:       { from: QbAttempt.status }
   category:     { kind: { type: text, maxLength: 20 } }
   passed:       { from: QbAttempt.passed }
@@ -61,6 +65,10 @@ SELECT
     coalesce(CASE m.{{QbAttempt.language}} WHEN 'ja' THEN c.{{QbPublicationCard.coverJa}} WHEN 'zh' THEN c.{{QbPublicationCard.coverZh}}
         WHEN 'en' THEN c.{{QbPublicationCard.coverEn}} END, c.{{QbPublicationCard.cover}}) AS cover,
     c.{{QbPublicationCard.kind}}           AS kind,
+    -- Q113d-1: the row shows who published it, as the home's posts do.
+    sp.{{QbSponsor.contactName}}           AS sponsorName,
+    sp.{{QbSponsor.company}}               AS sponsorCompany,
+    sp.{{QbSponsor.avatar}}                AS sponsorAvatar,
     m.{{QbAttempt.status}}                 AS status,
     CAST(CASE
         WHEN m.{{QbAttempt.status}} <> 'IN_PROGRESS' AND m.{{QbAttempt.passed}} THEN 'PASSED'
@@ -88,6 +96,7 @@ SELECT
     m.{{QbAttempt.deadline}}               AS deadline
 FROM {{QbAttempt}} m
 JOIN {{QbPublicationCard}} c ON c.{{QbPublicationCard.publicationId}} = m.{{QbAttempt.publicationId}}
+LEFT JOIN {{QbSponsor}} sp ON sp.{{QbSponsor.userId}} = c.{{QbPublicationCard.publisherId}}
 LEFT JOIN {{QbCashReward}} cr ON cr.{{QbCashReward.attemptId}} = m.{{QbAttempt.attemptId}}
 LEFT JOIN {{QbRedemption}} rd ON rd.{{QbRedemption.attemptId}} = m.{{QbAttempt.attemptId}}
 LEFT JOIN {{QbDigitalPrize}} dg ON dg.{{QbDigitalPrize.attemptId}} = m.{{QbAttempt.attemptId}}

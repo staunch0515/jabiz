@@ -2,29 +2,31 @@ import { formatDateTime, i18n } from '@jabiz/client'
 import { AreaHeader } from '../frame/AreaHeader'
 import '../frame/messages'
 import {
-  Badge,
   Button,
   Checkbox,
   Input,
   Label,
   PageState,
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
   Spinner,
   Switch,
   cn,
 } from '@jabiz/ui'
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { CalendarDays, CheckCheck, Search } from 'lucide-react'
-import { useEffect, useId, useState, type FormEvent } from 'react'
+import { Bell, CheckCheck, Clock, Gift, ListFilter, Search, Settings, Sparkles, Store, type LucideIcon } from 'lucide-react'
+import { useEffect, useId, useState, type FormEvent, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 import { APP } from '../messages'
+import { BRAND } from '../qb/brand'
 import { pickText } from '../qb/legal'
 import { shownLanguages } from '../qb/api'
 import { QB } from '../qb/messages'
@@ -46,6 +48,9 @@ import {
 } from './api'
 import './messages'
 import { useMySponsor } from '../mysponsor/api'
+import { accountPath } from '../pages/accountPaths'
+import { SponsorPicture } from '../qb/view/SponsorPicture'
+import { PostAgeText } from '../qb/view/FeedCard'
 
 /** Items per page of the inbox. */
 export const INBOX_PAGE = 20
@@ -60,28 +65,76 @@ export function senderOf(item: InboxItem, t: (key: string, options?: Record<stri
   return item.sponsorName ? t('inbox.fromSponsor', { name: item.sponsorName }) : t('inbox.fromSponsorUnknown')
 }
 
-function Row({ item }: { item: InboxItem }) {
+/** The kind's icon in the row's first column (Q113d-1, the prototype's): rewards in the reward's gold. */
+const ICONS: Record<Category, { icon: LucideIcon; tone: string }> = {
+  REWARD: { icon: Gift, tone: 'text-qb-reward-foreground' },
+  PROMO: { icon: Sparkles, tone: 'text-primary' },
+  SYSTEM: { icon: Bell, tone: 'text-muted-foreground' },
+  REMINDER: { icon: Clock, tone: 'text-muted-foreground' },
+  SPONSOR: { icon: Store, tone: 'text-muted-foreground' },
+}
+
+/** The name a row is from: the sponsor's company for a notice, the product's for the rest. */
+function senderName(item: InboxItem, t: (key: string) => string): string {
+  if (item.sender === 'SPONSOR') return item.sponsorName ?? t('inbox.fromSponsorUnknown')
+  return BRAND.names[i18n.language as 'en' | 'zh' | 'ja'] ?? BRAND.names.en
+}
+
+/**
+ * One notification (Q113d-1, as x.com's): the kind's icon in a column of its own (40 px), then the sender's picture
+ * (32 px), "sender · time", the title and the beginning of the text; an unread one on the accent's tint, with its
+ * word for screen readers.
+ */
+function Row({ item, at }: { item: InboxItem; at: string }) {
   const { t } = useTranslation(APP)
   const title = pickText(item.title, i18n.language)
   const body = pickText(item.body, i18n.language)
+  const { icon: Icon, tone } = ICONS[item.category] ?? ICONS.SYSTEM
+  const from = senderName(item, t)
   return (
-    <li data-testid="inbox-row" data-kind={item.itemKind} data-id={item.itemId} data-unread={item.unread}>
+    <li data-testid="inbox-row" data-kind={item.itemKind} data-id={item.itemId} data-unread={item.unread}
+      className="border-border border-b">
       <Link to={itemPath(item.itemKind, item.itemId)}
-        className={cn('hover:bg-accent focus-visible:ring-ring/50 flex flex-col gap-1 rounded-lg border p-3',
-          'outline-none focus-visible:ring-[3px]')}>
-        <span className="flex items-start gap-2">
-          <span className={cn('flex-1', item.unread ? 'font-semibold' : 'font-medium')} lang={title.lang}>
+        className={cn('hover:bg-accent/60 focus-visible:ring-ring/50 flex gap-2 px-4 py-3 outline-none focus-visible:ring-[3px] focus-visible:ring-inset',
+          item.unread && 'bg-accent/40')}>
+        <span className="flex w-10 shrink-0 justify-end" data-testid="inbox-icon" data-category={item.category}>
+          <Icon aria-hidden className={cn('size-[30px]', tone)} strokeWidth={1.6} />
+        </span>
+        <span className="flex min-w-0 flex-1 flex-col">
+          <SponsorPicture avatar={item.sponsorAvatar} name={from} size={32} />
+          <span className="mt-3 flex min-w-0 gap-1">
+            <span className="truncate font-bold" title={senderOf(item, t)}>{from}</span>
+            <span aria-hidden className="text-muted-foreground">·</span>
+            <span className="text-muted-foreground shrink-0">
+              <PostAgeText startAt={item.at} at={at} testId="inbox-age" title={formatDateTime(item.at)} />
+            </span>
+          </span>
+          <span className={cn('mt-0.5', item.unread ? 'font-semibold' : 'font-normal')} lang={title.lang}>
             {title.text}
           </span>
-          {item.unread && <Badge data-testid="inbox-unread">{t('inbox.unread')}</Badge>}
-        </span>
-        <span className="text-muted-foreground line-clamp-2 text-sm" lang={body.lang}>{body.text}</span>
-        <span className="text-muted-foreground flex flex-wrap gap-x-3 text-xs">
-          <span>{senderOf(item, t)}</span>
-          <span>{formatDateTime(item.at)}</span>
+          <span className="text-muted-foreground line-clamp-2" lang={body.lang}>{body.text}</span>
+          {item.unread && <span className="sr-only" data-testid="inbox-unread">{t('inbox.unread')}</span>}
         </span>
       </Link>
     </li>
+  )
+}
+
+/** A panel from the bottom of the screen (Q113d-1: the filters, the settings): a title and its contents. */
+function Panel({ open, onOpenChange, title, description, testId, children }: {
+  open: boolean; onOpenChange: (open: boolean) => void; title: string; description?: string; testId: string
+  children: ReactNode }) {
+  return (
+    <Sheet open={open} onOpenChange={onOpenChange}>
+      <SheetContent side="bottom" className="mx-auto max-h-[85dvh] w-full max-w-[600px] gap-4 overflow-y-auto rounded-t-[16px] pb-6"
+        data-testid={testId}>
+        <SheetHeader className="pb-0">
+          <SheetTitle>{title}</SheetTitle>
+          <SheetDescription className={description ? undefined : 'sr-only'}>{description ?? title}</SheetDescription>
+        </SheetHeader>
+        <div className="flex flex-col gap-4 px-4">{children}</div>
+      </SheetContent>
+    </Sheet>
   )
 }
 
@@ -100,8 +153,7 @@ function Promotions() {
     },
   })
   return (
-    <section aria-labelledby={`${id}-title`} className="flex flex-col gap-2 rounded-lg border p-3"
-      data-testid="inbox-settings">
+    <section aria-labelledby={`${id}-title`} className="flex flex-col gap-2" data-testid="inbox-settings">
       <h2 id={`${id}-title`} className="text-sm font-medium">{t('inbox.settings')}</h2>
       <div className="flex items-center gap-3">
         <Switch id={`${id}-promo`} checked={state.data ? !state.data.promoOff : true}
@@ -119,9 +171,12 @@ function Promotions() {
 /**
  * The taker's inbox (U-60 – U-63; template `qb.app.inbox`): their messages and the announcements that match them,
  * newest first, filtered by kind, unread, text and dates; "mark all as read" and the promotions switch. Opening an
- * item reads it (its page marks it). Entering the page refreshes the navigation's badge.
+ * item reads it (its page marks it). Entering the page refreshes the navigation's badge. Q113d-1 (the prototype's
+ * notifications): the area's tabs "All" and "Rewards" (the kind `REWARD`, at its own address) beside the
+ * conversations; "mark all as read", the filters and the settings are the header's buttons, the filters and the
+ * settings in a panel each.
  */
-export function InboxPage() {
+export function InboxPage({ tab }: { tab: 'inbox' | 'rewards' }) {
   const { t } = useTranslation(APP)
   const { t: tQb } = useTranslation(QB)
   const id = useId()
@@ -129,9 +184,14 @@ export function InboxPage() {
   const sponsor = !!useMySponsor().data
   // The list as of opening the page: its pages stay one list until it is opened again or reloaded.
   const [at] = useState(() => Date.now())
+  const now = new Date(at).toISOString()
   const [text, setText] = useState('')
-  const [filter, setFilter] = useState<InboxFilter>({})
+  const [chosen, setFilter] = useState<InboxFilter>({})
   const [done, setDone] = useState(false)
+  const [filtering, setFiltering] = useState(false)
+  const [setting, setSetting] = useState(false)
+  // The rewards' tab is the kind REWARD, whatever was chosen in "All".
+  const filter: InboxFilter = tab === 'rewards' ? { ...chosen, category: 'REWARD' } : chosen
   useEffect(() => {
     void queryClient.invalidateQueries({ queryKey: UNREAD_QUERY })
   }, [queryClient])
@@ -157,86 +217,95 @@ export function InboxPage() {
     event.preventDefault()
     setFilter((current) => ({ ...current, q: text.trim() || undefined }))
   }
-  const dated = !!(filter.from || filter.to)
-  const filtered = !!(filter.q || filter.category || filter.unread || filter.from || filter.to)
+  const dated = !!(chosen.from || chosen.to)
+  // What the taker chose (the rewards' tab's own kind is not a choice).
+  const filtered = !!(chosen.q || (tab === 'inbox' && chosen.category) || chosen.unread || chosen.from || chosen.to)
+  const iconButton = 'relative size-9 rounded-full'
   return (
     <section className="flex flex-col gap-4" aria-labelledby="inbox-title" data-testid="inbox">
       {/* Q82: the conversations with sponsors are the other tab (F-F4). */}
-      <AreaHeader area="messages" tab="inbox" id="inbox-title" title={t('frame.areas.messages')} />
-      {/* The tools in two rows: the search and "mark all as read"; the kind, unread only and the dates (in a window of
-          their own, opened when wanted). */}
-      <div className="flex flex-col gap-2" data-testid="inbox-tools">
-        <div className="flex items-center gap-2">
-          <form role="search" onSubmit={search} className="relative flex min-w-0 flex-1">
-            <Label htmlFor={`${id}-q`} className="sr-only">{t('inbox.search')}</Label>
-            <Input id={`${id}-q`} type="search" value={text} maxLength={100} placeholder={t('inbox.search')}
-              className="pr-9" data-testid="inbox-search" onChange={(event) => setText(event.target.value)} />
-            <Button type="submit" variant="ghost" size="icon" aria-label={t('inbox.searchButton')}
-              className="absolute inset-y-0 right-0 h-full">
-              <Search aria-hidden />
+      <AreaHeader area="messages" tab={tab} id="inbox-title" title={t('frame.areas.messages')}
+        actions={(
+          <span className="flex" data-testid="inbox-tools">
+            <Button variant="ghost" size="icon" className={iconButton} disabled={all.isPending}
+              onClick={() => all.mutate()} aria-label={t('inbox.readAll')} title={t('inbox.readAll')}
+              data-testid="inbox-read-all">
+              <CheckCheck aria-hidden className="size-5" />
             </Button>
-          </form>
-          <Button variant="outline" className="shrink-0" disabled={all.isPending} onClick={() => all.mutate()}
-            title={t('inbox.readAll')} data-testid="inbox-read-all">
-            <CheckCheck aria-hidden />
-            <span className="sr-only sm:not-sr-only">{t('inbox.readAll')}</span>
+            <Button variant="ghost" size="icon" className={iconButton} onClick={() => setFiltering(true)}
+              aria-label={filtered ? t('inbox.filterOn') : t('inbox.filter')} title={t('inbox.filter')}
+              data-testid="inbox-filter-open" data-active={filtered || undefined}>
+              <ListFilter aria-hidden className="size-5" />
+              {filtered && <span aria-hidden className="bg-primary absolute top-1.5 right-1.5 size-2 rounded-full" />}
+            </Button>
+            <Button variant="ghost" size="icon" className={iconButton} onClick={() => setSetting(true)}
+              aria-label={t('inbox.settingsOpen')} title={t('inbox.settingsOpen')} data-testid="inbox-settings-open">
+              <Settings aria-hidden className="size-5" />
+            </Button>
+          </span>
+        )} />
+      <p role="status" className="text-muted-foreground text-sm empty:hidden" data-testid="inbox-read-all-done">
+        {done ? t('inbox.readAllDone') : ''}
+      </p>
+      {all.isError && <p className="text-destructive text-sm" role="alert">{problemText(all.error)}</p>}
+      <Panel open={filtering} onOpenChange={setFiltering} title={t('inbox.filterTitle')} testId="inbox-filters">
+        <form role="search" onSubmit={search} className="relative flex min-w-0">
+          <Label htmlFor={`${id}-q`} className="sr-only">{t('inbox.search')}</Label>
+          <Input id={`${id}-q`} type="search" value={text} maxLength={100} placeholder={t('inbox.search')}
+            className="rounded-full pr-9" data-testid="inbox-search" onChange={(event) => setText(event.target.value)} />
+          <Button type="submit" variant="ghost" size="icon" aria-label={t('inbox.searchButton')}
+            className="absolute inset-y-0 right-0 h-full rounded-full">
+            <Search aria-hidden />
           </Button>
-        </div>
-        <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
-          <Label htmlFor={`${id}-category`} className="sr-only">{t('inbox.show')}</Label>
-          <Select value={filter.category ?? 'all'}
-            onValueChange={(value) => setFilter((current) => ({ ...current,
-              category: value === 'all' ? undefined : value as Category }))}>
-            <SelectTrigger id={`${id}-category`} size="sm" data-testid="inbox-category" aria-label={t('inbox.show')}>
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {(sponsor ? SPONSOR_CATEGORIES : CATEGORIES).map((category) => (
-                <SelectItem key={category} value={category}>{t(`inbox.categories.${category}`)}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <div className="flex items-center gap-2">
-            <Checkbox id={`${id}-unread`} checked={!!filter.unread} data-testid="inbox-unread-only"
-              onCheckedChange={(on) => setFilter((current) => ({ ...current, unread: on === true || undefined }))} />
-            <Label htmlFor={`${id}-unread`} className="font-normal">{t('inbox.unreadOnly')}</Label>
+        </form>
+        {tab === 'inbox' && (
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor={`${id}-category`}>{t('inbox.show')}</Label>
+            <Select value={chosen.category ?? 'all'}
+              onValueChange={(value) => setFilter((current) => ({ ...current,
+                category: value === 'all' ? undefined : value as Category }))}>
+              <SelectTrigger id={`${id}-category`} data-testid="inbox-category" className="w-full">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {(sponsor ? SPONSOR_CATEGORIES : CATEGORIES).map((category) => (
+                  <SelectItem key={category} value={category}>{t(`inbox.categories.${category}`)}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
-          <Popover>
-            <PopoverTrigger asChild>
-              <Button variant={dated ? 'secondary' : 'outline'} size="sm" className="ml-auto max-w-full"
-                data-testid="inbox-dates" data-active={dated || undefined}>
-                <CalendarDays aria-hidden />
-                <span className="truncate">{dated
-                  ? t('inbox.dateRange', { from: filter.from ?? '…', to: filter.to ?? '…' })
-                  : t('inbox.dates')}</span>
-              </Button>
-            </PopoverTrigger>
-            <PopoverContent align="end" className="flex w-auto flex-col gap-3" data-testid="inbox-dates-window">
-              <fieldset className="flex flex-col gap-3">
-                <legend className="mb-1 text-sm font-medium">{t('inbox.dates')}</legend>
-                <div className="grid grid-cols-[auto_1fr] items-center gap-x-3 gap-y-2">
-                  <Label htmlFor={`${id}-from`} className="text-xs">{t('inbox.from')}</Label>
-                  <Input id={`${id}-from`} type="date" className="w-40" value={filter.from ?? ''} data-testid="inbox-from"
-                    onChange={(event) => setFilter((current) => ({ ...current, from: event.target.value || undefined }))} />
-                  <Label htmlFor={`${id}-to`} className="text-xs">{t('inbox.to')}</Label>
-                  <Input id={`${id}-to`} type="date" className="w-40" value={filter.to ?? ''} data-testid="inbox-to"
-                    onChange={(event) => setFilter((current) => ({ ...current, to: event.target.value || undefined }))} />
-                </div>
-              </fieldset>
-              {dated && (
-                <Button variant="ghost" size="sm" className="self-end" data-testid="inbox-dates-clear"
-                  onClick={() => setFilter((current) => ({ ...current, from: undefined, to: undefined }))}>
-                  {t('inbox.clearDates')}
-                </Button>
-              )}
-            </PopoverContent>
-          </Popover>
+        )}
+        <div className="flex items-center gap-2">
+          <Checkbox id={`${id}-unread`} checked={!!chosen.unread} data-testid="inbox-unread-only"
+            onCheckedChange={(on) => setFilter((current) => ({ ...current, unread: on === true || undefined }))} />
+          <Label htmlFor={`${id}-unread`} className="font-normal">{t('inbox.unreadOnly')}</Label>
         </div>
-        <p role="status" className="text-muted-foreground text-sm empty:hidden" data-testid="inbox-read-all-done">
-          {done ? t('inbox.readAllDone') : ''}
-        </p>
-        {all.isError && <p className="text-destructive text-sm" role="alert">{problemText(all.error)}</p>}
-      </div>
+        <fieldset className="flex flex-col gap-2" data-testid="inbox-dates" data-active={dated || undefined}>
+          <legend className="mb-1.5 text-sm font-medium">{t('inbox.dates')}</legend>
+          <div className="grid grid-cols-[auto_1fr] items-center gap-x-3 gap-y-2">
+            <Label htmlFor={`${id}-from`} className="text-xs">{t('inbox.from')}</Label>
+            <Input id={`${id}-from`} type="date" value={chosen.from ?? ''} data-testid="inbox-from"
+              onChange={(event) => setFilter((current) => ({ ...current, from: event.target.value || undefined }))} />
+            <Label htmlFor={`${id}-to`} className="text-xs">{t('inbox.to')}</Label>
+            <Input id={`${id}-to`} type="date" value={chosen.to ?? ''} data-testid="inbox-to"
+              onChange={(event) => setFilter((current) => ({ ...current, to: event.target.value || undefined }))} />
+          </div>
+          {dated && (
+            <Button variant="ghost" size="sm" className="self-end" data-testid="inbox-dates-clear"
+              onClick={() => setFilter((current) => ({ ...current, from: undefined, to: undefined }))}>
+              {t('inbox.clearDates')}
+            </Button>
+          )}
+        </fieldset>
+        <Button className="rounded-full" onClick={() => setFiltering(false)} data-testid="inbox-filters-done">
+          {t('inbox.filtersDone')}
+        </Button>
+      </Panel>
+      <Panel open={setting} onOpenChange={setSetting} title={t('inbox.settingsOpen')} testId="inbox-settings-panel">
+        <Promotions />
+        <Link to={accountPath('mail')} className="text-primary font-medium underline-offset-2 hover:underline"
+          data-testid="inbox-mail-settings">{t('account.titles.mail')}</Link>
+      </Panel>
       {inbox.isPending ? (
         <PageState kind="loading" />
       ) : inbox.isError ? (
@@ -247,8 +316,9 @@ export function InboxPage() {
           description={filtered ? t('inbox.noMatch') : t('inbox.empty')} data-testid="inbox-empty" />
       ) : (
         <>
-          <ul className="flex flex-col gap-2" data-testid="inbox-list">
-            {items.map((item) => <Row key={`${item.itemKind}:${item.itemId}`} item={item} />)}
+          {/* Q113d-1: rows across the column, a divider between them, as the home's posts. */}
+          <ul className="border-border -mx-4 flex flex-col border-t" data-testid="inbox-list">
+            {items.map((item) => <Row key={`${item.itemKind}:${item.itemId}`} item={item} at={now} />)}
           </ul>
           {inbox.hasNextPage && (
             <Button variant="outline" disabled={inbox.isFetchingNextPage} onClick={() => void inbox.fetchNextPage()}>
@@ -257,7 +327,6 @@ export function InboxPage() {
           )}
         </>
       )}
-      <Promotions />
     </section>
   )
 }

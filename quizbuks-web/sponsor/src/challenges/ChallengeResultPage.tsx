@@ -97,7 +97,7 @@ export function ChallengeResultPage({ attemptId }: { attemptId: string }) {
           </AlertDescription>
         </Alert>
       )}
-      <ol className="flex flex-col gap-2" aria-label={t('challenges.questions')}>
+      <ol className="border-border flex flex-col border-t" aria-label={t('challenges.questions')}>
         {data.result.map((row, i) => (
           <QuestionRow key={row.no} result={row} question={byNo.get(row.no)} index={i} />
         ))}

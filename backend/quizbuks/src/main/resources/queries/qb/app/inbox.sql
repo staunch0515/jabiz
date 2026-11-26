@@ -39,6 +39,7 @@ results:
   kind:          { kind: { type: text, maxLength: 30 } }
   sender:        { kind: { type: text, maxLength: 10 } }
   sponsorName:   { from: QbSponsor.company }
+  sponsorAvatar: { from: QbSponsor.avatar }
   title:         { from: QbMessage.title }
   body:          { from: QbMessage.body }
   markdown:      { kind: { type: bool } }
@@ -89,6 +90,8 @@ items AS (
         CAST(m.{{QbMessage.kind}} AS varchar(30)) AS kind,
         CAST(NULL AS varchar(10))                 AS sender,
         CAST(NULL AS varchar(200))                AS sponsor_name,
+        -- Q113d-1: the notification's picture (a sponsor's notice only).
+        CAST(NULL AS uuid)                        AS sponsor_avatar,
         m.{{QbMessage.title}}                     AS title,
         m.{{QbMessage.body}}                      AS body,
         false                                     AS markdown,
@@ -111,6 +114,7 @@ items AS (
         CAST(NULL AS varchar(30)),
         CAST(f.{{QbBroadcastFeed.senderKind}} AS varchar(10)),
         CAST(sp.{{QbSponsor.company}} AS varchar(200)),
+        sp.{{QbSponsor.avatar}},
         f.{{QbBroadcastFeed.title}},
         f.{{QbBroadcastFeed.body}},
         f.{{QbBroadcastFeed.senderKind}} = 'PLATFORM',
@@ -188,6 +192,7 @@ SELECT
     i.kind           AS kind,
     i.sender         AS sender,
     i.sponsor_name   AS sponsorName,
+    i.sponsor_avatar AS sponsorAvatar,
     i.title          AS title,
     i.body           AS body,
     i.markdown       AS markdown,

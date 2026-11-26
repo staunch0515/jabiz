@@ -14,8 +14,8 @@
 
 - **首页**：可以马上答的 Quiz，右上角可以筛选；
 - **搜索**：按名称、发起方或说明中的词搜索 Quiz；
-- **已答**：你答过的 Quiz 和结果；旁边的"待领奖"标签列出还没领取、还要确认的奖品，有数字时表示有奖品在等你；
-- **通知**：收件箱，以及和发起方的对话（有未读时显示数字）；
+- **已答**：三个标签。"全部"是你答过的 Quiz 和结果（可以只看已完成的，右上的放大镜按名称搜索），还要领取或确认的奖品显示在那一行下面的框里；"待领奖"列出还没领取、还要确认的奖品，有数字时表示有奖品在等你；"未完成"是还没答完的，可以接着答；
+- **通知**：三个标签。"全部"是收件箱，"奖励"只列奖励的消息，"对话"是和发起方的对话（有未读时显示数字）。右上三个按钮：全部标为已读、筛选（文字、类型、只看未读、日期）、通知设置（是否显示推广消息，以及邮件通知的设置）；
 - 右下的圆形按钮是**扫一扫**：扫发起方店里的码；到店领奖时，点"出示领奖码"给店员看；
 - 左上的**头像**打开侧边菜单：**我的主页**（学分、待领奖品、证书三个数字，你拥有的东西和设置）、学分、奖品、证书、知识结构图、推荐朋友、设置，下面是发起方账号（是发起方时）、店员柜台（是店员时）、帮助和退出登录。
 
@@ -39,8 +39,8 @@
 
 - **ホーム**：今すぐ答えられるクイズです。右上で絞り込みができます。
 - **検索**：名前、主催者、説明の言葉でクイズを検索します。
-- **回答済み**：答えたクイズとその結果です。隣の「受け取り待ち」タブには、まだ受け取っていない景品や確認が必要な景品が並びます。数字があるときは、景品があなたを待っています。
-- **お知らせ**：受信箱と、主催者との会話です。未読があると数字が出ます。
+- **回答済み**：3 つのタブがあります。「すべて」は答えたクイズとその結果です（完了したものだけも表示でき、右上の虫めがねで名前を検索できます）。受け取りや確認が必要な景品は、その行の下の枠に表示されます。「受け取り待ち」には、まだ受け取っていない景品や確認が必要な景品が並びます。数字があるときは、景品があなたを待っています。「未完了」は答え終わっていないクイズで、続きから答えられます。
+- **お知らせ**：3 つのタブがあります。「すべて」は受信箱、「報酬」は報酬のお知らせだけ、「会話」は主催者との会話です。未読があると数字が出ます。右上の 3 つのボタンは、すべて既読にする、絞り込み（文字、種類、未読のみ、日付）、お知らせの設定（プロモーションを表示するかどうかと、メール通知の設定）です。
 - 右下の丸いボタンは**スキャン**：主催者のお店のコードを読み取ります。お店で景品を受け取るときは「引き換えパスを表示」を押してスタッフに見せます。
 - 左上の**アイコン**でサイドメニューが開きます：**マイページ**（クドス・受け取り待ちの景品・証明書の 3 つの数字と、持っているもの、設定）、クドス、景品、証明書、知識マップ、友だちを紹介、設定。その下に主催者アカウント（主催者のとき）、スタッフカウンター（スタッフのとき）、ヘルプ、ログアウトがあります。
 
@@ -64,8 +64,8 @@
 
 - **Home**: the quizzes you can answer now, with filters at the top right;
 - **Search**: finds quizzes by their name, their Sponsor or a word of their description;
-- **Answered**: the quizzes you answered and their results; the "To collect" tab beside it lists the prizes you have not collected or still have to confirm, and a number means a prize is waiting for you;
-- **Notifications**: your inbox and your conversations with Sponsors (a number shows what is unread);
+- **Answered**: three tabs. "All" is the quizzes you answered and their results (you can show only the finished ones, and the magnifier at the top right searches by name); a prize still to collect or confirm shows in a box under its row. "To collect" lists the prizes you have not collected or still have to confirm, and a number means a prize is waiting for you. "Not finished" is the quizzes you have not finished, to go on with;
+- **Notifications**: three tabs. "All" is your inbox, "Rewards" only the reward messages, "Conversations" your conversations with Sponsors (a number shows what is unread). The three buttons at the top right mark everything as read, filter (text, kind, unread only, dates) and open the notification settings (whether to show promotions, and your email notifications);
 - the round button at the bottom right is **Scan**: it scans a Sponsor's code at their place; to collect a prize in the shop, tap "Show my pass" and show it to the staff;
 - your **picture** at the top left opens the side menu: **My page** (three numbers: Kudos, prizes to collect, certificates; what you have and your settings), Kudos, Prizes, Certificates, Knowledge maps, Refer a friend and Settings, then Sponsor account (for a Sponsor), Staff counter (for staff), Help and Sign out.
 

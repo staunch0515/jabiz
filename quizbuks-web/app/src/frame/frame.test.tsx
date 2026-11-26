@@ -45,6 +45,8 @@ describe('the frame of the signed-in pages (F-F4)', () => {
     const first = await screen.findByTestId('page-tab-inbox')
     first.focus()
     await userEvent.keyboard('{ArrowRight}')
+    expect(screen.getByTestId('page-tab-rewards')).toHaveFocus()
+    await userEvent.keyboard('{ArrowRight}')
     expect(screen.getByTestId('page-tab-conversations')).toHaveFocus()
     await expectAccessible()
   })

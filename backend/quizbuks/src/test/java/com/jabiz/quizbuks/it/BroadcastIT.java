@@ -203,7 +203,9 @@ class BroadcastIT extends InboxItSupport {
         assertThat(itemIds(inbox(taker(taker)))).contains(id);
         assertThat(inbox(taker(taker))).filteredOn(item -> id.equals(item.get("itemId"))).singleElement()
             .satisfies(item -> assertThat(item).containsEntry("sender", "SPONSOR").containsEntry("markdown", false)
-                .containsEntry("publicationId", live.publicationId()).containsEntry("category", "PROMO"));
+                .containsEntry("publicationId", live.publicationId()).containsEntry("category", "PROMO")
+                // Q113d-1: the row's picture is the sponsor's (none set here).
+                .containsKey("sponsorAvatar"));
         assertThat(query("SELECT 1 FROM qb_broadcast_schedule WHERE broadcast_id = ?::uuid", id)).isEmpty();
 
         // Taken back to its draft before its time, and discarded.

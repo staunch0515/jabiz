@@ -10,7 +10,6 @@ import {
   Alert,
   AlertDescription,
   AlertTitle,
-  Badge,
   Button,
   Dialog,
   DialogContent,
@@ -22,6 +21,7 @@ import {
   notify,
   PageState,
   Textarea,
+  cn,
 } from '@jabiz/ui'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Banknote, CircleCheck, Clock, Copy, ExternalLink, Gift, Hourglass, ListChecks, Ticket, Trophy }
@@ -43,6 +43,8 @@ import { confirmCashReward, confirmDigitalPrize, disputeCashReward, disputeDigit
 import { problemText } from '../qb/problems'
 import { Link, Redirect } from '../qb/router'
 import { QuestionRow, SurveyRow } from '../qb/answer/QuestionReview'
+import { AreaHeader } from '../frame/AreaHeader'
+import { SponsorPicture } from '../qb/view/SponsorPicture'
 
 /** How often the page asks again while the server finishes an attempt whose time ran out. */
 export const FINISHING_POLL_MS = 5_000
@@ -512,6 +514,7 @@ export function ResultPage({ attemptId }: { attemptId: string }) {
   // Q60b: one product per question, by its number (the quiz's own, number 0, show on its page).
   const productOf = questionProducts(products.data)
   const name = data.name
+  const sponsorOfResult = publication.data ? publication.data.sponsorCompany ?? publication.data.sponsorName ?? null : null
   // A survey (Q12) has no score to show: complete (every question answered) or not, and what was chosen.
   const survey = data.kind === 'SURVEY'
 
@@ -523,51 +526,68 @@ export function ResultPage({ attemptId }: { attemptId: string }) {
   return (
     <section className="flex flex-col gap-4" aria-labelledby="result-title" data-testid="result">
       <SoundOnce cue={cue} />
-      <header className="flex flex-col gap-1">
-        <h1 id="result-title" className="text-xl font-semibold">{t('result.title')}</h1>
-        {name && <p className="text-muted-foreground" data-testid="result-name">{name}</p>}
-      </header>
+      {/* Q113d-1: the frame's head of a page under "Answered" (the way back, the title). */}
+      <AreaHeader area="history" id="result-title" title={t('result.title')} />
       {automatic && (
         <Alert data-testid="result-automatic">
           <Clock aria-hidden />
           <AlertDescription>{t('result.automatic')}</AlertDescription>
         </Alert>
       )}
-      {survey ? (
-        <div className="flex items-center gap-3 rounded-lg border p-4" data-testid="result-survey"
-          data-complete={outcome.passed ? 'true' : 'false'}>
-          <ListChecks aria-hidden className="size-6 shrink-0" />
-          <p className="font-medium">{outcome.passed ? t('result.surveyDone') : t('result.surveyIncomplete')}</p>
-        </div>
-      ) : (
-      <div className={outcome.passed ? 'bg-accent flex items-center gap-4 rounded-xl border p-4' : 'flex items-center gap-4 rounded-xl border p-4'}>
-        {outcome.passed && <CelebrateArt className="h-20 w-24 shrink-0" />}
-        <p className="flex flex-col">
-          <span className="text-muted-foreground text-sm">{t('result.score')}</span>
-          <span className="text-3xl font-bold tabular-nums" data-testid="result-score">
-            {t('result.scoreOf', { score: outcome.score, full: outcome.fullScore })}
+      {/* Q113d-1 (the prototype's result): who and what, then the score in large figures with passed or not. */}
+      <div className="border-border -mx-4 flex flex-col border-b px-4 pb-4" data-testid="result-summary">
+        <div className="flex items-center gap-2">
+          <SponsorPicture avatar={publication.data?.sponsorAvatar}
+            name={sponsorOfResult ?? name ?? ''} />
+          <span className="flex min-w-0 flex-1 flex-col">
+            {name && <span className="truncate font-bold" data-testid="result-name">{name}</span>}
+            {sponsorOfResult && <span className="text-muted-foreground truncate" data-testid="result-sponsor">{sponsorOfResult}</span>}
           </span>
-          {outcome.passScore !== null && (
-            <span className="text-muted-foreground text-sm" data-testid="result-pass-score">
-              {t('result.passScore', { score: outcome.passScore })}
-            </span>
-          )}
-        </p>
-        <span className="flex-1" />
-        <Badge variant={outcome.passed ? 'success' : 'secondary'} data-testid="result-passed"
-          data-passed={outcome.passed ? 'true' : 'false'}>
-          {outcome.passed ? t('result.passed') : t('result.failed')}
-        </Badge>
+        </div>
+        {survey ? (
+          <div className="mt-4 flex items-center gap-3" data-testid="result-survey"
+            data-complete={outcome.passed ? 'true' : 'false'}>
+            <ListChecks aria-hidden className="size-6 shrink-0" />
+            <p className="font-bold">{outcome.passed ? t('result.surveyDone') : t('result.surveyIncomplete')}</p>
+          </div>
+        ) : (
+          <div className="mt-4 flex items-center gap-3">
+            <p className="flex min-w-0 flex-1 flex-col">
+              <span className="sr-only">{t('result.score')}</span>
+              <span className="flex flex-wrap items-center gap-3">
+                <span className="text-[31px] leading-9 font-extrabold tabular-nums" data-testid="result-score">
+                  {t('result.scoreOf', { score: outcome.score, full: outcome.fullScore })}
+                </span>
+                <span data-testid="result-passed" data-passed={outcome.passed ? 'true' : 'false'}
+                  className={cn('inline-flex h-6 items-center gap-1 rounded-full pr-2.5 pl-1.5 text-[13px] font-bold',
+                    outcome.passed ? 'bg-qb-reward/15 text-qb-reward-foreground' : 'bg-secondary text-secondary-foreground pl-2.5')}>
+                  {outcome.passed && <CircleCheck aria-hidden className="size-4" />}
+                  {outcome.passed ? t('result.passed') : t('result.failed')}
+                </span>
+              </span>
+              {outcome.passScore !== null && (
+                <span className="text-muted-foreground mt-1" data-testid="result-pass-score">
+                  {t('result.passScore', { score: outcome.passScore })}
+                </span>
+              )}
+            </p>
+            {outcome.passed && <CelebrateArt className="h-16 w-20 shrink-0" />}
+          </div>
+        )}
       </div>
-      )}
-      <Reward outcome={outcome} survey={survey} attemptId={attemptId} />
+      {/* The reward in a box of its own (16 px corners), its buttons round, as the prototype's. */}
+      <section aria-label={t('result.rewardLabel')} data-testid="result-reward-box"
+        className="[&>[data-slot=alert]]:rounded-[16px] [&>[data-slot=alert]]:px-4 [&>[data-slot=alert]]:py-3 [&_[data-slot=button]]:rounded-full">
+        <Reward outcome={outcome} survey={survey} attemptId={attemptId} />
+      </section>
       <ResultInstallOffer />
       {outcome.questions.length > 0 && (
-        <section aria-labelledby="result-questions-title" className="flex flex-col gap-2">
-          <h2 id="result-questions-title" className="text-lg font-semibold">
+        <section aria-labelledby="result-questions-title" className="flex flex-col">
+          <h2 id="result-questions-title" className="text-xl font-extrabold">
             {survey ? t('result.surveyAnswers') : t('result.questions')}
           </h2>
-          <ol className="flex flex-col gap-2">
+          {/* Q113d-1: the questions as a list across the column. */}
+          <ol className="border-border -mx-4 mt-3 flex flex-col border-t">
             {outcome.questions.map((result, i) => {
               // Q60b: the Sponsor's product for this question, after its answer is shown.
               const product = productOf.get(result.no)

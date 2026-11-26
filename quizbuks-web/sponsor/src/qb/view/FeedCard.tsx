@@ -48,15 +48,21 @@ export function videoLength(seconds: number | null | undefined): string | null {
   return h > 0 ? `${h}:${String(m).padStart(2, '0')}:${sec}` : `${m}:${sec}`
 }
 
-/** "3d", "5h", "Nov 2": the post's age in the interface's language (`postAge`). */
-function PostAgeText({ startAt, at }: { startAt: string; at: string }) {
+/**
+ * "3d", "5h", "Nov 2": the post's age in the interface's language (`postAge`); also the time of a row of the app's
+ * other lists (Q113d-1: answered, notifications), with the full time as its title.
+ */
+export function PostAgeText({ startAt, at, testId = 'feed-card-age', title }: { startAt: string; at: string
+  testId?: string
+  /** The full time, for whoever points at it. */
+  title?: string }) {
   const { t, i18n } = useTranslation(QBVIEW)
   const age = postAge(startAt, at)
   if (!age) return null
   const text = 'unit' in age ? t(`feed.age.${age.unit}`, { count: age.count })
     : new Intl.DateTimeFormat(i18n.language, { month: 'short', day: 'numeric',
       ...(age.withYear ? { year: 'numeric' } : {}) }).format(age.date)
-  return <time dateTime={startAt} className="shrink-0" data-testid="feed-card-age">{text}</time>
+  return <time dateTime={startAt} title={title} className="shrink-0" data-testid={testId}>{text}</time>
 }
 
 /**

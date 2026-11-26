@@ -111,6 +111,8 @@ const OLD_ROUTES: [string, TakerArea | null][] = [
   ['/verify/sample', null], ['/u/sample', null], ['/s/sample', null],
   // F-F4b's new addresses.
   ['/history/prizes', 'history'], ['/scan/pass', 'scan'], ['/account/blocks', 'me'],
+  // Q113d-1's tabs.
+  ['/history/unfinished', 'history'], ['/inbox/rewards', 'messages'],
 ]
 
 test('every address the app had is still a page, in the area that marks it', async ({ page, request }) => {
@@ -129,6 +131,9 @@ test('every address the app had is still a page, in the area that marks it', asy
       await expect(page.locator('[data-slot="bottom-bar"] [aria-current="page"]'), path).toHaveCount(0)
     } else if (area) await expect(takerArea(page, area), path).toHaveAttribute('aria-current', 'page')
     else await expect(page.getByTestId('bottom-menu'), path).toHaveCount(0)
+    // The session's refresh on loading a page is let finish before the next address: a public page shows at once,
+    // and leaving it mid-refresh (the server rotated the token, the page never kept it) twice in a row signs out.
+    await page.waitForLoadState('networkidle')
   }
 })
 
