@@ -2,7 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState, u
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { api, endSession, refreshSession as refreshTokens, unwrap, type RefreshOptions } from '../api/client'
 import { session } from '../api/session'
-import { loadSessionSettings } from './account'
+import { loadSessionSettings, type EmailLinkSignUp } from './account'
 import { passkeySecondStep, passkeySignIn, type PasskeySignInOptions } from './passkey'
 
 /**
@@ -46,8 +46,12 @@ export interface AuthState {
   verifyWithPasskey(challenge: string): Promise<void>
   /** The return from an identity provider (docs/design/10-security.md section 12): state and code. */
   signInWithProvider(state: string, code: string, binder: string): Promise<SignInStep>
-  /** The token of a mailed sign-in link (decision D54); used once, whatever the answer. */
-  signInWithEmailLink(token: string): Promise<SignInStep>
+  /**
+   * The token of a mailed sign-in link (decision D54); used once, whatever the answer. A link that opens an account at
+   * an entry with one "continue" needs its name first (`signUp` of `checkEmailLink`, decision D84): without one it is
+   * refused (422 `REQUIRED`) and stays unused.
+   */
+  signInWithEmailLink(token: string, signUp?: EmailLinkSignUp): Promise<SignInStep>
   /**
    * A token another platform signed for the person in front of it, such as the session token of a page embedded in a
    * shop's administration (decision D59), at this entry; used once, whatever the answer. Ask the platform for a fresh
@@ -171,8 +175,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   )
 
   const signInWithEmailLink = useCallback(
-    async (token: string): Promise<SignInStep> => {
-      const answer = await unwrap(api.POST('/api/auth/email-link/confirm', { body: { token } }))
+    async (token: string, signUp?: EmailLinkSignUp): Promise<SignInStep> => {
+      const answer = await unwrap(api.POST('/api/auth/email-link/confirm', { body: { token,
+        displayName: signUp?.displayName, locale: signUp?.locale } }))
       if (answer.status === 'MFA_REQUIRED' || answer.status === 'MFA_ENROLLMENT_REQUIRED') {
         return { status: answer.status, challenge: answer.challenge! }
       }

@@ -250,6 +250,29 @@ class SignInEntriesTest {
         return new SignInEntries.Config(accepted, null, null, null, null, null, null, null, true);
     }
 
+    @Test
+    void oneContinueNeedsSignInByLinkAndWarnsWithoutRegistration() {
+        SignInEntries entries = new SignInEntries(Map.of(
+            "app", new SignInEntries.Config(List.of("A"), true, List.of("A"), null, "/app/", null, true, null, null,
+                null, true),
+            "bare", new SignInEntries.Config(List.of("A"), null, null, null, null, null, null, null, null, null, true),
+            "closed", new SignInEntries.Config(List.of("A"), null, null, null, null, null, true, null, null, null,
+                true),
+            "admin", config(List.of("ADMIN"), null, null, null, null)), true, () -> List.of("A", "ADMIN"));
+
+        assertThat(entries.find("app").orElseThrow().unifiedSignIn()).isTrue();
+        assertThat(entries.find("bare")).isEmpty();
+        assertThat(entries.check()).filteredOn(CheckProblem::isError).extracting(CheckProblem::location,
+            CheckProblem::message).containsExactly(org.assertj.core.groups.Tuple.tuple("jabiz.security.entries.bare",
+                "unified-sign-in needs email-link: its \"continue\" mails a link"));
+        assertThat(entries.check()).filteredOn(problem -> !problem.isError()).extracting(CheckProblem::location,
+            CheckProblem::message).contains(org.assertj.core.groups.Tuple.tuple("jabiz.security.entries.closed",
+                "unified-sign-in is on, but self-registration is not: an address nobody has gets nothing"));
+        // Off unless said.
+        assertThat(new SignInEntries(Map.of("plain", emailLink(List.of("A"))), false, null).find("plain")
+            .orElseThrow().unifiedSignIn()).isFalse();
+    }
+
     private static SignInEntries.Config emailLink(List<String> accepted) {
         return new SignInEntries.Config(accepted, null, null, null, null, null, true);
     }

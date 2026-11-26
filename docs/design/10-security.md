@@ -1156,6 +1156,46 @@ class PortalSignUpSwitch implements SignUpGuard {
   `GuardLoadChecksIT`（真实数据视图上的启动检查：未声明的参数、未知字段、没有条件的 global、同名同形的两次声明与不同形；索引警告）、
   `SignUpGuardIT`（示范：商品不存在即拒，在售即放行，停售再拒，其他入口不受影响）、`PlatformCheckIT`（示范的预读走索引，无新警告）。
 
+### 15.19 统一的"继续"：登录与注册同一个入口（阶段 17zz32，决策 D84）
+
+开启了 `unified-sign-in` 的入口只有一个页面、一个"继续"：输入邮箱之后的第二步对任何地址都相同，页面与答复都看不出这个地址有没有账号。
+
+```yaml
+jabiz:
+  security:
+    entries:
+      app:
+        accepted-roles: QB_TAKER
+        self-registration: true
+        registration-roles: QB_TAKER
+        email-link: true
+        unified-sign-in: true        # 缺省 false；须同时开启 email-link
+```
+
+- **启动检查**（`SECURITY`）：开启而未开启 `email-link` 为错误（于是 `admin` 与接受 `*` 的入口也不能开启，同 D54 第 1 条）；开启而不开放注册为警告（新地址什么也收不到，只能登录）。
+  `GET /api/auth/entries/{name}` 增加 `unifiedSignIn`。
+- **第二步**（前端，服务端没有新的登录接口）："继续"即以 `POST /api/auth/email-link` 寄出链接（对任何地址都答 202，§15.11），页面说"请查收邮件"，同一步可"改用密码"：
+  以 `POST /api/auth/login` 用这个邮箱登录（§15.2）。不存在的地址、没有密码的账号与密码错误是同一个 401 `LOGIN_FAILED`，页面同一句话，附"忘记密码"。
+  本设备上次在该入口用密码登录时（只在本机记下方式 `password`，不记地址），"继续"直接到密码一步、不寄信，同一步可"改为寄链接"。
+- **不接受口令注册**：`POST /api/auth/register` 对这个入口答 422 `SIGN_UP_DISABLED`（同不开放注册）。开户只经邮件链接（下条）、OIDC（D39）与外部令牌（D59）。
+  其他入口的注册、"您已有账号"与加入（§15.7）不变。
+- **链接的三种结果**（`SPONSOR_EMAIL_LINK_SEND` 按地址决定寄什么，答复照旧不说）：
+  1. 可信地址上该入口接受的用户：登录链接（同 §15.11）。
+  2. 可信地址上的用户，入口开放注册而他还没有该入口的注册角色：**加入链接**。打开时先问 `SignUpGuard`（途径 `EMAIL_LINK`，带用户编号与预读），
+     再以 `SignUpProcesses.addRoles` 追加注册角色（受保护的权限照旧 422 `PROTECTED_CHANGE_REQUIRES_APPROVAL`，§16），之后登录。这取代该入口上的"您已有账号"邮件。
+     可预占的账号照旧被接管（§15.11）。禁用的用户、守卫拒绝的照旧什么也不寄或在链接处拒绝。
+  3. 无人使用的地址，入口开放注册：**开户链接**。打开后先"完成注册"，见下条。
+- **完成注册**：`POST /api/auth/email-link/check {token}` 是试运行（不使用令牌、不改变任何东西），答 `{signUp}`：为真时页面先请用户填显示名（必填，规则同注册）并显示应用的条款说明，
+  再以 `POST /api/auth/email-link/confirm {token, displayName, locale?}` 开户并登录（已验证、没有密码、入口的注册角色；邮件语言取 `locale`，没有则不设，同注册）。
+  开户链接缺显示名即 422 `REQUIRED`（`field: displayName`），**令牌不消费**；登录与加入链接不需要也不使用这两个值。
+  `check` 只回答令牌的持有人（能读该邮箱的人），与 §15.7 的 `verify-email/check` 相同；限流计 `LINK`。应用邮件中的登录链接（D55）打开到这样的入口时同样先完成注册。
+- **不透露**："继续"、改用密码与重寄的答复与耗时同 §15.11 与 §15.2；地址是新是旧只在链接处（邮件的收件人）才看得出。
+- **限流**：不新增种类。"继续"计 `EMAIL_LINK`（按地址与邮箱，§15.7），密码一步同登录（§4.1，口令哈希的上限 §4.2），`check` 与 `confirm` 计 `LINK`。
+- **前端**（12"登录与账户的积木"）：`SignInForm` 的 `flow="continue"`（入口 `unifiedSignIn` 时才可用）；`MailLinkPage` 的 `email-link` 页在 `signUp` 时显示 `CompleteSignUp`
+  （显示名、`note` 为条款说明、`extra` 插槽）；`@jabiz/client` 的 `checkEmailLink(token)`、`signInWithEmailLink(token, { displayName, locale })`。
+- **测试**：`SignInEntriesTest`（配置与启动检查）、`EmailLinkIT`（三种链接；`check` 不消费；开户缺显示名 422 且链接仍可用；加入经守卫与受保护的授权；注册接口 422；
+  未开启的入口一切照旧）、`SignUpGuardIT`（加入链接的途径与用户编号）、前端 `SignInForm` 与 `MailLinkPage` 的 Vitest 与 axe（亮暗）、`@jabiz/client` 的测试；OpenAPI 快照。
+
 ## 16. 受保护的授权：四眼【决策 D48 第 1 条，阶段 16r】
 
 一个管理员不能独自让某人（包括自己或另一个账号）得到能改权限、能审批、能记账的权限，也不能独自接管持有这类权限的账号。

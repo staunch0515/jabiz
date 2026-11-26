@@ -628,6 +628,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/auth/email-link/check": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["checkEmailLink"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/auth/email-link/confirm": {
         parameters: {
             query?: never;
@@ -2512,7 +2528,12 @@ export interface components {
             priority?: number;
             ruleCode?: string;
         };
+        EmailLinkCheck: {
+            signUp?: boolean;
+        };
         EmailLinkConfirm: {
+            displayName?: string;
+            locale?: string;
             token?: string;
         };
         EmailLinkRequest: {
@@ -2520,6 +2541,9 @@ export interface components {
             entry?: string;
             locale?: string;
             to?: string;
+        };
+        EmailLinkToken: {
+            token?: string;
         };
         EmailRequest: {
             email?: string;
@@ -2549,6 +2573,7 @@ export interface components {
             selfRegistration?: boolean;
             /** @enum {string} */
             sessionPersistence?: "tab" | "device";
+            unifiedSignIn?: boolean;
         };
         EntryRequest: {
             entry?: string;
@@ -4615,6 +4640,30 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+        };
+    };
+    checkEmailLink: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["EmailLinkToken"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EmailLinkCheck"];
+                };
             };
         };
     };

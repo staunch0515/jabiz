@@ -748,8 +748,22 @@
         },
         "type" : "object"
       },
+      "EmailLinkCheck" : {
+        "properties" : {
+          "signUp" : {
+            "type" : "boolean"
+          }
+        },
+        "type" : "object"
+      },
       "EmailLinkConfirm" : {
         "properties" : {
+          "displayName" : {
+            "type" : "string"
+          },
+          "locale" : {
+            "type" : "string"
+          },
           "token" : {
             "type" : "string"
           }
@@ -768,6 +782,14 @@
             "type" : "string"
           },
           "to" : {
+            "type" : "string"
+          }
+        },
+        "type" : "object"
+      },
+      "EmailLinkToken" : {
+        "properties" : {
+          "token" : {
             "type" : "string"
           }
         },
@@ -841,6 +863,9 @@
           "sessionPersistence" : {
             "enum" : [ "tab", "device" ],
             "type" : "string"
+          },
+          "unifiedSignIn" : {
+            "type" : "boolean"
           }
         },
         "type" : "object"
@@ -4898,6 +4923,33 @@
         "responses" : {
           "202" : {
             "description" : "Accepted"
+          }
+        },
+        "tags" : [ "email-link-controller" ]
+      }
+    },
+    "/api/auth/email-link/check" : {
+      "post" : {
+        "operationId" : "checkEmailLink",
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/EmailLinkToken"
+              }
+            }
+          }
+        },
+        "responses" : {
+          "200" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/EmailLinkCheck"
+                }
+              }
+            },
+            "description" : "OK"
           }
         },
         "tags" : [ "email-link-controller" ]
