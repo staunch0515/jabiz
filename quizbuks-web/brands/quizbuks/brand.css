@@ -62,7 +62,7 @@
 
 .dark {
   /* Palette A, dark (Q113e, P11; approved on the prototype 2026-11-26): a neutral near-black without the green, the
-     page and its cards alike as X has them (a popover lifted a step); text 16.5:1, secondary text 6.6:1. The accent is
+     page and its cards alike as X has them (a popover lifted a step); text 16.5:1, secondary text 7.4:1. The accent is
      lightened for the dark (7.5:1) and still only marks the current tab, links and the floating button, with dark
      words on it; the main button turns near-white (`bg-foreground`). The reward's gold fill stays, its text lightens
      (12:1). The dividers and outlines are quiet greys; inputs keep the platform's border (3:1). */
@@ -75,7 +75,8 @@
   --foreground: #e7ecea;
   --card-foreground: #e7ecea;
   --popover-foreground: #e7ecea;
-  --muted-foreground: #8b9893;
+  /* A step lighter than the prototype's #8b9893: 4.9:1 also on an outlined button's tinted fill (#303134). */
+  --muted-foreground: #95a29d;
   --border: #22282a;
   --sidebar-border: #22282a;
   --qb-outline: #3a4240;
