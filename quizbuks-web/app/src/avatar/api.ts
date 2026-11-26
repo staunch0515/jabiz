@@ -1,15 +1,11 @@
 import { api, runProcess, unwrap } from '@jabiz/client'
+import { AVATAR } from './ids'
 import presets from './presets.json'
 
 /*
  * A taker's own avatar (Q114a, `avatar.AvatarProcesses`, docs/quizbuks/plans/impl/Q114.md): read from the caller's
  * own dataset (no row: the initial), chosen with `QB_AVATAR_SET`. Only the taker sees it.
  */
-export const AVATAR = {
-  set: 'QB_AVATAR_SET',
-  mine: 'urn:jabiz:dataset:me:QbTakerAvatar',
-} as const
-
 /** The query key of the caller's avatar, which every avatar of the frame reads. */
 export const AVATAR_QUERY = ['qb', 'avatar'] as const
 

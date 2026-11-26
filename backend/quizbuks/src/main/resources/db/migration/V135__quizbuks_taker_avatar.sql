@@ -7,6 +7,6 @@ CREATE TABLE qb_taker_avatar (
     preset    varchar(10),
     edited_at timestamptz  NOT NULL,
     version   bigint       NOT NULL,
-    -- A preset exactly when the kind is one.
+    -- A preset exactly when the kind is one. The kinds are AvatarProcesses.Kind's: Q114b's PHOTO changes both.
     CONSTRAINT ck_qb_taker_avatar_preset CHECK ((kind = 'PRESET') = (preset IS NOT NULL))
 );
