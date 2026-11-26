@@ -4,10 +4,10 @@ import { countProductClick } from '../share/counting'
 import { ProductCards } from '../qb/view/ProductCards'
 import { QBVIEW } from '../qb/view/messages'
 import { i18n, useAuth } from '@jabiz/client'
-import { Alert, AlertDescription, Button, ConfirmDialog, PageState } from '@jabiz/ui'
+import { Alert, AlertDescription, Button, ConfirmDialog, PageState, cn } from '@jabiz/ui'
 import { keepPreviousData, useQuery } from '@tanstack/react-query'
 import { MailWarning, Play, UserRoundSearch } from 'lucide-react'
-import { useEffect, useLayoutEffect, useRef, useState, type RefObject } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type RefObject } from 'react'
 import { useTranslation } from 'react-i18next'
 import { APP } from '../messages'
 import { playProblemText } from '../play/busy'
@@ -28,7 +28,9 @@ import { VideoSlot } from '../video/stage'
 import { StartPageExposure } from '../exposure/ExposureWatch'
 import { queueReport } from '../exposure/reporter'
 import { clock, satisfied, shortfallSec, toInput, usePlayback } from '../video/playback'
-import { CONTENT_TABS, PublicationContent, useDuration, type ContentTab, type ContentTabs } from '../qb/view/PublicationContent'
+import { CONTENT_TABS, FORMER_TABS, PublicationContent, useDuration, type ContentTab, type ContentTabs } from '../qb/view/PublicationContent'
+import { useChromeOffset } from '../frame/Header'
+import { chromeOpacity } from '../frame/scrollChrome'
 import { formatKudos } from '../qb/kudos'
 import { readWallet, transferable, WALLET_QUERY } from '../wallet/api'
 import { ReferralPanel } from '../referral/ReferralPanel'
@@ -44,6 +46,12 @@ export function minutesUntil(time: string | null, now: number = Date.now()): num
   const end = time ? Date.parse(time) : NaN
   return Number.isFinite(end) ? Math.max(0, Math.ceil((end - now) / 60_000)) : 0
 }
+
+/**
+ * The start bar's button (Q113 §9.1 "详情页", the prototype's 答题详情: x.com's main action, a near-black pill at the
+ * right of the bar, its hint at the left).
+ */
+const PILL = 'bg-foreground text-background hover:bg-foreground/90 h-9 shrink-0 rounded-full px-4 text-[15px] font-bold'
 
 /**
  * Q88b (D-Q88-10, D-Q88-16): the start of a quiz charging an entry fee. It is paid from the Kudos that can be
@@ -73,7 +81,7 @@ function EntryFeeStart({ fee, disabled, busy, describedBy, onStart }: { fee: num
         : t('detail.entryFeeConfirmText', { fee: formatKudos(fee), available: formatKudos(usable) })}
       confirmLabel={t('detail.entryFeePay', { fee: formatKudos(fee) })} onConfirm={onStart}
       trigger={
-        <Button size="lg" className="w-full" disabled={disabled || wallet.isPending} aria-busy={busy || undefined}
+        <Button className={PILL} disabled={disabled || wallet.isPending} aria-busy={busy || undefined}
           aria-describedby={describedBy} data-testid="detail-start" data-entry-fee={fee}>
           <Play aria-hidden />
           {t('detail.startWithFee', { fee: formatKudos(fee) })}
@@ -113,12 +121,12 @@ function Action({ publication, onLanguage }: { publication: PublicationView; onL
   let action
   if (mine && !inProgress) {
     action = (
-      <>
-        <p className="text-muted-foreground text-sm" data-testid="detail-answered">{t('detail.answered')}</p>
-        <Button asChild size="lg" variant="outline" className="w-full">
+      <div className="flex items-center gap-3">
+        <p className="text-muted-foreground min-w-0 flex-1 text-[13px] leading-4" data-testid="detail-answered">{t('detail.answered')}</p>
+        <Button asChild variant="outline" className="h-9 shrink-0 rounded-full px-4 text-[15px] font-bold">
           <Link to={`/result/${mine}`} data-testid="detail-result">{t('detail.seeResult')}</Link>
         </Button>
-      </>
+      </div>
     )
   } else if (!emailVerified) {
     action = (
@@ -148,11 +156,15 @@ function Action({ publication, onLanguage }: { publication: PublicationView; onL
             <span className="text-muted-foreground basis-full text-xs">{t('detail.languageFixed')}</span>
           </div>
         )}
-        <p className="text-muted-foreground text-sm" id="detail-start-hint">
+        {/* The bar of the prototype: what to know before starting at the left (the timer, the video still to watch), the
+            button at the right. */}
+        <div className="flex items-center gap-3">
+        <div className="flex min-w-0 flex-1 flex-col gap-0.5 text-[13px] leading-4">
+        <p className="text-muted-foreground" id="detail-start-hint">
           {inProgress ? t('detail.continueHint') : t('detail.startHint', { time: duration(publication.timeLimitSec) })}
         </p>
         {watching && !noPlayer && (
-          <p className="text-sm" id="detail-watch-hint" role="status" aria-live="polite" data-testid="detail-watch"
+          <p id="detail-watch-hint" role="status" aria-live="polite" data-testid="detail-watch"
             data-watched={watched || undefined} data-playback={playback.status ?? undefined}>
             {playback.status === 'UNKNOWN' ? t('detail.playbackUnknown')
               : watched ? t('detail.watched')
@@ -162,12 +174,13 @@ function Action({ publication, onLanguage }: { publication: PublicationView; onL
                   : t('detail.watchToEnd')}
           </p>
         )}
+        </div>
         {!inProgress && fee > 0 ? (
           <EntryFeeStart fee={fee} disabled={start.isPending || !watched} busy={start.isPending}
             describedBy={watching && !noPlayer ? 'detail-start-hint detail-watch-hint' : 'detail-start-hint'}
             onStart={begin} />
         ) : (
-          <Button size="lg" className="w-full" disabled={start.isPending || !watched} aria-busy={start.isPending || undefined}
+          <Button className={PILL} disabled={start.isPending || !watched} aria-busy={start.isPending || undefined}
             aria-describedby={watching && !noPlayer ? 'detail-start-hint detail-watch-hint' : 'detail-start-hint'}
             data-testid="detail-start" onClick={begin}>
             <Play aria-hidden />
@@ -176,6 +189,7 @@ function Action({ publication, onLanguage }: { publication: PublicationView; onL
               : t('detail.start')}
           </Button>
         )}
+        </div>
       </>
     )
   } else if (!publication.matched) {
@@ -193,7 +207,7 @@ function Action({ publication, onLanguage }: { publication: PublicationView; onL
     )
   } else {
     action = (
-      <Button size="lg" className="w-full" disabled data-testid="detail-unavailable">{t('detail.unavailable')}</Button>
+      <Button className={cn(PILL, 'self-end')} disabled data-testid="detail-unavailable">{t('detail.unavailable')}</Button>
     )
   }
   return (
@@ -211,10 +225,13 @@ function Action({ publication, onLanguage }: { publication: PublicationView; onL
   )
 }
 
-/** The tab an address asks for (`?tab=`); the introduction when none or an unknown one. */
-function tabOf(search: string): ContentTab {
-  const asked = new URLSearchParams(search).get('tab')
-  return CONTENT_TABS.find((tab) => tab === asked) ?? 'about'
+/**
+ * The tab an address asks for (`?tab=`): the materials when none or an unknown one; a tab of before (F-F4c: `about`,
+ * `reward`) opens the one its content is under now (Q113b-2), so old links and bookmarks still lead there.
+ */
+export function tabOf(search: string): ContentTab {
+  const asked = new URLSearchParams(search).get('tab') ?? ''
+  return CONTENT_TABS.find((tab) => tab === asked) ?? FORMER_TABS[asked] ?? 'materials'
 }
 
 /**
@@ -282,12 +299,13 @@ export function PublicationPage({ publicationId, country }: { publicationId: str
   const tab = tabOf(location.search)
   const tabPath = (to: ContentTab) => {
     const query = new URLSearchParams(location.search)
-    if (to === 'about') query.delete('tab')
+    if (to === 'materials') query.delete('tab')
     else query.set('tab', to)
     const text = query.toString()
     return text ? `${location.path}?${text}` : location.path
   }
   const startBar = useRef<HTMLDivElement>(null)
+  const dim = chromeOpacity(useChromeOffset())
   useStartBarClearance(startBar, !!publication.data)
 
   // The funnel's first view; a failure (a banned caller, a publication gone) changes nothing on the page.
@@ -351,6 +369,7 @@ export function PublicationPage({ publicationId, country }: { publicationId: str
   const productList = quizProducts(products.data)
   // F-F4c: what only the app has goes under the tab it belongs to (F-F4 section 2.5).
   const extra: ContentTabs['extra'] = {
+    // At the end of the reward, under the rules (Q113b-2: the tab "Reward" of before).
     reward: <ReferralPanel publication={p} />,
     materials: productList.length > 0 || p.sponsorHandle ? (
       <>
@@ -377,7 +396,7 @@ export function PublicationPage({ publicationId, country }: { publicationId: str
       </div>),
   }
   return (
-    <article className="flex flex-col gap-3" aria-labelledby="detail-title" data-testid="detail">
+    <article className="flex flex-col gap-3 pt-3" aria-labelledby="detail-title" data-testid="detail">
       {/* F-S8: blocked after starting it: the attempt stays reachable (its result, or the rest of its time). */}
       {blocks.length > 0 && <BlockedNotice item={p} blocks={blocks} />}
       {/* Q65: the home's player carries on here, its sound on from the tap that opened the page; a viewer who
@@ -390,18 +409,19 @@ export function PublicationPage({ publicationId, country }: { publicationId: str
             {trackable(player)
               ? <VideoSlot id={`page:${p.publicationId}`} player={player} title={title} mode="page"
                 publicationId={p.publicationId}
-                className="bg-muted relative aspect-video w-full sm:border" />
+                className="bg-muted relative aspect-video w-full" />
               // Q99b: another site's player is the page's own (the app cannot hand it the sound) and starts the same
               // way.
-              : <VideoPlayer player={player} title={title} autoplay className="bg-muted aspect-video w-full overflow-hidden sm:border" />}
+              : <VideoPlayer player={player} title={title} autoplay className="bg-muted absolute inset-0 size-full overflow-hidden" />}
           </StartPageExposure>
         )}
         tabs={{ current: tab, path: tabPath, extra, renderLink: (item, props) => (
           <FrameLink to={item.path} replace {...props} />) }} />
       {/* F-F4c: the start stays at the foot of the screen (above the bottom menu of a phone) while the page scrolls;
           at the end of the page it sits in the flow, so the last line is never under it. */}
-      <div ref={startBar} data-testid="detail-start-bar"
-        className="bg-background sticky bottom-[calc(var(--bottom-bar-height)+env(safe-area-inset-bottom))] z-10 -mx-4 border-t px-4 py-3 md:bottom-0">
+      {/* §9.1a: on a phone it fades with the bottom menu as the page scrolls, and stays usable. */}
+      <div ref={startBar} data-testid="detail-start-bar" style={{ '--start-bar-dim': dim } as CSSProperties}
+        className="bg-background sticky bottom-[calc(var(--bottom-bar-height)+env(safe-area-inset-bottom))] z-10 -mx-4 border-t px-4 py-3 opacity-(--start-bar-dim) transition-opacity duration-170 ease-linear md:bottom-0 md:opacity-100">
         <Action publication={p} onLanguage={setChosen} />
       </div>
     </article>

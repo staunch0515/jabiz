@@ -89,8 +89,8 @@ async function choose(page: Page, text: string) {
   await saved
 }
 
-/** F-F4c: the publication's page in four tabs (`?tab=`), the start fixed above the bottom menu and clear of the content. */
-test('a publication opens on its introduction, has the rules, reward and materials under tabs, and keeps the start in view', async ({
+/** Q113b-2: the publication's page in two tabs (`?tab=`), the start fixed above the bottom menu and clear of the content. */
+test('a publication opens as a post with its materials, has the rules and reward under the other tab, and keeps the start in view', async ({
   page,
   request,
 }) => {
@@ -102,20 +102,22 @@ test('a publication opens on its introduction, has the rules, reward and materia
   await signIn(page, '/taker/', me.email)
   await expect(page.getByTestId('home')).toBeVisible()
   await openFromFeed(page, seeded.name)
-  await expect(page.getByTestId('detail-tabs')).toHaveAttribute('data-tab', 'about')
+  // Q113b-2: the materials first (no tab in the address), the rules with the reward under them.
+  await expect(page.getByTestId('detail-tabs')).toHaveAttribute('data-tab', 'materials')
   const start = page.getByTestId('detail-start')
   const bar = page.getByTestId('bottom-bar-home')
-  for (const tab of ['about', 'reward', 'materials', 'rules']) {
+  for (const tab of ['rules', 'materials']) {
     await page.getByTestId(`page-tab-${tab}`).click()
     await expect(page.getByTestId('detail-tabs')).toHaveAttribute('data-tab', tab)
-    await expect(page).toHaveURL(tab === 'about' ? /\/p\/[^?]+$/ : new RegExp(`\\?tab=${tab}$`))
+    await expect(page).toHaveURL(tab === 'materials' ? /\/p\/[^?]+$/ : new RegExp(`\\?tab=${tab}$`))
     // The start stays on the screen, above the bottom menu.
     await expect(start).toBeInViewport()
     const startBox = (await start.boundingBox())!
     const barBox = (await bar.boundingBox())!
     expect(startBox.y + startBox.height, `${tab}: the start is above the bottom menu`).toBeLessThanOrEqual(barBox.y + 1)
   }
-  // At the end of the page the last line of the tab is above the start, not under it.
+  // At the end of the page the last line of the rules is above the start, not under it.
+  await page.getByTestId('page-tab-rules').click()
   await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight))
   const last = (await page.getByTestId('detail-footer').boundingBox())!
   expect(last.y + last.height).toBeLessThanOrEqual((await start.boundingBox())!.y + 1)
@@ -143,10 +145,9 @@ for (const appearance of ['light', 'dark'] as const) {
     await expect(page.getByTestId('home')).toBeVisible()
     await openFromFeed(page, seeded.name)
     await expectAccessible(page, at('app feed'))
-    // F-F4c: the page opens on its introduction; the materials (Q34: a row each) are under their tab: the article
-    // opens on a sheet as Markdown, a link in a new tab; the tiers in Kudos are under the reward tab.
-    await expect(page.getByTestId('detail-tabs')).toHaveAttribute('data-tab', 'about')
-    await page.getByTestId('page-tab-materials').click()
+    // Q113b-2: the page opens on its materials (a row each): the article opens on a sheet as Markdown, a link in a
+    // new tab; the tiers in Kudos are under the rules.
+    await expect(page.getByTestId('detail-tabs')).toHaveAttribute('data-tab', 'materials')
     await page.getByTestId('materials').locator('[data-kind="ARTICLE"]').getByTestId('material-open').click()
     const sheet = page.getByTestId('material-sheet')
     await expect(sheet.locator('strong')).toHaveText('the capital')
@@ -154,7 +155,7 @@ for (const appearance of ['light', 'dark'] as const) {
     await page.keyboard.press('Escape')
     await expect(sheet).toHaveCount(0)
     await expect(page.getByTestId('material-link')).toHaveAttribute('target', '_blank')
-    await page.getByTestId('page-tab-reward').click()
+    await page.getByTestId('page-tab-rules').click()
     await expect(page.getByTestId('detail-tiers')).toContainText(`${seeded.reward.toLocaleString('en-US')} Kudos`)
     await expect(page.getByTestId('detail-tiers')).not.toContainText('JPY')
     await expectAccessible(page, at('app publication'))

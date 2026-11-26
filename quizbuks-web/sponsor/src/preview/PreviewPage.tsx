@@ -80,7 +80,7 @@ function Screens({ preview }: { preview: Preview }) {
   const { t } = useTranslation(SPONSOR)
   const [screen, setScreen] = useState<Screen>('page')
   // F-F3c: the page in the tabs the App has; the preview has no address per tab, so they are buttons.
-  const [tab, setTab] = useState<ContentTab>('about')
+  const [tab, setTab] = useState<ContentTab>('materials')
   const tabs: ContentTabs = {
     current: tab,
     path: (key) => `#${key}`,

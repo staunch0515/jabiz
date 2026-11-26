@@ -462,17 +462,16 @@ describe('the preview (Q34b)', () => {
     // The quiz page first: the taker app's own layout, from the version's snapshot and the sponsor's profile.
     expect(within(frame).getByTestId('detail-quiz-title')).toHaveTextContent('Coffee basics')
     expect(within(frame).getByTestId('detail-sponsor')).toHaveTextContent('Acme')
-    // F-F3c: the page in the App's tabs (about first): the introduction, then the reward and the materials.
+    // Q113b-2: the App's post detail: the introduction is the post's text, then the two tabs (the materials first;
+    // the rules with the reward under them).
     expect(within(frame).getByText('easy').tagName).toBe('STRONG')
-    expect(within(frame).getByTestId('page-tab-about')).toHaveAttribute('aria-current', 'page')
-    await userEvent.click(within(frame).getByTestId('page-tab-reward'))
-    expect(within(frame).getByTestId('detail-prize')).toHaveTextContent('A free espresso')
-    expect(within(frame).getByTestId('page-tab-reward')).toHaveAttribute('aria-current', 'page')
-    expect(within(frame).queryByTestId('detail-intro')).toBeNull()
-    await userEvent.click(within(frame).getByTestId('page-tab-materials'))
+    expect(within(frame).getByTestId('page-tab-materials')).toHaveAttribute('aria-current', 'page')
     expect(within(frame).getByTestId('material-title')).toHaveTextContent('Bean guide')
     await userEvent.click(within(frame).getByTestId('page-tab-rules'))
+    expect(within(frame).getByTestId('page-tab-rules')).toHaveAttribute('aria-current', 'page')
     expect(within(frame).getByTestId('detail-rules')).toHaveTextContent('Time limit')
+    expect(within(frame).getByTestId('detail-prize')).toHaveTextContent('A free espresso')
+    expect(within(frame).getByTestId('detail-intro')).toBeInTheDocument()
     expect(within(frame).getByTestId('preview-start')).toBeDisabled()
     await expectAccessible()
     // The home's card leads nowhere here.

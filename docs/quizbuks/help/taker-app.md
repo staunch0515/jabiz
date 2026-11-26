@@ -5,7 +5,7 @@
 
 - 名字（写进文案的是现在的叫法，改界面文字时同步改这里）：底部四项（只有图标）首页 / 搜索 / 已答 / 通知（日文 ホーム / 検索 / 回答済み / お知らせ；英文 Home / Search / Answered / Notifications）；右下的圆形按钮 扫一扫 / スキャン / Scan；左上头像打开的侧边菜单中第一项 我的 / マイページ / Me；学者在柜台出示的码：领奖码 / 引き換えパス / pass。
 - 平台原则（写进文案）：所有旧的链接、书签与邮件里的地址照常可用；没有功能被删除。
-- 名字（Quiz 页的标签，F-F4c）：说明 / 奖励 / 资料 / 规则（日文 説明 / 報酬 / 資料 / ルール；英文 About / Reward / Materials / Rules）；底部固定的按钮：开始答题 / Start the quiz。
+- 名字（Quiz 页的标签，Q113b-2 起两个）：资料 / 规则（日文 資料 / ルール；英文 Materials / Rules），奖励在"规则"之下；作者行的按钮：主页 / ページ / Page；底部固定的按钮：开始答题 / Start the quiz。
 - 内部备注（不写进 FAQ）：宽屏时底部菜单变为左侧一列（底部四项加"我的"，扫一扫是其中的黑色按钮），右侧另有搜索与待领奖品；"证书"一个数字是此刻有效的证书个数（F-S5b：节点证书与仍有效的旧证书，撤销了的不算；列表里撤销的照旧列出并标"已收回"），点开是"证书与你的公开页"：每张证书可下载 PDF（第一次下载时签发）、复制核实链接、停用与恢复分享。怎样核实证书见 `knowledge-map.md` 第三部分。
 
 ## 一、给学者（FAQ 的 `audience` = `TAKER`，分类 `ANSWERING`）
@@ -31,9 +31,9 @@
 
 退出登录在侧边菜单（点左上的头像）和"我的"页的最下方。外观在"我的 → 设置 → App 设置 → 外观"，可以选浅色、深色或跟随系统。"扫一扫"是右下的圆形按钮，"我的推荐"在侧边菜单和"我的 → 我拥有的 → 推荐"。你保存的书签、旧邮件里的链接都照常可用。
 
-### 中文 · Quiz 页上的"说明、奖励、资料、规则"各是什么？"开始答题"在哪里？
+### 中文 · Quiz 页上有什么？"资料"和"规则"各是什么？"开始答题"在哪里？
 
-打开一个 Quiz，封面（或视频）、名称和要点在最上面，下面分四个标签：**说明**（介绍和有多少人答过）、**奖励**（奖励怎么发、各分数档能得多少；有推荐奖励时在这里）、**资料**（发起方提供的资料、商品和发起方的主页）、**规则**（题数、合格线、时限、参加费、截止时间，以及比赛规则、举报和屏蔽）。"开始答题"始终固定在屏幕下方（手机上在底部菜单之上），换哪个标签都在，不会盖住内容。分享给别人的链接照旧；想直接给别人看奖励，把地址末尾加上 `?tab=reward` 即可（资料 `materials`、规则 `rules`）。
+打开一个 Quiz，最上面是发起方（点"主页"去发起方的主页），下面是 Quiz 的名称和介绍、视频或封面，然后一行写着发布了多久、多少人已答和截止日期，再下面一行是奖励、题数、时限和合格线。再往下是两个标签：**资料**（发起方提供的资料、商品和发起方的主页）、**规则**（题数、合格线、时限、参加费、截止时间；其下是**奖励**：奖励怎么发、各分数档能得多少、推荐奖励；最后是比赛规则、举报和屏蔽）。"开始答题"始终固定在屏幕下方（手机上在底部菜单之上），换哪个标签都在，不会盖住内容。分享给别人的链接照旧；想直接给别人看规则与奖励，把地址末尾加上 `?tab=rules` 即可（以前的 `?tab=reward` 也照样打开这里）。
 
 ### 日本語 · 下の 4 つのアイコン、右下の丸いボタン、左上のアイコンは、それぞれ何をするところ？
 
@@ -56,9 +56,9 @@
 
 ログアウトはサイドメニュー（左上のアイコンを押します）と「マイページ」の一番下です。外観は「マイページ → 設定 → アプリの設定 → 外観」で、ライト・ダーク・端末に合わせるから選べます。「スキャン」は右下の丸いボタン、「紹介の一覧」はサイドメニューと「マイページ → 持っているもの → 紹介」にあります。保存したブックマークや過去のメールのリンクも、そのまま使えます。
 
-### 日本語 · クイズのページの「説明・報酬・資料・ルール」は何？「クイズを始める」はどこ？
+### 日本語 · クイズのページには何がある？「資料」と「ルール」は何？「クイズを始める」はどこ？
 
-クイズを開くと、表紙（または動画）・名前・要点が一番上にあり、その下が 4 つのタブです。**説明**（紹介と回答した人数）、**報酬**（報酬の支払い方と得点ごとの金額。紹介報酬もここ）、**資料**（主催者の資料・商品・主催者のページ）、**ルール**（問題数・合格点・制限時間・参加費・締め切り、そして公式ルール・通報・ブロック）。「クイズを始める」は画面の下に固定され（スマートフォンでは下のメニューの上）、どのタブでも見え、内容を隠しません。共有されたリンクはそのまま使えます。報酬のタブを直接見せたいときは、アドレスの最後に `?tab=reward`（資料は `materials`、ルールは `rules`）を付けます。
+クイズを開くと、一番上に主催者（「ページ」を押すと主催者のページへ）、その下にクイズの名前と紹介、動画または表紙、続いて公開からの時間・回答した人数・締め切りの行、さらに報酬・問題数・制限時間・合格点の行があります。その下は 2 つのタブです。**資料**（主催者の資料・商品・主催者のページ）、**ルール**（問題数・合格点・制限時間・参加費・締め切り。その下に**報酬**：報酬の支払い方、得点ごとの金額、紹介報酬。最後に公式ルール・通報・ブロック）。「クイズを始める」は画面の下に固定され（スマートフォンでは下のメニューの上）、どのタブでも見え、内容を隠しません。共有されたリンクはそのまま使えます。ルールと報酬を直接見せたいときは、アドレスの最後に `?tab=rules` を付けます（以前の `?tab=reward` もここを開きます）。
 
 ### English · What do the four icons at the bottom, the round button and the picture at the top left do?
 
@@ -81,6 +81,6 @@ In the "To collect" tab of "Answered": prizes to collect at a Sponsor's place, p
 
 Signing out is at the bottom of the side menu (tap your picture at the top left) and of "Me". The appearance is in "Me → Settings → App settings → Appearance": light, dark or following your system. "Scan" is the round button at the bottom right, and "My referrals" is in the side menu and in "Me → What I have → Referrals". Your bookmarks and the links in old mails still work.
 
-### English · What are "About, Reward, Materials and Rules" on a quiz page? Where is "Start the quiz"?
+### English · What is on a quiz page? What are "Materials" and "Rules"? Where is "Start the quiz"?
 
-When you open a quiz, the cover (or video), the name and the key facts are at the top, and four tabs are below: **About** (the introduction and how many people answered), **Reward** (how the reward is paid and what each score earns; a referral reward is here too), **Materials** (the Sponsor's materials, products and page) and **Rules** (the number of questions, pass mark, time limit, entry fee and deadline, plus the official rules, reporting and blocking). "Start the quiz" stays at the bottom of the screen (above the bottom menu on a phone) on every tab and never covers the content. Shared links work as before; to point someone straight to the reward, add `?tab=reward` to the address (`materials`, `rules`).
+When you open a quiz, the Sponsor is at the top (tap "Page" for their page), then the quiz's name and introduction, its video or cover, a line with how long ago it went up, how many answered and when it ends, and a row with the reward, the number of questions, the time limit and the pass mark. Below are two tabs: **Materials** (the Sponsor's materials, products and page) and **Rules** (the number of questions, pass mark, time limit, entry fee and deadline; under them the **Reward**: how it is paid, what each score earns and any referral reward; last the official rules, reporting and blocking). "Start the quiz" stays at the bottom of the screen (above the bottom menu on a phone) on every tab and never covers the content. Shared links work as before; to point someone straight to the rules and the reward, add `?tab=rules` to the address (the old `?tab=reward` opens it too).

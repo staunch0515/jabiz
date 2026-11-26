@@ -94,8 +94,8 @@ for (const appearance of ['light', 'dark'] as const) {
     await expect(card.getByTestId('feed-card-survey')).toHaveText('Survey')
     await expect(card.getByTestId('feed-card-reward')).toContainText('for answering')
     await card.getByTestId('feed-card-link').click()
-    // F-F4c: the reward's details, the survey's among them, are under the reward tab.
-    await page.getByTestId('page-tab-reward').click()
+    // Q113b-2: the reward's details, the survey's among them, are under the rules.
+    await page.getByTestId('page-tab-rules').click()
     await expect(page.getByTestId('detail-survey')).toBeVisible()
     await expect(page.getByTestId('detail-tiers')).toHaveCount(0)
     await expectAccessible(page, at('app survey'))
