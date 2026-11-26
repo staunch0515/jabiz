@@ -57,6 +57,9 @@ jabiz:
         require-verified-email: ${JABIZ_PORTAL_REQUIRE_VERIFIED_EMAIL:true}
         # Signing in by a mailed link, offered above the password on the portal's sign-in page (decision D54; phase 17m).
         email-link: ${JABIZ_PORTAL_EMAIL_LINK:true}
+        # One "continue" for signing in and signing up (decision D84; phase 17zz32): off in the demo, where the portal's
+        # tabs and password registration are shown; JABIZ_PORTAL_UNIFIED_SIGN_IN=true shows the other way.
+        unified-sign-in: ${JABIZ_PORTAL_UNIFIED_SIGN_IN:false}
         # Passkeys as a quicker way in for existing customers (decision D71): a button on the sign-in page and a block on
         # the account page. Needs jabiz.security.passkeys below.
         passkeys: ${JABIZ_PORTAL_PASSKEYS:true}

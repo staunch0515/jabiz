@@ -87,7 +87,7 @@ public class SecurityConfig {
         ServerWebExchangeMatchers.pathMatchers(HttpMethod.POST, InvitationController.CONFIRM),
         // Signing in with a mailed link (decision D54): rate limited, answered alike for every address.
         ServerWebExchangeMatchers.pathMatchers(HttpMethod.POST, EmailLinkController.REQUEST,
-            EmailLinkController.CONFIRM),
+            EmailLinkController.CONFIRM, EmailLinkController.CHECK),
         // Asking for the deletion of an account by a mailed link (section 17.5): rate limited, answered alike for every
         // address; the link's token is the credential.
         ServerWebExchangeMatchers.pathMatchers(HttpMethod.POST, AccountDeletionController.REQUEST,

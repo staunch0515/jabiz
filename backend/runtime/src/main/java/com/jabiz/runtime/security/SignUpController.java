@@ -132,9 +132,11 @@ class SignUpController {
      * @param environment        the system the pages run on ({@code jabiz.web.environment}, phase 16zd):
      *                           {@code production}, or a test system's name, which every page shows
      * @param passkeys           whether users sign in here with passkeys (decision D71)
+     * @param unifiedSignIn      whether signing in and signing up are one "continue" here (decision D84)
      */
     record EntryInfo(String name, boolean selfRegistration, boolean requireVerifiedEmail, String appPath,
-        SignInEntries.Persistence sessionPersistence, boolean emailLink, String environment, boolean passkeys) {}
+        SignInEntries.Persistence sessionPersistence, boolean emailLink, String environment, boolean passkeys,
+        boolean unifiedSignIn) {}
 
     private final ProcessExecutor processes;
     private final SignInEntries entries;
@@ -181,7 +183,10 @@ class SignUpController {
         this.accountJoin = accountJoin;
     }
 
-    /** 202 whether or not the address is in use; 422 {@code SIGN_UP_DISABLED} for an entry without registration. */
+    /**
+     * 202 whether or not the address is in use; 422 {@code SIGN_UP_DISABLED} for an entry without registration, or
+     * one whose "continue" opens accounts by link only (decision D84).
+     */
     @PostMapping(REGISTER)
     @ResponseStatus(HttpStatus.ACCEPTED)
     Mono<ResponseEntity<Void>> register(@RequestBody(required = false) RegisterRequest request,
@@ -189,7 +194,8 @@ class SignUpController {
         return Mono.defer(() -> {
             limits.client(SignUpRateLimits.Kind.REGISTER, clients.clientOf(http));
             RegisterRequest body = request == null ? new RegisterRequest(null, null, null, null, null) : request;
-            if (entries.find(body.entry()).filter(SignInEntries.Entry::selfRegistration).isEmpty()) {
+            if (entries.find(body.entry()).filter(entry -> entry.selfRegistration() && !entry.unifiedSignIn())
+                .isEmpty()) {
                 return Mono.error(new SignUpDisabledException("Registration is not open at entry " + body.entry()));
             }
             List<Violation> problems = new ArrayList<>(emailProblems(body.email()));
@@ -375,7 +381,7 @@ class SignUpController {
         return Mono.fromCallable(() -> entries.find(name)
             .map(entry -> new EntryInfo(entry.name(), entry.selfRegistration(), entry.requireVerifiedEmail(),
                 entry.appPath(), entry.session().persistence(), entry.emailLink(), web.environment(),
-                entry.passkeys()))
+                entry.passkeys(), entry.unifiedSignIn()))
             .orElseThrow(() -> new ResourceNotFoundException("No sign-in entry " + name)));
     }
 
@@ -420,7 +426,7 @@ class SignUpController {
         return new Violation(field, PlatformErrorCodes.INVALID_VALUE, message, Map.of("field", field));
     }
 
-    private static boolean hasControl(String value) {
+    static boolean hasControl(String value) {
         return value.codePoints().anyMatch(c -> Character.isISOControl(c) || Character.getType(c) == Character.FORMAT);
     }
 

@@ -34,6 +34,8 @@ export {
 export type { MailLinkPageProps, MailLinkPageBase, MailLinkInfo, NewPassword } from './MailLinkPage'
 export { EmailLinkForm, EmailLinkPanel } from './EmailLink'
 export type { EmailLinkFormProps, EmailLinkPanelProps } from './EmailLink'
+export { CompleteSignUp } from './CompleteSignUp'
+export type { CompleteSignUpProps } from './CompleteSignUp'
 export { PasswordResetRequest } from './PasswordResetRequest'
 export type { PasswordResetRequestProps } from './PasswordResetRequest'
 export { MfaCodeStep } from './MfaCodeStep'

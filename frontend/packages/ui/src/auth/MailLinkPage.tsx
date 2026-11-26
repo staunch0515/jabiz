@@ -53,6 +53,12 @@ export interface MailLinkPageBase extends AuthNavigation {
    * frontend; the frontend's navigation (`onNavigate`) or a page load when absent.
    */
   onSignedIn?(path: string): void
+  /**
+   * The application's terms on the last step of signing up by link (`email-link` at an entry with one "continue",
+   * decision D84), and its own fields there (`CompleteSignUp`).
+   */
+  signUpNote?: ReactNode
+  signUpExtra?: ReactNode
 }
 
 export interface MailLinkPageProps extends MailLinkPageBase {

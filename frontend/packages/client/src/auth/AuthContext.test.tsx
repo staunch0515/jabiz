@@ -96,6 +96,13 @@ describe('AuthProvider with a sign-in entry (decision D43)', () => {
     await expect(act(() => result.current.signInWithEmailLink('t2')))
       .resolves.toEqual({ status: 'MFA_REQUIRED', challenge: 'c1' })
     expect(session.accessToken()).toBeNull()
+
+    // A link that opens an account at an entry with one "continue" carries its name (decision D84).
+    const named = server({ me: () => ({ userId: 'u5', entry: 'portal' }) })
+    await expect(act(() => result.current.signInWithEmailLink('t3', { displayName: 'Sora', locale: 'ja' })))
+      .resolves.toEqual({ status: 'SIGNED_IN' })
+    expect(named.find((p) => p.path === '/api/auth/email-link/confirm')?.body)
+      .toEqual({ token: 't3', displayName: 'Sora', locale: 'ja' })
   })
 
   it("signs in with another platform's token at its entry (decision D59)", async () => {

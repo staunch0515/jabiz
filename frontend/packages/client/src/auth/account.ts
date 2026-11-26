@@ -144,6 +144,48 @@ export async function requestEmailLink(email: string, request: EmailLinkRequest 
     locale: request.locale } }))
 }
 
+/** The new account a link to an address nobody has opens at an entry with one "continue" (decision D84). */
+export interface EmailLinkSignUp {
+  /** Required: the name others see. */
+  displayName: string
+  /** Its language (a platform language); the account has none when absent. */
+  locale?: string
+}
+
+/**
+ * What a mailed sign-in link would do, without using it (decision D84): `signUp` when it opens an account that first
+ * needs its name (`signInWithEmailLink(token, { displayName })`). A link that is no good throws `TOKEN_INVALID`; a
+ * sign-up guard's refusal throws `SIGN_UP_REFUSED`, as using it would.
+ */
+export async function checkEmailLink(token: string): Promise<{ signUp: boolean }> {
+  const check = await unwrap(api.POST('/api/auth/email-link/check', { body: { token } }))
+  return { signUp: check.signUp ?? false }
+}
+
+/** How the person signed in last at an entry with one "continue": only the way, never the address (decision D84). */
+export type RememberedSignIn = 'password' | 'link'
+
+const METHOD_KEY = 'jabiz.signInMethod.'
+
+/** The way this device signed in last at the entry, if it remembers one. */
+export function lastSignInMethod(entry: string = session.entry()): RememberedSignIn | null {
+  try {
+    const value = localStorage.getItem(METHOD_KEY + entry)
+    return value === 'password' || value === 'link' ? value : null
+  } catch {
+    return null
+  }
+}
+
+/** Remembers on this device the way it signed in at the entry. */
+export function rememberSignInMethod(method: RememberedSignIn, entry: string = session.entry()): void {
+  try {
+    localStorage.setItem(METHOD_KEY + entry, method)
+  } catch {
+    // Storage refused (private mode): the next "continue" mails a link, as for anyone.
+  }
+}
+
 /**
  * Changes the signed-in user's own password (`POST /api/auth/account/password`, phase 16m; decision D43 item 3): needs
  * the current one, a wrong one counting towards the lock-out. The other sessions end; this one is kept, as its

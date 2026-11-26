@@ -177,7 +177,7 @@ function Routes() {
     return (
       <EntryPages>
         <MailLinkPage {...navigation} page={path.slice('/auth/'.length)} brand={brand} signInPath="/login"
-          passwordResetPath="/password-reset" />
+          passwordResetPath="/password-reset" signUpNote={t('entry.terms')} />
       </EntryPages>
     )
   }
@@ -222,7 +222,9 @@ function Routes() {
             pendingStep = undefined
             navigate(to, { replace: true })
           }} passwordResetPath="/password-reset"
-          signInPath="/login" signUpPath="/signup" tabs emailLink passkey userNameLabel="email" />
+          signInPath="/login" signUpPath="/signup" tabs emailLink passkey userNameLabel="email"
+          // One "continue" where the portal's entry has it (JABIZ_PORTAL_UNIFIED_SIGN_IN; decision D84), else as before.
+          flow="continue" />
       </EntryPages>
     )
   }

@@ -327,8 +327,9 @@ jabizApp {
   17m：`emailLink` 在入口开启了 `email-link` 时把"以邮件链接登录"（`EmailLinkForm`，链接回到 `returnTo`）放在最上面、密码在"或用密码登录"之下，
   `userNameLabel="email"` 把名字一栏写作"邮箱"（服务端照旧接受用户名或邮箱）；17zf-b：`passkey` 在入口收通行密钥（`passkeys`）且浏览器能用时，
   在密码之上给"用通行密钥登录"，名字一栏 `autocomplete="username webauthn"` 并以浏览器的建议（conditional mediation）等待通行密钥（按钮或提交密码先停下它），
-  二次验证码一步与绑定一步各有"改用通行密钥"；在微信、QQ 与安卓网页视图中只说"在浏览器打开"；`auth` 属性的 `signInWithPasskey` / `verifyWithPasskey` 可选；身份提供方始终在最后）、
+  二次验证码一步与绑定一步各有"改用通行密钥"；在微信、QQ 与安卓网页视图中只说"在浏览器打开"；`auth` 属性的 `signInWithPasskey` / `verifyWithPasskey` 可选；身份提供方始终在最后；17zz32：`flow="continue"` 在入口 `unifiedSignIn` 时只有邮箱与"继续"（寄链接后"请查收邮件"，同一步"改用密码"；本机上次用密码时直接到密码一步、可"改为寄链接"），见 10 §15.19）、
   `SignUpForm` + `SignUpSent`（邮箱、两次密码、显示名、邮件语言，应用的附加字段经 `extra` 插槽；202 后一律提示查收邮件并可重发）、
+  `CompleteSignUp`（邮件链接开户前的"完成注册"：显示名、`note` 为条款说明、`extra` 插槽；`MailLinkPage` 的 `email-link` 页在 `check` 答 `signUp` 时显示，17zz32）、
   `MailLinkPage`（按路径末段分派到 `VerifyEmailPanel`、`JoinPanel`、`PasswordResetConfirm`，无令牌的 `password-reset` 为 `PasswordResetRequest`）、
   `MfaCodeStep`、`MfaEnrollment`、`MfaSettings`（本人的两步验证：状态与剩余恢复码数，未绑定时绑定；默认调用 `/api/auth/mfa*`，可经属性替换；`refreshKey` 改变即重读；15c-2，后台安全设置与示范门户共用）、`StepUpProvider`、
   `OidcButtons`（按提供方的 `kind` 画标志，Google 为品牌指南的四色"G"（D44），16f-1；Facebook 与 LINE 的标志与 `layout="icons"`（"其他方式登录"下的一排圆形图标按钮，`SignInForm` 的 `oidcLayout`）见 D61 第 5 条，16zk；`purpose="signUp"` 时写作"其他方式注册"，`SignUpForm` 的 `oidc` 把它放进注册卡片，`note` 是卡片底部的小字，17u）、`OidcCallback`（登录与本人关联共用：按
