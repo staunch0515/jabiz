@@ -11,10 +11,12 @@ import {
   signIn,
   signUp,
   submitSignIn,
+  takerByLink,
   test,
   tokenOf,
   verifiedUser,
-  verifyByMail,
+  adminToken,
+  insert,
 } from './support'
 import { reviewerFor } from './operators'
 
@@ -27,18 +29,23 @@ test.beforeEach(async ({ request }) => {
   await prepareQuizbuks(request)
 })
 
-test('a Taker registers, verifies at the app\'s own page, completes the profile and stays signed in', async ({
-  page,
-  context,
-}) => {
+test('a Taker continues with the address, finishes signing up at the mailed link, completes the profile and stays signed in',
+  async ({ page, context }) => {
   const email = address('taker')
-  await signUp(page, '/taker/', email, 'Mei')
-  // The link leads to the app's own page (/auth/…, decision D43 item 4).
-  await verifyByMail(page, email, '/taker/')
-  await page.getByTestId('auth-continue').click()
-  await expect(page).toHaveURL(/\/login$/)
+  // Q113f-2: one "continue" (platform D84): the address, then a link by mail, whether or not it has an account.
+  await page.goto('/taker/login')
+  await page.getByTestId('continue-email').fill(email)
+  await page.getByTestId('continue-form').locator('button[type="submit"]').click()
+  await expect(page.getByTestId('continue-link-sent')).toContainText(email)
+  // The link leads to the app's own page (/auth/…, decision D43 item 4); a new address gives its name first.
+  const mail = await mailTo(page.request, email, /link/i)
+  const link = linkIn(mail.text, '/auth/email-link')
+  expect(link.pathname).toBe('/taker/auth/email-link')
+  await page.goto(link.pathname + link.search)
+  await expect(page.getByTestId('complete-sign-up-note')).toContainText(/accept these/i)
+  await page.getByTestId('complete-sign-up-name').fill('Mei')
+  await page.getByTestId('complete-sign-up').locator('button[type="submit"]').click()
 
-  await signIn(page, '/taker/', email)
   // Registration's second step: the profile, starting from the sign-up name and the browser's country (en-US).
   await expect(page).toHaveURL(/\/welcome$/)
   await expect(page.getByTestId('profile-name')).toHaveValue('Mei')
@@ -73,9 +80,17 @@ test('a Taker registers, verifies at the app\'s own page, completes the profile 
   await expect(again.getByTestId('login-error')).toBeVisible()
 })
 
-test('a Taker who has not verified the address yet browses the app and is told to verify', async ({ page }) => {
+test('a Taker who has not verified the address yet browses the app and is told to verify', async ({ page, request }) => {
+  // Since Q113f-2 nobody signs up at the app without proving the address; the Takers who registered with a password
+  // before it may not have verified theirs yet. Such an account, made as theirs were: the address as its name, a
+  // password, unverified.
   const email = address('unverified')
-  await signUp(page, '/taker/', email, 'Yui')
+  const admin = await adminToken(request)
+  const created = await run(request, admin, 'SEC_USER_CREATE', { userName: email, displayName: 'Yui', email,
+    password: PASSWORD })
+  const [taker] = await rows(request, admin, 'urn:jabiz:dataset:platform:SecRole',
+    [{ field: 'roleCode', op: 'eq', value: 'QB_TAKER' }], 1)
+  await insert(request, admin, 'urn:jabiz:dataset:platform:SecUserRole', { userId: created.userId, roleId: taker.id })
   await signIn(page, '/taker/', email)
   // Not held at the welcome page: the app lets unverified takers browse (D-Q2-1); every write waits for the address.
   await expect(page.getByTestId('home')).toContainText('Yui')
@@ -88,11 +103,14 @@ test('a Taker who has not verified the address yet browses the app and is told t
 test('a Taker who forgot the password gets a link to the app\'s own page and signs in with a new one', async ({
   page,
 }) => {
-  const email = address('forgot')
-  await signUp(page, '/taker/', email, 'Ken')
-  await verifyByMail(page, email, '/taker/')
+  // Signed up by link (Q113f-2): no password yet; "forgot your password" gives it one.
+  const email = await takerByLink(page.request, 'Ken', address('forgot'))
 
+  // "Forgot your password?" is on the password step of "continue" (Q113f-2).
   await page.goto('/taker/login')
+  await page.getByTestId('continue-email').fill(email)
+  await page.getByTestId('continue-form').locator('button[type="submit"]').click()
+  await page.getByTestId('continue-use-password').click()
   await page.getByTestId('forgot-password').click()
   await expect(page).toHaveURL(/\/password-reset$/)
   await page.getByLabel('E-mail address', { exact: true }).fill(email)
@@ -107,10 +125,13 @@ test('a Taker who forgot the password gets a link to the app\'s own page and sig
   await page.getByRole('button', { name: /password/i }).click()
   await expect(page.getByTestId('auth-continue')).toBeVisible()
 
+  // "Continue" mails a link on a device that never signed in with a password; the password is on the same step.
   await page.goto('/taker/login')
-  await page.getByTestId('login-user-name').fill(email)
-  await page.getByLabel('Password', { exact: true }).fill(fresh)
-  await page.getByRole('button', { name: 'Sign in', exact: true }).click()
+  await page.getByTestId('continue-email').fill(email)
+  await page.getByTestId('continue-form').locator('button[type="submit"]').click()
+  await page.getByTestId('continue-use-password').click()
+  await page.getByTestId('continue-password').fill(fresh)
+  await page.getByTestId('continue-password-step').locator('form button[type="submit"]').click()
   await expect(page).toHaveURL(/\/welcome$/)
 })
 

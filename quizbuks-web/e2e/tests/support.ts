@@ -355,6 +355,7 @@ export async function verifyByMail(page: Page, email: string, base: string) {
  * tests about what comes after). Returns the address; the password is {@link PASSWORD}.
  */
 export async function verifiedUser(request: APIRequestContext, entry: 'app' | 'sponsor', name: string) {
+  if (entry === 'app') return takerWithPassword(request, name)
   const email = address(entry)
   const registered = await request.post('/api/auth/register', {
     data: { email, password: PASSWORD, displayName: name, locale: 'en', entry },
@@ -367,6 +368,35 @@ export async function verifiedUser(request: APIRequestContext, entry: 'app' | 's
   const body = (await check.json()).passwordRequired ? { token, password: PASSWORD } : { token }
   const verified = await request.post('/api/auth/verify-email', { data: body })
   expect(verified.status(), await verified.text()).toBeLessThan(300)
+  return email
+}
+
+/**
+ * A Taker who signed up the one way the app has (Q113f-2; platform D84): "continue" with the address, the mailed link,
+ * and the name on finishing. Verified, without a password. Returns the address.
+ */
+export async function takerByLink(request: APIRequestContext, name: string, email = address('app')) {
+  const asked = await request.post('/api/auth/email-link', { data: { email, entry: 'app', locale: 'en' } })
+  expect(asked.status(), await asked.text()).toBe(202)
+  const mail = await mailTo(request, email, /link/i)
+  const token = linkIn(mail.text, '/auth/email-link').searchParams.get('token')!
+  const opened = await request.post('/api/auth/email-link/confirm', { data: { token, displayName: name, locale: 'en' } })
+  expect(opened.status(), await opened.text()).toBe(200)
+  return email
+}
+
+/**
+ * A Taker who signed up by link ({@link takerByLink}) and then chose a password through "forgot your password": the
+ * tests that sign in on the page use it. Returns the address; the password is {@link PASSWORD}.
+ */
+export async function takerWithPassword(request: APIRequestContext, name: string) {
+  const email = await takerByLink(request, name)
+  const asked = await request.post('/api/auth/password-reset/request', { data: { email, entry: 'app' } })
+  expect(asked.status(), await asked.text()).toBe(202)
+  const mail = await mailTo(request, email, /password/i)
+  const token = linkIn(mail.text, '/auth/password-reset').searchParams.get('token')!
+  const reset = await request.post('/api/auth/password-reset/confirm', { data: { token, password: PASSWORD } })
+  expect(reset.status(), await reset.text()).toBeLessThan(300)
   return email
 }
 
@@ -387,6 +417,22 @@ export async function signIn(page: Page, base: string, email: string) {
  */
 export async function submitSignIn(page: Page, base: string, email: string) {
   await page.goto(`${base}login`)
+  await fillSignIn(page, email)
+}
+
+/** Fills in and sends the sign-in form of the page already open (a sign-in the app led to, `/login?next=…`). */
+export async function fillSignIn(page: Page, email: string) {
+  // The app has one "continue" (Q113f-2): the address, then the password. This device "signed in with a password
+  // last" (only the way is kept, never the address), so no link is mailed, as for a returning Taker.
+  if (await page.getByTestId('continue-email').or(page.getByTestId('login-user-name')).first()
+    .getAttribute('data-testid') === 'continue-email') {
+    await page.evaluate(() => window.localStorage.setItem('jabiz.signInMethod.app', 'password'))
+    await page.getByTestId('continue-email').fill(email)
+    await page.getByTestId('continue-form').locator('button[type="submit"]').click()
+    await page.getByTestId('continue-password').fill(PASSWORD)
+    await page.getByTestId('continue-password-step').locator('form button[type="submit"]').click()
+    return
+  }
   // The app and the console ask for the address (Q50); in Chinese a mailed link comes first, so the fields are found
   // by the password form they belong to, in any interface language.
   const name = page.getByTestId('login-user-name')

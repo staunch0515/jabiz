@@ -26,6 +26,7 @@ import {
   unique,
   verifiedUser, openTakerArea,
   openTakerSettings,
+  address,
 } from './support'
 
 /**
@@ -75,18 +76,24 @@ for (const appearance of ['light', 'dark'] as const) {
       await expect(page.getByTestId('intro')).toHaveAttribute('data-slide', 'earn')
       await expectAccessible(page, at(`app intro slide 2 ${size}`))
       await page.getByTestId('intro-skip').click()
-      await expect(page.getByRole('button', { name: 'Sign in', exact: true })).toBeVisible()
+      // One "continue" for signing in and signing up (Q113f-2).
+      await expect(page.getByRole('button', { name: 'Continue', exact: true })).toBeVisible()
       await page.goto('/taker/login')
-      await expect(page.getByRole('button', { name: 'Sign in', exact: true })).toBeVisible()
+      await expect(page.getByRole('button', { name: 'Continue', exact: true })).toBeVisible()
       if (appearance === 'dark') await expect(page.locator('html')).toHaveClass(/dark/)
       else await expect(page.locator('html')).not.toHaveClass(/dark/)
       // Not configured as production: every page says it is a test system (platform 16zd), the title too.
       await expect(page.getByTestId('environment-badge')).toContainText('Test system, not the production system')
       await expect(page).toHaveTitle(/^\[TEST\] /)
       await expectAccessible(page, at(`app sign-in ${size}`))
-      await page.goto('/taker/signup')
-      await expect(page.getByRole('button', { name: 'Create the account' })).toBeVisible()
-      await expectAccessible(page, at(`app sign-up ${size}`))
+      // Its second step, alike for every address: the link is on its way, the password on the same step.
+      await page.getByTestId('continue-email').fill(address('a11y'))
+      await page.getByTestId('continue-form').locator('button[type="submit"]').click()
+      await expect(page.getByTestId('continue-link-sent')).toBeVisible()
+      await expectAccessible(page, at(`app continue, link sent ${size}`))
+      await page.getByTestId('continue-use-password').click()
+      await expect(page.getByTestId('continue-password')).toBeVisible()
+      await expectAccessible(page, at(`app continue, password ${size}`))
       await page.goto('/taker/password-reset')
       await expect(page.getByLabel('E-mail address', { exact: true })).toBeVisible()
       await expectAccessible(page, at(`app password reset ${size}`))

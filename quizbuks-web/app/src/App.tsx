@@ -59,7 +59,7 @@ import { useSignOut } from './frame/signOut'
 import { PrizesPage } from './pages/PrizesPage'
 import { MyPassesPage } from './pass/MyPassesPage'
 import { pendingRedeem, redeemPath, rememberRedeem } from './redeemReturn'
-import { signInOrder } from './signin'
+import { signInOrder, useUnifiedSignIn } from './signin'
 import { InAppBrowserNotice, useInAppNotice } from './install'
 import { readMyProfile } from './qb/api'
 import { ConsentGate, LegalLink, newQbQueryClient } from './qb/ConsentGate'
@@ -442,6 +442,12 @@ function Routes() {
   useEffect(() => notePage(path, search), [path, search])
   // The name alone: the open look draws the mark itself, beside it on a phone and large on a wide screen.
   const brand = t('brand')
+  // Q113f-2: one "continue" for signing in and signing up where the entry has it (QB_APP_UNIFIED_SIGN_IN).
+  const unified = useUnifiedSignIn()
+  const terms = <span data-testid="signup-terms">
+    {tApp('public.signUpTerms')}{' '}
+    <LegalLink kind="TERMS_APP" />{' · '}<LegalLink kind="PRIVACY" />
+  </span>
   // Every entry page in the template, with the notices that were over the card before (offline, a new version, the
   // way out of another app's browser).
   const frame = (content: ReactNode) => <EntryPages>{content}</EntryPages>
@@ -458,8 +464,9 @@ function Routes() {
   const legacy = legacyTarget(path, search)
   if (legacy) return <Redirect to={legacy} />
   if (MAIL_PAGES.has(path)) {
+    // A new address's link finishes signing up there (Q113f-2): its name, and where the texts are.
     return frame(<MailLinkPage {...navigation} page={path.slice('/auth/'.length)} brand={brand}
-      signInPath="/login" passwordResetPath="/password-reset" />)
+      signInPath="/login" passwordResetPath="/password-reset" signUpNote={terms} />)
   }
   if (path === '/login/oidc') {
     return frame(<OidcCallback brand={brand} fallbackPath={HOME}
@@ -515,14 +522,13 @@ function Routes() {
   // The form, then "look in your mailbox" with a new mail on request; the profile follows the first sign-in.
   // The texts are accepted on the welcome step (Q7-3); signing up says where to read them.
   // Signing up and signing in are two tabs of one page (suggestion ④); each keeps its address and the query.
+  // Q113f-2: with one "continue" signing up is the sign-in page's; the old address leads there, query and all.
   if (path === '/signup') {
+    if (unified === null) return <PageState kind="loading" />
+    if (unified) return <Redirect to={`/login${search}`} />
     return frame(<>
       <SignUpForm {...navigation} brand={brand} signInPath="/login" signUpPath="/signup" tabs
-        oidc={{ returnTo: HOME, layout: 'buttons' }}
-        note={<span data-testid="signup-terms">
-          {tApp('public.signUpTerms')}{' '}
-          <LegalLink kind="TERMS_APP" />{' · '}<LegalLink kind="PRIVACY" />
-        </span>} />
+        oidc={{ returnTo: HOME, layout: 'buttons' }} note={terms} />
     </>)
   }
   if (path === '/login') {
@@ -538,8 +544,11 @@ function Routes() {
       }} passwordResetPath="/password-reset" signInPath="/login" signUpPath="/signup" tabs
       // Q50 and gap 1: in Chinese the mailed link first (Google, Facebook and LINE do not open in mainland China); in
       // Japanese and English the providers first and the mailed link behind a button. The providers as full-width
-      // pills at every width, as on x.com (Q113 §9.4).
-      order={signInOrder} oidcLayout="buttons" emailLink userNameLabel="email" passkey />)
+      // pills at every width, as on x.com (Q113 §9.4). Q113f-2: one "continue" where the entry has it, the mailed
+      // link being its button, the texts under it; the tabs, the link's own button and the password form give way.
+      flow="continue" below={unified ? terms : undefined}
+      order={(language) => signInOrder(language, !!unified)} oidcLayout="buttons" emailLink userNameLabel="email"
+      passkey />)
   }
   // A visitor's first time at the root: the introduction (Q32), remembered on the device; then the sign-in.
   if (!signedIn && path === HOME && !introSeen()) return <IntroPage />

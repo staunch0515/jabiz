@@ -93,7 +93,7 @@ function header({ language, page, content, base }) {
         <a href="/sponsor/login" data-signup="sponsor" target="_blank" rel="noopener" data-testid="signin-sponsor">${esc(content.signIn.sponsor)}</a>
       </div>
       <div class="actions">
-        <a class="button ghost" href="/taker/signup" data-signup="taker">${esc(content.cta.taker)}</a>
+        <a class="button ghost" href="/taker/login" data-signup="taker">${esc(content.cta.taker)}</a>
         <a class="button primary" href="/sponsor/signup" data-signup="sponsor" target="_blank" rel="noopener">${esc(content.cta.sponsor)}</a>
       </div>
     </nav>
@@ -141,7 +141,7 @@ function steps(items, illustrated = false) {
 
 function cta(content) {
   return `<div class="actions">
-    <a class="button primary large" href="/taker/signup" data-signup="taker">${esc(content.cta.takerLong)}</a>
+    <a class="button primary large" href="/taker/login" data-signup="taker">${esc(content.cta.takerLong)}</a>
     <a class="button ghost large" href="/sponsor/signup" data-signup="sponsor" target="_blank" rel="noopener">${esc(content.cta.sponsorLong)}</a>
   </div>`
 }

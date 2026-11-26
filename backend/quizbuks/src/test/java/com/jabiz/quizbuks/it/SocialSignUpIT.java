@@ -38,6 +38,8 @@ import static org.assertj.core.api.Assertions.assertThat;
  * account's own session, keeping the account and its LINE link. An address in use opens nothing.
  */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.MOCK, properties = {
+    // Password registration at the app, as with QB_APP_UNIFIED_SIGN_IN=false (Q113f-2): one "continue" is UnifiedAppSignInIT's.
+    "jabiz.security.entries.app.unified-sign-in=false",
     "jabiz.mail.enabled=true", "jabiz.mail.from=quizbuks@example.com",
     "jabiz.mail.base-url=https://quizbuks.example.com",
     "spring.mail.host=localhost", "spring.mail.port=3051",

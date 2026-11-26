@@ -160,8 +160,9 @@ class InvitationIT extends PlayItSupport {
         Matcher link = LINK.matcher(textTo(address));
         assertThat(link.find()).as("a sign-in link to " + address).isTrue();
         Map<String, Object> session = client.post().uri("/api/auth/email-link/confirm")
-            .contentType(MediaType.APPLICATION_JSON).bodyValue(Map.of("token", link.group(1))).exchange()
-            .expectStatus().isOk().expectBody(MAP).returnResult().getResponseBody();
+            // A new address finishes signing up with a name (Q113f-2, platform D84); an account's ignores it.
+            .contentType(MediaType.APPLICATION_JSON).bodyValue(Map.of("token", link.group(1), "displayName", "Invitee"))
+            .exchange().expectStatus().isOk().expectBody(MAP).returnResult().getResponseBody();
         assertThat(session).containsEntry("status", "SIGNED_IN");
         return "Bearer " + session.get("accessToken");
     }

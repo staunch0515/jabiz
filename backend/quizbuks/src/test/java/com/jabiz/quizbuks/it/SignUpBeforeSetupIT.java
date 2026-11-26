@@ -14,6 +14,8 @@ import static org.assertj.core.api.Assertions.assertThat;
  * accepted. A class of its own: it needs a new installation.
  */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.MOCK, properties = {
+    // Password registration at the app, as with QB_APP_UNIFIED_SIGN_IN=false (Q113f-2): one "continue" is UnifiedAppSignInIT's.
+    "jabiz.security.entries.app.unified-sign-in=false",
     "jabiz.security.entries.app.self-registration=true", "jabiz.security.entries.sponsor.self-registration=true"})
 class SignUpBeforeSetupIT extends AccountItSupport {
 

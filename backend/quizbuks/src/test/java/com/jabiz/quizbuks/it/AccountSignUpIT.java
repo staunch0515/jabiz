@@ -36,6 +36,8 @@ import static org.assertj.core.api.Assertions.assertThat;
  * no QuizBuks data. QuizBuks's own mail (welcome, onboarding) goes out through the platform's mail.
  */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.MOCK, properties = {
+    // Password registration at the app, as with QB_APP_UNIFIED_SIGN_IN=false (Q113f-2): one "continue" is UnifiedAppSignInIT's.
+    "jabiz.security.entries.app.unified-sign-in=false",
     "jabiz.mail.enabled=true", "jabiz.mail.from=quizbuks@example.com",
     "jabiz.mail.base-url=https://quizbuks.example.com",
     "spring.mail.host=localhost", "spring.mail.port=3041",
