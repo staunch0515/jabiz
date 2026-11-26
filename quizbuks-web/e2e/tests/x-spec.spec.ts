@@ -9,7 +9,7 @@ import { takerInJapan } from './wallet'
  * The taker app measured against the timeline's layout (docs/quizbuks/plans/Q113-taker-ui-tone.md section 9, as measured
  * on x.com; the plan's section 3 items 2 and 3). Each phase of Q113 adds the rows of its own pages; Q113a-1 the heads,
  * the tabs and the scrolling (sections 9.1 and 9.1a); Q113a-2 the navigation; Q113b-1 the home's post (9.1 "条目");
- * Q113f the entry pages
+ * Q113b-2 the quiz's page (9.1 "详情页"); Q113f the entry pages
  * (section 9.4): no card, the brand's name and mark, a column of pills 46 px high, fields 62 px high with the label in
  * the box, on a phone a column 38 px in from its sides and on a wide screen 384 px wide, 36 px in, the name at 64 px
  * and the mark large beside it.
@@ -349,4 +349,37 @@ test('the home post at 390 px: the avatar 40 px at 16, the text 8 px after it, i
   // The three places to tap (§9.3): the name to the quiz.
   await post.getByTestId('feed-card-link').click()
   await expect(page).toHaveURL(new RegExp(`/taker/p/${publicationId}$`))
+
+  // Q113b-2: the quiz's page as x.com's post detail (§9.1 "详情页"; the prototype's 答题详情), at the same 390 px.
+  await expect(page.getByTestId('detail-author')).toBeVisible()
+  await page.evaluate(() => document.fonts.ready)
+  const detail = async (testId: string) => (await page.getByTestId(testId).boundingBox())!
+  const authorAvatar = (await page.getByTestId('detail-author').locator(':scope > *').first().boundingBox())!
+  expect(authorAvatar.width, 'the author\'s picture is 40 px').toBeCloseTo(40, 0)
+  expect(authorAvatar.x, '16 px from the side').toBeCloseTo(16, 0)
+  // No published page for this Sponsor: no pill; the name 17 px bold.
+  expect(await style(page, '[data-testid="detail-name"]', 'font-size')).toBe('17px')
+  expect(await style(page, '[data-testid="detail-name"]', 'font-weight')).toBe('700')
+  // The picture across the column (16 px in from each side), its corners 16 px.
+  const hero = await detail('detail-hero')
+  expect(hero.x).toBeCloseTo(16, 0)
+  expect(hero.width).toBeCloseTo(390 - 32, 0)
+  expect(await style(page, '[data-testid="detail-hero"]', 'border-top-left-radius')).toBe('16px')
+  // The four facts on a row of 48 px between two dividers.
+  const row = await detail('detail-facts')
+  expect(row.height, 'the row is 48 px').toBeCloseTo(48, 0)
+  expect(await style(page, '[data-testid="detail-facts"]', 'border-top-width')).toBe('1px')
+  expect(await style(page, '[data-testid="detail-facts"]', 'border-bottom-width')).toBe('1px')
+  await expect(page.getByTestId('detail-facts').locator('dt')).toHaveCount(4)
+  // The two tabs share the column, 53 px high, the current one marked by its bar.
+  const tabs = (await page.getByTestId('detail-tabs').locator('[data-slot="page-tabs"]').boundingBox())!
+  expect(tabs.width).toBeCloseTo(390, 0)
+  const materialsTab = (await page.getByTestId('page-tab-materials').boundingBox())!
+  expect(materialsTab.height, 'a tab is 53 px').toBeCloseTo(53, 0)
+  expect(materialsTab.width, 'the tabs share the row').toBeCloseTo(390 / 2, 0)
+  // The start: a pill of 36 px at the right of the bar.
+  const start = await detail('detail-start')
+  expect(start.height, 'the start is 36 px').toBeCloseTo(36, 0)
+  expect(390 - (start.x + start.width), '16 px from the side').toBeCloseTo(16, 0)
+  expect(parseFloat(await style(page, '[data-testid="detail-start"]', 'border-top-left-radius'))).toBeGreaterThanOrEqual(18)
 })

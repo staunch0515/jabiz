@@ -20,7 +20,7 @@ How to use the app as a Taker. Paths are pages of the app (they start with /take
 
 ## Answering (/taker/p/…)
 
-- A quiz's page shows the number of questions, the time limit, the highest reward and how long it is open. "Start the quiz" starts the timer. Each person has one try.
+- A quiz's page shows the Sponsor ("Page" opens theirs), the name and introduction, the video or cover, how many answered and when it ends, and a row with the highest reward, the number of questions, the time limit and the pass mark. Two tabs follow: Materials, and Rules with the reward under them. "Start the quiz" starts the timer. Each person has one try.
 - Some quizzes ask you to watch a video first. At the first launch there are no entry fees; once they open, some quizzes have an entry fee, paid from your Kudos that can be transferred, and not refunded whatever the result.
 - Your answers are saved as you go. Submit when you are done; when the time is up, your saved answers are submitted.
 - A survey has no right answers: answer every question to get its reward.

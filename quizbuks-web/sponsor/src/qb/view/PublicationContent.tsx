@@ -1,7 +1,7 @@
 import { formatDateTime } from '@jabiz/client'
 import { MarkdownView, PageTabs, Table, TableBody, TableCell, TableHead, TableHeader, TableRow, cn,
   type PageTab, type PageTabLinkProps } from '@jabiz/ui'
-import { BookOpen, CalendarClock, ChevronDown, ListChecks, MailCheck, Network, Target, Ticket, Timer, TrendingUp, Trophy, type LucideIcon } from 'lucide-react'
+import { CircleCheck, ChevronDown, ClipboardList, Clock, ListChecks, MailCheck, Network, Ticket, type LucideIcon } from 'lucide-react'
 import { useId, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 import { FileImage } from '../FileImage'
@@ -17,6 +17,7 @@ import { leadVideo, Materials } from './Materials'
 import { QBVIEW } from './messages'
 import { VideoPlayer } from './VideoPlayer'
 import { useVideoFailed } from '../videoFailures'
+import { postAge } from './postAge'
 
 /** The time limit as people read it: minutes, with seconds when not whole. */
 export function useDuration() {
@@ -56,14 +57,18 @@ function Tiers({ tiers }: { tiers: Tier[] }) {
   )
 }
 
-/** One fact under the title (Q65: inline, small): an icon and the value, which says what it is; the term for assistive technology. */
-function Fact({ icon: Icon, label, value, testId }: { icon: LucideIcon; label: string; value: ReactNode; testId?: string }) {
+/**
+ * One fact of the row between the two dividers (Q113 §9.1 "详情页": x.com's row of actions; P8: the few that matter):
+ * an icon (22 px) and the value, which says what it is; the term for assistive technology.
+ */
+function Fact({ icon: Icon, label, value, testId, className }: { icon: LucideIcon; label: string; value: ReactNode
+  testId?: string; className?: string }) {
   return (
-    <div className="flex min-w-0 items-center gap-1" data-testid={testId}>
+    <div className={cn('flex min-w-0 items-center gap-1', className)} data-testid={testId}>
       <dt className="sr-only">{label}</dt>
       <dd className="flex min-w-0 items-center gap-1">
-        <Icon aria-hidden className="text-primary size-3.5 shrink-0" />
-        <span className="text-foreground">{value}</span>
+        <Icon aria-hidden className="size-[22px] shrink-0" strokeWidth={1.7} />
+        <span className="truncate">{value}</span>
       </dd>
     </div>
   )
@@ -102,7 +107,7 @@ function Expandable({ children, testId }: { children: ReactNode; testId?: string
       <div id={id} className={cn('relative', !open && 'max-h-[4.5rem] overflow-hidden')}
         onFocusCapture={() => { if (more) setOpen(true) }}>
         <div ref={inner}>{children}</div>
-        {!open && more && <span aria-hidden className="from-card absolute inset-x-0 bottom-0 h-6 bg-linear-to-t to-transparent" />}
+        {!open && more && <span aria-hidden className="from-background absolute inset-x-0 bottom-0 h-6 bg-linear-to-t to-transparent" />}
       </div>
       {more && (
         <button type="button" className="text-primary inline-flex items-center gap-1 self-start text-sm font-medium"
@@ -116,121 +121,48 @@ function Expandable({ children, testId }: { children: ReactNode; testId?: string
   )
 }
 
-/** A block that opens and closes (the counts in full, the sponsor): the native disclosure, styled as the cards. */
-function Disclosure({ summary, icon: Icon, testId, children }: {
-  summary: ReactNode
-  icon: LucideIcon
-  testId?: string
-  children: ReactNode
-}) {
-  return (
-    <details className="group bg-card border shadow-xs" data-testid={testId}>
-      <summary className="bg-muted flex cursor-pointer list-none items-center gap-2 px-3 py-2 text-sm group-open:border-b [&::-webkit-details-marker]:hidden">
-        <Icon aria-hidden className="text-primary size-4 shrink-0" />
-        <span className="min-w-0 flex-1">{summary}</span>
-        <ChevronDown aria-hidden className="text-muted-foreground size-4 shrink-0 transition-transform group-open:rotate-180" />
-      </summary>
-      <div className="p-3">{children}</div>
-    </details>
-  )
-}
-
-/** The tabs and the tab shown (F-F3c): each part as the stacked page has it, opened, under its own tab. */
-function TabbedBody({ tabs, p, draft, lead, rewardBody, statsBody, duration, nodeName }: {
-  tabs: ContentTabs
-  p: PublicationView
-  draft: boolean
-  lead: number | undefined
-  rewardBody: ReactNode
-  statsBody: ReactNode
-  duration: (seconds: number) => string
-  nodeName: string
-}) {
-  const { t } = useTranslation(QBVIEW)
-  const { extra = {} } = tabs
-  const materials = p.materials.filter((m) => m.no !== lead)
-  const survey = p.kind === 'SURVEY'
-  const shown: ContentTab[] = CONTENT_TABS.filter((tab) =>
-    tab === 'reward' ? !draft : tab === 'materials' ? materials.length > 0 || !!extra.materials : true)
-  const current = shown.includes(tabs.current) ? tabs.current : shown[0]
-  const rules: [string, ReactNode][] = [
-    [survey ? t('detail.kind') : t('detail.questions'), p.pickCount != null
-      ? t('detail.pickCount', { count: p.pickCount, total: p.questionCount })
-      : t('detail.questionCount', { count: p.questionCount })],
-    ...(survey ? [] : [[t('detail.passScore'), t('detail.passOf', { pass: draft ? '–' : p.passScore, full: p.fullScore })] as [string, ReactNode]]),
-    [t('detail.timeLimit'), duration(p.timeLimitSec)],
-    ...(p.entryFee ? [[t('detail.entryFee'), formatKudos(p.entryFee)] as [string, ReactNode]] : []),
-    [t('detail.endAt'), draft ? '–' : t('detail.until', { time: formatDateTime(p.endAt) })],
-    ...(nodeName ? [[t('detail.node'), nodeName] as [string, ReactNode]] : []),
-  ]
-  return (
-    <div className="flex flex-col gap-3" data-testid="detail-tabs" data-tab={current}>
-      <PageTabs label={t('detail.tabs.label')} current={current}
-        tabs={shown.map((tab) => ({ key: tab, label: t(`detail.tabs.${tab}`), path: tabs.path(tab) }))}
-        renderLink={tabs.renderLink} />
-      <div className="flex flex-col gap-3" data-testid={`detail-tab-${current}`}>
-        {current === 'about' && (
-          <>
-            {p.intro && (
-              <section aria-label={t('detail.intro')} className="px-0.5 text-sm" data-testid="detail-intro">
-                <Expandable testId="detail-intro-text"><MarkdownView text={p.intro} /></Expandable>
-              </section>
-            )}
-            <section aria-label={t('detail.tabs.about')} className="flex flex-col gap-1 text-sm" data-testid="detail-stats">
-              <p className="font-medium" data-testid="detail-stats-line">
-                {t('detail.statsLine', { recent: p.last24h, total: p.completions })}
-              </p>
-              {statsBody}
-            </section>
-          </>
-        )}
-        {current === 'reward' && (
-          <section aria-label={t('detail.rewardTitle')} className="flex flex-col gap-2" data-testid="detail-reward">
-            <p className="font-medium" data-testid="detail-reward-line">
-              {t('detail.rewardLine', { method: t(`methods.${p.rewardMethod}Short`) })}
-            </p>
-            {rewardBody}
-          </section>
-        )}
-        {current === 'materials' && <Materials materials={p.materials} exclude={lead} />}
-        {current === 'rules' && (
-          <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-sm" data-testid="detail-rules">
-            {rules.map(([label, value]) => (
-              <div key={label} className="contents">
-                <dt className="text-muted-foreground">{label}</dt>
-                <dd className="font-medium">{value}</dd>
-              </div>
-            ))}
-          </dl>
-        )}
-        {extra[current]}
-      </div>
-    </div>
-  )
-}
-
-/** The parts of the page under its tabs (F-F4, F-F3c): the introduction and heat, the reward, the materials, the rules. */
-export const CONTENT_TABS = ['about', 'reward', 'materials', 'rules'] as const
+/**
+ * The page's two tabs (Q113 §9.3 "普通模式": the prototype's 资料 and 规则). What the tabs of before held is in the
+ * body (the introduction; the completions in the line under the video) or under the rules (the reward).
+ */
+export const CONTENT_TABS = ['materials', 'rules'] as const
 export type ContentTab = (typeof CONTENT_TABS)[number]
 
+/** Q113b-2: the tabs of F-F4c an address may still name (`?tab=about`, `?tab=reward`), and where their content is. */
+export const FORMER_TABS: Readonly<Record<string, ContentTab>> = { about: 'materials', reward: 'rules' }
+
 /**
- * The page in tabs instead of one column (F-F4 section 2.5; the sponsor console's preview uses it, the App when its
- * frame does): the cover, name and facts stay above; a tab without content is not offered. A link is what the App
- * renders (an address `?tab=`), a button what the preview renders (no address of its own).
+ * The page's tabs (F-F3c; the sponsor console's preview uses them as the App does): a link is what the App renders (an
+ * address `?tab=`), a button what the preview renders (no address of its own).
  */
 export interface ContentTabs {
   current: ContentTab
   /** Where a tab leads (the App's address; the preview's buttons ignore it). */
   path: (tab: ContentTab) => string
   renderLink: (tab: PageTab, props: PageTabLinkProps) => ReactNode
-  /** More under a tab, after its own content (what only the App has: products, rules link, report, block). */
-  extra?: Partial<Record<ContentTab, ReactNode>>
+  /**
+   * More under a tab, after its own content (what only the App has): `materials` the products and the Sponsor's page,
+   * `reward` the referral panel at the end of the reward, `rules` the official rules, reporting and blocking.
+   */
+  extra?: Partial<Record<ContentTab | 'reward', ReactNode>>
+}
+
+/** "Jan 2", "Jan 2, 2027": a day as the post's line says it (no time: P8). */
+function shortDate(time: string, language: string): string {
+  const date = new Date(time)
+  if (Number.isNaN(date.getTime())) return ''
+  return new Intl.DateTimeFormat(language, { month: 'short', day: 'numeric',
+    ...(date.getFullYear() !== new Date().getFullYear() ? { year: 'numeric' } : {}) }).format(date)
 }
 
 /**
- * What a taker reads of a publication on its page (Q34; U-20 – U-23), from the picture to the sponsor's introduction:
- * the taker app draws it above the start button, the sponsor console's preview (Q34b) the same from the sponsor's
- * own data. Layout and the place of every text: docs/quizbuks/plans/Q34-ui-polish.md, D-Q34-11.
+ * What a taker reads of a publication on its page (Q113b-2: the normal mode of Q113 §9.3, as x.com's post detail;
+ * Q34b: the sponsor console's preview draws the same from the Sponsor's own data). From the top: the author row (the
+ * Sponsor's picture 40 px, name and role, and a near-black "Page" pill to their page); the name in bold and the
+ * introduction at 17 px; the video (or the cover) with 16 px corners; a line of when it went up, how many answered
+ * and when it ends; a row of four facts between two dividers (the reward in its colour, the questions, the time
+ * limit, the pass mark); then the tabs: the materials, and the rules with the reward under them. The start bar is the
+ * App's (the page's foot). Without `tabs` the two parts follow one another.
  */
 export function PublicationContent({ publication: p, tiers, titleAs: Title = 'h1', draft = false,
   linkSponsor = false, autoplay = false, video, tabs }: {
@@ -246,7 +178,7 @@ export function PublicationContent({ publication: p, tiers, titleAs: Title = 'h1
   autoplay?: boolean
   /** Q65: the app's own place for the leading video (its one player, carried over from the home's card). */
   video?: (player: string, title: string) => ReactNode
-  /** Tabs under the facts; without them the page is one column. */
+  /** The tabs; without them the materials and the rules follow one another. */
   tabs?: ContentTabs
 }) {
   const { t } = useTranslation(QBVIEW)
@@ -256,7 +188,6 @@ export function PublicationContent({ publication: p, tiers, titleAs: Title = 'h1
   const nodeName = p.nodeName ? pickText(p.nodeName, i18n.language).text : ''
   const survey = p.kind === 'SURVEY'
   const MethodIcon = REWARD_METHOD_ICONS[p.rewardMethod]
-  const prize = p.rewardMethod === 'OFFLINE_REDEEM' || p.rewardMethod === 'DIGITAL_PRIZE'
   const prizeText = p.rewardMethod === 'OFFLINE_REDEEM' ? p.redeemDescription
     : p.rewardMethod === 'DIGITAL_PRIZE' ? p.digitalDescription : null
   const found = leadVideo(p.materials, p.video ?? null)
@@ -264,147 +195,184 @@ export function PublicationContent({ publication: p, tiers, titleAs: Title = 'h1
   const leadFailed = useVideoFailed(found?.player)
   const lead = leadFailed ? null : found
   const leadTitle = lead?.material?.title ?? t('feed.videoTitle', { name: p.name })
-  const reward = (
-    <span className="bg-primary text-primary-foreground inline-flex items-center gap-1 px-2 py-1 text-xs font-semibold shadow-sm">
-      <Trophy aria-hidden className="size-3.5" />
-      {survey ? t('feed.surveyReward', { amount: formatKudos(p.maxReward) })
-        : t('feed.upTo', { amount: formatKudos(p.maxReward) })}
-    </span>
-  )
-  const sponsorLine = (tone: string) => sponsor && (
-      <p className={cn(tone, 'flex items-center gap-2 text-sm')} data-testid="detail-sponsor">
-        {p.sponsorAvatar && <FileImage fileId={p.sponsorAvatar} variant="w128" alt=""
-          className="size-5 rounded-full" />}
-        {/* Q60a: the sponsor's page, when it is published (the app only: the console has no such route). */}
-        {p.sponsorHandle && linkSponsor && !draft
-          ? <Link to={sponsorPagePath(p.sponsorHandle)} className="underline underline-offset-2"
-            data-testid="detail-sponsor-page">{t('detail.by', { sponsor })}</Link>
-          : <span>{t('detail.by', { sponsor })}</span>}
-      </p>
-  )
-  const rewardBody = (
-    <div className="flex flex-col gap-2">
-      {/* Q22: what the sponsor does after a pass, in their words for a prize. */}
-      <p className="text-sm" data-testid="detail-method-name">{t(`methods.${p.rewardMethod}`)}</p>
-      {p.rewardMethod !== 'PLATFORM' && (
-        <div className="bg-accent text-accent-foreground flex flex-col gap-1 px-3 py-2 text-sm"
-          data-testid="detail-method-note" data-method={p.rewardMethod}>
-          <span>{t(`methods.${p.rewardMethod}Hint`)}</span>
-          {prizeText && <span className="font-medium whitespace-pre-line" data-testid="detail-prize">{prizeText}</span>}
-          {/* Q89b-1: another sponsor's benefit is collected at its provider's place. */}
-          {p.rewardMethod === 'OFFLINE_REDEEM' && p.fulfillerCompany && (
-            <span data-testid="detail-fulfiller">{t('detail.collectAt', { company: p.fulfillerCompany })}</span>
-          )}
-        </div>
+  const materials = p.materials.filter((m) => m.no !== lead?.material?.no)
+  const extra = tabs?.extra ?? {}
+
+  // The author row: x.com's, with the Sponsor's page where x.com has "Follow" (Q113 §9.1 "详情页").
+  const pagePath = p.sponsorHandle && linkSponsor && !draft ? sponsorPagePath(p.sponsorHandle) : null
+  const initial = (sponsor ?? p.name).trim().charAt(0).toUpperCase()
+  const avatar = p.sponsorAvatar
+    ? <FileImage fileId={p.sponsorAvatar} variant="w128" alt="" className="size-10 rounded-full" />
+    : <span aria-hidden className="bg-accent text-accent-foreground flex size-10 items-center justify-center rounded-full text-sm font-bold">{initial}</span>
+  const author = sponsor && (
+    <div className="flex items-center gap-2" data-testid="detail-author">
+      {pagePath
+        ? <Link to={pagePath} className="shrink-0 rounded-full" aria-label={t('detail.sponsorHomeOf', { name: sponsor })}>
+          {avatar}</Link>
+        : <span className="shrink-0">{avatar}</span>}
+      <span className="flex min-w-0 flex-1 flex-col text-[15px] leading-5">
+        <span className="truncate font-bold" data-testid="detail-sponsor">{sponsor}</span>
+        <span className="text-muted-foreground">{t('detail.sponsorRole')}</span>
+      </span>
+      {pagePath && (
+        <Link to={pagePath} data-testid="detail-sponsor-page" aria-label={t('detail.sponsorHomeOf', { name: sponsor })}
+          className="bg-foreground text-background focus-visible:ring-ring flex h-8 shrink-0 items-center rounded-full px-4 text-sm font-bold outline-none hover:opacity-90 focus-visible:ring-2 focus-visible:ring-offset-2">
+          {t('detail.sponsorHome')}
+        </Link>
       )}
-      {survey && <p className="text-muted-foreground text-sm" data-testid="detail-survey">{t('detail.surveyHint')}</p>}
-      {!survey && <Tiers tiers={tiers} />}
     </div>
   )
-  const statsBody = (
+
+  // The line under the video: when it went up, how many answered, when it ends (x.com's line of time and counts).
+  const age = draft ? null : postAge(p.startAt, new Date())
+  const published = age && ('unit' in age ? t(`detail.publishedAgo.${age.unit}`, { count: age.count })
+    : t('detail.publishedAgo.date', { date: shortDate(p.startAt, i18n.language) }))
+  const line = (
+    <p className="text-muted-foreground mt-1 mb-1 text-[15px] leading-5" data-testid="detail-published">
+      {published && <>{published}<span aria-hidden> · </span></>}
+      <b className="text-foreground tabular-nums" data-testid="detail-completions">{p.completions.toLocaleString()}</b>
+      {' '}{t('detail.answeredCount')}
+      {!draft && <><span aria-hidden> · </span>{t('detail.endsOn', { date: shortDate(p.endAt, i18n.language) })}</>}
+    </p>
+  )
+
+  const rules: [string, ReactNode, string?][] = [
+    [survey ? t('detail.kind') : t('detail.questions'), p.pickCount != null
+      ? t('detail.pickCount', { count: p.pickCount, total: p.questionCount })
+      : t('detail.questionCount', { count: p.questionCount })],
+    ...(survey ? [] : [[t('detail.passScore'), t('detail.passOf', { pass: draft ? '–' : p.passScore, full: p.fullScore })] as [string, ReactNode]]),
+    [t('detail.timeLimit'), duration(p.timeLimitSec)],
+    ...(p.entryFee ? [[t('detail.entryFee'), formatKudos(p.entryFee)] as [string, ReactNode]] : []),
+    [t('detail.endAt'), draft ? '–' : t('detail.until', { time: formatDateTime(p.endAt) })],
+    ...(nodeName ? [[t('detail.node'), t(p.nodeLit ? 'detail.nodeLit' : 'detail.nodeOpen', { name: nodeName })] as [string, ReactNode]] : []),
+  ]
+  const rulesPart = (
     <>
-      <dl className="grid grid-cols-2 gap-x-4 gap-y-1 text-sm">
-        {([['last1h', p.last1h], ['last24h', p.last24h], ['last7d', p.last7d], ['last30d', p.last30d],
-          ['total', p.completions]] as const).map(([key, value]) => (
-          <div key={key} className="flex justify-between gap-2">
-            <dt className="text-muted-foreground">{t(`detail.${key}`)}</dt>
+      <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-[15px]" data-testid="detail-rules">
+        {rules.map(([label, value, testId]) => (
+          <div key={label} className="contents" data-testid={testId}>
+            <dt className="text-muted-foreground">{label}</dt>
             <dd className="font-medium">{value}</dd>
           </div>
         ))}
       </dl>
-      {p.statsAt && (
-        <p className="text-muted-foreground mt-2 text-xs">{t('detail.statsAt', { time: formatDateTime(p.statsAt) })}</p>
+      {/* The reward, what the tab "Reward" had: how it is paid, the prize in the Sponsor's words, the tiers. */}
+      {!draft && (
+        <section aria-labelledby="detail-reward-title" className="flex flex-col gap-2" data-testid="detail-reward">
+          <h2 id="detail-reward-title" className="text-[17px] font-bold">{t('detail.rewardSection')}</h2>
+          <p className="font-medium" data-testid="detail-reward-line">
+            {t('detail.rewardLine', { method: t(`methods.${p.rewardMethod}Short`) })}
+          </p>
+          {/* Q22: what the sponsor does after a pass, in their words for a prize. */}
+          <p className="text-sm" data-testid="detail-method-name">{t(`methods.${p.rewardMethod}`)}</p>
+          {p.rewardMethod !== 'PLATFORM' && (
+            <div className="bg-accent text-accent-foreground flex flex-col gap-1 rounded-[16px] px-3 py-2 text-sm"
+              data-testid="detail-method-note" data-method={p.rewardMethod}>
+              <span>{t(`methods.${p.rewardMethod}Hint`)}</span>
+              {prizeText && <span className="font-medium whitespace-pre-line" data-testid="detail-prize">{prizeText}</span>}
+              {/* Q89b-1: another sponsor's benefit is collected at its provider's place. */}
+              {p.rewardMethod === 'OFFLINE_REDEEM' && p.fulfillerCompany && (
+                <span data-testid="detail-fulfiller">{t('detail.collectAt', { company: p.fulfillerCompany })}</span>
+              )}
+            </div>
+          )}
+          {survey && <p className="text-muted-foreground text-sm" data-testid="detail-survey">{t('detail.surveyHint')}</p>}
+          {!survey && <Tiers tiers={tiers} />}
+          {extra.reward}
+        </section>
       )}
+      {extra.rules}
     </>
   )
+  const materialsPart = (
+    <>
+      <Materials materials={p.materials} exclude={lead?.material?.no} />
+      {materials.length === 0 && !extra.materials && (
+        <p className="text-muted-foreground text-[15px]" data-testid="detail-no-materials">{t('detail.noMaterials')}</p>
+      )}
+      {extra.materials}
+    </>
+  )
+  const current = tabs?.current ?? 'materials'
+
   return (
     <>
-      {lead ? (
-        // Q63: a video to learn from before answering leads the page and starts (muted) as it opens; the name, the
-        // sponsor and what passing earns follow it.
-        <header className="-mx-4 flex flex-col gap-3 sm:mx-0" data-testid="detail-hero" data-video>
-          {video ? video(lead.player, leadTitle)
-            : <VideoPlayer player={lead.player} autoplay={autoplay} title={leadTitle}
-              className="bg-muted aspect-video w-full overflow-hidden sm:border" />}
-          <div className="flex flex-col gap-1 px-4 sm:px-0">
-            <div className="flex items-start justify-between gap-2">
-              <Title id="detail-title" className="text-xl leading-tight font-semibold" data-testid="detail-name">{p.name}</Title>
-              {!draft && <span className="shrink-0">{reward}</span>}
-            </div>
-            {p.quizTitle && p.quizTitle !== p.name && (
-              <p className="text-muted-foreground text-sm" data-testid="detail-quiz-title">{p.quizTitle}</p>
-            )}
-            {sponsorLine('text-muted-foreground')}
-          </div>
-        </header>
-      ) : (
-      /* Q34: the picture leads, the name and the sponsor on its foot, what passing earns on its corner. */
-      <header className="relative -mx-4 aspect-video overflow-hidden sm:mx-0 sm:border" data-testid="detail-hero">
-        {p.cover
-          ? <FileImage fileId={p.cover} variant="w640" alt="" className="absolute inset-0 size-full" />
-          : <CoverPlaceholder seed={p.publicationId} className="absolute inset-0 size-full" />}
-        {!draft && <span className="absolute top-2 right-2">{reward}</span>}
-        <div className="from-qb-hero-from via-qb-hero-from/85 text-qb-hero-foreground absolute inset-x-0 bottom-0 flex flex-col gap-0.5 bg-linear-to-t to-transparent px-4 pt-10 pb-3">
-          <Title id="detail-title" className="text-xl leading-tight font-semibold" data-testid="detail-name">{p.name}</Title>
-          {p.quizTitle && p.quizTitle !== p.name && (
-            <p className="text-qb-hero-muted text-sm" data-testid="detail-quiz-title">{p.quizTitle}</p>
-          )}
-          {sponsorLine('text-qb-hero-muted')}
-        </div>
-      </header>
-      )}
-      {/* Q65: the facts in a line or two of small type, each with its icon; what each is, for assistive technology. */}
-      <dl className="text-muted-foreground flex flex-wrap gap-x-3 gap-y-1 px-0.5 text-sm" data-testid="detail-facts"
-        aria-label={t('detail.facts')}>
-        <Fact icon={ListChecks} label={t('detail.questions')} value={p.pickCount != null
-          ? t('detail.pickCount', { count: p.pickCount, total: p.questionCount })
-          : t('detail.questionCount', { count: p.questionCount })} />
+      {author}
+      {/* The text of the post: the name in bold, then the introduction (its first lines, the rest on demand). */}
+      <div className="flex flex-col text-[17px] leading-6">
+        <Title id="detail-title" className="text-[17px] leading-6 font-bold" data-testid="detail-name">{p.name}</Title>
+        {p.quizTitle && p.quizTitle !== p.name && (
+          <p className="text-muted-foreground text-[15px] leading-5" data-testid="detail-quiz-title">{p.quizTitle}</p>
+        )}
+        {p.intro && (
+          <section aria-label={t('detail.intro')} className="mt-1 [&_.markdown-view]:text-[17px] [&_.markdown-view]:leading-6"
+            data-testid="detail-intro">
+            <Expandable testId="detail-intro-text"><MarkdownView text={p.intro} /></Expandable>
+          </section>
+        )}
+      </div>
+      {/* Q63: a video to learn from before answering, started (muted) as the page opens; else the cover. */}
+      <div className="border-qb-outline bg-muted relative aspect-video w-full overflow-hidden rounded-[16px] border"
+        data-testid="detail-hero" data-video={lead ? true : undefined}>
+        {lead
+          ? video ? video(lead.player, leadTitle)
+            : <VideoPlayer player={lead.player} autoplay={autoplay} title={leadTitle} className="aspect-video w-full" />
+          : p.cover
+            ? <FileImage fileId={p.cover} variant="w640" alt="" className="absolute inset-0 size-full object-cover" />
+            : <CoverPlaceholder seed={p.publicationId} className="absolute inset-0 size-full" />}
+      </div>
+      {line}
+      {/* The row between the two dividers: the four facts that matter before starting (P8). */}
+      <dl className="text-muted-foreground flex h-12 items-center justify-between gap-2 border-y text-[13px]"
+        data-testid="detail-facts" aria-label={t('detail.facts')}>
+        <Fact icon={MethodIcon} className="text-qb-reward-foreground font-bold" testId="detail-method-fact"
+          label={survey ? t('detail.surveyReward') : p.rewardMethod === 'PLATFORM' ? t('detail.maxReward') : t('detail.prizeValue')}
+          value={draft ? '–' : <span data-testid="detail-method" data-method={p.rewardMethod}>
+            {survey ? t('feed.surveyReward', { amount: formatKudos(p.maxReward) })
+              : t('feed.upTo', { amount: formatKudos(p.maxReward) })}
+            <span className="sr-only"> · {t(`methods.${p.rewardMethod}Short`)}</span>
+          </span>} />
+        <Fact icon={ListChecks} label={t('detail.questions')}
+          value={t('detail.questionCount', { count: p.pickCount ?? p.questionCount })} />
+        <Fact icon={Clock} label={t('detail.timeLimit')} value={duration(p.timeLimitSec)} />
         {survey
-          ? <Fact icon={BookOpen} label={t('detail.kind')} value={t('detail.survey')} />
-          : <Fact icon={Target} label={t('detail.passScore')}
-            value={t('detail.passOf', { pass: draft ? '–' : p.passScore, full: p.fullScore })} />}
-        <Fact icon={Timer} label={t('detail.timeLimit')} value={duration(p.timeLimitSec)} />
-        <Fact icon={Trophy} label={survey ? t('detail.surveyReward') : prize ? t('detail.prizeValue') : t('detail.maxReward')}
-          value={draft ? '–' : formatKudos(p.maxReward)} />
-        {/* F-S2d: the node passing lights, and whether the caller has lit it. */}
-        {nodeName ? <Fact icon={Network} label={t('detail.node')} testId="detail-node"
-          value={<span data-testid="detail-node-state" data-lit={p.nodeLit ? 'true' : 'false'}>
-            {t(p.nodeLit ? 'detail.nodeLit' : 'detail.nodeOpen', { name: nodeName })}</span>} /> : null}
-        {/* Q88b: what starting costs, paid once from the transferable Kudos and not refunded. */}
-        {p.entryFee ? <Fact icon={Ticket} label={t('detail.entryFee')} testId="detail-entry-fee"
-          value={formatKudos(p.entryFee)} /> : null}
-        <Fact icon={MethodIcon} label={t('detail.method')} testId="detail-method-fact"
-          value={draft ? '–' : <span data-testid="detail-method" data-method={p.rewardMethod}>{t(`methods.${p.rewardMethod}Short`)}</span>} />
-        <Fact icon={CalendarClock} label={t('detail.endAt')}
-          value={draft ? '–' : t('detail.until', { time: formatDateTime(p.endAt) })} />
+          ? <Fact icon={ClipboardList} label={t('detail.kind')} value={t('detail.survey')} />
+          : <Fact icon={CircleCheck} label={t('detail.passScore')}
+            value={draft ? '–' : t('detail.passMark', { pass: p.passScore })} />}
       </dl>
+      {/* What matters too before starting, when a publication has it (shown above the tabs, as with the facts): the
+          entry fee (Q88b: paid once from the transferable Kudos, not refunded) and the node passing lights (F-S2d). */}
+      {(p.entryFee || nodeName) ? (
+        <dl className="text-muted-foreground -mt-1 flex flex-wrap gap-x-4 gap-y-1 text-[13px]" data-testid="detail-more-facts">
+          {p.entryFee ? <Fact icon={Ticket} label={t('detail.entryFee')} testId="detail-entry-fee"
+            value={<span className="text-foreground font-bold">{formatKudos(p.entryFee)}</span>} /> : null}
+          {nodeName ? <Fact icon={Network} label={t('detail.node')} testId="detail-node"
+            value={<span data-testid="detail-node-state" data-lit={p.nodeLit ? 'true' : 'false'}>
+              {t(p.nodeLit ? 'detail.nodeLit' : 'detail.nodeOpen', { name: nodeName })}</span>} /> : null}
+        </dl>
+      ) : null}
       {p.audience === 'INVITED' && (
         <p className="text-muted-foreground flex items-center gap-2 text-sm" data-testid="detail-invited">
           <MailCheck aria-hidden className="size-4" />
           {t('detail.invitedOnly')}
         </p>
       )}
-      {tabs ? <TabbedBody tabs={tabs} p={p} draft={draft} lead={lead?.material?.no}
-        rewardBody={rewardBody} statsBody={statsBody} duration={duration} nodeName={nodeName} /> : (<>
-      <Materials materials={p.materials} exclude={lead?.material?.no} />
-      {p.intro && (
-        // Q65: the introduction without a card of its own, its first lines and the rest on demand.
-        <section aria-label={t('detail.intro')} className="px-0.5 text-sm" data-testid="detail-intro">
-          <Expandable testId="detail-intro-text"><MarkdownView text={p.intro} /></Expandable>
-        </section>
+      {tabs ? (
+        <div className="-mx-4 flex flex-col" data-testid="detail-tabs" data-tab={current}>
+          <PageTabs label={t('detail.tabs.label')} current={current} indicator="label" fill className="border-b"
+            tabs={CONTENT_TABS.map((tab) => ({ key: tab, path: tabs.path(tab),
+              label: tab === 'materials' ? t('detail.materialsCount', { count: materials.length }) : t(`detail.tabs.${tab}`) }))}
+            renderLink={tabs.renderLink} />
+          <div className="flex flex-col gap-3 px-4 pt-3" data-testid={`detail-tab-${current}`}>
+            {current === 'materials' ? materialsPart : rulesPart}
+          </div>
+        </div>
+      ) : (
+        <>
+          {materialsPart}
+          {rulesPart}
+        </>
       )}
-      {!draft && (
-      // Q65: the reward folded to one line (the amount is beside the name); how it is paid and the tiers inside.
-      <Disclosure icon={MethodIcon} testId="detail-reward" summary={
-        <span data-testid="detail-reward-line">{t('detail.rewardLine', { method: t(`methods.${p.rewardMethod}Short`) })}</span>}>
-        {rewardBody}
-      </Disclosure>
-      )}
-      <Disclosure icon={TrendingUp} testId="detail-stats" summary={
-        <span data-testid="detail-stats-line">{t('detail.statsLine', { recent: p.last24h, total: p.completions })}</span>}>
-        {statsBody}
-      </Disclosure>
-      </>)}
     </>
   )
 }

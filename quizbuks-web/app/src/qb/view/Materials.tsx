@@ -10,7 +10,6 @@ import { trackable, videoKind, videoPlayer } from '../video'
 import { useVideoFailed } from '../videoFailures'
 import { VideoPlayer } from './VideoPlayer'
 import type { Material, MaterialKind } from '../play'
-import { DetailCard } from './DetailCard'
 
 const IMAGE_FIELD = { image: true, variants: [...CONTENT_IMAGE_VARIANTS] }
 const FILE_FIELD = { image: false }
@@ -143,9 +142,12 @@ export function Materials({ materials: all, exclude }: { materials: Material[]
   const videos = materials.filter(playable)
   const rows = materials.filter((m) => !playable(m))
   return (
-    <DetailCard title={t('detail.materials')} titleId="materials-title" testId="materials" flush>
+    // Q113b-2 (P1, the prototype's 资料): a plain list across the column, a divider under each row, no card; its name
+    // for screen readers.
+    <section aria-labelledby="materials-title" className="-mx-4 -mt-3 flex flex-col" data-testid="materials">
+      <h2 id="materials-title" className="sr-only">{t('detail.materials')}</h2>
       {videos.map((m) => (
-        <div key={m.no} className="flex flex-col gap-1.5 border-b p-3 last:border-b-0" data-testid="material"
+        <div key={m.no} className="flex flex-col gap-1.5 border-b px-4 py-3" data-testid="material"
           data-kind={m.kind}>
           <MaterialContent material={m} title={titleOf(m)} />
           <p className="text-sm font-medium">{titleOf(m)}</p>
@@ -153,7 +155,7 @@ export function Materials({ materials: all, exclude }: { materials: Material[]
         </div>
       ))}
       {rows.length > 0 && (
-        <ul className="divide-y">
+        <ul className="flex flex-col">
           {rows.map((m) => {
             const Icon = MATERIAL_ICONS[m.kind] ?? FileText
             const title = titleOf(m)
@@ -162,13 +164,13 @@ export function Materials({ materials: all, exclude }: { materials: Material[]
             const link = (m.kind === 'LINK' || m.kind === 'VIDEO_LINK') && !m.description ? safeLink(m.url) : null
             const inner = (
               <>
-                <span aria-hidden className="bg-accent text-accent-foreground flex size-9 shrink-0 items-center justify-center">
-                  <Icon className="size-4" />
+                <span aria-hidden className="bg-muted text-primary flex size-10 shrink-0 items-center justify-center rounded-[12px]">
+                  <Icon className="size-5" />
                 </span>
-                <span className="flex min-w-0 flex-1 flex-col">
-                  <span className="truncate text-sm font-medium" data-testid="material-title">{title}</span>
+                <span className="flex min-w-0 flex-1 flex-col text-[15px] leading-5">
+                  <span className="truncate font-bold" data-testid="material-title">{title}</span>
                   {m.description && (
-                    <span className="text-muted-foreground truncate text-xs" data-testid="material-description">
+                    <span className="text-muted-foreground truncate" data-testid="material-description">
                       {m.description}
                     </span>
                   )}
@@ -178,7 +180,7 @@ export function Materials({ materials: all, exclude }: { materials: Material[]
                   : <ChevronRight aria-hidden className="text-muted-foreground size-4 shrink-0" />}
               </>
             )
-            const row = 'hover:bg-accent/50 focus-visible:ring-ring/50 flex w-full items-center gap-3 px-3 py-2.5 text-left outline-none focus-visible:ring-[3px]'
+            const row = 'hover:bg-accent/50 focus-visible:ring-ring/50 flex w-full items-center gap-2 border-b px-4 py-3 text-left outline-none focus-visible:ring-[3px] focus-visible:ring-inset'
             return (
               <li key={m.no} data-testid="material" data-kind={m.kind}>
                 {link ? (
@@ -218,6 +220,6 @@ export function Materials({ materials: all, exclude }: { materials: Material[]
           )}
         </SheetContent>
       </Sheet>
-    </DetailCard>
+    </section>
   )
 }
