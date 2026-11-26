@@ -1,6 +1,7 @@
 import {
-  ApiError, PasskeyCancelledError, api, enrolPasskey, entryInfo, forgetSignInStep, isProblem, lastUserName, passkeyAutofill,
-  passkeySupport, pendingSignInStep, sitePath, unwrap, useOptionalAuth, type AuthState, type SignInStep,
+  ApiError, PasskeyCancelledError, api, enrolPasskey, entryInfo, forgetSignInStep, isProblem, languages, lastSignInMethod,
+  lastUserName, passkeyAutofill, passkeySupport, pendingSignInStep, rememberSignInMethod, requestEmailLink, sitePath, unwrap,
+  useOptionalAuth, type AuthState, type SignInStep,
 } from '@jabiz/client'
 import { CircleCheck, Fingerprint, Info, LockKeyhole, Mail, TriangleAlert, User } from 'lucide-react'
 import { Fragment, useEffect, useState, type ReactNode } from 'react'
@@ -11,14 +12,14 @@ import { Button } from '../components/ui/button'
 import { Separator } from '../components/ui/separator'
 import { EmailLinkForm } from './EmailLink'
 import { EntryTabs, useRetryWait } from './entry'
-import { AUTH_LINK_CLASS, AuthError, AuthField, AuthFrame, AuthLink, AuthSubmit, navigateTo, type AuthNavigation } from './frame'
+import { AUTH_LINK_CLASS, AuthError, AuthField, AuthFrame, AuthLink, AuthSubmit, navigateTo, Outcome, type AuthNavigation } from './frame'
 import { ResendVerification } from './MailLinkPage'
 import { AUTH_NAMESPACE } from './messages'
 import { MfaCodeStep } from './MfaCodeStep'
 import { MfaEnrollment } from './MfaEnrollment'
 import { OidcButtons, useOidcProviders, type OidcProvider } from './OidcButtons'
 import { passkeyDeviceName } from './Passkeys'
-import { refusal } from './problems'
+import { failure, refusal } from './problems'
 
 const missing = () => Promise.reject(new Error('SignInForm needs an AuthProvider around it, or the auth property'))
 /** What the form signs in with: a password and a code; with passkeys too where given (decision D71). */
@@ -111,6 +112,14 @@ export interface SignInFormProps extends AuthNavigation {
   startProvider?: (providerId: string, returnTo: string) => Promise<void>
   /** Signing in and the second step; the session's (`useAuth`) by default. */
   auth?: SignInAuth
+  /**
+   * `continue`: signing in and signing up are one "continue" (docs/design/10-security.md section 15.19; decision D84),
+   * where the frontend's entry has it (`unifiedSignIn`): the address only, then a link by mail with the password as
+   * the other way on the same step; straight to the password where this device signed in with one last. The mailed
+   * link, the password form, the sign-up link and the tabs give way to it; passkeys and providers stay as ordered.
+   * The ordinary form where the entry does not have it.
+   */
+  flow?: 'continue'
   /** Offers the appearance as well as the language (default true). */
   appearance?: boolean
   /** Small print under the form on every step (the admin shows the build it runs). */
@@ -145,6 +154,11 @@ export function SignInForm(props: SignInFormProps) {
     return { kind: 'password' }
   })
   const [mailOpen, setMailOpen] = useState(false)
+  // After "continue" (decision D84): the address, and whether its link went out or its password is asked.
+  const [continued, setContinued] = useState<{ email: string; mode: 'sent' | 'password' } | null>(null)
+  // A password sign-in begun from "continue": remembered on this device once it is done, second step and all.
+  const [byContinuedPassword, setByContinuedPassword] = useState(false)
+  const continueForm = useForm<{ email: string; password: string }>({ defaultValues: { email: '', password: '' } })
   // Too many attempts (429 with Retry-After, gap 5): the buttons wait as long as the server asks.
   const { seconds: wait, hold, message: waitMessage } = useRetryWait(t('common.error'))
   // A refusal, else what the server said with "too many requests" while the wait lasts (it goes with the wait).
@@ -152,7 +166,8 @@ export function SignInForm(props: SignInFormProps) {
   const form = useForm<{ userName: string; password: string }>({
     defaultValues: { userName: props.initialUserName ?? (notice === 'idle' ? lastUserName() : undefined) ?? '', password: '' },
   })
-  const { selfRegistration, emailLink, passkeys } = useEntryOffers(!!props.signUpPath, !!props.emailLink, !!props.passkey)
+  const { selfRegistration, emailLink, passkeys, unifiedSignIn, loaded } = useEntryOffers(!!props.signUpPath,
+    !!props.emailLink, !!props.passkey, props.flow === 'continue')
   const byEmail = props.userNameLabel === 'email'
   const support = passkeys ? passkeySupport() : 'unsupported'
   const withPasskey = passkeys && support === 'available' && !!auth.signInWithPasskey
@@ -160,6 +175,8 @@ export function SignInForm(props: SignInFormProps) {
 
   const signedIn = () => {
     forgetSignInStep()
+    // Only the way, never the address: next time this device goes straight to the password (decision D84).
+    if (byContinuedPassword) rememberSignInMethod('password')
     if (props.onSignedIn) props.onSignedIn(returnTo)
     else navigateTo({ onNavigate, hrefOf }, returnTo)
   }
@@ -299,9 +316,131 @@ export function SignInForm(props: SignInFormProps) {
     )
   }
 
+  /** Mails the link for the address (answered alike for every address), and says so. */
+  const sendLink = async (email: string) => {
+    setError(null)
+    try {
+      const locale = (languages as readonly string[]).includes(i18n.language) ? i18n.language : undefined
+      await requestEmailLink(email, { to: hrefOf ? hrefOf(returnTo) : returnTo, locale })
+      setContinued({ email, mode: 'sent' })
+    } catch (e) {
+      setError(hold(e) ? null : failure(e, t('account.failed')))
+    }
+  }
+
+  if (unifiedSignIn && continued) {
+    const { email, mode } = continued
+    const other = (
+      <Button variant="link" data-testid="continue-other-address" onClick={() => {
+        setError(null)
+        setUnverified(false)
+        continueForm.reset({ email, password: '' })
+        setContinued(null)
+      }}>
+        {t('continue.otherAddress')}
+      </Button>
+    )
+    return (
+      <AuthFrame {...frame} title={t(mode === 'sent' ? 'continue.sentTitle' : 'continue.passwordTitle')}
+        testId={`continue-${mode}-step`} below={props.below}>
+        <p className="text-sm font-medium break-all" data-testid="continue-address">{email}</p>
+        {shownError && <AuthError message={shownError} testId="login-error" />}
+        {unverified && (
+          <>
+            <Alert variant="warning" data-testid="login-email-not-verified">
+              <TriangleAlert aria-hidden />
+              <AlertDescription className="text-current">{t('login.emailNotVerified')}</AlertDescription>
+            </Alert>
+            <ResendVerification initialEmail={email} />
+          </>
+        )}
+        {mode === 'sent' ? (
+          <>
+            <Outcome ok testId="continue-link-sent">{t('continue.sent', { email })}</Outcome>
+            <Button size="lg" variant="outline" className="w-full" data-testid="continue-use-password" onClick={() => {
+              setError(null)
+              setContinued({ email, mode: 'password' })
+            }}>
+              <LockKeyhole aria-hidden />
+              {t('continue.usePassword')}
+            </Button>
+            <Button variant="link" data-testid="continue-send-again" disabled={wait > 0}
+              onClick={() => void sendLink(email)}>
+              {t('continue.sendAgain')}
+            </Button>
+          </>
+        ) : (
+          <>
+            <form
+              noValidate
+              className="flex flex-col gap-4"
+              onSubmit={continueForm.handleSubmit(async ({ password }) => {
+                setError(null)
+                setUnverified(false)
+                try {
+                  const next = await auth.signIn(email, password)
+                  if (next.status === 'SIGNED_IN') {
+                    rememberSignInMethod('password')
+                    signedIn()
+                  } else {
+                    // Remembered once the second step is done too (`signedIn`).
+                    setByContinuedPassword(true)
+                    setStep(next.status === 'MFA_REQUIRED'
+                      ? { kind: 'code', challenge: next.challenge }
+                      : { kind: 'enroll', challenge: next.challenge })
+                  }
+                } catch (e) {
+                  failed(e)
+                }
+              })}
+            >
+              {/* The address for the browser's password manager, which pairs it with the password. */}
+              <input type="email" name="username" autoComplete="username" value={email} readOnly hidden />
+              <AuthField
+                icon={LockKeyhole}
+                type="password"
+                placeholder={t('login.password')}
+                autoComplete="current-password"
+                data-testid="continue-password"
+                error={continueForm.formState.errors.password?.message}
+                {...continueForm.register('password', { validate: (v) => v !== '' || t('login.passwordRequired') })}
+              />
+              <AuthSubmit busy={continueForm.formState.isSubmitting} wait={wait}>{t('login.submit')}</AuthSubmit>
+            </form>
+            {props.passwordResetPath && (
+              <Button variant="link" asChild className="self-center">
+                <AuthLink to={props.passwordResetPath} onNavigate={onNavigate} hrefOf={hrefOf} data-testid="forgot-password">
+                  {t('login.forgotPassword')}
+                </AuthLink>
+              </Button>
+            )}
+            <Button size="lg" variant="outline" className="w-full" data-testid="continue-use-link" disabled={wait > 0}
+              onClick={() => {
+                rememberSignInMethod('link')
+                void sendLink(email)
+              }}>
+              <Mail aria-hidden />
+              {t('continue.useLink')}
+            </Button>
+          </>
+        )}
+        {other}
+      </AuthFrame>
+    )
+  }
+
+  // Not the ordinary form first: what was typed there would go when "continue" replaces it.
+  if (props.flow === 'continue' && !loaded && step.kind === 'password') {
+    return (
+      <AuthFrame {...frame} title={t('continue.title')} below={props.below} quietTitle>
+        <p className="text-muted-foreground text-sm" role="status" data-testid="continue-loading">{t('common.loading')}</p>
+      </AuthFrame>
+    )
+  }
+
   const errors = form.formState.errors
   const userName = form.getValues('userName')
-  const tabs = props.tabs && props.signUpPath && selfRegistration
+  const tabs = !unifiedSignIn && props.tabs && props.signUpPath && selfRegistration
     ? <EntryTabs current="signIn" signInPath={props.signInPath} signUpPath={props.signUpPath} onNavigate={onNavigate}
       hrefOf={hrefOf} />
     : undefined
@@ -312,14 +451,14 @@ export function SignInForm(props: SignInFormProps) {
     </div>
   )
   const shown = (method: SignInMethod) => method === 'password'
-    || (method === 'emailLink' || method === 'emailLinkButton' ? emailLink
+    || (method === 'emailLink' || method === 'emailLinkButton' ? emailLink && !unifiedSignIn
       : method === 'passkey' ? withPasskey || (passkeys && support === 'in-app-browser')
         : providers.length > 0)
   const methods = orderOf(typeof props.order === 'function' ? props.order(i18n.language) : props.order).filter(shown)
   const orPassword = (
     <div key="or" className="text-muted-foreground flex items-center gap-3 text-sm" data-testid="login-or-password">
       <Separator className="flex-1" />
-      {t('login.orPassword')}
+      {t(unifiedSignIn ? 'continue.or' : 'login.orPassword')}
       <Separator className="flex-1" />
     </div>
   )
@@ -369,6 +508,37 @@ export function SignInForm(props: SignInFormProps) {
           bare={index === 0}
           onError={(e) => (e === null ? setError(null) : failed(e))}
         />,
+      )
+    } else if (unifiedSignIn) {
+      parts.push(
+        <form
+          key="password"
+          noValidate
+          className="flex flex-col gap-4"
+          data-testid="continue-form"
+          onSubmit={continueForm.handleSubmit(async ({ email }) => {
+            stopAutofill()
+            const address = email.trim()
+            if (lastSignInMethod() === 'password') {
+              setError(null)
+              setContinued({ email: address, mode: 'password' })
+            } else {
+              await sendLink(address)
+            }
+          })}
+        >
+          <AuthField
+            icon={Mail}
+            type="email"
+            placeholder={t('account.email')}
+            autoComplete={withPasskey ? 'username webauthn' : 'username'}
+            inputMode="email"
+            data-testid="continue-email"
+            error={continueForm.formState.errors.email?.message}
+            {...continueForm.register('email', { validate: (v) => v.trim() !== '' || t('account.emailRequired') })}
+          />
+          <AuthSubmit busy={continueForm.formState.isSubmitting} wait={wait}>{t('continue.submit')}</AuthSubmit>
+        </form>,
       )
     } else {
       parts.push(
@@ -435,7 +605,8 @@ export function SignInForm(props: SignInFormProps) {
   })
 
   return (
-    <AuthFrame {...frame} title={t('login.title')} tabs={tabs} below={props.below} showOtherEntry quietTitle>
+    <AuthFrame {...frame} title={t(unifiedSignIn ? 'continue.title' : 'login.title')} tabs={tabs} below={props.below}
+      showOtherEntry quietTitle>
       {notice === 'idle' && step.notice !== 'enrolled' && (
         <Alert variant="warning" data-testid="idle-locked">
           <TriangleAlert aria-hidden />
@@ -486,20 +657,27 @@ export function orderOf(given: readonly SignInMethod[] | undefined): SignInMetho
  * What the frontend's entry offers of signing up, signing in by mail and with passkeys (asked only when the page would
  * show it).
  */
-export function useEntryOffers(signUp: boolean, emailLink: boolean, passkeys: boolean):
-  { selfRegistration: boolean; emailLink: boolean; passkeys: boolean } {
-  const wanted = signUp || emailLink || passkeys
-  const [offered, setOffered] = useState({ selfRegistration: false, emailLink: false, passkeys: false })
+export function useEntryOffers(signUp: boolean, emailLink: boolean, passkeys: boolean, unified = false):
+  { selfRegistration: boolean; emailLink: boolean; passkeys: boolean; unifiedSignIn: boolean; loaded: boolean } {
+  const wanted = signUp || emailLink || passkeys || unified
+  const [offered, setOffered] = useState({ selfRegistration: false, emailLink: false, passkeys: false,
+    unifiedSignIn: false })
+  const [loaded, setLoaded] = useState(false)
   useEffect(() => {
     if (!wanted) return undefined
     let live = true
     entryInfo()
       .then((info) => {
         if (live) {
-          setOffered({ selfRegistration: !!info.selfRegistration, emailLink: !!info.emailLink, passkeys: !!info.passkeys })
+          setOffered({ selfRegistration: !!info.selfRegistration, emailLink: !!info.emailLink, passkeys: !!info.passkeys,
+            unifiedSignIn: !!info.unifiedSignIn })
+          setLoaded(true)
         }
       })
-      .catch(() => undefined)
+      // Not read: the ordinary form, which works without the entry's settings.
+      .catch(() => {
+        if (live) setLoaded(true)
+      })
     return () => {
       live = false
     }
@@ -508,5 +686,7 @@ export function useEntryOffers(signUp: boolean, emailLink: boolean, passkeys: bo
     selfRegistration: signUp && offered.selfRegistration,
     emailLink: emailLink && offered.emailLink,
     passkeys: passkeys && offered.passkeys,
+    unifiedSignIn: unified && offered.unifiedSignIn,
+    loaded: !wanted || loaded,
   }
 }

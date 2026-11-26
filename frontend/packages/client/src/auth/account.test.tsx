@@ -16,6 +16,9 @@ import {
   register,
   requestPasswordReset,
   requestEmailLink,
+  checkEmailLink,
+  lastSignInMethod,
+  rememberSignInMethod,
   resendVerification,
   revokeOtherSessions,
   revokeSession,
@@ -65,6 +68,20 @@ describe('account functions (decision D43)', () => {
       ['/api/auth/email-link', { email: 'ann@example.com', entry: 'portal', to: '/p/1', locale: 'ja' }],
       ['/api/auth/email-link', { email: 'ann@example.com', entry: 'shop' }],
     ])
+  })
+
+  it('check a mailed link without using it, and remember only the way of signing in (decision D84)', async () => {
+    const posts = server(() => json(200, { signUp: true }))
+    expect(await checkEmailLink('t0k')).toEqual({ signUp: true })
+    expect(posts.map((p) => [p.path, p.body])).toEqual([['/api/auth/email-link/check', { token: 't0k' }]])
+    localStorage.clear()
+    expect(lastSignInMethod('one')).toBeNull()
+    rememberSignInMethod('password', 'one')
+    expect(lastSignInMethod('one')).toBe('password')
+    expect(lastSignInMethod('two')).toBeNull()
+    localStorage.setItem('jabiz.signInMethod.two', 'something else')
+    expect(lastSignInMethod('two')).toBeNull()
+    localStorage.clear()
   })
 
   it('throw the refusal with its rule code', async () => {

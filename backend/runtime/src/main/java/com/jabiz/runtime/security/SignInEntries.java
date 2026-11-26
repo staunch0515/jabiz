@@ -127,10 +127,13 @@ public class SignInEntries implements PlatformCheck {
      * @param reservedRoles        roles of entries with an entry scope (decision D64), which {@value #ALL_ROLES} does not
      *                             include here: their holders work in their scope only
      * @param passkeys             whether users sign in here with their passkeys (decision D71)
+     * @param unifiedSignIn        whether signing in and signing up are one "continue" here (section 15.19; decision
+     *                             D84): needs {@code emailLink}; no password registration, an address nobody has
+     *                             finishes signing up at its link, and a user of another entry joins by link
      */
     public record Entry(String name, Set<String> acceptedRoles, boolean selfRegistration, Set<String> registrationRoles,
         boolean requireVerifiedEmail, String appPath, Session session, boolean emailLink, String externalToken,
-        boolean accountDeletion, Set<String> reservedRoles, boolean passkeys) {
+        boolean accountDeletion, Set<String> reservedRoles, boolean passkeys, boolean unifiedSignIn) {
 
         public Entry {
             acceptedRoles = Set.copyOf(acceptedRoles);
@@ -138,6 +141,14 @@ public class SignInEntries implements PlatformCheck {
             Objects.requireNonNull(session, "session must not be null");
             externalToken = externalToken == null || externalToken.isBlank() ? null : externalToken.trim();
             reservedRoles = reservedRoles == null ? Set.of() : Set.copyOf(reservedRoles);
+        }
+
+        /** An entry where signing in and signing up are apart (decision D84). */
+        public Entry(String name, Set<String> acceptedRoles, boolean selfRegistration, Set<String> registrationRoles,
+            boolean requireVerifiedEmail, String appPath, Session session, boolean emailLink, String externalToken,
+            boolean accountDeletion, Set<String> reservedRoles, boolean passkeys) {
+            this(name, acceptedRoles, selfRegistration, registrationRoles, requireVerifiedEmail, appPath, session,
+                emailLink, externalToken, accountDeletion, reservedRoles, passkeys, false);
         }
 
         /** An entry without passkeys (decision D71). */
@@ -159,7 +170,7 @@ public class SignInEntries implements PlatformCheck {
         /** This entry, its {@value #ALL_ROLES} without {@code roles}. */
         Entry reserving(Set<String> roles) {
             return new Entry(name, acceptedRoles, selfRegistration, registrationRoles, requireVerifiedEmail, appPath,
-                session, emailLink, externalToken, accountDeletion, roles, passkeys);
+                session, emailLink, externalToken, accountDeletion, roles, passkeys, unifiedSignIn);
         }
 
         /** An entry where nobody asks for the deletion of their account. */
@@ -203,11 +214,18 @@ public class SignInEntries implements PlatformCheck {
     /** An entry as configured; every item optional. */
     public record Config(List<String> acceptedRoles, Boolean selfRegistration, List<String> registrationRoles,
         Boolean requireVerifiedEmail, String appPath, SessionConfig session, Boolean emailLink, String externalToken,
-        Boolean accountDeletion, Boolean passkeys) {
+        Boolean accountDeletion, Boolean passkeys, Boolean unifiedSignIn) {
 
         /** Binding takes this one (a second constructor would leave the binder without a choice). */
         @ConstructorBinding
         public Config {
+        }
+
+        public Config(List<String> acceptedRoles, Boolean selfRegistration, List<String> registrationRoles,
+            Boolean requireVerifiedEmail, String appPath, SessionConfig session, Boolean emailLink,
+            String externalToken, Boolean accountDeletion, Boolean passkeys) {
+            this(acceptedRoles, selfRegistration, registrationRoles, requireVerifiedEmail, appPath, session, emailLink,
+                externalToken, accountDeletion, passkeys, null);
         }
 
         public Config(List<String> acceptedRoles, Boolean selfRegistration, List<String> registrationRoles,
@@ -372,6 +390,10 @@ public class SignInEntries implements PlatformCheck {
                 problems.add(CheckProblem.warning(SessionChecks.CATEGORY, location, "self-registration is on, but "
                     + "jabiz.mail.enabled is not: registered users cannot verify their address"));
             }
+            if (entry.unifiedSignIn() && !entry.selfRegistration()) {
+                problems.add(CheckProblem.warning(SessionChecks.CATEGORY, location, "unified-sign-in is on, but "
+                    + "self-registration is not: an address nobody has gets nothing"));
+            }
             entry.acceptedRoles().stream().filter(role -> !ALL_ROLES.equals(role)).forEach(referenced::add);
             referenced.addAll(entry.registrationRoles());
         });
@@ -488,6 +510,10 @@ public class SignInEntries implements PlatformCheck {
             || entry.acceptedRoles().contains(ALL_ROLES))) {
             errors.add("email-link cannot be on for the administration entry or an entry accepting every role");
         }
+        // One "continue" sends a link (decision D84): nothing without signing in by link.
+        if (entry.unifiedSignIn() && !entry.emailLink()) {
+            errors.add("unified-sign-in needs email-link: its \"continue\" mails a link");
+        }
         // The administration's users leave through an administrator (SEC_USER_DELETION_SCHEDULE), never on their own
         // (decision D62 item 1): not at the administration, nor at an entry taking every role.
         if (entry.accountDeletion() && (RequestContext.DEFAULT_ENTRY.equals(name)
@@ -552,7 +578,7 @@ public class SignInEntries implements PlatformCheck {
     }
 
     private Entry entry(String name, Config config) {
-        Config c = config == null ? new Config(null, null, null, null, null, null, null, null, null, null) : config;
+        Config c = config == null ? new Config(null, null, null, null, null, null, null, null, null, null, null) : config;
         SessionConfig s = c.session() == null ? new SessionConfig(null, null, null) : c.session();
         Session session = new Session(s.refreshTokenTtl() == null ? defaults.refreshTokenTtl() : s.refreshTokenTtl(),
             s.idleTimeout() == null ? defaults.idleTimeout() : s.idleTimeout(),
@@ -560,7 +586,8 @@ public class SignInEntries implements PlatformCheck {
         return new Entry(name, trimmed(c.acceptedRoles()), Boolean.TRUE.equals(c.selfRegistration()),
             trimmed(c.registrationRoles()), Boolean.TRUE.equals(c.requireVerifiedEmail()),
             c.appPath() == null ? "/" : c.appPath().trim(), session, Boolean.TRUE.equals(c.emailLink()),
-            c.externalToken(), Boolean.TRUE.equals(c.accountDeletion()), Set.of(), Boolean.TRUE.equals(c.passkeys()));
+            c.externalToken(), Boolean.TRUE.equals(c.accountDeletion()), Set.of(), Boolean.TRUE.equals(c.passkeys()),
+            Boolean.TRUE.equals(c.unifiedSignIn()));
     }
 
     private static Set<String> trimmed(List<String> values) {
