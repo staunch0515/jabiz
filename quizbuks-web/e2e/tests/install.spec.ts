@@ -104,8 +104,8 @@ test('a share link opened in WeChat says first how to open it in the phone\'s br
   const notice = page.getByTestId('pwa-install')
   await expect(notice).toHaveAttribute('data-situation', 'in-app')
   await expect(notice).toContainText('点右上角的"···"')
-  // In Chinese the mailed link comes first, before the password and Google, Facebook and LINE.
-  await expect(page.getByTestId('email-link-form')).toBeVisible()
+  // In Chinese the address and "continue" come first, before Google, Facebook and LINE (Q113f-2).
+  await expect(page.getByTestId('continue-email')).toBeVisible()
   await expectAccessible(page, 'sign-in inside WeChat')
   await context.close()
 })

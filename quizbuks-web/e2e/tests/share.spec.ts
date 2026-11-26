@@ -70,7 +70,11 @@ test('a visitor starts from a share link with an e-mail address only', async ({ 
   const link = linkIn(mail.text, '/auth/email-link')
   expect(link.searchParams.get('to')).toBe(`/taker/p/${shared.publicationId}`)
   await page.goto(link.pathname + link.search)
-  await page.getByTestId('email-link-start').click()
+  // A new address gives its name at the link before the account exists (Q113f-2; platform D84).
+  const finish = page.getByTestId('complete-sign-up')
+  await expect(finish).toBeVisible()
+  await page.getByTestId('complete-sign-up-name').fill('Mio')
+  await finish.locator('button[type="submit"]').click()
 
   // A new taker: the short welcome step.
   await expect(page.getByTestId('welcome')).toBeVisible()
@@ -85,9 +89,9 @@ test('a visitor starts from a share link with an e-mail address only', async ({ 
   await expect(page).toHaveURL(new RegExp(`/p/${shared.publicationId}$`))
   await expect(page.getByTestId('detail-start')).toBeVisible()
 
-  // The name sponsors may see is the address's part before the @, never the address.
+  // The name sponsors may see is the one given at the link, never the address.
   await page.goto('/taker/account/profile')
-  await expect(page.getByTestId('profile-name')).toHaveValue(email.split('@')[0])
+  await expect(page.getByTestId('profile-name')).toHaveValue('Mio')
 })
 
 test('a link\'s language opens the app in it for a new visitor, and leaves the address (Q59b)', async ({

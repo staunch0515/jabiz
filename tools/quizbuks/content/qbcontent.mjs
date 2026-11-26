@@ -359,10 +359,14 @@ async function takers(options) {
   for (let n = 1; n <= count; n++) {
     const email = `taker-${Date.now()}-${n}@example.test`
     const client = new Client(options.base)
-    await client.json('POST', '/api/auth/register', { email, password, displayName: `Taker ${n}`, locale: 'en', entry: 'app' })
-    const token = (await mailLink(options.mailpit, email, '/auth/verify-email')).searchParams.get('token')
-    const check = await client.json('POST', '/api/auth/verify-email/check', { token })
-    await client.json('POST', '/api/auth/verify-email', check.passwordRequired ? { token, password } : { token })
+    // The app signs up only through "continue" and the mailed link (Q113f-2; platform D84); the password is then
+    // chosen through "forgot your password", so that the taker can sign in here.
+    await client.json('POST', '/api/auth/email-link', { email, entry: 'app', locale: 'en' })
+    const link = (await mailLink(options.mailpit, email, '/auth/email-link')).searchParams.get('token')
+    await client.json('POST', '/api/auth/email-link/confirm', { token: link, displayName: `Taker ${n}`, locale: 'en' })
+    await client.json('POST', '/api/auth/password-reset/request', { email, entry: 'app' })
+    const reset = (await mailLink(options.mailpit, email, '/auth/password-reset')).searchParams.get('token')
+    await client.json('POST', '/api/auth/password-reset/confirm', { token: reset, password })
     await client.signIn(email, password, 'app')
     const consents = await client.query('qb.me.consents', { kinds: ['TERMS_APP', 'PRIVACY'], at: new Date().toISOString() })
     const version = (kind) => consents.find((c) => c.kind === kind)?.versionNo ?? null

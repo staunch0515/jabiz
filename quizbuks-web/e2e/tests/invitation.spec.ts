@@ -123,7 +123,11 @@ test('an invited address answers through its mailed link; nobody else sees the p
   expect(link.searchParams.get('to')).toBe(`/taker/p/${publicationId}`)
   await page.context().clearCookies()
   await page.goto(link.pathname + link.search)
-  await page.getByTestId('email-link-start').click()
+  // A new address gives its name at the link before the account exists (Q113f-2; platform D84).
+  const finish = page.getByTestId('complete-sign-up')
+  await expect(finish).toBeVisible()
+  await page.getByTestId('complete-sign-up-name').fill('Invitee')
+  await finish.locator('button[type="submit"]').click()
   await expect(page.getByTestId('welcome')).toBeVisible()
   await page.getByTestId('profile-terms').click()
   await page.getByTestId('profile-save').click()
