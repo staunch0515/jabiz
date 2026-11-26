@@ -12,6 +12,7 @@ import { loadAds } from './qb/ads'
 import { nativeShell, rememberShell } from './shell'
 import { takeReferralFromAddress } from './referral/api'
 import { siteEnvironment } from './qb/environment'
+import { followAppearanceInStatusBar } from './statusBar'
 
 // The app's sign-in entry (jabizApp passes it as VITE_JABIZ_ENTRY; named here as well for `pnpm dev`): its sessions,
 // kept on the device for 30 days, and its identity providers are the app's, apart from the sponsor console's and the
@@ -24,8 +25,9 @@ rememberShell()
 applyLinkLanguage()
 // Q70: a friend's referral link: its key noted for the tab, the parameter gone, before the router reads the address.
 takeReferralFromAddress()
-// The remembered appearance before the first paint.
+// The remembered appearance before the first paint; the status bar follows it (Q113 P11).
 applyAppearance()
+followAppearanceInStatusBar()
 // The PWA's Service Worker (VITE_JABIZ_PWA=on in the jar's build); a new version waits for PwaUpdatePrompt.
 void registerServiceWorker()
 // Installed (now or while open): the business site's "start answering" then opens the app's window (Q41).

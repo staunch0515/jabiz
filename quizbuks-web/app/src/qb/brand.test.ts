@@ -48,6 +48,9 @@ const TEXT: [string, string][] = [
   ['qb-ink', 'qb-sky'],
   // The reward's text (Q113 P6) on the page.
   ['qb-reward-foreground', 'background'],
+  // Secondary text on a quiet fill (a badge, a secondary button) and in a popover.
+  ['muted-foreground', 'secondary'],
+  ['muted-foreground', 'popover'],
   // The button on the hero band: the band's dark green on the band's white.
   ['qb-hero-from', 'qb-hero-foreground'],
 ]
