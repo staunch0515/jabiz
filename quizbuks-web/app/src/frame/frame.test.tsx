@@ -165,8 +165,8 @@ describe('the heads of the pages (Q113 §9.1, P4)', () => {
     render(<App />)
     const back = await screen.findByTestId('header-back')
     expect(back.closest('[data-head="sub"]')).not.toBeNull()
-    expect(back).toHaveAttribute('href', '/account')
-    expect(back).toHaveAccessibleName('Back to Me')
+    expect(back).toHaveAttribute('href', '/settings')
+    expect(back).toHaveAccessibleName('Back to Settings')
     expect(document.querySelectorAll('[data-slot="x-head"]')).toHaveLength(1)
   })
 

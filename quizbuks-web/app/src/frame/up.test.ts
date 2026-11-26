@@ -3,8 +3,12 @@ import { upOf } from './up'
 
 describe('upOf: the way back from the pages under "Me"', () => {
   it('goes up one level in the menu', () => {
-    for (const path of ['/account/profile', '/account/security', '/account/certificates', '/account/delete', '/wallet',
-      '/maps', '/referrals']) {
+    // Q113d-2: the parts of the account are rows of the settings; the certificates, the Kudos, the maps and the
+    // referrals are tabs of My page.
+    for (const path of ['/account/profile', '/account/security', '/account/delete']) {
+      expect(upOf(path)).toEqual({ path: '/settings', name: 'me.settings' })
+    }
+    for (const path of ['/account/certificates', '/wallet', '/maps', '/referrals']) {
       expect(upOf(path)).toEqual({ path: '/account', name: 'frame.areas.me' })
     }
     for (const path of ['/wallet/balance', '/wallet/history', '/wallet/payout', '/wallet/bank']) {
@@ -15,7 +19,7 @@ describe('upOf: the way back from the pages under "Me"', () => {
   })
 
   it('has none on "Me" and on the areas\' own pages', () => {
-    for (const path of ['/account', '/', '/history', '/history/prizes', '/inbox', '/p/x']) {
+    for (const path of ['/account', '/settings', '/', '/history', '/history/prizes', '/inbox', '/p/x']) {
       expect(upOf(path)).toBeNull()
     }
   })

@@ -24,6 +24,17 @@ const STATUS_VARIANT: Record<ReferralStatus, 'default' | 'secondary' | 'outline'
  */
 export function ReferralsPage() {
   const { t } = useTranslation(APP)
+  return (
+    <div className="flex flex-col gap-4" data-testid="referrals-page">
+      <AreaHeader area="me" title={t('referral.page.title')} />
+      <ReferralsContent />
+    </div>
+  )
+}
+
+/** The links and the friends who came (Q113d-2: also a tab of "My page"). */
+export function ReferralsContent() {
+  const { t } = useTranslation(APP)
   const { t: tQb } = useTranslation(QB)
   const reward = useReferralReward()
   const links = useQuery({ queryKey: [...REFERRALS_QUERY, 'links'], queryFn: readMyLinks })
@@ -38,7 +49,6 @@ export function ReferralsPage() {
   }
   return (
     <div className="flex flex-col gap-4" data-testid="referrals">
-      <AreaHeader area="me" title={t('referral.page.title')} />
       <p className="text-muted-foreground text-sm">{t('referral.page.intro')}</p>
       <section aria-labelledby="referral-links-title" className="flex flex-col gap-2">
         <h2 id="referral-links-title" className="text-lg font-semibold">{t('referral.page.links')}</h2>

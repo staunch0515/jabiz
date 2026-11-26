@@ -137,11 +137,12 @@ describe('a Sponsor\'s knowledge map on their page (F-S3c)', () => {
 })
 
 describe('my knowledge maps (F-S3c)', () => {
-  it('lists the maps from the account with what the Taker lit, and opens one', async () => {
+  it('lists the maps on My page with what the Taker lit, and opens one', async () => {
     const { asked } = server()
     window.history.replaceState(null, '', '/account')
     render(<App />)
-    await userEvent.click(await screen.findByTestId('account-menu-maps'))
+    // Q113d-2: a tab of My page.
+    await userEvent.click(await screen.findByTestId('page-tab-maps'))
     const item = await screen.findByTestId('maps-item')
     expect(item).toHaveTextContent('Baking')
     expect(item).toHaveTextContent('By Acme')

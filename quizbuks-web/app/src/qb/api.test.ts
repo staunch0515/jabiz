@@ -28,9 +28,9 @@ describe('the typed calls', () => {
     vi.spyOn(globalThis, 'fetch')
       .mockResolvedValueOnce(json({ items: [] }))
       .mockResolvedValueOnce(json({ items: [{ attributes: { displayName: 'Mei', countryCode: 'JP', city: null,
-        preferredCurrency: 'JPY', revision: '4' } }] }))
+        preferredCurrency: 'JPY', revision: '4', createdAt: '2026-11-02T03:00:00Z' } }] }))
     expect(await readMyProfile()).toBeNull()
     expect(await readMyProfile()).toEqual({ displayName: 'Mei', countryCode: 'JP', city: null,
-      preferredCurrency: 'JPY', revision: 4 })
+      preferredCurrency: 'JPY', revision: 4, createdAt: '2026-11-02T03:00:00Z' })
   })
 })

@@ -32,8 +32,8 @@ test('an iPhone is guided through the Share menu from the account page', async (
   const page = await context.newPage()
   await signIn(page, '/taker/', email)
   await expect(page).not.toHaveURL(/\/login/)
-  // The offer stays in "App settings", under "Me" and "Settings" (F-F4).
-  await page.goto('/taker/account')
+  // The offer stays in "App settings", a row of the settings (F-F4, Q113d-2).
+  await page.goto('/taker/settings')
   await page.getByTestId('account-menu-preferences').click()
   await expect(page).toHaveURL(/\/taker\/account\/preferences$/)
   await expect(page.getByRole('heading', { level: 1, name: 'App settings' })).toBeVisible()

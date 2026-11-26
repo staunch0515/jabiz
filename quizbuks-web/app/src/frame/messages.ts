@@ -58,6 +58,20 @@ const en = {
       prizesHint: 'What you won, and what is left to collect',
       kudosHint: 'Balance, Kudos by method, transactions, payout',
     },
+    taker: 'Taker',
+    joined: 'Joined {{date}}',
+    answered: '{{count}} answered',
+    edit: 'Edit profile',
+    tabsLabel: 'My content',
+    tabs: { answered: 'Answered', kudos: 'Kudos', certificates: 'Certificates', maps: 'Knowledge maps', referrals: 'Referrals' },
+    seeAll: 'See all',
+    noAnswers: 'No quizzes yet',
+    noAnswersHint: 'The quizzes you answer appear here.',
+    toQuizzes: 'Find a quiz',
+  },
+  settings: {
+    search: 'Search settings',
+    noMatch: 'No setting matches.',
   },
 }
 
@@ -113,6 +127,20 @@ const zh = {
       prizesHint: '赢得的奖品，以及还要领取的',
       kudosHint: '余额、按方式的学分、交易、收款',
     },
+    taker: '学者',
+    joined: '{{date}}加入',
+    answered: '{{count}} 个已答',
+    edit: '编辑资料',
+    tabsLabel: '我的内容',
+    tabs: { answered: '已答', kudos: '学分', certificates: '证书', maps: '知识结构图', referrals: '推荐' },
+    seeAll: '查看全部',
+    noAnswers: '还没有答过 Quiz',
+    noAnswersHint: '你答过的 Quiz 会出现在这里。',
+    toQuizzes: '去答题',
+  },
+  settings: {
+    search: '搜索设置',
+    noMatch: '没有符合的设置。',
   },
 }
 
@@ -168,6 +196,20 @@ const ja = {
       prizesHint: '獲得した景品と、受け取りが残っているもの',
       kudosHint: '残高、方法別のクドス、取引、受け取り口座',
     },
+    taker: 'テイカー',
+    joined: '{{date}}に参加',
+    answered: '回答済み {{count}} 件',
+    edit: 'プロフィールを編集',
+    tabsLabel: 'マイコンテンツ',
+    tabs: { answered: '回答済み', kudos: 'クドス', certificates: '証明書', maps: '知識マップ', referrals: '紹介' },
+    seeAll: 'すべて見る',
+    noAnswers: 'まだクイズに答えていません',
+    noAnswersHint: '答えたクイズがここに表示されます。',
+    toQuizzes: 'クイズを探す',
+  },
+  settings: {
+    search: '設定を検索',
+    noMatch: '該当する設定はありません。',
   },
 }
 

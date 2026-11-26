@@ -1,4 +1,4 @@
-import { expect, expectAccessible, prepareQuizbuks, signIn, takerArea, test, type TakerArea, openTakerArea } from './support'
+import { expect, expectAccessible, prepareQuizbuks, signIn, takerArea, test, type TakerArea, openTakerArea, openTakerSettings } from './support'
 import { takerInJapan } from './wallet'
 
 /*
@@ -146,7 +146,7 @@ test('an address that changed leads to its page now', async ({ page, request }) 
   await expect(page).toHaveURL(/\/taker\/auth\/account-deletion$/)
   await page.goto('/taker/account?section=details')
   await expect(page).toHaveURL(/\/taker\/account\/details$/)
-  await expect(page.getByTestId('header-back')).toHaveAccessibleName('Back to Me')
+  await expect(page.getByTestId('header-back')).toHaveAccessibleName('Back to Settings')
 })
 
 test('"Coming soon" beside the Kudos is the same on "Me" and on the wallet', async ({ page, request }) => {
@@ -168,17 +168,18 @@ test('the old menu is gone, and each of its entries has a place', async ({ page,
   await signIn(page, '/taker/', me.email)
   await expect(page.getByTestId('home')).toBeVisible()
   await expect(page.getByTestId('app-menu')).toHaveCount(0)
-  // Scanning: the floating button. Referrals: "What I have". Appearance: App settings. Signing out: the drawer, and
-  // the bottom of "Me".
+  // Scanning: the floating button. Referrals: a tab of My page (Q113d-2). Appearance: App settings. Signing out: the
+  // drawer, and the bottom of the settings.
   await openTakerArea(page, 'me')
-  await page.getByTestId('account-menu-referrals').click()
+  await page.getByTestId('page-tab-referrals').click()
+  await page.getByTestId('me-referrals-all').click()
   await expect(page).toHaveURL(/\/taker\/referrals$/)
-  await openTakerArea(page, 'me')
+  await openTakerSettings(page)
   await page.getByTestId('account-menu-preferences').click()
   await page.getByTestId('appearance-dark').click()
   await expect(page.getByTestId('appearance-dark')).toHaveAttribute('aria-pressed', 'true')
   await page.getByTestId('appearance-light').click()
-  await openTakerArea(page, 'me')
+  await openTakerSettings(page)
   await page.getByTestId('sign-out').click()
   await expect(page).toHaveURL(/\/login$/)
 })

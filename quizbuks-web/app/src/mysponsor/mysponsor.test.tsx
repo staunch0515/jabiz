@@ -192,7 +192,7 @@ describe('a Sponsor in the app (Q68)', () => {
   it('tells a Taker who is no Sponsor what opens applying, and says why when the join is refused (F-S2c2b)',
     async () => {
     const api = server({ account: null, refuseJoin: true })
-    window.history.replaceState(null, '', '/account')
+    window.history.replaceState(null, '', '/settings')
     render(<App />)
     const section = await screen.findByTestId('become-sponsor')
     expect(within(section).getByTestId('become-sponsor-needed')).toHaveTextContent('knowledge map')
@@ -205,7 +205,7 @@ describe('a Sponsor in the app (Q68)', () => {
 
   it('applies once the gate is open: the Sponsor sign-in is added and the console is linked', async () => {
     const api = server({ account: null })
-    window.history.replaceState(null, '', '/account')
+    window.history.replaceState(null, '', '/settings')
     render(<App />)
     await userEvent.click(await screen.findByTestId('become-sponsor-apply'))
     expect(await screen.findByTestId('become-sponsor-onboarding')).toHaveAttribute('href', '/sponsor/onboarding')

@@ -444,6 +444,23 @@ export async function openTakerArea(page: Page, area: TakerArea) {
   return entry.click()
 }
 
+/**
+ * Opens the taker app's settings (Q113d-2): the drawer's "Settings" on a phone (from the home, which has the avatar);
+ * a wide screen has no drawer, and the settings no entry of the left column: its address.
+ */
+export async function openTakerSettings(page: Page) {
+  if (await page.getByTestId('head-avatar').count() === 0 && await takerArea(page, 'home').isVisible()) {
+    await takerArea(page, 'home').click()
+  }
+  if (await page.getByTestId('head-avatar').isVisible().catch(() => false)) {
+    await page.getByTestId('head-avatar').click()
+    await page.getByTestId('drawer-settings').click()
+  } else {
+    await page.goto('/taker/settings')
+  }
+  await expect(page.getByTestId('me-settings')).toBeVisible()
+}
+
 /** Signs out of the taker app: the drawer, then the button at the bottom of it (Q113 §9.2). */
 export async function signOutTaker(page: Page) {
   if (await page.getByTestId('head-avatar').count() === 0) await takerArea(page, 'home').click()

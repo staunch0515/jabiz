@@ -71,6 +71,9 @@ export function frameServer(options: FrameServer = {}) {
         return json(200, { items: rows.slice(offset, offset + limit), offset, limit,
           ...(body?.count ? { total: rows.length } : {}) })
       }
+      // Q113d-2: My page's latest answers and their number (none here).
+      case '/api/queries/qb.app.history':
+        return json(200, { items: [], offset: 0, limit: Number(body?.limit ?? 20), ...(body?.count ? { total: 0 } : {}) })
       case '/api/queries/qb.app.wallet':
         return options.wallet ? json(200, { items: [options.wallet], offset: 0, limit: 1 })
           : json(500, { status: 500, title: 'Failed' })

@@ -438,3 +438,31 @@ async ({ page, request }) => {
   expect(question.width).toBeCloseTo(390, 0)
   await expectAccessible(page, 'app result (Q113d-1)')
 })
+
+test('My page and the settings at 390 px: a banner of 3:1, the picture of 93 px over its edge, the tabs of 53 px; the '
+  + 'settings\' search of 42 px and rows of 52 px (Q113d-2)', async ({ page, request }) => {
+  const me = await takerInJapan(request, 'Profile')
+  await page.setViewportSize({ width: 390, height: 844 })
+  await signIn(page, '/taker/', me.email)
+  await page.goto('/taker/account')
+  const banner = (await page.getByTestId('me-banner').boundingBox())!
+  expect(banner.width, 'the banner spans the screen').toBeCloseTo(390, 0)
+  expect(banner.height, 'at 3:1').toBeCloseTo(130, 0)
+  const avatar = (await page.getByTestId('me-avatar').boundingBox())!
+  expect(avatar.width).toBeCloseTo(93, 0)
+  expect(avatar.x, '16 px in').toBeCloseTo(16, 0)
+  expect(banner.y + banner.height - avatar.y, 'over the banner\'s edge by 43 px').toBeCloseTo(43, 0)
+  await expect(page.getByTestId('me-joined')).toBeVisible()
+  const tab = page.locator('[data-slot="page-tab"][aria-current="page"]').first()
+  expect((await tab.boundingBox())!.height).toBeCloseTo(53, 0)
+  await expectAccessible(page, 'app my page (Q113d-2)')
+
+  await page.goto('/taker/settings')
+  expect((await page.getByTestId('settings-search').boundingBox())!.height).toBeCloseTo(42, 0)
+  // A row of plain words is 52 px; one with its line of hint under it, as tall as it needs.
+  const row = (await page.getByTestId('account-menu-help').boundingBox())!
+  expect(row.width, 'the rows span the screen').toBeCloseTo(390, 0)
+  expect(row.height).toBeCloseTo(52, 0)
+  expect((await page.getByTestId('account-menu-profile').boundingBox())!.height).toBeGreaterThanOrEqual(52)
+  await expectAccessible(page, 'app settings (Q113d-2)')
+})
