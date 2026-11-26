@@ -45,6 +45,9 @@ class MessagesTest {
         assertThat(en.stringPropertyNames()).containsAll(ContentCodes.ALL).containsAll(PublishingCodes.ALL)
             .contains("approval.subject.qb.publication", "qb.publication.copy-name")
             .containsAll(AccountCodes.ALL).containsAll(ReviewCodes.ALL)
+            // Q114: the avatar.
+            .containsAll(com.jabiz.quizbuks.avatar.AvatarCodes.ALL)
+            .contains("entity.QbTakerAvatar", "process.QB_AVATAR_SET")
             .containsAll(com.jabiz.quizbuks.page.SponsorPageCodes.ALL)
             .containsAll(com.jabiz.quizbuks.asset.AssetCodes.ALL)
             .containsAll(com.jabiz.quizbuks.tree.TreeCodes.ALL).containsAll(com.jabiz.quizbuks.tree.TreeRules.CODES)

@@ -53,6 +53,15 @@ const TEXT: [string, string][] = [
   ['muted-foreground', 'popover'],
   // The button on the hero band: the band's dark green on the band's white.
   ['qb-hero-from', 'qb-hero-foreground'],
+  // Q114a: the initial in an avatar, on each of its backgrounds.
+  ['qb-avatar-foreground', 'qb-avatar-1'],
+  ['qb-avatar-foreground', 'qb-avatar-2'],
+  ['qb-avatar-foreground', 'qb-avatar-3'],
+  ['qb-avatar-foreground', 'qb-avatar-4'],
+  ['qb-avatar-foreground', 'qb-avatar-5'],
+  ['qb-avatar-foreground', 'qb-avatar-6'],
+  ['qb-avatar-foreground', 'qb-avatar-7'],
+  ['qb-avatar-foreground', 'qb-avatar-8'],
 ]
 
 /** Boundaries of controls, the focus indicator and the carousel's dots: 3:1 (1.4.11). */

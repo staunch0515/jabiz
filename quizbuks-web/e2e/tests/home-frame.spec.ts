@@ -130,6 +130,8 @@ test('the home stays pixel for pixel as it was before F-F4', async ({ page, requ
     { name: 'Frame check: a short dance', video: 'https://youtube.com/shorts/aaaaaaaaaaa' },
   ]
   const me = await taker(request, 'Hana')
+  // Q114a: the initial's colour comes from the taker's id, new each run; a preset keeps the head's picture the same.
+  await run(request, me.token, 'QB_AVATAR_SET', { kind: 'PRESET', preset: 'p01' })
   for (const card of made) {
     const quizId = await quiz(request, sponsor.token, `${card.name} ${words}`, card.video)
     const publicationId = await livePublication(request, sponsor.token, quizId, card.name, 1)
@@ -163,6 +165,10 @@ test('the home stays pixel for pixel as it was before F-F4', async ({ page, requ
         const header = page.getByTestId('header')
         await expect(header.getByTestId('head-mark')).toBeVisible()
         await expect(header.getByTestId('head-avatar')).toBeVisible()
+        // Q114a: the avatar's drawing is loaded before the picture is taken.
+        const drawing = header.getByTestId('head-avatar').locator('img')
+        await expect.poll(() => drawing.evaluate((img: HTMLImageElement) => img.complete && img.naturalWidth > 0))
+          .toBe(true)
         // The button at the right: the filters (Q64); the search is the bottom menu's (Q113a-2), the menu is gone
         // (F-F4b), its entries are in the bottom menu and the drawer.
         await expect(header.getByTestId('feed-filters-open')).toBeVisible()

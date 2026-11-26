@@ -11,6 +11,15 @@
   --color-qb-coin: var(--qb-coin);
   --color-qb-sky: var(--qb-sky);
   --color-qb-ink: var(--qb-ink);
+  --color-qb-avatar-1: var(--qb-avatar-1);
+  --color-qb-avatar-2: var(--qb-avatar-2);
+  --color-qb-avatar-3: var(--qb-avatar-3);
+  --color-qb-avatar-4: var(--qb-avatar-4);
+  --color-qb-avatar-5: var(--qb-avatar-5);
+  --color-qb-avatar-6: var(--qb-avatar-6);
+  --color-qb-avatar-7: var(--qb-avatar-7);
+  --color-qb-avatar-8: var(--qb-avatar-8);
+  --color-qb-avatar-foreground: var(--qb-avatar-foreground);
   /* Q113 §9.1: the outline of media and quiet buttons, and the reward colour (P6). */
   --color-qb-outline: var(--qb-outline);
   --color-qb-reward: var(--qb-reward);

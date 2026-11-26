@@ -14,7 +14,8 @@ import {
 import { useTranslation } from 'react-i18next'
 import { APP } from '../messages'
 import { ACCOUNT_PATH } from '../pages/accountPaths'
-import { Initial, useDrawer } from './Drawer'
+import { Avatar } from '../avatar/Avatar'
+import { useDrawer } from './Drawer'
 import { FrameLink } from './FrameLink'
 import { nextScrollChrome, SHOWN } from './scrollChrome'
 import { XSPEC } from './xspec'
@@ -133,7 +134,7 @@ export function TakerAvatar() {
   const drawer = useDrawer()
   // A wide screen has the account in the left column: no avatar in the heads (x.com's, and the prototype's Desktop).
   const classes = 'focus-visible:ring-ring shrink-0 rounded-full outline-none focus-visible:ring-2 md:hidden'
-  const initial = <Initial className="size-(--x-avatar) text-sm" />
+  const initial = <Avatar className="size-(--x-avatar) text-sm" />
   if (!drawer) {
     return <FrameLink to={ACCOUNT_PATH} aria-label={t('frame.areas.me')} data-testid="head-avatar" className={classes}>{initial}</FrameLink>
   }
