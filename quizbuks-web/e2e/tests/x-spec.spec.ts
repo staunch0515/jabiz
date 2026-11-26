@@ -337,7 +337,9 @@ test('the home post at 390 px: the avatar 40 px at 16, the text 8 px after it, i
   expect(text.y, 'the text right under the first line').toBeGreaterThanOrEqual(head.y + head.height)
   expect(picture.x, 'the picture across the text').toBeCloseTo(head.x, 0)
   expect(picture.width).toBeCloseTo(head.width, 0)
-  expect(picture.y - (text.y + text.height), 'the picture 12 px under the text').toBeCloseTo(12, 0)
+  // The text's box is 2 px taller each way than its lines (a target of 24 px at least), its margin giving them back.
+  expect(picture.y - (text.y + text.height - 2), 'the picture 12 px under the text').toBeCloseTo(12, 0)
+  expect(text.height, 'one line of text is a target of 24 px').toBeGreaterThanOrEqual(24)
   expect(await post.getByTestId('feed-card-picture').locator(':scope > span').first()
     .evaluate((element) => getComputedStyle(element).borderTopLeftRadius)).toBe('16px')
   expect(facts.y - (picture.y + picture.height), 'the facts 12 px under the picture').toBeCloseTo(12, 0)

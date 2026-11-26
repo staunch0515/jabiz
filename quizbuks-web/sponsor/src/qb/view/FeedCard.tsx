@@ -129,7 +129,9 @@ export function FeedCardView({ card, href, playing = false, note, video, onOpen,
       {card.introLead && <>{' '}<span data-testid="feed-card-intro">{card.introLead}</span></>}
     </>
   )
-  const textClass = 'mt-0.5 line-clamp-3 block text-[15px] leading-5 break-words'
+  // The text is a target of its own (§9.3): 2 px above and below make even one line 24 px tall (WCAG 2.5.8), and the
+  // margin under it gives the 2 px back, so the post is laid out as with 20 px lines.
+  const textClass = 'line-clamp-3 -mb-0.5 block py-0.5 text-[15px] leading-5 break-words'
   // Q99b: every site's video plays on the home the same way; YouTube's and Vimeo's in the app's one player (`video`),
   // the others in their own (their sound is their own button).
   const plays = !!card.video && !failed
