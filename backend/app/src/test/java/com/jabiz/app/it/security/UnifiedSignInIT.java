@@ -169,6 +169,21 @@ class UnifiedSignInIT extends SignUpItSupport {
     }
 
     @Test
+    void aJoinTakesOverAnAccountSomebodyRegisteredWithoutTheMailbox() {
+        // Registered at the portal with a password, never verified: whoever owns the mailbox takes it on joining.
+        String email = address("claimjoin");
+        register(PORTAL, email, PASSWORD).expectStatus().isAccepted();
+        String userId = (String) userOf(email).get("user_id");
+        ask(ONE, email);
+        assertThat(confirm(token(LINK, email), null, null).expectStatus().isOk().expectBody(MAP).returnResult()
+            .getResponseBody()).containsEntry("status", "SIGNED_IN");
+        assertThat(userOf(email)).containsEntry("user_id", userId).containsEntry("password_hash", null)
+            .containsEntry("verified_email", email);
+        assertThat(rolesOf(userId)).containsExactlyInAnyOrder(CUSTOMER, MEMBER);
+        assertThat(refusal(loginTo(email, PASSWORD, PORTAL), 401)).isEqualTo("LOGIN_FAILED");
+    }
+
+    @Test
     void aJoinIsAskedOfTheGuardsAndProtectedGrantsNeedApproval() {
         String refused = address(ItSignInFixtures.SIGN_UP_REFUSED_PREFIX + "-join");
         String refusedId = createUserWithEmail(unique("refused"), refused, PASSWORD);

@@ -19,12 +19,13 @@ function json(status: number, body: unknown) {
 }
 
 /** Entries named `one…` have one "continue"; the link check answers `signUp`. Returns the posts made. */
-function server(check: () => Response = () => json(200, { signUp: false })) {
+function server(check: () => Response = () => json(200, { signUp: false }), entriesGate?: Promise<void>) {
   const posts: { path: string; body: unknown }[] = []
   vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const request = input instanceof Request ? input : new Request(new URL(String(input), 'http://localhost'), init)
     const path = new URL(request.url).pathname
     if (request.method === 'GET' && path.startsWith('/api/auth/entries/')) {
+      await entriesGate
       const name = path.split('/').pop()!
       return json(200, { name, selfRegistration: true, emailLink: true, appPath: '/app/',
         unifiedSignIn: name.startsWith('one') })
@@ -113,6 +114,36 @@ describe('SignInForm with flow="continue"', () => {
     expect(await screen.findByTestId('login-error')).toHaveTextContent('Wrong user name or password')
   })
 
+  it('remembers the password only once the second step is done', async () => {
+    const entry = entryNamed('one')
+    configureClient({ entry })
+    server()
+    const signIn = vi.fn(async () => ({ status: 'MFA_REQUIRED' as const, challenge: 'c1' }))
+    const verify = vi.fn(async () => undefined)
+    const onSignedIn = vi.fn()
+    render(<SignInForm brand="Shop" returnTo="/app/" flow="continue" auth={{ signIn, verify }} onSignedIn={onSignedIn} />)
+    await user().type(await screen.findByTestId('continue-email'), 'ann@example.com{Enter}')
+    await user().click(await screen.findByTestId('continue-use-password'))
+    await user().type(screen.getByTestId('continue-password'), 'secret{Enter}')
+    await screen.findByRole('heading', { name: 'Two-step verification' })
+    expect(lastSignInMethod(entry)).toBeNull()
+    await user().type(screen.getByRole('textbox'), '123456{Enter}')
+    await waitFor(() => expect(onSignedIn).toHaveBeenCalled())
+    expect(lastSignInMethod(entry)).toBe('password')
+  })
+
+  it('shows nothing to type into before it knows the entry', async () => {
+    const entry = entryNamed('one')
+    configureClient({ entry })
+    let open!: () => void
+    server(undefined, new Promise<void>((resolve) => { open = resolve }))
+    render(<SignInForm brand="Shop" returnTo="/app/" flow="continue" auth={{ signIn: vi.fn(), verify: vi.fn() }} />)
+    expect(screen.getByTestId('continue-loading')).toBeInTheDocument()
+    expect(screen.queryByRole('textbox')).toBeNull()
+    open()
+    expect(await screen.findByTestId('continue-email')).toBeInTheDocument()
+  })
+
   it('is the ordinary form where the entry has no "continue"', async () => {
     configureClient({ entry: entryNamed('plain') })
     server()
@@ -166,6 +197,24 @@ describe('EmailLinkPanel at an entry with one "continue"', () => {
       auth={{ signInWithEmailLink, verify: vi.fn() }} />)
     expect(await screen.findByTestId('email-link-state')).toHaveTextContent('Not open to you')
     expect(screen.queryByTestId('complete-sign-up')).toBeNull()
+  })
+
+  it('keeps the second step of a click made before the check answered', async () => {
+    const entry = entryNamed('one')
+    configureClient({ entry })
+    let open!: () => void
+    // The click used the link: the late check finds it no good.
+    server(() => json(422, { status: 422, violations: [{ field: null, ruleCode: 'TOKEN_INVALID', message: 'Used' }] }),
+      new Promise<void>((resolve) => { open = resolve }))
+    const signInWithEmailLink = vi.fn(async () => ({ status: 'MFA_REQUIRED' as const, challenge: 'c1' }))
+    render(<EmailLinkPanel brand="Shop" link={{ entry, token: 'd', appPath: '/app/' }}
+      auth={{ signInWithEmailLink, verify: vi.fn() }} />)
+    await user().click(screen.getByTestId('email-link-start'))
+    expect(await screen.findByRole('heading', { name: 'Two-step verification' })).toBeInTheDocument()
+    open()
+    await new Promise((resolve) => setTimeout(resolve, 20))
+    expect(screen.getByRole('heading', { name: 'Two-step verification' })).toBeInTheDocument()
+    expect(screen.queryByTestId('email-link-state')).toBeNull()
   })
 
   it('asks nothing before the click where the entry has no "continue"', async () => {

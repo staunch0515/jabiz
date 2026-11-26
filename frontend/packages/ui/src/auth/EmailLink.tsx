@@ -161,18 +161,22 @@ export function EmailLinkPanel({ link, to, brand, appearance, onNavigate, hrefOf
     // Only where the entry has one "continue" does a link wait for a name: elsewhere nothing is asked before the click.
     entryInfo(entry)
       .then(async (info) => {
-        if (!info.unifiedSignIn) return
-        if (live) setState({ kind: 'checking' })
+        if (!info.unifiedSignIn || !live) return
+        // Only while nothing was clicked: the click's own answer wins over the check's.
+        setState((now) => (now.kind === 'ready' ? { kind: 'checking' } : now))
         const { signUp } = await checkEmailLink(token)
-        if (live) setState({ kind: signUp ? 'signUp' : 'ready' })
+        if (live) setState((now) => (now.kind === 'checking' ? { kind: signUp ? 'signUp' : 'ready' } : now))
       })
       .catch((e: unknown) => {
         if (!live) return
-        if (invalidLink(e)) setState({ kind: 'invalid' })
-        // A sign-up guard's refusal (SIGN_UP_REFUSED), in the server's words.
-        else if (e instanceof ApiError && e.status === 403) setState({ kind: 'refused', message: refusal(e, t('common.error')) })
-        // The entry could not be read: the click answers for itself.
-        else setState({ kind: 'ready' })
+        setState((now) => {
+          if (now.kind !== 'ready' && now.kind !== 'checking') return now
+          if (invalidLink(e)) return { kind: 'invalid' }
+          // A sign-up guard's refusal (SIGN_UP_REFUSED), in the server's words.
+          if (e instanceof ApiError && e.status === 403) return { kind: 'refused', message: refusal(e, t('common.error')) }
+          // The entry could not be read: the click answers for itself.
+          return { kind: 'ready' }
+        })
       })
     return () => {
       live = false

@@ -156,6 +156,8 @@ export function SignInForm(props: SignInFormProps) {
   const [mailOpen, setMailOpen] = useState(false)
   // After "continue" (decision D84): the address, and whether its link went out or its password is asked.
   const [continued, setContinued] = useState<{ email: string; mode: 'sent' | 'password' } | null>(null)
+  // A password sign-in begun from "continue": remembered on this device once it is done, second step and all.
+  const [byContinuedPassword, setByContinuedPassword] = useState(false)
   const continueForm = useForm<{ email: string; password: string }>({ defaultValues: { email: '', password: '' } })
   // Too many attempts (429 with Retry-After, gap 5): the buttons wait as long as the server asks.
   const { seconds: wait, hold, message: waitMessage } = useRetryWait(t('common.error'))
@@ -164,8 +166,8 @@ export function SignInForm(props: SignInFormProps) {
   const form = useForm<{ userName: string; password: string }>({
     defaultValues: { userName: props.initialUserName ?? (notice === 'idle' ? lastUserName() : undefined) ?? '', password: '' },
   })
-  const { selfRegistration, emailLink, passkeys, unifiedSignIn } = useEntryOffers(!!props.signUpPath, !!props.emailLink,
-    !!props.passkey, props.flow === 'continue')
+  const { selfRegistration, emailLink, passkeys, unifiedSignIn, loaded } = useEntryOffers(!!props.signUpPath,
+    !!props.emailLink, !!props.passkey, props.flow === 'continue')
   const byEmail = props.userNameLabel === 'email'
   const support = passkeys ? passkeySupport() : 'unsupported'
   const withPasskey = passkeys && support === 'available' && !!auth.signInWithPasskey
@@ -173,6 +175,8 @@ export function SignInForm(props: SignInFormProps) {
 
   const signedIn = () => {
     forgetSignInStep()
+    // Only the way, never the address: next time this device goes straight to the password (decision D84).
+    if (byContinuedPassword) rememberSignInMethod('password')
     if (props.onSignedIn) props.onSignedIn(returnTo)
     else navigateTo({ onNavigate, hrefOf }, returnTo)
   }
@@ -375,10 +379,12 @@ export function SignInForm(props: SignInFormProps) {
                 setUnverified(false)
                 try {
                   const next = await auth.signIn(email, password)
-                  // Only the way, never the address: next time this device goes straight to the password.
-                  rememberSignInMethod('password')
-                  if (next.status === 'SIGNED_IN') signedIn()
-                  else {
+                  if (next.status === 'SIGNED_IN') {
+                    rememberSignInMethod('password')
+                    signedIn()
+                  } else {
+                    // Remembered once the second step is done too (`signedIn`).
+                    setByContinuedPassword(true)
                     setStep(next.status === 'MFA_REQUIRED'
                       ? { kind: 'code', challenge: next.challenge }
                       : { kind: 'enroll', challenge: next.challenge })
@@ -419,6 +425,15 @@ export function SignInForm(props: SignInFormProps) {
           </>
         )}
         {other}
+      </AuthFrame>
+    )
+  }
+
+  // Not the ordinary form first: what was typed there would go when "continue" replaces it.
+  if (props.flow === 'continue' && !loaded && step.kind === 'password') {
+    return (
+      <AuthFrame {...frame} title={t('continue.title')} below={props.below} quietTitle>
+        <p className="text-muted-foreground text-sm" role="status" data-testid="continue-loading">{t('common.loading')}</p>
       </AuthFrame>
     )
   }
@@ -643,10 +658,11 @@ export function orderOf(given: readonly SignInMethod[] | undefined): SignInMetho
  * show it).
  */
 export function useEntryOffers(signUp: boolean, emailLink: boolean, passkeys: boolean, unified = false):
-  { selfRegistration: boolean; emailLink: boolean; passkeys: boolean; unifiedSignIn: boolean } {
+  { selfRegistration: boolean; emailLink: boolean; passkeys: boolean; unifiedSignIn: boolean; loaded: boolean } {
   const wanted = signUp || emailLink || passkeys || unified
   const [offered, setOffered] = useState({ selfRegistration: false, emailLink: false, passkeys: false,
     unifiedSignIn: false })
+  const [loaded, setLoaded] = useState(false)
   useEffect(() => {
     if (!wanted) return undefined
     let live = true
@@ -655,9 +671,13 @@ export function useEntryOffers(signUp: boolean, emailLink: boolean, passkeys: bo
         if (live) {
           setOffered({ selfRegistration: !!info.selfRegistration, emailLink: !!info.emailLink, passkeys: !!info.passkeys,
             unifiedSignIn: !!info.unifiedSignIn })
+          setLoaded(true)
         }
       })
-      .catch(() => undefined)
+      // Not read: the ordinary form, which works without the entry's settings.
+      .catch(() => {
+        if (live) setLoaded(true)
+      })
     return () => {
       live = false
     }
@@ -667,5 +687,6 @@ export function useEntryOffers(signUp: boolean, emailLink: boolean, passkeys: bo
     emailLink: emailLink && offered.emailLink,
     passkeys: passkeys && offered.passkeys,
     unifiedSignIn: unified && offered.unifiedSignIn,
+    loaded: !wanted || loaded,
   }
 }
