@@ -60,6 +60,11 @@ export interface FeedCard {
   publicationId: string
   name: string
   quizTitle: string
+  /**
+   * Q113b-1: the beginning of the quiz's introduction as plain text (the card's, frozen with it: `IntroLeads`), in the
+   * language shown; none without one, and on a preview's card.
+   */
+  introLead?: string | null
   /** A file of the policy `qb.content.image`. */
   cover: string | null
   /** Q19: the player of the video watching which is enough to answer (one of `qb/video.ts`), else null. */
@@ -161,6 +166,7 @@ export function feedCard(row: Record<string, unknown>): FeedCard {
     publicationId: String(row.publicationId),
     name: String(row.name ?? ''),
     quizTitle: String(row.quizTitle ?? ''),
+    introLead: textOrNull(row.introLead),
     cover: textOrNull(row.cover),
     video: trustedPlayer(textOrNull(row.video)),
     watchRequired: row.watchRequired === true || row.watchRequired === 'true',

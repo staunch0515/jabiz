@@ -240,6 +240,23 @@ class PublicationSwitchIT extends PlayItSupport {
     }
 
     @Test
+    void theCardsLeadOfTheIntroductionFollowsASwitch() {
+        // Q113b-1: the home's post shows the lead of the version's introduction, frozen on the card like its title.
+        String sponsor = newSponsor("s-q113-lead");
+        credit(sponsor, 10_000);
+        String token = sponsorToken(sponsor);
+        String publicationId = livePublication(sponsor, "Q113 lead");
+        assertThat(card(publicationId)).containsEntry("intro_lead", null);
+        String quizId = quizOf(versionOf(publicationId));
+        run("QB_QUIZ_SAVE", token, body("quizId", quizId, "title", "Q113 lead quiz", "timeLimitSec", 300,
+            "intro", "## Capitals\n\nName **two** capitals; see [the map](https://example.com/map)."));
+        String second = (String) run("QB_QUIZ_PUBLISH_VERSION", token, body("quizId", quizId)).get("versionId");
+        switchTo(token, publicationId, second);
+        assertThat(card(publicationId)).containsEntry("version_id", UUID.fromString(second))
+            .containsEntry("intro_lead", "Capitals Name two capitals; see the map.");
+    }
+
+    @Test
     void theEndDropsASwitchInReview() {
         String sponsor = newSponsor("s-q51-ended");
         credit(sponsor, 10_000);

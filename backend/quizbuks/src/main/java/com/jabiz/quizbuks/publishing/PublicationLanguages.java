@@ -100,10 +100,13 @@ public final class PublicationLanguages {
 
     /** The card's own field of the version's title in each language (Q73b). */
     public static final String QUIZ_TITLE = "quizTitle";
+    /** Q113b-1: the card's own field of the lead of the version's introduction in each language ({@link IntroLeads}). */
+    public static final String INTRO_LEAD = "introLead";
 
     /**
      * The card's texts: the publication's in each offered language other than the base, with the version's title in
-     * it ({@link #QUIZ_TITLE}); null when it offers none but the base.
+     * it ({@link #QUIZ_TITLE}) and the lead of its introduction ({@link #INTRO_LEAD}); null when it offers none but the
+     * base.
      */
     public static String cardJson(Object stored, com.jabiz.quizbuks.content.QuizSnapshot snapshot,
         List<String> offered, String base) {
@@ -119,6 +122,11 @@ public final class PublicationLanguages {
             String title = t == null ? null : t.texts().get(com.jabiz.quizbuks.content.QuizSnapshot.TITLE_KEY);
             if (title != null) {
                 fields.put(QUIZ_TITLE, title);
+            }
+            String lead = t == null ? null
+                : IntroLeads.of(t.texts().get(com.jabiz.quizbuks.content.QuizSnapshot.INTRO_KEY));
+            if (lead != null) {
+                fields.put(INTRO_LEAD, lead);
             }
             if (!fields.isEmpty()) {
                 out.put(language, fields);

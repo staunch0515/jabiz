@@ -424,6 +424,7 @@
   区域（底部与左列的 `BOTTOM_AREAS`；扫一扫与"我的"是不在底部的区域，它们的页面是子页）、标签（`AREA_TABS`）、抽屉的条目（`DRAWER_ROWS`）、"我的"两组的条目（`ME_OWNED`、`ME_SETTINGS`）与每个页面属于哪个区域只在 `frame/areas.ts`。
   **新功能加为某个区域里的标签、抽屉或"我的"中的一项，不加底部菜单项，也不恢复右上角菜单**（退出登录在抽屉与"我的"最下方，欢迎页的页头另有；外观在"设置 → App 设置"）。搜索的结果在 `/search?q=`（首页的 `/?q=` 照旧可用）。地址改动只经 `LEGACY_APP_PATHS`（`areas.test.ts` 逐条检查），`OLD_ROUTES` 只增不删（e2e `taker-frame.spec.ts` 逐条打开）。
   首页（`FeedPage`）的改动须同时更新视觉对比基线并说明理由（`e2e/tests/home-frame.spec.ts`；框架本身的改动不得更新基线，Q113a 与 Q113b 的改版除外，其 PR 说明理由）。"我的图"在 `/maps`（F-S3c，不另设 `/account/map`）。
+  首页的每一条是 X 的帖子（Q113b-1，`qb/view/FeedCard.tsx`，两个 SPA 共用，发起方的预览即同一组件）：正文是卡片在上线与版本切换时冻结的简介开头 `introLead`（`publishing.IntroLeads`；迁移 V134 以同样的规则补上旧卡片，`IntroLeadMigrationIT` 核对两者，改规则即改两处），首页的查询不读版本的整份内容。
   待领奖只有一个来源：只读模板 `qb.app.prizes`（到店、现金、电子三种，`open` 与 `qb.app.redemptions` / `cash-rewards` 同一条件），已答的"待领奖"标签与两处徽标、"我的"的数字、扫一扫的"出示领奖码"都读它（`frame/prizes.ts`，同一个 query key，不轮询）；
   消息的徽标 = 收件箱未读 + 对话未读，由 `AppFrame` 问一次（`useUnread` / `useConversationsUnread`，进入、回到前台、每 5 分钟；标签上的数字只读缓存）。
   "即将开放"取自 `qb.app.wallet` 的列 `usable`（`qb.transfer.enabled` 或 `qb.withdrawal.bank.enabled` 为 true），不写死、不另设开关。证书数（"我的"的第三个数字）是 `QB_MY_CERTIFICATIONS` 的 `certificates` 中没有撤销的个数（F-S5b）。

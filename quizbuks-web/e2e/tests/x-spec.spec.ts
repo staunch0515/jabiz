@@ -1,11 +1,15 @@
 import type { Page } from '@playwright/test'
-import { expect, prepareQuizbuks, signIn, test } from './support'
+import { PNG, POLICY, upload } from './content'
+import { fund, taker, untilLive } from './play'
+import { approvedSponsor, livePublication } from './publishing'
+import { expect, prepareQuizbuks, run, signIn, test } from './support'
 import { takerInJapan } from './wallet'
 
 /*
  * The taker app measured against the timeline's layout (docs/quizbuks/plans/Q113-taker-ui-tone.md section 9, as measured
  * on x.com; the plan's section 3 items 2 and 3). Each phase of Q113 adds the rows of its own pages; Q113a-1 the heads,
- * the tabs and the scrolling (sections 9.1 and 9.1a); Q113f the entry pages
+ * the tabs and the scrolling (sections 9.1 and 9.1a); Q113a-2 the navigation; Q113b-1 the home's post (9.1 "条目");
+ * Q113f the entry pages
  * (section 9.4): no card, the brand's name and mark, a column of pills 46 px high, fields 62 px high with the label in
  * the box, on a phone a column 38 px in from its sides and on a wide screen 384 px wide, 36 px in, the name at 64 px
  * and the mark large beside it.
@@ -286,4 +290,63 @@ test.describe('the navigation (Q113 §9.1, §9.2)', () => {
     await expect(page.getByTestId('side-rail-history').getByText('Answered')).toBeHidden()
     expect((await page.getByTestId('x-column').boundingBox())!.width).toBeCloseTo(600, 0)
   })
+})
+
+test('the home post at 390 px: the avatar 40 px at 16, the text 8 px after it, its first line level with the avatar, '
+  + 'the picture across the text with 16 px corners, the facts 12 px under it (Q113 §9.1 "条目")', async ({ page, request }) => {
+  // A quiz of this test's own, found by a word no other test uses.
+  const sponsor = await approvedSponsor(request, 'Poster')
+  await fund(request, sponsor.token)
+  const word = `xpost${Date.now().toString(36)}`
+  const cover = await upload(request, sponsor.token, POLICY.image, 'cover.png', 'image/png', PNG)
+  const saved = await run(request, sponsor.token, 'QB_QUIZ_SAVE', { title: `Post ${word}`,
+    intro: '## Capitals\n\nName **two** capitals of the world.', cover, timeLimitSec: 300, shuffleQuestions: false })
+  const quizId = saved.quizId as string
+  await run(request, sponsor.token, 'QB_QUESTION_SAVE', { quizId, stem: 'Which one?', points: 1,
+    options: [{ text: 'This one', correct: true }, { text: 'That one', correct: false }] })
+  await run(request, sponsor.token, 'QB_QUIZ_PUBLISH_VERSION', { quizId })
+  const publicationId = await livePublication(request, sponsor.token, quizId, `Post check ${word}`, 1)
+  const me = await taker(request, 'Reader')
+  await untilLive(request, me.token, publicationId)
+
+  await page.setViewportSize({ width: 390, height: 844 })
+  await signIn(page, '/taker/', me.email)
+  await page.goto(`/taker/?q=${word}`)
+  const post = page.getByTestId('feed-card').filter({ hasText: `Post check ${word}` })
+  await expect(post).toHaveCount(1)
+  // The beginning of the introduction, its marks gone, after the name (Q113b-1).
+  await expect(post.getByTestId('feed-card-intro')).toHaveText('Capitals Name two capitals of the world.')
+  await page.evaluate(() => document.fonts.ready)
+
+  const box = async (testId: string) => (await post.getByTestId(testId).boundingBox())!
+  const card = (await post.boundingBox())!
+  const avatar = (await post.getByTestId('feed-card-avatar').locator(':scope > *').first().boundingBox())!
+  const head = await box('feed-card-head')
+  const text = await box('feed-card-link')
+  const picture = (await post.getByTestId('feed-card-picture').locator(':scope > span').first().boundingBox())!
+  const facts = await box('feed-card-facts')
+  expect(card.width, 'the post spans the screen').toBeCloseTo(390, 0)
+  expect(avatar.width, 'the avatar is 40 px').toBeCloseTo(40, 0)
+  expect(avatar.height).toBeCloseTo(40, 0)
+  expect(avatar.x - card.x, '16 px from the side').toBeCloseTo(16, 0)
+  expect(avatar.y - card.y, '12 px from the top').toBeCloseTo(12, 0)
+  expect(head.x - (avatar.x + avatar.width), 'the text 8 px after the avatar').toBeCloseTo(8, 0)
+  expect(head.y, 'the first line level with the avatar').toBeCloseTo(avatar.y, 0)
+  expect(head.height, 'the first line is 20 px, the menu floating beside it').toBeCloseTo(20, 0)
+  expect(card.x + card.width - (head.x + head.width), '16 px from the other side').toBeCloseTo(16, 0)
+  expect(text.y, 'the text right under the first line').toBeGreaterThanOrEqual(head.y + head.height)
+  expect(picture.x, 'the picture across the text').toBeCloseTo(head.x, 0)
+  expect(picture.width).toBeCloseTo(head.width, 0)
+  // The text's box is 2 px taller each way than its lines (a target of 24 px at least), its margin giving them back.
+  expect(picture.y - (text.y + text.height - 2), 'the picture 12 px under the text').toBeCloseTo(12, 0)
+  expect(text.height, 'one line of text is a target of 24 px').toBeGreaterThanOrEqual(24)
+  expect(await post.getByTestId('feed-card-picture').locator(':scope > span').first()
+    .evaluate((element) => getComputedStyle(element).borderTopLeftRadius)).toBe('16px')
+  expect(facts.y - (picture.y + picture.height), 'the facts 12 px under the picture').toBeCloseTo(12, 0)
+  expect(facts.height, 'the facts are 20 px').toBeCloseTo(20, 0)
+  expect(card.y + card.height - (facts.y + facts.height), '12 px to the divider').toBeCloseTo(12 + 1, 0)
+
+  // The three places to tap (§9.3): the name to the quiz.
+  await post.getByTestId('feed-card-link').click()
+  await expect(page).toHaveURL(new RegExp(`/taker/p/${publicationId}$`))
 })

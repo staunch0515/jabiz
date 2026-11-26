@@ -8,7 +8,7 @@ import {
 } from '@jabiz/ui'
 import { useAuth } from '@jabiz/client'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { Ban, EllipsisVertical, EyeOff } from 'lucide-react'
+import { Ban, Ellipsis, EyeOff } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { APP } from '../messages'
 import type { BlockKind } from '../qb/play'
@@ -68,7 +68,7 @@ export function BlockMenu({ item, onBlocked, className }: { item: Blockable
       <DropdownMenuTrigger asChild>
         <Button variant="ghost" size="icon-sm" className={className} disabled={block.isPending}
           aria-label={t('blocks.menu', { name: item.name })} data-testid="block-menu">
-          <EllipsisVertical aria-hidden />
+          <Ellipsis aria-hidden />
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end">

@@ -294,6 +294,8 @@ public final class PublicationVersions {
             Map<String, Object> values = new LinkedHashMap<>();
             values.put("versionId", version.id());
             values.put("quizTitle", version.get("title"));
+            // Q113b-1: and the lead of its introduction (the other languages' with the card's texts below).
+            values.put("introLead", IntroLeads.of(snapshot.intro()));
             // Q73b: the languages offered stay as submitted; one offering none follows its version's. The card's
             // texts take the new version's titles.
             if (com.jabiz.quizbuks.content.ContentLanguages.parseList(publication.get("languages")).isEmpty()) {

@@ -90,7 +90,9 @@ for (const appearance of ['light', 'dark'] as const) {
     await expect(page.getByTestId('home')).toBeVisible()
     await searchHome(page, seeded.name)
     const card = page.getByTestId('feed-card').filter({ hasText: seeded.name })
-    await expect(card.getByTestId('feed-card-survey')).toBeVisible()
+    // Q113b-1: a survey says so in the post's reward, "for answering" (and "Survey" to screen readers).
+    await expect(card.getByTestId('feed-card-survey')).toHaveText('Survey')
+    await expect(card.getByTestId('feed-card-reward')).toContainText('for answering')
     await card.getByTestId('feed-card-link').click()
     // F-F4c: the reward's details, the survey's among them, are under the reward tab.
     await page.getByTestId('page-tab-reward').click()

@@ -122,6 +122,14 @@ const en = {
     survey: 'Survey',
     surveyReward: '{{amount}} for answering',
     completions: 'Completed: {{count}}',
+    // Q113b-1: the post's facts (the numbers shown, these said to screen readers) and its age (x.com's short form).
+    answered: '{{count}} answered',
+    timeLimit: 'Time limit {{time}}',
+    reward: 'Reward: {{reward}}',
+    age: { minutes: '{{count}}m', hours: '{{count}}h', days: '{{count}}d' },
+    share: 'Share',
+    shareCopied: 'Link copied',
+    shareFailed: 'The link could not be copied',
   },
 }
 
@@ -238,6 +246,13 @@ const zh: typeof en = {
     survey: '调查问卷',
     surveyReward: '作答得 {{amount}}',
     completions: '已完成：{{count}}',
+    answered: '{{count}} 人已答',
+    timeLimit: '时限 {{time}}',
+    reward: '奖励：{{reward}}',
+    age: { minutes: '{{count}}分钟', hours: '{{count}}小时', days: '{{count}}天' },
+    share: '分享',
+    shareCopied: '已复制链接',
+    shareFailed: '无法复制链接',
   },
 }
 
@@ -354,6 +369,13 @@ const ja: typeof en = {
     survey: 'アンケート',
     surveyReward: '回答で {{amount}}',
     completions: '完了：{{count}}',
+    answered: '{{count}} 人が回答',
+    timeLimit: '制限時間 {{time}}',
+    reward: '報酬：{{reward}}',
+    age: { minutes: '{{count}}分', hours: '{{count}}時間', days: '{{count}}日' },
+    share: '共有',
+    shareCopied: 'リンクをコピーしました',
+    shareFailed: 'リンクをコピーできませんでした',
   },
 }
 

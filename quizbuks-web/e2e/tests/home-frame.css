@@ -20,3 +20,12 @@ nav,
 aside {
   visibility: hidden !important;
 }
+
+/*
+ * Q113b-1: a post's age ("1m", "12m") is how long ago this run made it: kept in its place at one width, not drawn,
+ * so that the line stays as it is whichever minute the comparison falls in.
+ */
+[data-testid="feed-card-age"] {
+  visibility: hidden !important;
+  flex: 0 0 2.5rem !important;
+}

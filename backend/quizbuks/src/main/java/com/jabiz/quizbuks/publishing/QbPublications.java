@@ -412,6 +412,9 @@ public final class QbPublications {
             .asText(PublishingLimits.NAME_LENGTH));
         eb.field("quizTitle", f -> f.physicalColumn("quiz_title").required(true)
             .asText(ContentLimits.TITLE_LENGTH));
+        // Q113b-1: the beginning of its version's introduction as plain text (IntroLeads), for the home's post; in the
+        // other languages offered it is in translations. Follows a version switch, like the title.
+        eb.field("introLead", f -> f.physicalColumn("intro_lead").asText(IntroLeads.LENGTH));
         // The cover's file key as text: the version's files (or, for the publication's own cover, Q64, the publication)
         // keep the file, the card only names it. The publication's own cover when it has one, else the version's.
         eb.field("cover", f -> f.physicalColumn("cover").asText(36));
