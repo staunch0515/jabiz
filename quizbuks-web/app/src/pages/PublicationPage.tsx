@@ -412,7 +412,8 @@ export function PublicationPage({ publicationId, country }: { publicationId: str
                 className="bg-muted relative aspect-video w-full" />
               // Q99b: another site's player is the page's own (the app cannot hand it the sound) and starts the same
               // way.
-              : <VideoPlayer player={player} title={title} autoplay className="bg-muted absolute inset-0 size-full overflow-hidden" />}
+              // In the flow (not absolute): the exposure's watch around it measures this box on the screen (F-S13).
+              : <VideoPlayer player={player} title={title} autoplay className="bg-muted aspect-video w-full overflow-hidden" />}
           </StartPageExposure>
         )}
         tabs={{ current: tab, path: tabPath, extra, renderLink: (item, props) => (

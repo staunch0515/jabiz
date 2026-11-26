@@ -316,7 +316,7 @@ export function PublicationContent({ publication: p, tiers, titleAs: Title = 'h1
         data-testid="detail-hero" data-video={lead ? true : undefined}>
         {lead
           ? video ? video(lead.player, leadTitle)
-            : <VideoPlayer player={lead.player} autoplay={autoplay} title={leadTitle} className="absolute inset-0 size-full" />
+            : <VideoPlayer player={lead.player} autoplay={autoplay} title={leadTitle} className="aspect-video w-full" />
           : p.cover
             ? <FileImage fileId={p.cover} variant="w640" alt="" className="absolute inset-0 size-full object-cover" />
             : <CoverPlaceholder seed={p.publicationId} className="absolute inset-0 size-full" />}
