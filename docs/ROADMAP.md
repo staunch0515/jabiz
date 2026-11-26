@@ -5767,6 +5767,23 @@ QuizBuks 的 #545、#546、#547 用了 43.5–45 分钟，#545 到点被取消�
 
 **17zz31 状态**：PR 待合并。
 
+### 17zz32 统一的"继续"：登录与注册同一个入口（2026-11-26，QuizBuks Q113 §9.4）
+
+**缘由**：需求方 2026-11-24 决定 QuizBuks 的登录与注册统一（一个"继续"，第二步对所有邮箱相同，新用户点链接后"完成注册"，不透露邮箱是否注册过）。
+平台的口令注册与邮件链接开户（立即开户、没有名字）都不够；应用不得自写认证流程（D36、D54），所以在平台补上。缺省不变。决策 D84。
+
+| # | 内容 |
+|---|---|
+| 17zz32-1 | 设计：10 §15.19、12"登录与账户的积木"、决策 D84 |
+| 17zz32-2 | 入口的 `unified-sign-in`（配置、启动检查、`GET /api/auth/entries/{name}`）；注册接口对它 422 |
+| 17zz32-3 | 邮件链接：加入链接（守卫、`addRoles`）；`POST /api/auth/email-link/check`；开户先完成注册（显示名、语言） |
+| 17zz32-4 | `@jabiz/client`：`checkEmailLink`、`signInWithEmailLink` 的显示名；`@jabiz/ui`：`SignInForm` 的 `flow="continue"`、`CompleteSignUp`；示范门户 |
+| 17zz32-5 | `EmailLinkIT`、`SignUpGuardIT`、`SignInEntriesTest`、Vitest 与 axe（亮暗）；OpenAPI 快照；`/security-review` |
+
+**验收**：`./gradlew check` 与前端全部检查绿；未开启的入口的现有测试不改；`/security-review` 没有未处理的问题。
+
+**17zz32 状态**：设计已确认（2026-11-26），实施待开始。
+
 ### 线 1.3 的候选（未排期，2026-11-08 总控：首次上线前不做）
 
 | 候选 | 缘由 | 粗估 |

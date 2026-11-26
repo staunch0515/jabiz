@@ -65,6 +65,8 @@ public class EmailLinkProcesses {
     public static final String TO = MailTemplate.RETURN_PARAM;
     /** Longest path to return to. */
     public static final int MAX_TO = 200;
+    /** The field of the name an account opened by link at an entry with one "continue" needs (decision D84). */
+    public static final String DISPLAY_NAME = "displayName";
     /**
      * A path of this site: starts with one {@code /}, then the characters of a path and its query only (no scheme,
      * host, {@code //} or {@code \}).
@@ -107,7 +109,18 @@ public class EmailLinkProcesses {
      */
     public record SendInput(String entry, String email, String to, String locale) {}
 
-    public record OpenInput(@Sensitive String token) {
+    /**
+     * @param displayName the name of the account a link to an address nobody has opens, at an entry with one
+     *                    "continue" (decision D84; required there, ignored otherwise)
+     * @param locale      that account's language ({@code zh}, {@code ja}, {@code en}); optional
+     * @param check       only telling what the link would do: run as a dry run, never requiring the name
+     */
+    public record OpenInput(@Sensitive String token, String displayName, String locale, boolean check) {
+
+        public OpenInput(String token) {
+            this(token, null, null, false);
+        }
+
         @Override
         public String toString() {
             return "OpenInput[***]";
@@ -133,6 +146,7 @@ public class EmailLinkProcesses {
     private static final String ASSIGNMENTS = "assignments";
     private static final String HELD_ROLES = "held_roles";
     private static final String GRANTS = "grants";
+    private static final String CHECK = "check";
 
     // ---- the request ------------------------------------------------------------------------------------------------
 
@@ -166,7 +180,7 @@ public class EmailLinkProcesses {
                         // Nor does a user the entry would refuse: the link would take over a pre-claimable account
                         // for nothing.
                         if (user != null && Rbac.enabled(user) && SignUpProcesses.trusted(user)
-                            && signsIn(ctx, entry)) {
+                            && (signsIn(ctx, entry) || joinable(entry))) {
                             ctx.put(TO_USER, user.id());
                         }
                     } else if (entry.selfRegistration()) {
@@ -213,8 +227,14 @@ public class EmailLinkProcesses {
             .description("Uses a mailed sign-in link: proves the address, and opens the account where it may.")
             .permissions(SecurityPermissions.SIGN_UP)
             .entryOnly()
-            .contextFactory((start, input) -> new AccountContext(start, null, null, null, null, null,
-                input.token(), null))
+            .contextFactory((start, input) -> {
+                AccountContext ctx = new AccountContext(start, null, null, input.displayName(), input.locale(), null,
+                    input.token(), null);
+                if (input.check()) {
+                    ctx.put(CHECK, true);
+                }
+                return ctx;
+            })
             .outputMapper(ctx -> ctx.get(OPENED, OpenOutput.class))
             .step("Use the link", MailTokens.<AccountContext>consumeAnyUnused(SIGN_IN, AccountContext::token,
                 SignUpProcesses.CONSUMED))
@@ -242,10 +262,12 @@ public class EmailLinkProcesses {
                 ctx -> ofUser(ctx), SignUpProcesses.IDENTITIES))
             .step("Draw a name suffix", SignUpProcesses.on(RandomBytesStep.class), new RandomBytesStep.Metadata(
                 SignUpProcesses.RANDOM, SignUpProcesses.SUFFIX_LENGTH))
-            // Only where the link opens an account (D66): the mailbox is proven, so the refusal is answered at the link.
+            // Only where the link opens an account or joins the entry (D66, D84): the mailbox is proven, so the refusal
+            // is answered at the link.
             .step("Sign-up guards", SignUpGuardStep.spec(new SignUpGuardStep.Metadata<AccountContext>(
-                SignUpAttempt.Path.EMAIL_LINK, AccountContext::entryName, ctx -> null,
-                ctx -> ctx.consumed().address(), ctx -> true, ctx -> opens(ctx, entries))))
+                SignUpAttempt.Path.EMAIL_LINK, AccountContext::entryName,
+                ctx -> joins(ctx, entries) ? ctx.user().id() : null,
+                ctx -> ctx.consumed().address(), ctx -> true, ctx -> opens(ctx, entries) || joins(ctx, entries))))
             .compute("Sign in or open the account", (metadata, ctx) -> opened(ctx, entries))
             .step("End the sessions", SignUpProcesses.on(RevokeSessionsStep.class), new RevokeSessionsStep.Metadata(
                 SignUpProcesses.END_SESSIONS, RefreshTokenStore.REASON_CLAIM,
@@ -263,6 +285,21 @@ public class EmailLinkProcesses {
         return consumed != null && consumed.userId() == null && ctx.list(SignUpProcesses.USERS).isEmpty()
             && entries.find(ctx.entryName()).filter(entry -> entry.emailLink() && entry.selfRegistration())
                 .isPresent();
+    }
+
+    /**
+     * Whether a user the entry would not take yet joins it by link: only where one "continue" both signs in and signs
+     * up (decision D84 item 3), which then stands in for the mail an address in use gets on registering.
+     */
+    private static boolean joinable(SignInEntries.Entry entry) {
+        return entry.unifiedSignIn() && entry.selfRegistration();
+    }
+
+    /** Whether the used link stands for a user who joins the entry ({@link #joinable}) before signing in. */
+    static boolean joins(AccountContext ctx, SignInEntries entries) {
+        SignInEntries.Entry entry = entries.find(ctx.entryName()).filter(SignInEntries.Entry::emailLink).orElse(null);
+        return ctx.consumed() != null && ctx.user() != null && entry != null && joinable(entry)
+            && !signsIn(ctx, entry);
     }
 
     static void opened(AccountContext ctx, SignInEntries entries) {
@@ -285,10 +322,19 @@ public class EmailLinkProcesses {
                 invalid(ctx, "user or address changed");
                 return;
             }
+            Map<String, EntityInstance> joining = null;
             if (!signsIn(ctx, entry)) {
-                // Checked before anything changes: no takeover for a sign-in that would be refused.
-                invalid(ctx, "the user cannot sign in here");
-                return;
+                if (!joinable(entry)) {
+                    // Checked before anything changes: no takeover for a sign-in that would be refused.
+                    invalid(ctx, "the user cannot sign in here");
+                    return;
+                }
+                // The entry's registration roles, as the mail join gives them (D84 item 3): ordinary assignments, so
+                // that the four eyes on protected grants apply (D48).
+                joining = SignUpProcesses.registrationRoles(ctx, entry);
+                if (joining == null) {
+                    return;
+                }
             }
             Map<String, Object> changed = SignUpProcesses.proof(ctx, user);
             if (SignUpProcesses.preClaimable(user)) {
@@ -299,6 +345,9 @@ public class EmailLinkProcesses {
             }
             if (!SecurityEntities.emailVerified(user) || changed.containsKey("passwordHash")) {
                 ctx.changes().update(SecurityEntities.USER, user.id(), user.version(), changed);
+            }
+            if (joining != null) {
+                SignUpProcesses.addRoles(ctx, user, joining);
             }
             ctx.put(OPENED, new OpenOutput(String.valueOf(user.id()), entry.name(), false));
             return;
@@ -311,6 +360,14 @@ public class EmailLinkProcesses {
         if (roles == null) {
             return;
         }
+        String displayName = ctx.displayName() == null || ctx.displayName().isBlank() ? null
+            : ctx.displayName().strip();
+        if (entry.unifiedSignIn() && displayName == null && ctx.get(CHECK) == null) {
+            // The account exists only once its owner has finished signing up (D84 item 4); the link stays unused.
+            ctx.reject(new Violation(DISPLAY_NAME, PlatformErrorCodes.REQUIRED,
+                "Finishing the sign-up needs a display name"));
+            return;
+        }
         String base = SignUpProcesses.baseName(consumed.address());
         Map<String, Object> created = new LinkedHashMap<>();
         created.put("userName", ctx.list(SignUpProcesses.NAMES).isEmpty() ? base
@@ -320,6 +377,10 @@ public class EmailLinkProcesses {
         created.put("verifiedEmail", consumed.address());
         created.put("emailVerifiedAt", ctx.opTime());
         created.put("enabled", true);
+        if (entry.unifiedSignIn()) {
+            created.put("displayName", displayName);
+            created.put("locale", ctx.locale());
+        }
         Object userId = ctx.changes().insert(SecurityEntities.USER, created);
         for (EntityInstance role : roles.values()) {
             ctx.changes().insert(SecurityEntities.USER_ROLE, Map.of("userId", userId, "roleId", role.id()));

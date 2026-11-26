@@ -1,8 +1,11 @@
 import {
   ApiError,
   api,
+  checkEmailLink,
+  entryInfo,
   isProblem,
   languages,
+  rememberSignInMethod,
   requestEmailLink,
   sitePath,
   unwrap,
@@ -11,11 +14,12 @@ import {
   type SignInStep,
 } from '@jabiz/client'
 import { Info, Mail } from 'lucide-react'
-import { useState, type ReactNode } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 import { useForm } from 'react-hook-form'
 import { useTranslation } from 'react-i18next'
 import { Alert, AlertDescription } from '../components/ui/alert'
 import { Button } from '../components/ui/button'
+import { CompleteSignUp } from './CompleteSignUp'
 import { AuthField, AuthFrame, AuthSubmit, navigateTo, Outcome } from './frame'
 import type { MailLinkInfo, MailLinkPageBase } from './MailLinkPage'
 import { MfaCodeStep } from './MfaCodeStep'
@@ -104,7 +108,11 @@ export interface EmailLinkPanelProps extends MailLinkPageBase {
 }
 
 type PanelState =
+  /** Asking the entry (and, where it has one "continue", the link) what the click will do. */
+  | { kind: 'checking' }
   | { kind: 'ready' }
+  /** The link opens an account that needs its name first (decision D84). */
+  | { kind: 'signUp' }
   | { kind: 'code'; challenge: string }
   | { kind: 'enroll'; challenge: string }
   | { kind: 'enrolled' }
@@ -135,8 +143,9 @@ function withinFrontEnd(to: string | null | undefined, appPath: string): string 
  * the path of the link. The link is used by the click whatever comes of it: a link that is no good, or a sign-in that
  * was refused or not finished, offers to send a new one for the same path.
  */
-export function EmailLinkPanel({ link, to, brand, appearance, onNavigate, hrefOf, ...props }: EmailLinkPanelProps) {
-  const { t } = useTranslation(AUTH_NAMESPACE)
+export function EmailLinkPanel({ link, to, brand, appearance, onNavigate, hrefOf, signUpNote, signUpExtra, ...props }:
+  EmailLinkPanelProps) {
+  const { t, i18n } = useTranslation(AUTH_NAMESPACE)
   const session = useOptionalAuth()
   const auth = props.auth ?? session ?? NO_AUTH
   const { entry, token, appPath } = link
@@ -146,7 +155,38 @@ export function EmailLinkPanel({ link, to, brand, appearance, onNavigate, hrefOf
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  const signedIn = () => (props.onSignedIn ? props.onSignedIn(returnTo) : navigateTo({ onNavigate, hrefOf }, returnTo))
+  useEffect(() => {
+    if (!token) return undefined
+    let live = true
+    // Only where the entry has one "continue" does a link wait for a name: elsewhere nothing is asked before the click.
+    entryInfo(entry)
+      .then(async (info) => {
+        if (!info.unifiedSignIn) return
+        if (live) setState({ kind: 'checking' })
+        const { signUp } = await checkEmailLink(token)
+        if (live) setState({ kind: signUp ? 'signUp' : 'ready' })
+      })
+      .catch((e: unknown) => {
+        if (!live) return
+        if (invalidLink(e)) setState({ kind: 'invalid' })
+        // A sign-up guard's refusal (SIGN_UP_REFUSED), in the server's words.
+        else if (e instanceof ApiError && e.status === 403) setState({ kind: 'refused', message: refusal(e, t('common.error')) })
+        // The entry could not be read: the click answers for itself.
+        else setState({ kind: 'ready' })
+      })
+    return () => {
+      live = false
+    }
+    // Once per link.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [entry, token])
+
+  const signedIn = () => {
+    // Only the way, never the address: this device's next "continue" mails a link again (decision D84).
+    rememberSignInMethod('link', entry)
+    if (props.onSignedIn) props.onSignedIn(returnTo)
+    else navigateTo({ onNavigate, hrefOf }, returnTo)
+  }
   const next = (step: SignInStep) => {
     if (step.status === 'SIGNED_IN') signedIn()
     else setState({ kind: step.status === 'MFA_REQUIRED' ? 'code' : 'enroll', challenge: step.challenge })
@@ -159,7 +199,9 @@ export function EmailLinkPanel({ link, to, brand, appearance, onNavigate, hrefOf
     try {
       next(await auth.signInWithEmailLink(token!))
     } catch (e) {
-      if (invalidLink(e)) setState({ kind: 'invalid' })
+      // Clicked before the check answered: the link opens an account that needs its name first, and is still unused.
+      if (isProblem(e, 'REQUIRED')) setState({ kind: 'signUp' })
+      else if (invalidLink(e)) setState({ kind: 'invalid' })
       else if (e instanceof ApiError && (e.status === 401 || e.status === 403)) {
         setState({ kind: 'refused', message: refused(e) })
       } else setState({ kind: 'failed' })
@@ -168,12 +210,32 @@ export function EmailLinkPanel({ link, to, brand, appearance, onNavigate, hrefOf
     }
   }
 
+  const finish = async (displayName: string) => {
+    setError(null)
+    try {
+      const locale = (languages as readonly string[]).includes(i18n.language) ? i18n.language : undefined
+      next(await auth.signInWithEmailLink(token!, { displayName, locale }))
+    } catch (e) {
+      if (invalidLink(e)) setState({ kind: 'invalid' })
+      else if (e instanceof ApiError && (e.status === 401 || e.status === 403)) {
+        setState({ kind: 'refused', message: refused(e) })
+      } else setError(failure(e, t('account.failed')))
+    }
+  }
+
   const again = <EmailLinkForm entry={entry} to={path ?? undefined} />
   const title = state.kind === 'code' ? t('login.codeTitle')
-    : state.kind === 'enroll' ? t('login.enrollTitle') : t('emailLink.title')
+    : state.kind === 'enroll' ? t('login.enrollTitle')
+      : state.kind === 'signUp' ? t('continue.finishTitle') : t('emailLink.title')
 
   return (
     <AuthFrame brand={brand} appearance={appearance} title={title} testId="email-link">
+      {state.kind === 'checking' && (
+        <p className="text-muted-foreground text-sm" role="status" data-testid="email-link-checking">{t('common.loading')}</p>
+      )}
+      {state.kind === 'signUp' && (
+        <CompleteSignUp onSubmit={finish} note={signUpNote} extra={signUpExtra} error={error} />
+      )}
       {state.kind === 'ready' && (
         <>
           <p className="text-sm">{t('emailLink.signInHint')}</p>

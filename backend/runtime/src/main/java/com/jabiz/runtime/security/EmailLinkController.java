@@ -5,7 +5,9 @@ import com.jabiz.entity.Violation;
 import com.jabiz.i18n.PlatformErrorCodes;
 import com.jabiz.i18n.PlatformLanguages;
 import com.jabiz.process.ProcessDefinition;
+import com.jabiz.runtime.process.ExecutionOptions;
 import com.jabiz.runtime.process.ProcessExecutor;
+import com.jabiz.runtime.process.ProcessResult;
 import com.jabiz.runtime.process.sponsor.SignInSource;
 import com.jabiz.runtime.process.sponsor.SponsorEmailLinkSignInInput;
 import com.jabiz.runtime.process.sponsor.SponsorEmailLinkSignInProcess;
@@ -34,6 +36,7 @@ class EmailLinkController {
 
     static final String REQUEST = "/api/auth/email-link";
     static final String CONFIRM = "/api/auth/email-link/confirm";
+    static final String CHECK = "/api/auth/email-link/check";
 
     /**
      * @param entry  the sign-in entry whose front end the link leads to; it must sign in by link (422
@@ -44,12 +47,32 @@ class EmailLinkController {
      */
     record EmailLinkRequest(String email, String entry, String to, String locale) {}
 
-    record EmailLinkConfirm(@Sensitive String token) {
+    /**
+     * @param displayName the name of the account a link to an address nobody has opens, at an entry with one
+     *                    "continue" (required there: 422 {@code REQUIRED}, the link unused; decision D84); ignored
+     *                    otherwise
+     * @param locale      that account's language ({@code zh}, {@code ja}, {@code en}); optional
+     */
+    record EmailLinkConfirm(@Sensitive String token, String displayName, String locale) {
         @Override
         public String toString() {
             return "EmailLinkConfirm[***]";
         }
     }
+
+    record EmailLinkToken(@Sensitive String token) {
+        @Override
+        public String toString() {
+            return "EmailLinkToken[***]";
+        }
+    }
+
+    /**
+     * What a link would do, told to whoever holds it (decision D84 item 4).
+     *
+     * @param signUp whether using it first needs the new account's name ({@code displayName} of the confirmation)
+     */
+    record EmailLinkCheck(boolean signUp) {}
 
     private final ProcessExecutor processes;
     private final SignInEntries entries;
@@ -118,8 +141,24 @@ class EmailLinkController {
         ServerHttpRequest http) {
         return Mono.defer(() -> {
             limits.client(SignUpRateLimits.Kind.LINK, clients.clientOf(http));
-            EmailLinkProcesses.OpenInput input = new EmailLinkProcesses.OpenInput(request == null ? null
-                : request.token());
+            EmailLinkConfirm body = request == null ? new EmailLinkConfirm(null, null, null) : request;
+            List<Violation> problems = new ArrayList<>();
+            String displayName = body.displayName() == null || body.displayName().isBlank() ? null
+                : body.displayName().strip();
+            if (displayName != null && (displayName.length() > SignUpController.MAX_DISPLAY_NAME
+                || SignUpController.hasControl(displayName))) {
+                problems.add(SignUpController.invalid(EmailLinkProcesses.DISPLAY_NAME, "A display name has at most "
+                    + SignUpController.MAX_DISPLAY_NAME + " characters and no control characters"));
+            }
+            String locale = body.locale() == null || body.locale().isBlank() ? null : body.locale().strip();
+            if (locale != null && !PlatformLanguages.isSupported(locale)) {
+                problems.add(SignUpController.invalid("locale", "Not one of the platform's languages"));
+            }
+            if (!problems.isEmpty()) {
+                return Mono.error(new ValidationException(problems));
+            }
+            EmailLinkProcesses.OpenInput input = new EmailLinkProcesses.OpenInput(body.token(), displayName, locale,
+                false);
             return processes.executeAtEntry(open, input)
                 // Another link of the address opened the account at the same moment: this one, rolled back and still
                 // unused, now finds that account (and stands for it, or is refused as used).
@@ -134,6 +173,25 @@ class EmailLinkController {
                         .flatMap(result -> AuthController.answer(result, null, null, source, refreshTokens, tokens,
                             mfa, "Sign-in with a mailed link"));
                 });
+        });
+    }
+
+    /**
+     * Whether using a link first needs the new account's name, without using it (a dry run): told from the link alone
+     * (422 {@code TOKEN_INVALID} for any link that is no good, the refusals of the sign-up guards as on using it), so
+     * it tells nothing about other addresses; a mail scanner opening the link changes nothing.
+     */
+    @PostMapping(CHECK)
+    Mono<EmailLinkCheck> checkEmailLink(@RequestBody(required = false) EmailLinkToken request,
+        ServerHttpRequest http) {
+        return Mono.defer(() -> {
+            limits.client(SignUpRateLimits.Kind.LINK, clients.clientOf(http));
+            EmailLinkProcesses.OpenInput input = new EmailLinkProcesses.OpenInput(request == null ? null
+                : request.token(), null, null, true);
+            return processes.run(open, input, ExecutionOptions.DRY_RUN.atEntryOf(open))
+                .map(ProcessResult::output)
+                .map(opened -> new EmailLinkCheck(opened.created() && entries.find(opened.entry())
+                    .filter(SignInEntries.Entry::unifiedSignIn).isPresent()));
         });
     }
 
