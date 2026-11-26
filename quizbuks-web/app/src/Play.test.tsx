@@ -40,6 +40,13 @@ const MATERIALS = JSON.stringify([
     url: 'https://youtu.be/dQw4w9WgXcQ', pdf: null, audio: null, images: [] },
 ])
 
+/** Q113c: from the video mode a tap on the playing video opened, "Details" of the screen shown: the start page. */
+async function detailsFromVideoMode() {
+  const viewer = await screen.findByTestId('shorts-viewer')
+  const shown = viewer.querySelector('[data-current]') as HTMLElement
+  await userEvent.click(within(shown).getByTestId('shorts-details'))
+}
+
 function publication(mine: Record<string, unknown> = {}) {
   return { ...CARD, intro: 'Two **easy** questions.', materials: MATERIALS, status: 'LIVE', passScore: 3,
     sponsorIntro: null, last1h: 0, last24h: 2, last7d: 2, last30d: 2, statsAt: '2026-10-14T00:00:00Z',
@@ -725,7 +732,7 @@ describe('a digital prize (Q33)', () => {
 describe('the video to watch (Q19, Q63)', () => {
   const PLAYER = 'https://www.youtube-nocookie.com/embed/dQw4w9WgXcQ'
 
-  it('plays a card\'s video muted while the card is in the middle of the screen, and its start opens the start page',
+  it('plays a card\'s video muted while the card is in the middle of the screen, and its picture opens the video mode',
     async () => {
     const io = intersections()
     const api = server({ feed: [{ ...CARD, video: PLAYER }] })
@@ -752,11 +759,27 @@ describe('the video to watch (Q19, Q63)', () => {
     io.fire(card, false, MIDDLE)
     await waitFor(() => expect(document.querySelector('iframe')).toBeNull())
     expect(within(card).getByTestId('feed-card-reward')).toHaveTextContent('Up to 100 Kudos')
-    // The picture opens the start page first (its time limit and pass score), and starts nothing.
-    expect(within(card).getByTestId('feed-card-picture')).toHaveAttribute('href', `/p/${PUB}`)
+    // Q113c (§9.3): the picture of a post with a video opens the video mode on it, and starts nothing; the name still
+    // opens the start page.
+    expect(within(card).getByTestId('feed-card-link')).toHaveAttribute('href', `/p/${PUB}`)
+    expect(within(card).getByTestId('feed-card-picture')).toHaveAttribute('href', `/?video=${PUB}`)
+    expect(within(card).getByTestId('feed-card-picture')).toHaveAccessibleName('Watch Capitals week in full screen')
     await userEvent.click(within(card).getByTestId('feed-card-picture'))
-    await waitFor(() => expect(window.location.pathname).toBe(`/p/${PUB}`))
+    await waitFor(() => expect(window.location.search).toBe(`?video=${PUB}`))
+    expect(await screen.findByTestId('shorts-viewer')).toBeInTheDocument()
     expect(api.posted('QB_ATTEMPT_START')).toEqual([])
+  })
+
+  it('opens the video mode from a tap on the video playing on the home (Q113c)', async () => {
+    const io = intersections()
+    server({ feed: [{ ...CARD, video: PLAYER }] })
+    render(<App />)
+    const card = await screen.findByTestId('feed-card')
+    io.fire(card, true, MIDDLE)
+    await screen.findByTitle('Video: Capitals week')
+    await userEvent.click(screen.getByTestId('video-open'))
+    await waitFor(() => expect(window.location.search).toBe(`?video=${PUB}`))
+    expect(await screen.findByTestId('shorts-viewer')).toHaveAccessibleName('Videos')
   })
 
   it('plays another site\'s video on the home and the start page as YouTube\'s, in its own player (Q99b)',
@@ -801,6 +824,8 @@ describe('the video to watch (Q19, Q63)', () => {
     const frame = await screen.findByTitle('Video: Capitals week') as HTMLIFrameElement
     const sent = vi.spyOn(frame.contentWindow!, 'postMessage')
     await userEvent.click(screen.getByTestId('video-open'))
+    // Q113c: the tap opens the video mode; its "Details" goes on to the start page, the player with it.
+    await detailsFromVideoMode()
     await waitFor(() => expect(window.location.pathname).toBe(`/p/${PUB}`))
     // The sound is asked for within the tap, through the player's own commands.
     expect(sent.mock.calls.map(([message]) => JSON.parse(String(message)).func)).toEqual(
@@ -828,6 +853,8 @@ describe('the video to watch (Q19, Q63)', () => {
     io.fire(card, true, MIDDLE)
     const frame = await screen.findByTitle('Video: Capitals week') as HTMLIFrameElement
     await userEvent.click(screen.getByTestId('video-open'))
+    // Q113c: the tap opens the video mode; its "Details" goes on to the start page, the player with it.
+    await detailsFromVideoMode()
     await waitFor(() => expect(window.location.pathname).toBe(`/p/${PUB}`))
     const hero = await screen.findByTestId('detail-hero')
     await waitFor(() => expect(within(hero).getByTestId('video-slot')).toHaveAttribute('data-mode', 'page'))
@@ -2128,6 +2155,8 @@ describe('the video to watch first (Q75)', () => {
     hear(frame, { event: 'infoDelivery', info: { currentTime: 50 } })
     // The tap opens the start page with the same player; what played muted on the card did not count.
     await userEvent.click(screen.getByTestId('video-open'))
+    // Q113c: the tap opens the video mode; its "Details" goes on to the start page, the player with it.
+    await detailsFromVideoMode()
     await waitFor(() => expect(window.location.pathname).toBe(`/p/${PUB}`))
     expect(await screen.findByTestId('detail-watch')).toHaveTextContent('0:00 of 1:40 watched')
     // From here it counts: fifty more seconds, then forty, make ninety.
@@ -2267,6 +2296,8 @@ describe('a video file on any https address (F-S15)', () => {
     const video = await screen.findByTestId('video-stage-file') as HTMLVideoElement
     const play = vi.spyOn(video, 'play').mockResolvedValue(undefined)
     await userEvent.click(screen.getByTestId('video-open'))
+    // Q113c: the tap opens the video mode; its "Details" goes on to the start page, the player with it.
+    await detailsFromVideoMode()
     await waitFor(() => expect(window.location.pathname).toBe(`/p/${PUB}`))
     expect(video.muted).toBe(false)
     expect(play).toHaveBeenCalled()
@@ -2289,6 +2320,8 @@ describe('a video file on any https address (F-S15)', () => {
       // On a card the whole of the player opens the start page: no key in it.
       expect(screen.queryByTestId('video-fullscreen')).toBeNull()
       await userEvent.click(screen.getByTestId('video-open'))
+      // Q113c: the tap opens the video mode; its "Details" goes on to the start page, the player with it.
+      await detailsFromVideoMode()
       await waitFor(() => expect(screen.getByTestId('video-slot')).toHaveAttribute('data-mode', 'page'))
       const key = await screen.findByTestId('video-fullscreen')
       expect(key).toHaveAccessibleName('Full screen')

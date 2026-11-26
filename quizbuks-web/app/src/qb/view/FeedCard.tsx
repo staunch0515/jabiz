@@ -22,14 +22,16 @@ export const REWARD_METHOD_ICONS: Record<RewardMethod, LucideIcon> = {
 }
 
 /** What passing earns (a survey: what answering earns), in the card's line of small facts (Q66). */
-export function RewardText({ card }: { card: FeedCard }) {
+export function RewardText({ card, className }: { card: FeedCard
+  /** The look where the default is not readable (Q113c: the video mode's black). */
+  className?: string }) {
   const { t } = useTranslation(QBVIEW)
   const reward = card.kind === 'SURVEY' ? t('feed.surveyReward', { amount: formatKudos(card.maxReward) })
     : t('feed.upTo', { amount: formatKudos(card.maxReward) })
   // Q88b (D-Q88-16): what starting it costs, after what it pays.
   const fee = card.entryFee ? t('feed.entryFee', { amount: formatKudos(card.entryFee) }) : null
   return (
-    <span className="text-foreground font-medium" data-testid="feed-card-reward"
+    <span className={cn('text-foreground font-medium', className)} data-testid="feed-card-reward"
       data-entry-fee={card.entryFee || undefined}>
       {fee ? `${reward} · ${fee}` : reward}
     </span>
@@ -70,8 +72,16 @@ function PostAgeText({ startAt, at }: { startAt: string; at: string }) {
  * null) leads nowhere. The numbers are Tailwind's steps: this is the shared folder, which the frame's `xspec.ts` is
  * not in; the geometry test measures them.
  */
-export function FeedCardView({ card, href, playing = false, note, video, onOpen, menu, at, share }: { card: FeedCard
-  href: string | null; playing?: boolean; note?: ReactNode
+export function FeedCardView({ card, href, videoHref, playing = false, note, video, onOpen, menu, at, share }: {
+  card: FeedCard
+  href: string | null
+  /**
+   * Q113c (§9.3): where the post's video leads, the full-screen video mode from this post; its picture, and a tap on
+   * the video playing on the home, go there (the name and the text still go to the quiz). None: the picture goes to
+   * `href`, as without a video.
+   */
+  videoHref?: string
+  playing?: boolean; note?: ReactNode
   /** Q65: the app's own place for the playing video (its one player, given the cover it comes in beside); a plain
       player otherwise. */
   video?: (cover: ReactNode) => ReactNode
@@ -171,9 +181,20 @@ export function FeedCardView({ card, href, playing = false, note, video, onOpen,
             <span className="absolute inset-0 block" aria-hidden data-testid="feed-card-cover">{cover}</span>
             {video ? video(cover) : <VideoPlayer player={card.video!} autoplay title={t('feed.videoTitle', { name: card.name })}
               className="bg-muted absolute inset-0 size-full overflow-hidden" />}
+            {/* Q113c: another site's player takes taps of its own (it is in a frame): a tap anywhere on it opens the
+                video mode, whose controls it has (x.com's way). The app's own player (`video`) has the stage's button
+                for that (`video/stage.tsx`). */}
+            {videoHref && plays && !video && (
+              <Link to={videoHref} onNavigate={onOpen} data-testid="feed-card-video-open"
+                aria-label={t('feed.openVideoMode', { name: card.name })}
+                className="focus-visible:ring-ring absolute inset-0 z-10 block rounded-[16px] outline-none focus-visible:ring-[3px] focus-visible:ring-inset">
+                <span className="sr-only">{t('feed.openVideoMode', { name: card.name })}</span>
+              </Link>
+            )}
           </span>
           : href
-            ? <Link to={href} aria-label={card.name} data-testid="feed-card-picture" onNavigate={onOpen}
+            ? <Link to={videoHref && plays ? videoHref : href} data-testid="feed-card-picture" onNavigate={onOpen}
+              aria-label={videoHref && plays ? t('feed.openVideoMode', { name: card.name }) : card.name}
               className="block rounded-[16px]">{picture}</Link>
             : picture}
         <div className="text-muted-foreground mt-3 flex h-5 items-center justify-between gap-2 text-[13px] leading-5"

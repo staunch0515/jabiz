@@ -95,6 +95,8 @@ export interface FeedCard {
   kind: QuizKind
   /** The language the quiz is written in (Q59a); a preview's card has none. */
   language?: string | null
+  /** Q73b: the language the card is shown in (the first of the taker's it offers); Q113c starts an attempt in it. */
+  displayLanguage?: string | null
   /** The highest reward, in Kudos. */
   maxReward: unknown
   /** How the reward reaches the taker (Q22). */
@@ -166,6 +168,7 @@ export function feedCard(row: Record<string, unknown>): FeedCard {
     publicationId: String(row.publicationId),
     name: String(row.name ?? ''),
     quizTitle: String(row.quizTitle ?? ''),
+    displayLanguage: textOrNull(row.displayLanguage),
     introLead: textOrNull(row.introLead),
     cover: textOrNull(row.cover),
     video: trustedPlayer(textOrNull(row.video)),

@@ -39,6 +39,7 @@ import { cardProgress, FEED_SORTS, readFeed, readOpenCashRewards, readOpenRedemp
 import { problemText } from '../qb/problems'
 import { canGoBack, Link, navigate, useLocation } from '../qb/router'
 import { prefersStillVideo, trackable } from '../qb/video'
+import { videoFailed } from '../qb/videoFailures'
 import { QBVIEW } from '../qb/view/messages'
 import { openWithSound, VideoSlot } from '../video/stage'
 import { useSoundSetting } from '../qb/SoundSettings'
@@ -84,6 +85,24 @@ export function shortsPath(q: string, publicationId: string | null, base = HOME_
 /** The publication the vertical mode is open on, from the home's address; null when it is closed. */
 export function shortsOf(search: string): string | null {
   return new URLSearchParams(search).get('shorts') || null
+}
+
+/**
+ * Q113c (§9.3 "视频流转模式"): the home's address with the video mode open on a post's video (`video=<id>`), the search
+ * kept: the same mode as the row of shorts, over the home's posts that have a video. A second name, so that a reload
+ * or the way back builds the list it was opened on.
+ */
+export function videoPath(q: string, publicationId: string | null, base = HOME_PATH): string {
+  const params = new URLSearchParams()
+  if (q) params.set('q', q)
+  if (publicationId) params.set('video', publicationId)
+  const query = params.toString()
+  return query ? `${base}?${query}` : base
+}
+
+/** The publication the video mode of the home's posts is open on; null when it is closed. */
+export function videoOf(search: string): string | null {
+  return new URLSearchParams(search).get('video') || null
 }
 
 /** Cards per page of the feed. */
@@ -283,12 +302,14 @@ function useMoreNearTheEnd(sentinel: HTMLElement | null, more: () => void) {
  * The playing card's video (Q65): the app's one player, which nothing on the card touches; a tap on it opens the
  * start page with the sound on, the same player playing on.
  */
-function CardVideo({ card, player, cover }: { card: FeedCard; player: string; cover: ReactNode }) {
+function CardVideo({ card, player, cover, to }: { card: FeedCard; player: string; cover: ReactNode
+  /** Q113c: where a tap on the playing video leads (the video mode from this post), with the sound on. */
+  to: string }) {
   const { t } = useTranslation(QBVIEW)
   const open = useCallback(() => {
     openWithSound(player)
-    navigate(`/p/${card.publicationId}`)
-  }, [card.publicationId, player])
+    navigate(to)
+  }, [to, player])
   // No background of its own: the cover comes in the stage's strip beside the player (see `video/stage.tsx`).
   return <VideoSlot id={`card:${card.publicationId}`} player={player} mode="card" onOpen={open}
     publicationId={card.publicationId} className="relative aspect-video w-full" cover={cover}
@@ -433,8 +454,9 @@ export function FeedPage({ name, country, base = HOME_PATH }: {
   // Q63: searched from the header (`/?q=`).
   const search = useLocation().search
   const q = searchOf(search)
-  // F-S10: the vertical mode, open over the home on this publication.
+  // F-S10: the vertical mode, open over the home on this publication; Q113c: the video mode of the posts.
   const shortsOpen = shortsOf(search)
+  const videoOpen = shortsOpen === null ? videoOf(search) : null
   // Q64: chosen from the header's filter button (Q22: one way of paying the reward, remembered on this device).
   const { method, chooseMethod, filters, setFilters, open: filtersOpen, setOpen: setFiltersOpen } = useFeedControls()
   const filterList = feedFilters(filters)
@@ -466,7 +488,7 @@ export function FeedPage({ name, country, base = HOME_PATH }: {
     initialPageParam: 0,
     getNextPageParam: (last) => (last.items.length < FEED_PAGE ? undefined : last.offset + FEED_PAGE),
   })
-  const cards = feed.data?.pages.flatMap((page) => page.items) ?? []
+  const cards = useMemo(() => feed.data?.pages.flatMap((page) => page.items) ?? [], [feed.data])
   // F-S10: the vertical short videos under the same conditions (the template's `shorts`), once the feed is there.
   const shorts = useQuery({
     queryKey: ['qb', 'feed-shorts', at, country, q, filters.sort, filters.includeAnswered, method, filterList,
@@ -529,11 +551,26 @@ export function FeedPage({ name, country, base = HOME_PATH }: {
     else closeShorts()
   }
   const viewing = shortsOpen !== null && viewerCards.some((card) => card.publicationId === shortsOpen)
+  // Q113c: the posts with a video that plays, in the home's order (one that failed shows its cover and is left out).
+  const videoCards = useMemo(() => cards.filter((card) => !!card.video && !videoFailed(card.video)), [cards])
+  const viewingVideos = videoOpen !== null && videoCards.some((card) => card.publicationId === videoOpen)
+  const closeVideos = useCallback(() => {
+    if (canGoBack()) window.history.back()
+    else navigate(videoPath(q, null, base), { replace: true })
+  }, [q, base])
+  // F-S8: a block moves the video mode on as it does the vertical one.
+  const blockedInVideos = (card: FeedCard, kind: BlockKind) => {
+    const at = videoCards.findIndex((c) => c.publicationId === card.publicationId)
+    const next = [...videoCards.slice(at + 1), ...videoCards.slice(0, Math.max(0, at)).reverse()]
+      .find((c) => !covers(kind, card, c))
+    if (next) navigate(videoPath(q, next.publicationId, base), { replace: true })
+    else closeVideos()
+  }
   const [list, setList] = useState<HTMLUListElement | null>(null)
   const [end, setEnd] = useState<HTMLDivElement | null>(null)
   const centred = useCentredVideo(list, cards.length + shelves.length)
-  // Q65: one player: none of the home's while the vertical mode is open over it.
-  const playing = viewing ? null : centred
+  // Q65: one player: none of the home's while a video mode is open over it.
+  const playing = viewing || viewingVideos ? null : centred
   useMoreNearTheEnd(end, () => {
     if (feed.hasNextPage && !feed.isFetchingNextPage) void feed.fetchNextPage()
   })
@@ -635,10 +672,12 @@ export function FeedPage({ name, country, base = HOME_PATH }: {
               return (
                 <Fragment key={card.publicationId}>
                   <FeedCardView card={card} href={`/p/${card.publicationId}`}
+                    videoHref={videoPath(q, card.publicationId, base)}
                     playing={playing === card.publicationId} note={<CardProgressNote card={card} at={at} />}
                     menu={<BlockMenu item={card} className="text-muted-foreground hover:text-primary rounded-full" />} at={at}
                     share={<SharePostButton publicationId={card.publicationId} name={card.name} />}
-                    video={trackable(card.video) ? (cover) => <CardVideo card={card} player={card.video!} cover={cover} />
+                    video={trackable(card.video) ? (cover) => <CardVideo card={card} player={card.video!} cover={cover}
+                      to={videoPath(q, card.publicationId, base)} />
                       : undefined}
                     onOpen={trackable(card.video) ? () => openWithSound(card.video!) : undefined} />
                   {/* F-S10: a shelf of short videos after this card (the parameters' places). */}
@@ -651,8 +690,15 @@ export function FeedPage({ name, country, base = HOME_PATH }: {
           <div ref={setEnd} aria-hidden data-testid="feed-end" />
           {viewing && (
             <ShortsViewer cards={viewerCards} startId={shortsOpen!} onClose={closeShorts} exposure={emailVerified}
-              onAnswer={(card) => navigate(`/p/${card.publicationId}`)}
+              onDetails={(card) => navigate(`/p/${card.publicationId}`)}
               menu={(card) => <BlockMenu item={card} onBlocked={(kind) => blockedInShorts(card, kind)} />} />
+          )}
+          {viewingVideos && (
+            <ShortsViewer cards={videoCards} startId={videoOpen!} onClose={closeVideos} exposure={emailVerified}
+              title={t('shorts.videoTitle')}
+              onDetails={(card) => navigate(`/p/${card.publicationId}`)}
+              onNearEnd={() => { if (feed.hasNextPage && !feed.isFetchingNextPage) void feed.fetchNextPage() }}
+              menu={(card) => <BlockMenu item={card} onBlocked={(kind) => blockedInVideos(card, kind)} />} />
           )}
           {feed.hasNextPage && (
             <Button variant="outline" disabled={feed.isFetchingNextPage} data-testid="feed-more"

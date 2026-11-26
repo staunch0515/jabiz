@@ -110,6 +110,8 @@ test('a video to watch is shown on the home with its reward and starts the quiz'
   // A tap on the video (nothing in the player is touched) opens the start page; the same player plays on there.
   const before = await frame.elementHandle()
   await page.getByTestId('video-open').click()
+  // Q113c: the tap opens the video mode; its "Details" goes on to the start page, the same player with it.
+  await page.getByTestId('shorts-viewer').locator('[data-current]').getByTestId('shorts-details').click()
   await expect(page).toHaveURL(/\/p\/[^/]+$/)
   await expect(page.getByTestId('detail-hero').getByTestId('video-slot')).toHaveAttribute('data-mode', 'page')
   await expect(stage).toHaveAttribute('data-mode', 'page')

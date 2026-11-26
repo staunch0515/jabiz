@@ -236,6 +236,8 @@ test('a provider shares a video, its operator reviews it once, another Sponsor u
     await expect(stage.locator('iframe')).toHaveAttribute('src', new RegExp(`^${player}\\?autoplay=1&mute=1`))
     await expectAccessible(page, 'app home with a shared video')
     await page.getByTestId('video-open').click()
+    // Q113c: the tap opens the video mode; its "Details" goes on to the start page, the same player with it.
+    await page.getByTestId('shorts-viewer').locator('[data-current]').getByTestId('shorts-details').click()
     await expect(page).toHaveURL(new RegExp(`/taker/p/${publicationId}$`))
     await expect(page.getByTestId('detail-hero').getByTestId('video-slot')).toHaveAttribute('data-mode', 'page')
     await expect(stage).toHaveAttribute('data-mode', 'page')
