@@ -118,6 +118,8 @@ test('a video file plays muted on the home and is the video to watch before the 
   await expect.poll(() => video.evaluate((element: HTMLVideoElement) => element.currentTime)).toBeGreaterThan(0.5)
   // A tap opens the start page with the same player (its sound on); the start waits for the watching it reports.
   await page.getByTestId('video-open').click()
+  // Q113c: the tap opens the video mode; its "Details" goes on to the start page, the same player with it.
+  await page.getByTestId('shorts-viewer').locator('[data-current]').getByTestId('shorts-details').click()
   await expect(page).toHaveURL(/\/p\/[^/]+$/)
   await expect(page.getByTestId('detail-hero').getByTestId('video-slot')).toHaveAttribute('data-mode', 'page')
   await expect(page.getByTestId('detail-watch')).toBeVisible()

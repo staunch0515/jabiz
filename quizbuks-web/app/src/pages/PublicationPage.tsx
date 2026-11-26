@@ -58,8 +58,10 @@ const PILL = 'bg-foreground text-background hover:bg-foreground/90 h-9 shrink-0 
  * transferred (rewards still held back cannot pay it); short, the page says how much is missing and where Kudos are
  * earned instead of offering the start; otherwise starting asks first. The server decides (`QB_ENTRY_FEE_SHORT`).
  */
-function EntryFeeStart({ fee, disabled, busy, describedBy, onStart }: { fee: number; disabled: boolean; busy: boolean;
-  describedBy: string; onStart: () => void }) {
+export function EntryFeeStart({ fee, disabled, busy, describedBy, onStart, className = PILL }: { fee: number
+  disabled: boolean; busy: boolean; describedBy?: string; onStart: () => void
+  /** The button's look (Q113c: the video mode's, on black). */
+  className?: string }) {
   const { t } = useTranslation(APP)
   const wallet = useQuery({ queryKey: [...WALLET_QUERY, 'entry-fee'], queryFn: readWallet })
   // Unread (an error): the start is still offered, without the figures; the server checks the fee (QB_ENTRY_FEE_SHORT).
@@ -81,7 +83,7 @@ function EntryFeeStart({ fee, disabled, busy, describedBy, onStart }: { fee: num
         : t('detail.entryFeeConfirmText', { fee: formatKudos(fee), available: formatKudos(usable) })}
       confirmLabel={t('detail.entryFeePay', { fee: formatKudos(fee) })} onConfirm={onStart}
       trigger={
-        <Button className={PILL} disabled={disabled || wallet.isPending} aria-busy={busy || undefined}
+        <Button className={className} disabled={disabled || wallet.isPending} aria-busy={busy || undefined}
           aria-describedby={describedBy} data-testid="detail-start" data-entry-fee={fee}>
           <Play aria-hidden />
           {t('detail.startWithFee', { fee: formatKudos(fee) })}

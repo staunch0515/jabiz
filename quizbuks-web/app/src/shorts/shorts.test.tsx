@@ -67,6 +67,13 @@ function server(options: { feed?: Record<string, unknown>[]; shorts?: Record<str
       }
       case '/api/client/region':
         return json(404, {})
+      case '/api/processes/QB_ATTEMPT_START/latest': {
+        const now = new Date()
+        return json(200, { output: { attemptId: 'a1', publicationId: (body as { publicationId: string }).publicationId,
+          status: 'IN_PROGRESS', startedAt: now.toISOString(), deadline: new Date(now.getTime() + 300_000).toISOString(),
+          serverTime: now.toISOString(), timeLimitSec: 300, currentIndex: 0, resumed: false, questions: [], answers: [],
+          kind: 'QUIZ' } })
+      }
       default:
         if (path.startsWith('/api/public/counters/')) return new Response(null, { status: 204 })
         return json(200, { items: [], offset: 0, limit: 20 })
@@ -253,7 +260,7 @@ describe('the full-screen vertical mode (F-S10)', () => {
     now.mockReturnValue(5_020_000)
     hear({ event: 'infoDelivery', info: { currentTime: 20 } })
     expect(playbackOf('s1').watchedSec).toBe(20)
-    await user.click(within(current()).getByTestId('shorts-answer'))
+    await user.click(within(current()).getByTestId('shorts-details'))
     await waitFor(() => expect(window.location.pathname).toBe('/p/s1'))
     expect(screen.queryByTestId('shorts-viewer')).toBeNull()
   })
@@ -278,5 +285,80 @@ describe('the full-screen vertical mode (F-S10)', () => {
     // Wholly outside them: not shown at all (nor touched).
     moving.mockImplementation(box(-700, 640))
     await waitFor(() => expect(stage.style.visibility).toBe('hidden'))
+  })
+})
+
+describe('the video mode of the posts (Q113c, §9.3)', () => {
+  const LANDSCAPE = 'https://www.youtube-nocookie.com/embed/bbbbbbbbbbb'
+  const POSTS = [card('v1', { video: LANDSCAPE, displayLanguage: 'ja' }), card('n1'),
+    card('v2', { video: BILIBILI }), card('v3', { video: YOUTUBE, videoVertical: true })]
+  const starts = (calls: { path: string; body: unknown }[]) =>
+    calls.filter((c) => c.path.startsWith('/api/processes/QB_ATTEMPT_START')).map((c) => c.body)
+
+  async function openVideos(id: string, feed: Record<string, unknown>[] = POSTS) {
+    const api = server({ feed, shorts: [] })
+    window.history.replaceState(null, '', `/?video=${id}`)
+    render(<App />)
+    const viewer = await screen.findByTestId('shorts-viewer')
+    return { api, viewer, user: userEvent.setup() }
+  }
+  const shown = () => screen.getByTestId('shorts-viewer').querySelector('[data-current]') as HTMLElement
+
+  it('is black, over the posts with a video in the home\'s order (those without skipped), a landscape one across', async () => {
+    const { viewer } = await openVideos('v1')
+    expect(viewer).toHaveClass('bg-black', 'text-white')
+    expect(viewer).toHaveAccessibleName('Videos')
+    expect(within(viewer).getAllByTestId('shorts-screen').map((s) => s.getAttribute('data-publication')))
+      .toEqual(['v1', 'v2', 'v3'])
+    expect(within(shown()).getByTestId('shorts-stage')).toHaveAttribute('data-orientation', 'landscape')
+    expect(within(viewer).getAllByTestId('shorts-stage')[2]).toHaveAttribute('data-orientation', 'vertical')
+    expect(within(viewer).getByTestId('shorts-position')).toHaveTextContent('1 of 3')
+    // Over the foot: the Sponsor, the name, the reward, and the two buttons.
+    expect(within(shown()).getByTestId('shorts-sponsor')).toHaveTextContent('Capitals Inc')
+    expect(within(shown()).getByTestId('shorts-name')).toHaveTextContent('Quiz v1')
+    expect(within(shown()).getByTestId('shorts-reward')).toHaveTextContent('Up to 100 Kudos')
+    expect(within(shown()).getByTestId('shorts-details')).toHaveTextContent('Details')
+    expect(within(shown()).getByTestId('shorts-start')).toHaveTextContent('Start the quiz')
+    // Only the way back at the top left; it goes back to the home.
+    await userEvent.click(within(viewer).getByTestId('shorts-close'))
+    await waitFor(() => expect(screen.queryByTestId('shorts-viewer')).toBeNull())
+  })
+
+  it('starts the quiz shown at once, in the language it is shown in, and "Details" opens its start page', async () => {
+    const { api, user } = await openVideos('v1')
+    await user.click(within(shown()).getByTestId('shorts-start'))
+    await waitFor(() => expect(window.location.pathname).toBe('/play/a1'))
+    expect(starts(api.calls)).toEqual([expect.objectContaining({ publicationId: 'v1', language: 'ja' })])
+    cleanup()
+    vi.restoreAllMocks()
+    const again = await openVideos('v1')
+    await again.user.click(within(shown()).getByTestId('shorts-details'))
+    await waitFor(() => expect(window.location.pathname).toBe('/p/v1'))
+    expect(starts(again.api.calls)).toEqual([])
+  })
+
+  it('waits for the video to be watched first, saying how long (Q75)', async () => {
+    await openVideos('v1', [card('v1', { video: LANDSCAPE, watchRequired: true, videoDurationSec: 30 })])
+    const start = within(shown()).getByTestId('shorts-start')
+    expect(start).toBeDisabled()
+    // How long is the watch rule's (`video/playback.ts`, its tolerance under the length).
+    expect(start).toHaveTextContent(/^\d+ s to watch$/)
+    await expectAccessible()
+  })
+
+  it('continues an attempt in progress, and offers only the start page for one answered', async () => {
+    const deadline = new Date(Date.now() + 120_000).toISOString()
+    await openVideos('v1', [card('v1', { video: LANDSCAPE, myAttemptId: 'a9', myStatus: 'IN_PROGRESS', myDeadline: deadline }),
+      card('v2', { video: BILIBILI, myAttemptId: 'a8', myStatus: 'SUBMITTED' })])
+    expect(within(shown()).getByTestId('shorts-start')).toHaveTextContent('Continue the quiz')
+    const answered = screen.getAllByTestId('shorts-screen')[1]
+    expect(within(answered).getByTestId('shorts-details')).toBeInTheDocument()
+    expect(within(answered).queryByTestId('shorts-start')).toBeNull()
+  })
+
+  it('reads the home\'s next page when the screen shown is near the end of the list', async () => {
+    const page = Array.from({ length: 10 }, (_, i) => card(`w${i}`, { video: LANDSCAPE.replace('bbbbbbbbbbb', `w${i}`.padEnd(11, 'x')) }))
+    const { api } = await openVideos('w9', page)
+    await waitFor(() => expect(api.feedReads().some((read) => (read as unknown as { offset: number }).offset === 10)).toBe(true))
   })
 })

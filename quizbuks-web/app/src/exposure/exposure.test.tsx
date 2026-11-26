@@ -207,7 +207,7 @@ describe('the vertical mode\'s pushes (F-S13)', () => {
     now.mockReturnValue(5_030_000)
     hear({ event: 'infoDelivery', info: { currentTime: 30 } })
     expect(reports().filter((r) => r.kind === 'EXPOSURE')).toHaveLength(1)
-    await user.click(within(current()).getByTestId('shorts-answer'))
+    await user.click(within(current()).getByTestId('shorts-details'))
     await waitFor(() => expect(reports()).toContainEqual({ publicationId: 'x', kind: 'GO', surface: 'VERTICAL' }))
   })
 

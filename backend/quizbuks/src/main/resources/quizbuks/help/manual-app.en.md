@@ -11,7 +11,7 @@ How to use the app as a Taker. Paths are pages of the app (they start with /take
 - Each quiz on Home is a post: the Sponsor's picture and name and how long ago it went up, then the quiz's name and the beginning of its introduction, its picture or video, and a line with the reward, how many answered, the time limit and a share button. Tap the Sponsor's picture or name for their page; tap the name, the text or the picture to open the quiz.
 - Home lists the quizzes you can answer. Use Search, Sort (newest, reward, most completed…) and Filters (Sponsor, the Sponsor's country or region, reward, how many completed it).
 - Quizzes you have answered are hidden; turn on "Show quizzes I answered" to see them.
-- Shorts: a shelf of short videos on Home. Tap one to watch in full screen and answer from there.
+- The full-screen video mode: tap a post's video on Home, or one in the "Shorts" row, to watch in full screen (black, swipe up and down for the other videos; quizzes without a video are skipped). Under the video are "Details" (the start page) and "Start the quiz" (straight away; a video to watch first shows the seconds left).
 - Topics you like: in Account → About me (/taker/account/details) choose topics, and turn on "Show only the topics I like" to limit Home and the shorts to them.
 - Languages of the quizzes: Account → App settings (/taker/account/preferences). Unless you choose, they follow the app's language.
 - Blocking: the "…" menu of a quiz offers "Not interested" and blocking every round of the quiz, the Sponsor or the video provider. What you blocked never shows and cannot be answered. Unblock it in Account → App settings.

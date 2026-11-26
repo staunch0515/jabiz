@@ -12,12 +12,12 @@ test.beforeEach(async ({ request }) => {
   await prepareQuizbuks(request)
 })
 
-/** A live publication of the sponsor's, of a quiz whose video is a YouTube Shorts link. */
+/** A live publication of the sponsor's, of a quiz whose video is `video` (a YouTube Shorts link; none: no video). */
 async function shortsPublication(request: APIRequestContext, sponsor: { token: string; balance: number }, name: string,
-  video: string) {
+  video: string | null) {
   const quiz = await run(request, sponsor.token, 'QB_QUIZ_SAVE', { title: `${name} quiz`, timeLimitSec: 300 })
   const quizId = quiz.quizId as string
-  await run(request, sponsor.token, 'QB_MATERIAL_SAVE', { quizId, kind: 'VIDEO_LINK', title: 'Short', url: video })
+  if (video) await run(request, sponsor.token, 'QB_MATERIAL_SAVE', { quizId, kind: 'VIDEO_LINK', title: 'Short', url: video })
   await run(request, sponsor.token, 'QB_QUESTION_SAVE', { quizId, stem: 'What did the short show?', points: 1,
     options: [{ text: 'A song', correct: true }, { text: 'A map' }] })
   const version = await run(request, sponsor.token, 'QB_QUIZ_PUBLISH_VERSION', { quizId })
@@ -122,7 +122,56 @@ test('a Shorts publication is in the shelf; the vertical mode swipes on and lead
   await expect(viewer).toHaveCount(0)
   await expect(shelf).toBeVisible()
   await shelf.getByTestId('shorts-card-open').last().click()
-  await page.getByTestId('shorts-viewer').locator('[data-current]').getByTestId('shorts-answer').click()
+  await page.getByTestId('shorts-viewer').locator('[data-current]').getByTestId('shorts-details').click()
   await expect(page).toHaveURL(new RegExp(`/taker/p/${first}$`))
   await expect(page.getByTestId('detail-start')).toBeVisible()
+})
+
+test('a post\'s video opens the video mode: black, landscape across, the posts without a video skipped, and starts at once (Q113c)',
+  async ({ page, request }) => {
+  test.setTimeout(180_000)
+  await page.route('https://www.youtube-nocookie.com/**', (route) => route.fulfill({ contentType: 'text/html',
+    body: '<!doctype html><html lang="en"><title>Player</title></html>' }))
+  // Nothing plays by itself: the post's picture is the one to tap (a playing one has the stage's button instead).
+  await page.emulateMedia({ reducedMotion: 'reduce' })
+  const sponsor = await fundedSponsor(request)
+  const base = unique('Videos run ')
+  // Newest first on the home: the landscape one, the one without a video, then the other landscape one.
+  const last = await shortsPublication(request, sponsor, `${base} three`, 'https://www.youtube.com/watch?v=bbbbbbbbbbb')
+  const none = await shortsPublication(request, sponsor, `${base} two`, null)
+  const first = await shortsPublication(request, sponsor, `${base} one`, 'https://www.youtube.com/watch?v=dQw4w9WgXcQ')
+  const me = await taker(request, 'Rin')
+  for (const id of [first, none, last]) await untilLive(request, me.token, id)
+
+  await page.setViewportSize({ width: 390, height: 844 })
+  await signIn(page, '/taker/', me.email)
+  await expect(page.getByTestId('home')).toBeVisible()
+  await searchHome(page, base)
+  await expect(page.getByTestId('feed-card')).toHaveCount(3)
+  const post = page.getByTestId('feed-card').filter({ hasText: `${base} one` })
+  await post.getByTestId('feed-card-picture').click()
+  await expect(page).toHaveURL(new RegExp(`[?&]video=${first}`))
+  const viewer = page.getByTestId('shorts-viewer')
+  await expect(viewer).toBeVisible()
+  expect(await viewer.evaluate((element) => getComputedStyle(element).backgroundColor)).toBe('rgb(0, 0, 0)')
+  // The two with a video, in the home's order; the one without is not among them.
+  await expect(viewer.getByTestId('shorts-screen')).toHaveCount(2)
+  await expect(viewer.locator(`[data-publication="${none}"]`)).toHaveCount(0)
+  const current = viewer.locator('[data-current]')
+  await expect(current).toHaveAttribute('data-publication', first)
+  await expect(current.getByTestId('shorts-stage')).toHaveAttribute('data-orientation', 'landscape')
+  const box = (await current.getByTestId('shorts-stage').locator(':scope > div').boundingBox())!
+  expect(box.width, 'a landscape video across the screen').toBeCloseTo(390, 0)
+  expect(box.height).toBeCloseTo(390 * 9 / 16, 0)
+  await expectAccessible(page, 'app video mode')
+  await viewer.getByTestId('shorts-next').click()
+  await expect(current).toHaveAttribute('data-publication', last)
+  await viewer.getByTestId('shorts-previous').click()
+  await expect(current).toHaveAttribute('data-publication', first)
+
+  // "Start the quiz" starts it there and then.
+  const started = page.waitForResponse((r) => r.url().includes('/api/processes/QB_ATTEMPT_START/'))
+  await current.getByTestId('shorts-start').click()
+  expect((await started).status()).toBe(200)
+  await expect(page).toHaveURL(/\/taker\/play\//)
 })
