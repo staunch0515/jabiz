@@ -8,9 +8,16 @@
  * the same tokens, which the SPAs import as @qb-brand/brand.css.
  */
 :root {
-  /* Palette A of the timeline look (Q113 §9.1, light; the dark one comes with Q113e): ink, secondary grey, the
+  /* Palette A of the timeline look (Q113 §9.1, light; the dark one is Q113e's, below): ink, secondary grey, the
      dividers and the accent, the accent marking the current tab, links and the floating button. Inputs keep the
-     platform's darker border (3:1 against white, WCAG 1.4.11); the spec's outline colour is --qb-outline. */
+     platform's darker border (3:1 against white, WCAG 1.4.11); the spec's outline colour is --qb-outline. The page,
+     the cards and the quiet fills are the platform's values, written here because the dark appearance sets them. */
+  --background: #ffffff;
+  --card: #ffffff;
+  --popover: #ffffff;
+  --secondary: #f4f4f5;
+  --secondary-foreground: #18181b;
+  --muted: #f4f4f5;
   --foreground: #0f1a17;
   --card-foreground: #0f1a17;
   --popover-foreground: #0f1a17;
@@ -54,29 +61,40 @@
 }
 
 .dark {
-  /* The platform's dark values until Q113e designs the dark palette: the same tokens as the light appearance. */
-  --foreground: #fafafa;
-  --card-foreground: #fafafa;
-  --popover-foreground: #fafafa;
-  --muted-foreground: #a8a8b0;
-  --border: #3f3f46;
-  --sidebar-border: #3f3f46;
-  --qb-outline: #3f3f46;
+  /* Palette A, dark (Q113e, P11; approved on the prototype 2026-11-26): a neutral near-black without the green, the
+     page and its cards alike as X has them (a popover lifted a step); text 16.5:1, secondary text 6.6:1. The accent is
+     lightened for the dark (7.5:1) and still only marks the current tab, links and the floating button, with dark
+     words on it; the main button turns near-white (`bg-foreground`). The reward's gold fill stays, its text lightens
+     (12:1). The dividers and outlines are quiet greys; inputs keep the platform's border (3:1). */
+  --background: #0a0b0b;
+  --card: #0a0b0b;
+  --popover: #141817;
+  --secondary: #1c2120;
+  --secondary-foreground: #c9d1ce;
+  --muted: #1c2120;
+  --foreground: #e7ecea;
+  --card-foreground: #e7ecea;
+  --popover-foreground: #e7ecea;
+  --muted-foreground: #8b9893;
+  --border: #22282a;
+  --sidebar-border: #22282a;
+  --qb-outline: #3a4240;
   --qb-reward: #e3b23c;
   --qb-reward-foreground: #f0c75e;
-  --primary: #6ee7b7;
-  --primary-foreground: #052e16;
-  --ring: #6ee7b7;
-  /* Lighter than the platform's dark accent so a ghost button's hover (accent at 50%) stays visible. */
-  --accent: #123b2d;
-  --accent-foreground: #d1fae5;
-  --sidebar-primary: #6ee7b7;
-  --sidebar-primary-foreground: #052e16;
-  --sidebar-ring: #6ee7b7;
-  --sidebar-accent: #123b2d;
-  --sidebar-accent-foreground: #d1fae5;
-  --chart-1: #6ee7b7;
-  --chart-2: #b45309;
+  --primary: #36ad91;
+  --primary-foreground: #04201a;
+  --ring: #36ad91;
+  /* The tint of an unread row and of a hover: a step above the page. */
+  --accent: #121a18;
+  --accent-foreground: #e7ecea;
+  --sidebar-primary: #36ad91;
+  --sidebar-primary-foreground: #04201a;
+  --sidebar-ring: #36ad91;
+  --sidebar-accent: #121a18;
+  --sidebar-accent-foreground: #e7ecea;
+  /* The two chart series apart from each other (3:1) and from the page: a deeper green and a pale amber. */
+  --chart-1: #2a8f78;
+  --chart-2: #fde68a;
   --qb-hero-from: #064e3b;
   --qb-hero-to: #065f46;
   --qb-hero-foreground: #ffffff;
@@ -85,8 +103,9 @@
   --qb-leaf-deep: #10b981;
   --qb-coin: #fbbf24;
   --qb-coin-deep: #f59e0b;
-  --qb-sky: #123b2d;
+  --qb-sky: #121a18;
   --qb-ink: #d1fae5;
+  /* The mark (Q113 §9.5) is the same in both appearances. */
   --qb-mark: #0f6b5c;
   --qb-mark-foreground: #ffffff;
 }
