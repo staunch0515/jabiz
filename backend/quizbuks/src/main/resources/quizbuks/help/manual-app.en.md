@@ -12,9 +12,9 @@ How to use the app as a Taker. Paths are pages of the app (they start with /take
 - Home lists the quizzes you can answer. Use Search, Sort (newest, reward, most completed…) and Filters (Sponsor, the Sponsor's country or region, reward, how many completed it).
 - Quizzes you have answered are hidden; turn on "Show quizzes I answered" to see them.
 - The full-screen video mode: tap a post's video on Home, or one in the "Shorts" row, to watch in full screen (black, swipe up and down for the other videos; quizzes without a video are skipped). Under the video are "Details" (the start page) and "Start the quiz" (straight away; a video to watch first shows the seconds left).
-- Topics you like: in Account → About me (/taker/account/details) choose topics, and turn on "Show only the topics I like" to limit Home and the shorts to them.
-- Languages of the quizzes: Account → App settings (/taker/account/preferences). Unless you choose, they follow the app's language.
-- Blocking: the "…" menu of a quiz offers "Not interested" and blocking every round of the quiz, the Sponsor or the video provider. What you blocked never shows and cannot be answered. Unblock it in Account → App settings.
+- Topics you like: in Settings → About me (/taker/account/details) choose topics, and turn on "Show only the topics I like" to limit Home and the shorts to them.
+- Languages of the quizzes: Settings → App settings (/taker/account/preferences). Unless you choose, they follow the app's language.
+- Blocking: the "…" menu of a quiz offers "Not interested" and blocking every round of the quiz, the Sponsor or the video provider. What you blocked never shows and cannot be answered. Unblock it in Settings → App settings.
 - Some quizzes are only for people whose profile matches what the Sponsor looks for; telling more in About me may let you answer them. Sponsors never see your answers to About me.
 - A quiz on a knowledge map shows once you have lit the nodes it needs. A quiz whose video cannot be played where you are now (for example YouTube in mainland China) says it is not available in your region.
 
@@ -50,7 +50,10 @@ Each quiz says how its reward is paid. At the first launch, Kudos are shown but 
 - "Report this quiz" on a quiz's page tells us what is wrong with it; the Sponsor is not told who reported it.
 - Refer a friend (/taker/referrals): some quizzes offer a referral link once you have answered or passed them yourself. If your friend passes in time, you get the referral reward.
 
-## Account (/taker/account)
+## My page (/taker/account) and Settings (/taker/settings)
+
+- My page: your name, where you live and the month you joined, with three numbers: Kudos, prizes to collect and certificates; "Edit profile" changes your profile. The tabs under them are Answered, Kudos, Certificates, Knowledge maps and Referrals, each listing what it has and opening its whole page.
+- Settings ("Settings" in the side menu): the search box at the top finds a row by its name; below are the items that follow, the Sponsor account, deleting the account and signing out.
 
 - Profile: your name and where you live. Your e-mail address cannot be changed here; contact us if it needs to change.
 - About me: optional details for quizzes aimed at people like you, and the topics you like.
@@ -71,5 +74,5 @@ Each quiz says how its reward is paid. At the first launch, Kudos are shown but 
 ## Help and terms
 
 - Help centre with frequently asked questions: /taker/help. When the answer is not there, hand your question to a person.
-- Ask the AI: at the top of the help centre (/taker/help, from Account → Help). It answers how to use the app, with links to the pages; mark an answer solved or not solved. "Ask a person" hands the conversation to the support team, whose reply comes there and in the inbox. Your earlier conversations are under "Your conversations".
+- Ask the AI: at the top of the help centre (/taker/help, from Settings → Help). It answers how to use the app, with links to the pages; mark an answer solved or not solved. "Ask a person" hands the conversation to the support team, whose reply comes there and in the inbox. Your earlier conversations are under "Your conversations".
 - Terms of use: /taker/legal/terms. Privacy policy: /taker/legal/privacy. Official rules of reward campaigns: /taker/legal/contest-rules.

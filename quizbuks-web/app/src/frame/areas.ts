@@ -28,6 +28,7 @@ import {
   ACCOUNT_DETAILS_PATH,
   ACCOUNT_PARTS,
   ACCOUNT_PATH,
+  SETTINGS_PATH,
 } from '../pages/accountPaths'
 import { legalKindOf, legalPath } from '../qb/legal'
 import { REFERRALS_PATH } from '../referral/api'
@@ -118,7 +119,7 @@ export const AREAS: readonly Area[] = [
  * The settings, as the drawer and the left column name them (the prototype's "设置"). Until Q113d gives them a page of
  * their own they are the lower half of "Me", where the link leads.
  */
-export const SETTINGS_ROW = { key: 'settings', path: ACCOUNT_PATH, icon: SettingsIcon, title: 'frame.drawer.rows.settings' }
+export const SETTINGS_ROW = { key: 'settings', path: SETTINGS_PATH, icon: SettingsIcon, title: 'frame.drawer.rows.settings' }
 
 /** The area of a key. */
 export function areaOf(key: AreaKey): Area {
@@ -221,7 +222,7 @@ export type PageName =
   // Messages
   | 'inbox' | 'inboxRewards' | 'inboxItem' | 'conversations' | 'conversation'
   // Me
-  | 'account' | 'accountPart' | 'accountBlocks' | 'accountDeletion' | 'wallet' | 'walletPart' | 'kudosMethod'
+  | 'account' | 'settings' | 'accountPart' | 'accountBlocks' | 'accountDeletion' | 'wallet' | 'walletPart' | 'kudosMethod'
   | 'payout' | 'bank' | 'referrals' | 'referral' | 'mySponsor' | 'staffDesk' | 'staffHandled' | 'maps' | 'map'
   // Outside the areas
   | 'welcome' | 'help' | 'legal' | 'about' | 'verify' | 'takerPage' | 'sponsorPage'
@@ -250,6 +251,7 @@ const FIXED: Readonly<Record<string, Route>> = {
   [INBOX_REWARDS_PATH]: route('inboxRewards', 'messages'),
   [CONVERSATIONS_PATH]: route('conversations', 'messages'),
   [ACCOUNT_PATH]: route('account', 'me'),
+  [SETTINGS_PATH]: route('settings', 'me'),
   [ACCOUNT_BLOCKS_PATH]: route('accountBlocks', 'me'),
   [ACCOUNT_DELETION_PATH]: route('accountDeletion', 'me'),
   [WALLET_PATH]: route('wallet', 'me'),

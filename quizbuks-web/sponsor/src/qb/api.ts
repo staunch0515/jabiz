@@ -14,6 +14,8 @@ export interface Profile {
   city: string | null
   preferredCurrency: string | null
   revision: number
+  /** Q113d-2: when the profile was made ("joined in …" on My page); absent where it is not read. */
+  createdAt?: string | null
 }
 
 /** `ProfileProcesses.ProfileInput`. */
@@ -139,6 +141,7 @@ export async function readMyProfile(): Promise<Profile | null> {
     city: (row.city as string | null) ?? null,
     preferredCurrency: (row.preferredCurrency as string | null) ?? null,
     revision: numberOf(row.revision),
+    createdAt: (row.createdAt as string | null) ?? null,
   }
 }
 

@@ -42,7 +42,7 @@ const PRIZES = new Set(['CASH', 'REDEEM', 'DIGITAL'])
  * or the result at the line's end. A prize (cash, to collect, digital) is a quote box under it, which opens the result
  * where it is handled.
  */
-function Row({ row, at, onContinue, starting }: { row: HistoryRow; at: string; onContinue: () => void; starting: boolean }) {
+export function HistoryItem({ row, at, onContinue, starting }: { row: HistoryRow; at: string; onContinue: () => void; starting: boolean }) {
   const { t } = useTranslation(APP)
   const finished = row.category === 'PASSED' || row.category === 'FAILED'
   const left = minutesUntil(row.deadline)
@@ -230,7 +230,7 @@ export function HistoryPage({ tab }: { tab: 'answered' | 'unfinished' }) {
           {/* Q113d-1: rows across the column, a divider between them, as the home's posts. */}
           <ul className="border-border -mx-4 flex flex-col border-t" data-testid="history-list">
             {rows.map((row) => (
-              <Row key={row.attemptId} row={row} at={at} starting={start.isPending}
+              <HistoryItem key={row.attemptId} row={row} at={at} starting={start.isPending}
                 onContinue={() => start.mutate(row.publicationId)} />
             ))}
           </ul>

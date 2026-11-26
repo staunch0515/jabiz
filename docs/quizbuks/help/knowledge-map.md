@@ -116,21 +116,21 @@ A challenge is a quiz your operator sets on a node of its copy of a platform map
 
 ### 中文 · 怎样核实证书？怎样分享、停用我的证书？（学者）
 
-别人只要拿到证书的链接（"我的 → 证书与你的公开页"里每张证书都有"复制链接"），就能在核实页看到：证书名称、颁发方、证书上的名字、点亮日期和状态。节点证书没有有效期，所以页面不写有效期：状态是"有效"，被撤销的点亮会显示"已收回"（原来那次合格不再算），已删除账号的证书显示"没有这张证书"。核实页不显示你的分数、住址或邮箱。
+别人只要拿到证书的链接（"我的主页 → 证书"里每张证书都有"复制链接"），就能在核实页看到：证书名称、颁发方、证书上的名字、点亮日期和状态。节点证书没有有效期，所以页面不写有效期：状态是"有效"，被撤销的点亮会显示"已收回"（原来那次合格不再算），已删除账号的证书显示"没有这张证书"。核实页不显示你的分数、住址或邮箱。
 链接默认可用，链接本身是一串无法猜出的编号。你可以随时在证书上"停用分享"：之后打开链接的人只会看到"链接已停用"，看不到证书的任何内容；再打开开关即恢复，链接不变。公开认证页只在你开启并取了公开名之后才列出你分享的、没有被撤销的证书。
 停用或被撤销后，核实页最多晚一分钟才更新：页面缓存了这么久。
 下载 PDF：第一次点"下载 PDF"时才签发，之后下载的都是同一份；PDF 上写点亮日期、颁发方和核实地址，没有有效期。
 
 ### 日本語 · 証明書はどうやって確認してもらいますか？ 共有を止めるには？（テイカー）
 
-証明書のリンクを知っている人なら、確認ページで証明書の名前、発行者、証明書上の名前、点灯日、状態を見られます（「マイページ → 証明書と公開ページ」の各証明書に「リンクをコピー」があります）。ノードの証明書に有効期限はないため、ページにも期限は載りません。状態は「有効」で、点灯が取り消されると「取り消し」と表示されます（そのときの合格は無効になります）。アカウントを削除した人の証明書は「この証明書は見つかりません」になります。確認ページにスコア・住所・メールアドレスは表示されません。
+証明書のリンクを知っている人なら、確認ページで証明書の名前、発行者、証明書上の名前、点灯日、状態を見られます（「マイページ → 証明書」の各証明書に「リンクをコピー」があります）。ノードの証明書に有効期限はないため、ページにも期限は載りません。状態は「有効」で、点灯が取り消されると「取り消し」と表示されます（そのときの合格は無効になります）。アカウントを削除した人の証明書は「この証明書は見つかりません」になります。確認ページにスコア・住所・メールアドレスは表示されません。
 リンクは初期状態で有効で、推測できない番号です。証明書ごとに「共有を止める」ことがいつでもでき、止めるとリンクを開いた人には「リンクは無効」とだけ表示され、証明書の内容は何も見えません。スイッチを戻せば再び有効になり、リンクは変わりません。公開の認定ページには、公開名を付けて公開をオンにしたときだけ、共有中で取り消されていない証明書が並びます。
 共有を止めた後や取り消された後、確認ページに反映されるまで最大 1 分かかります（その間ページはキャッシュされるためです）。
 PDF は「PDF をダウンロード」を初めて押したときに発行され、以降は同じものがダウンロードされます。PDF には点灯日、発行者、確認用アドレスが載り、有効期限はありません。
 
 ### English · How do I let others verify my certificate, and turn sharing off?（Taker）
 
-Anyone with a certificate's link (each certificate under "Me → Certificates and your public page" has "Copy link") sees on the verify page the certificate's name, who issued it, the name on it, the day it was lit and its state. A node's certificate has no end date, so the page shows none: it is "Valid"; a revoked lighting shows "Revoked" (the pass it came from no longer counts), and the certificate of a deleted account shows "No such certificate". The page never shows your scores, address or e-mail.
+Anyone with a certificate's link (each certificate under "My page → Certificates" has "Copy link") sees on the verify page the certificate's name, who issued it, the name on it, the day it was lit and its state. A node's certificate has no end date, so the page shows none: it is "Valid"; a revoked lighting shows "Revoked" (the pass it came from no longer counts), and the certificate of a deleted account shows "No such certificate". The page never shows your scores, address or e-mail.
 The link works by default, and it is a number nobody can guess. You can turn sharing off on a certificate at any time: whoever opens the link is then told only that the link is turned off, and sees nothing of the certificate. Turn it on again and the same link works. Your public certification page lists a certificate only when you have turned the page on under a name of your own, the certificate is shared and its lighting is not revoked.
 After you turn sharing off, or a lighting is revoked, the verify page can take up to a minute (60 seconds) to show it: the page is cached for that long.
 The PDF is issued the first time you choose "Download PDF"; every later download is that same file. It shows the day it was lit, the issuer and the verify address, and no end date.

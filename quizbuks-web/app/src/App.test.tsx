@@ -653,20 +653,17 @@ describe('a signed-in Taker', () => {
     await waitFor(() => expect(window.location.pathname).toBe('/login'))
   })
 
-  it('opens the account as a menu of its parts, each on a page of its own (Q56)', async () => {
+  it('opens the settings as a menu of the account\'s parts, each on a page of its own (Q56, Q113d-2)', async () => {
     server({ profile: { displayName: 'Mei', countryCode: 'JP', city: null, preferredCurrency: 'JPY', revision: 1 } })
-    window.history.replaceState(null, '', '/account')
+    window.history.replaceState(null, '', '/settings')
     render(<App />)
-    const menu = await screen.findByTestId('account')
-    expect(await within(menu).findByTestId('account-who')).toHaveTextContent('Mei · mei@example.com')
+    const menu = await screen.findByTestId('settings')
+    expect(await screen.findByTestId('account-who')).toHaveTextContent('mei@example.com')
     const settings = within(menu).getByRole('navigation', { name: 'Settings' })
     expect(within(settings).getAllByRole('link').map((link) => link.getAttribute('href'))).toEqual([
       '/account/profile', '/account/details', '/account/security', '/account/mail', '/account/blocks',
       '/account/preferences', '/account/id', '/help', '/legal/terms', '/legal/privacy', '/legal/contest-rules',
       '/about'])
-    const owned = within(menu).getByRole('navigation', { name: 'What I have' })
-    expect(within(owned).getAllByRole('link').map((link) => link.getAttribute('href'))).toEqual([
-      '/history/prizes', '/account/certificates', '/maps', '/referrals', '/wallet'])
     expect(within(menu).getByTestId('account-menu-security')).toHaveTextContent('Sign-in and security')
     // Only the menu: no form of a part on it.
     expect(screen.queryByTestId('profile-name')).toBeNull()
@@ -679,16 +676,16 @@ describe('a signed-in Taker', () => {
     // "Me" is the drawer's (Q113 §9.2): the left column of a wide screen marks it.
     expect(screen.getByTestId('side-rail-me')).toHaveAttribute('aria-current', 'page')
     // The way back is the header's, the same on every page under "Me", and says where it goes.
-    expect(screen.getByTestId('header-back')).toHaveAccessibleName('Back to Me')
+    expect(screen.getByTestId('header-back')).toHaveAccessibleName('Back to Settings')
     expect(screen.queryByTestId('account-back')).toBeNull()
     await userEvent.click(screen.getByTestId('header-back'))
-    expect(window.location.pathname).toBe('/account')
+    expect(window.location.pathname).toBe('/settings')
     expect(await screen.findByTestId('account-menu-profile')).toBeInTheDocument()
   })
 
   it('offers the deletion of the account only where the entry allows it (Q71)', async () => {
     server({ profile: { displayName: 'Mei', countryCode: 'JP', city: null, preferredCurrency: 'JPY', revision: 1 } })
-    window.history.replaceState(null, '', '/account')
+    window.history.replaceState(null, '', '/settings')
     const { unmount } = render(<App />)
     expect(await screen.findByTestId('account-menu-profile')).toBeInTheDocument()
     await waitFor(() => expect(screen.queryByTestId('account-menu-delete')).toBeNull())
@@ -718,7 +715,7 @@ describe('a signed-in Taker', () => {
     expect(await screen.findByTestId('account-deletion-request')).toBeInTheDocument()
   })
 
-  it('keeps the old link to the details, and sends a part there is not to the menu', async () => {
+  it('keeps the old link to the details, and sends a part there is not to My page', async () => {
     server({ profile: { displayName: 'Mei', countryCode: 'JP', city: null, preferredCurrency: 'JPY', revision: 1 } })
     window.history.replaceState(null, '', '/account?section=details')
     render(<App />)
@@ -728,7 +725,7 @@ describe('a signed-in Taker', () => {
     window.history.replaceState(null, '', '/account/nothing')
     render(<App />)
     await waitFor(() => expect(window.location.pathname).toBe('/account'))
-    expect(await screen.findByTestId('account-menu-profile')).toBeInTheDocument()
+    expect(await screen.findByTestId('me-edit-profile')).toBeInTheDocument()
   })
 
   it('edits the profile on the account page with the revision it read', async () => {

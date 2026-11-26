@@ -13,6 +13,9 @@ export const ACCOUNT_PATH = '/account'
 export const ACCOUNT_PARTS = ['profile', 'details', 'certificates', 'security', 'mail', 'preferences', 'blocks', 'id'] as const
 export type AccountPart = (typeof ACCOUNT_PARTS)[number]
 
+/** The settings (Q113d-2): the rows "Me" listed before it became My page; the drawer's "Settings". */
+export const SETTINGS_PATH = '/settings'
+
 /** Deleting the account (Q71): its own page, in the menu only where the entry allows it. */
 export const ACCOUNT_DELETION_PATH = `${ACCOUNT_PATH}/delete`
 

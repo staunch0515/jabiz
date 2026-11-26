@@ -312,15 +312,15 @@ describe('a signed-in Taker', () => {
   it('finds the help, the texts and the contact address from the account', async () => {
     server({ profile: { displayName: 'Mei', countryCode: 'JP', city: null, preferredCurrency: 'JPY', revision: 1 },
       support: 'help@quizbuks.example' })
-    window.history.replaceState(null, '', '/account')
+    window.history.replaceState(null, '', '/settings')
     render(<App />)
     await userEvent.click(await screen.findByTestId('account-about'))
     expect(await screen.findByTestId('about-sign-out')).toBeInTheDocument()
     window.history.replaceState(null, '', '/help')
     window.dispatchEvent(new PopStateEvent('popstate'))
     expect(await screen.findByTestId('help-mail')).toHaveAttribute('href', 'mailto:help@quizbuks.example')
-    // Signed in, the help is under "Me": the back button goes up to it.
-    expect(screen.getByTestId('public-back')).toHaveAttribute('href', '/account')
-    expect(screen.getByTestId('public-back')).toHaveAccessibleName('Back to Me')
+    // Signed in, the help is a row of the settings (Q113d-2): the back button goes up to them.
+    expect(screen.getByTestId('public-back')).toHaveAttribute('href', '/settings')
+    expect(screen.getByTestId('public-back')).toHaveAccessibleName('Back to Settings')
   })
 })

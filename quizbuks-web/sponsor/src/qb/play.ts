@@ -952,6 +952,8 @@ export interface HistoryRequest {
   method?: RewardMethod
   offset?: number
   limit?: number
+  /** Q113d-2: also count them all (My page's "n answered"). */
+  count?: boolean
 }
 
 /** How each method's rewards are recorded on the attempt (`rewardStatus`). */
@@ -976,6 +978,7 @@ export async function readHistory(request: HistoryRequest): Promise<QueryPage<Hi
     filters: historyFilters(request),
     offset: request.offset,
     limit: request.limit,
+    count: request.count,
   })
   return {
     ...page,

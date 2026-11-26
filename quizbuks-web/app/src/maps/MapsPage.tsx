@@ -22,25 +22,31 @@ import '../frame/messages'
  */
 export function MapsPage() {
   const { t } = useTranslation(APP)
-  const { t: tQb } = useTranslation(QB)
-  const maps = useQuery({ queryKey: ['qb', 'maps'], queryFn: readMyMaps })
   return (
     <section className="flex flex-col gap-4" aria-labelledby="maps-title" data-testid="maps">
       <div className="flex flex-col gap-1">
         <AreaHeader area="me" id="maps-title" title={t('maps.title')} />
         <p className="text-muted-foreground text-sm">{t('maps.intro')}</p>
       </div>
-      {maps.isPending ? <PageState kind="loading" />
-        : maps.isError ? <PageState kind="error" description={tQb('failed')}
-          action={<Button variant="outline" onClick={() => void maps.refetch()}>{tQb('retry')}</Button>} />
-        : maps.data.length === 0 ? <PageState kind="empty" title={t('maps.empty')} data-testid="maps-empty" />
-        : (
-          <ul className="flex flex-col gap-2" data-testid="maps-list">
-            {maps.data.map((map) => <MapRow key={map.treeId} map={map} />)}
-          </ul>
-        )}
+      <MapsList />
     </section>
   )
+}
+
+/** The maps' list (Q113d-2: also a tab of "My page"). */
+export function MapsList() {
+  const { t } = useTranslation(APP)
+  const { t: tQb } = useTranslation(QB)
+  const maps = useQuery({ queryKey: ['qb', 'maps'], queryFn: readMyMaps })
+  return maps.isPending ? <PageState kind="loading" />
+    : maps.isError ? <PageState kind="error" description={tQb('failed')}
+      action={<Button variant="outline" onClick={() => void maps.refetch()}>{tQb('retry')}</Button>} />
+    : maps.data.length === 0 ? <PageState kind="empty" title={t('maps.empty')} data-testid="maps-empty" />
+    : (
+      <ul className="flex flex-col gap-2" data-testid="maps-list">
+        {maps.data.map((map) => <MapRow key={map.treeId} map={map} />)}
+      </ul>
+    )
 }
 
 function MapRow({ map }: { map: MapSummary }) {

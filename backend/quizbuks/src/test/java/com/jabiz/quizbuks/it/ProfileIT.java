@@ -113,7 +113,9 @@ class ProfileIT extends AccountItSupport {
         run("QB_PROFILE_SAVE", tokenOf(bob, QbRoles.TAKER), profile("Bob", "US", null, "USD"));
 
         assertThat(rows(QbAccounts.MY_PROFILE_DATASET, tokenOf(ann, QbRoles.TAKER))).singleElement()
-            .satisfies(row -> assertThat(row).containsEntry("userId", ann).containsEntry("displayName", "Ann"));
+            .satisfies(row -> assertThat(row).containsEntry("userId", ann).containsEntry("displayName", "Ann")
+                // Q113d-2: "My page" says since when (the month the profile was made).
+                .containsKey("createdAt").extractingByKey("createdAt").isNotNull());
         assertThat(rows(QbAccounts.MY_PROFILE_DATASET, tokenOf(bob, QbRoles.TAKER))).singleElement()
             .satisfies(row -> assertThat(row).containsEntry("userId", bob));
         // A taker does not read the administrators' dataset, nor another's profile by its key.

@@ -9,7 +9,9 @@ import {
   run,
   signIn,
   takerArea,
-  test, openTakerArea } from './support'
+  test, openTakerArea,
+  openTakerSettings,
+} from './support'
 import { approvedSponsor, takerInJapan } from './wallet'
 import { reviewerFor } from './operators'
 
@@ -295,8 +297,8 @@ test('a Sponsor names a Taker to the staff by their ID, who hands out a prize at
     // Kai reads their ID in "Me" (once signed in: the home is shown): Settings, Staff counter (F-F4).
     await signIn(page, '/taker/', kai.email)
     await expect(page.getByTestId('home')).toBeVisible()
-    await openTakerArea(page, 'me')
-    await expectAccessible(page, 'app account menu')
+    await openTakerSettings(page)
+    await expectAccessible(page, 'app settings')
     await page.getByTestId('account-menu-id').click()
     await expect(page).toHaveURL(/\/taker\/account\/id$/)
     const kaiId = (await page.getByTestId('my-id').textContent())!.trim()
@@ -322,8 +324,8 @@ test('a Sponsor names a Taker to the staff by their ID, who hands out a prize at
     await signOut()
     await signIn(page, '/taker/', kai.email)
     await expect(page.getByTestId('home')).toBeVisible()
-    // F-F4: "Me", Settings, Staff counter, then the desk.
-    await openTakerArea(page, 'me')
+    // F-F4: Settings, Staff counter, then the desk.
+    await openTakerSettings(page)
     await page.getByTestId('account-menu-id').click()
     await page.getByTestId('staff-desk-link').click()
     await expect(page).toHaveURL(/\/taker\/staff$/)

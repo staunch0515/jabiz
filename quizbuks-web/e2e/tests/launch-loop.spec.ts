@@ -266,7 +266,9 @@ test.describe.serial('the first launch\'s loop', () => {
         // "Me", then the maps: Sora's map is in the list, one node lit; its map has the basics lit and the advanced
         // node open (the lighting follows the answering by an event).
         await openTakerArea(page, 'me')
-        await page.getByTestId('account-menu-maps').click()
+        // Q113d-2: a tab of My page, which leads to the maps' own page.
+        await page.getByTestId('page-tab-maps').click()
+        await page.getByTestId('me-maps-all').click()
         await expect(page).toHaveURL(/\/taker\/maps$/)
         const item = page.locator(`[data-testid="maps-item"][data-tree="${map!.treeId}"]`)
         await expect.poll(async () => {

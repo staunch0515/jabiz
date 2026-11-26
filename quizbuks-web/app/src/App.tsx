@@ -93,7 +93,8 @@ import { MaintenanceRedirect } from './maintenance'
 import { MapPage, MapsPage } from './maps/MapsPage'
 import { upOf } from './frame/up'
 import './frame/messages'
-import { ACCOUNT_PATH } from './pages/accountPaths'
+import { SETTINGS_PATH } from './pages/accountPaths'
+import { SettingsPage } from './frame/SettingsPage'
 import { mapOf, MAPS_PATH } from './maps/paths'
 
 /** Where a signed-in taker starts. */
@@ -249,7 +250,7 @@ function SignedIn({ path }: { path: string }) {
       action={<Button variant="outline" onClick={() => void profile.refetch()}>{t('retry')}</Button>} />
   }
   const complete = profile.data?.countryCode ? profile.data : null
-  if (!complete && emailVerified && path !== WELCOME && !isAccountPath(path)) {
+  if (!complete && emailVerified && path !== WELCOME && !isAccountPath(path) && path !== SETTINGS_PATH) {
     // From a share link (Q15): the short welcome step, then back to the publication.
     if (itemPage(path)?.page === 'p') rememberShareNext(path)
     return <Redirect to={WELCOME} />
@@ -273,6 +274,7 @@ function SignedIn({ path }: { path: string }) {
   else if (path === BANK_PATH) page = <BankPage />
   else if (kudosMethodOf(path)) page = <KudosMethodPage key={path} method={kudosMethodOf(path)!} />
   else if (isWalletPath(path)) page = <WalletPage path={path} />
+  else if (path === SETTINGS_PATH) page = <SettingsPage />
   else if (isAccountPath(path)) page = <AccountPage path={path} />
   else if (path === INBOX_PATH) page = <InboxPage tab="inbox" />
   else if (path === INBOX_REWARDS_PATH) page = <InboxPage tab="rewards" />
@@ -352,11 +354,11 @@ function PublicPage({ path, signedIn, sponsorSite = false, children }: { path: s
       {!sponsorSite && (
         <header className="bg-background sticky top-0 z-10 border-b" data-testid="public-header">
           <div className="mx-auto flex max-w-md items-center gap-2 px-4 py-2">
-            {/* Signed in, these pages are under "Me" (its settings): the same back button as the app's pages there
-                (`upOf`), in the same place. Signed out, the way to signing in. */}
+            {/* Signed in, these pages are rows of the settings (Q113d-2): the same back button as the app's pages
+                there (`upOf`), in the same place. Signed out, the way to signing in. */}
             {signedIn && (
               <Button asChild variant="ghost" size="icon-sm" className="-ml-2">
-                <Link to={ACCOUNT_PATH} aria-label={tApp('nav.backTo', { name: tApp('frame.areas.me') })}
+                <Link to={SETTINGS_PATH} aria-label={tApp('nav.backTo', { name: tApp('me.settings') })}
                   data-testid="public-back">
                   <ArrowLeft aria-hidden />
                 </Link>
