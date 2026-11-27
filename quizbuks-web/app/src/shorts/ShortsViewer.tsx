@@ -14,7 +14,7 @@ import { RewardText } from '../qb/view/FeedCard'
 import { QBVIEW } from '../qb/view/messages'
 import { VideoPlayer } from '../qb/view/VideoPlayer'
 import { useVideoFailed, videoFailed } from '../qb/videoFailures'
-import { openWithSound, soundOn, stagePlayer, useStage, VideoSlot } from '../video/stage'
+import { openWithSound, soundOn, stagePlayer, togglePlay, useStage, VideoSlot } from '../video/stage'
 import { ExposureWatch } from '../exposure/ExposureWatch'
 import { queueReport } from '../exposure/reporter'
 import { FileImage } from '../qb/FileImage'
@@ -47,8 +47,9 @@ function SponsorAvatar({ card }: { card: FeedCard }) {
  *
  * A vertical video fills the screen (on a phone all of it, cut at the sides rather than letterboxed; on a wider screen
  * the full height in a column of its shape), the way back, the Sponsor, the name and the buttons over it. The app's
- * player therefore lies under the screens (`SHORT_STAGE_Z`, over the mode's black backdrop), and the place of a playing
- * screen's video lets taps and swipes through to it, as when the player lay above.
+ * player therefore lies under the screens (`SHORT_STAGE_Z`, over the mode's black backdrop). The screen takes the taps
+ * on the video itself (a tap pauses or plays on, `togglePlay`; a swipe moves on): the player's own controls are never
+ * reached, so it never stops on them.
  */
 export function ShortsViewer({ cards, startId, onClose, onDetails, menu, exposure = false, title, onNearEnd }: {
   cards: readonly FeedCard[]
@@ -306,12 +307,28 @@ export function ShortsViewer({ cards, startId, onClose, onDetails, menu, exposur
                 data-testid="shorts-stage" data-orientation={vertical ? 'vertical' : 'landscape'}>
                 <div className={cn(vertical ? 'relative aspect-[9/16] h-full max-w-full overflow-hidden'
                   : 'relative aspect-video max-h-full w-full overflow-hidden',
-                // Transparent where the app's player shows through; taps on it go to the player beneath.
-                staged ? 'pointer-events-none' : 'bg-neutral-900')} data-testid="shorts-video-box">
+                // Transparent where the app's player shows through (it lies beneath the screens).
+                !staged && 'bg-neutral-900')} data-testid="shorts-video-box">
                   {staged
-                    ? <VideoSlot id={`short:${card.publicationId}`} player={card.video!} mode="short"
-                      publicationId={card.publicationId} className="absolute inset-0 size-full" title={title}
-                      fit={vertical ? 'cover' : undefined} />
+                    ? <>
+                      <VideoSlot id={`short:${card.publicationId}`} player={card.video!} mode="short"
+                        publicationId={card.publicationId} className="absolute inset-0 size-full" title={title}
+                        fit={vertical ? 'cover' : undefined} />
+                      {/* The screen takes the taps on the video, never the player's own controls (which would leave it
+                          in its controls, paused or waiting): a tap pauses the short or plays it on. A swipe here
+                          moves to the next screen. */}
+                      <button type="button" className="absolute inset-0 size-full cursor-pointer" data-testid="shorts-toggle"
+                        aria-label={stage.pausedByViewer ? t('shorts.resume') : t('shorts.pause')}
+                        onClick={() => togglePlay()}>
+                        {stage.pausedByViewer && (
+                          <span className="absolute inset-0 flex items-center justify-center" aria-hidden>
+                            <span className="flex size-16 items-center justify-center rounded-full bg-black/50">
+                              <Play className="ml-1 size-8" />
+                            </span>
+                          </span>
+                        )}
+                      </button>
+                    </>
                     : plays
                       ? vertical
                         // Another site's frame given the vertical shape over all of the place, cut at its edges.

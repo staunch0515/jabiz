@@ -37,7 +37,7 @@ interface Slot {
   element: HTMLElement
   /** Q75: the publication whose video this is, for its playback record. */
   publicationId: string | null
-  /** Told of the card's tap (which plays it in place with its sound, `engage`). */
+  /** The card's tap: the start page, the sound on. */
   onOpen?: () => void
   /** The cover the player fades in over (`VideoStage`, `crossFade`). */
   cover?: ReactNode
@@ -59,15 +59,12 @@ interface StageState {
    * is already painted when the card's own picture takes over (the player is released once the fade is done).
    */
   returning: { cover: ReactNode } | null
-  /**
-   * Q113 §9.3 (2026-11-27, as x.com): a card's video tapped plays on in place as a player: its sound on and its own
-   * controls usable (the card's cover over it no longer takes the taps). Until then nothing on a card is for touching.
-   */
-  engaged: boolean
+  /** F-S10: the viewer paused the short with a tap on it (the vertical mode's own tap, `togglePlay`). */
+  pausedByViewer: boolean
 }
 
 let state: StageState = { slot: null, player: null, soundAsked: false, soundOn: false, framed: false, returning: null,
-  engaged: false }
+  pausedByViewer: false }
 const listeners = new Set<() => void>()
 let frame: HTMLIFrameElement | null = null
 /** F-S15: the stage's `<video>` while the player is a video file. */
@@ -464,8 +461,7 @@ function claim(slot: Slot) {
   const asked = !!wanted && wanted.player === slot.player && wanted.until >= Date.now()
   wanted = null
   set({ slot, player: slot.player, returning: null,
-    // A card tapped to play (its cover, not yet playing) plays as a player at once.
-    ...(same ? {} : { soundAsked: asked, soundOn: false, framed: false, engaged: asked && slot.mode === 'card' }) })
+    ...(same ? {} : { soundAsked: asked, soundOn: false, framed: false, pausedByViewer: false }) })
   // Q75: a slot that counts (the start page's) starts the counting afresh.
   startCounting()
 }
@@ -492,7 +488,7 @@ function leave(slot: Slot) {
         clearTimeout(frameTimer)
         frameTimer = null
       }
-      set({ player: null, soundAsked: false, soundOn: false, framed: false, returning: null, engaged: false })
+      set({ player: null, soundAsked: false, soundOn: false, framed: false, returning: null, pausedByViewer: false })
       heard = false
       playerPlaying = false
       youtubePlayerState = null
@@ -506,13 +502,21 @@ export function useStage(): StageState {
 }
 
 /**
- * Q113 §9.3: a tap on a card's playing video: it plays on in place, its sound on (within the tap) and its own controls
- * usable from now on.
+ * F-S10: the vertical mode's tap on its video: it pauses the short, or plays it on (a shorts player's way). The player's
+ * own controls are never reached there (the screens take the taps), so it never stops on its controls.
  */
-export function engage() {
-  if (!state.player || state.slot?.mode !== 'card') return
-  soundOn()
-  set({ engaged: true })
+export function togglePlay() {
+  if (!state.player || state.slot?.mode !== 'short') return
+  const pause = !state.pausedByViewer
+  if (media && videoKind(state.player) === 'file') {
+    if (pause) media.pause()
+    else void media.play()?.catch(() => undefined)
+  } else if (state.player.startsWith(VIMEO_PLAYER)) {
+    post({ method: pause ? 'pause' : 'play' })
+  } else {
+    post({ event: 'command', func: pause ? 'pauseVideo' : 'playVideo', args: [] })
+  }
+  set({ pausedByViewer: pause })
 }
 
 /** The stage's player now (Q65), and whether its sound is on: the vertical mode carries the sound to the next video. */
@@ -522,7 +526,7 @@ export function stagePlayer(): { player: string | null; soundOn: boolean } {
 
 /**
  * The place a video shows: an empty 16:9 box the stage lays the player over while `active`. On a card (`mode`
- * `card`) the player cannot be touched until a tap anywhere on it plays it in place (`engage`, then `onOpen`). On the start page (`page`) the player's
+ * `card`) the player cannot be touched: a tap anywhere on it is `onOpen`. On the start page (`page`) the player's
  * controls work.
  */
 export function VideoSlot({ id, player, title, mode, publicationId = null, active = true, onOpen, cover, fit, className }: {
@@ -665,7 +669,7 @@ export function VideoStage() {
         // In full screen the player fills the screen: nothing of the home's place is cut off it.
         clipPath: clip && !fullscreen ? `inset(${clip.top}px ${clip.right}px ${clip.bottom}px ${clip.left}px)` : undefined,
         // F-S10: in the vertical mode, between its black backdrop (z-index 40) and its screens (50), whose overlays (the
-        // way back, the name, the buttons) lie over the video; the screens let a tap through to the player.
+        // way back, the name, the buttons) lie over the video; the screens take the taps (`togglePlay`).
         zIndex: slot?.mode === 'short' ? SHORT_STAGE_Z : 5 }} data-fit={slot?.fit}>
       {/* A card's cover and its player cross-fade (`crossFade`): the player fades in over the cover as the cover fades
           out, once the player has its frame, and back when the card stops. Under the stage the card's own cover lies
@@ -674,7 +678,8 @@ export function VideoStage() {
       {cover && <div className="absolute inset-0" data-testid="video-stage-cover" style={fade?.cover}>{cover}</div>}
       <div className="absolute inset-0" data-testid="video-stage-content" style={fade?.player}>
       {videoKind(stage.player) === 'file' ? (
-        // F-S15: a video file, started muted; its controls on the start page and in the vertical mode only.
+        // F-S15: a video file, started muted; its controls on the start page only (the vertical mode plays it as a
+        // short: its screen takes the taps, `togglePlay`).
         <video
           key={stage.player}
           ref={attach}
@@ -689,7 +694,7 @@ export function VideoStage() {
           muted
           playsInline
           preload="auto"
-          controls={!!slot && (slot.mode !== 'card' || stage.engaged)}
+          controls={slot?.mode === 'page'}
           controlsList="nofullscreen"
           onError={() => markVideoFailed(stage.player!)}
         />
@@ -719,19 +724,16 @@ export function VideoStage() {
         }}
       />
       )}
-      {videoKind(stage.player) === 'file' && !!slot && (slot.mode !== 'card' || stage.engaged) && (
+      {videoKind(stage.player) === 'file' && slot?.mode === 'page' && (
         // Above the browser's own control bar, whose full-screen key `controlsList` takes away where it can.
         <FullscreenButton target={box} video={media} className="bottom-[4.25rem]" />
       )}
       </div>
-      {/* On a card nothing in the player is for touching until it is tapped: the tap (anywhere on it, before its first
-          frame too) turns its sound on and hands the player its own controls, in place (Q113 §9.3, as x.com). */}
-      {slot?.mode === 'card' && !stage.engaged && (
+      {/* On a card nothing in the player is for touching: the whole of it opens the start page (not moved, so a tap
+          before the first frame opens it too). */}
+      {slot?.mode === 'card' && (
         <button type="button" className="absolute inset-0 size-full cursor-pointer" data-testid="video-open"
-          aria-label={slot.title} onClick={() => {
-            engage()
-            slot.onOpen?.()
-          }} />
+          aria-label={slot.title} onClick={() => slot.onOpen?.()} />
       )}
     </div>,
     document.body,

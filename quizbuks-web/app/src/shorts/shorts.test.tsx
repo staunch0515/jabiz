@@ -301,11 +301,12 @@ describe('a vertical video fills the screen of the vertical mode (F-S10)', () =>
     return viewer.querySelector('[data-current]') as HTMLElement
   }
 
-  it('lays the app\'s player over all of the screen, the foot over the video, and lets taps through to it', async () => {
+  it('lays the app\'s player over all of the screen, the foot over the video, the screen taking the taps', async () => {
     const shown = await openOn('t1')
     const box = within(shown).getByTestId('shorts-video-box')
     // All of the screen's height, at most its width: on a phone all of it, wider a column of the video's shape.
-    expect(box).toHaveClass('aspect-[9/16]', 'h-full', 'max-w-full', 'pointer-events-none')
+    expect(box).toHaveClass('aspect-[9/16]', 'h-full', 'max-w-full')
+    expect(box).not.toHaveClass('pointer-events-none')
     expect(box).not.toHaveClass('bg-neutral-900')
     expect(within(shown).getByTestId('video-slot')).toHaveAttribute('data-fit', 'cover')
     // The name and the buttons over the video, and still tappable.
@@ -327,6 +328,29 @@ describe('a vertical video fills the screen of the vertical mode (F-S10)', () =>
     expect(video).toHaveClass('object-cover')
     expect(video.autoplay).toBe(true)
     expect(video.muted).toBe(true)
+    // A short: never the browser's controls (paused on them, waiting for a tap); the screen's tap pauses and plays on.
+    expect(video.controls).toBe(false)
+    const pause = vi.spyOn(video, 'pause').mockImplementation(() => undefined)
+    const play = vi.spyOn(video, 'play').mockResolvedValue(undefined)
+    const toggle = within(shown).getByTestId('shorts-toggle')
+    expect(toggle).toHaveAccessibleName('Pause')
+    await userEvent.click(toggle)
+    expect(pause).toHaveBeenCalledTimes(1)
+    expect(toggle).toHaveAccessibleName('Play')
+    await userEvent.click(toggle)
+    expect(play).toHaveBeenCalled()
+    expect(toggle).toHaveAccessibleName('Pause')
+  })
+
+  it('takes the taps on a YouTube short itself: they pause it and play it on, never reaching its controls', async () => {
+    const shown = await openOn('t1')
+    const frame = await screen.findByTitle('Video: Quiz t1') as HTMLIFrameElement
+    const sent = vi.spyOn(frame.contentWindow!, 'postMessage').mockImplementation(() => undefined)
+    const funcs = () => sent.mock.calls.map(([message]) => JSON.parse(String(message)).func)
+    await userEvent.click(within(shown).getByTestId('shorts-toggle'))
+    expect(funcs()).toContain('pauseVideo')
+    await userEvent.click(within(shown).getByTestId('shorts-toggle'))
+    expect(funcs().at(-1)).toBe('playVideo')
   })
 
   it('gives another site\'s player the vertical shape over all of the screen', async () => {

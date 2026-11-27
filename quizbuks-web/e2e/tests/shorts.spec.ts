@@ -140,7 +140,7 @@ test('a post\'s video opens the video mode: black, landscape across, the posts w
   test.setTimeout(180_000)
   await page.route('https://www.youtube-nocookie.com/**', (route) => route.fulfill({ contentType: 'text/html',
     body: '<!doctype html><html lang="en"><title>Player</title></html>' }))
-  // Nothing plays by itself: the post's picture is the one to tap.
+  // Nothing plays by itself: the post's picture is the one to tap (a playing one has the stage's button instead).
   await page.emulateMedia({ reducedMotion: 'reduce' })
   const sponsor = await fundedSponsor(request)
   const base = unique('Videos run ')
@@ -157,12 +157,7 @@ test('a post\'s video opens the video mode: black, landscape across, the posts w
   await searchHome(page, base)
   await expect(page.getByTestId('feed-card')).toHaveCount(3)
   const post = page.getByTestId('feed-card').filter({ hasText: `${base} one` })
-  // Q113 §9.3 (as x.com): the picture plays the video in place (even with less motion asked for: it was asked for);
-  // the key at its top right opens the video mode.
   await post.getByTestId('feed-card-picture').click()
-  await expect(post).toHaveAttribute('data-playing', 'true')
-  await expect(page).not.toHaveURL(/[?&]video=/)
-  await post.getByTestId('feed-card-video-mode').click()
   await expect(page).toHaveURL(new RegExp(`[?&]video=${first}`))
   const viewer = page.getByTestId('shorts-viewer')
   await expect(viewer).toBeVisible()
@@ -210,16 +205,22 @@ test('a vertical video fills the screen of the vertical mode and plays at once, 
   await expect(page.getByTestId('home')).toBeVisible()
   await searchHome(page, base)
   await expect(page.getByTestId('feed-card')).toHaveCount(2)
-  // Q113 §9.3 (as x.com): on the home a vertical video keeps its shape, 9:16 at most 287 px across, at the left.
+  // The file's post, in the middle of the screen, plays in the app's player. On the home a vertical video keeps its
+  // shape (9:16, at most 287 px across, at the left), and the player is the cover's size: the same box.
   const post = page.getByTestId('feed-card').filter({ hasText: `${base} file` })
   await post.evaluate((element) => element.scrollIntoView({ block: 'center' }))
+  await expect(page.getByTestId('video-open')).toBeVisible()
   const onHome = (await post.getByTestId('feed-card-playing').boundingBox())!
   expect(onHome.width, 'a vertical video on the home is at most 287 px across').toBeCloseTo(287, 0)
   expect(onHome.height / onHome.width).toBeCloseTo(16 / 9, 1)
-  const head = (await post.getByTestId('feed-card-head').boundingBox())!
-  expect(onHome.x, 'at the left of the text').toBeCloseTo(head.x, 0)
-  // Its key at the top right opens the video mode.
-  await post.getByTestId('feed-card-video-mode').click()
+  await expect.poll(async () => {
+    const player = await page.getByTestId('video-stage').boundingBox()
+    // Within the box's 1 px border.
+    return !!player && [player.x - onHome.x - 1, player.y - onHome.y - 1, player.width - onHome.width + 2,
+      player.height - onHome.height + 2].every((off) => Math.abs(off) <= 1)
+  }, { message: 'the player on the home is the cover\'s box' }).toBe(true)
+  // A tap maximizes this video: the full-screen video mode on it.
+  await page.getByTestId('video-open').click()
   await expect(page).toHaveURL(new RegExp(`[?&]video=${file}`))
   const viewer = page.getByTestId('shorts-viewer')
   const current = viewer.locator('[data-current]')
@@ -237,9 +238,16 @@ test('a vertical video fills the screen of the vertical mode and plays at once, 
   await filled(390, 844)
   const video = page.getByTestId('video-stage-file')
   expect(await video.evaluate((element) => getComputedStyle(element).objectFit)).toBe('cover')
-  // It plays, not waiting on its paused controls for a tap.
+  // It plays, never on the browser's controls (paused, waiting for a tap): the screen takes the taps on the video, one
+  // pauses it, the next plays it on.
   await expect.poll(() => video.evaluate((element: HTMLVideoElement) => !element.paused && element.currentTime > 0.5),
     { message: 'the file plays by itself' }).toBe(true)
+  expect(await video.evaluate((element: HTMLVideoElement) => element.controls)).toBe(false)
+  const toggle = current.getByTestId('shorts-toggle')
+  await toggle.click()
+  await expect.poll(() => video.evaluate((element: HTMLVideoElement) => element.paused)).toBe(true)
+  await toggle.click()
+  await expect.poll(() => video.evaluate((element: HTMLVideoElement) => !element.paused)).toBe(true)
   // The name and the buttons lie over the video, and take their taps.
   const details = current.getByTestId('shorts-details')
   const box = (await details.boundingBox())!
