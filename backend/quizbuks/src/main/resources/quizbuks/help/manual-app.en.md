@@ -55,7 +55,7 @@ Each quiz says how its reward is paid. At the first launch, Kudos are shown but 
 - My page: your name, where you live and the month you joined, with three numbers: Kudos, prizes to collect and certificates; "Edit profile" changes your profile. The tabs under them are Answered, Kudos, Certificates, Knowledge maps and Referrals, each listing what it has and opening its whole page.
 - Settings ("Settings" in the side menu): the search box at the top finds a row by its name; below are the items that follow, the Sponsor account, deleting the account and signing out.
 
-- Profile: your avatar, your name and where you live. "Change avatar" offers your initial or one of the preset avatars, saved as you choose it; only you see your avatar (/taker/account/profile). Your e-mail address cannot be changed here; contact us if it needs to change.
+- Profile: your avatar, your name and where you live. "Change avatar" offers your initial or one of the preset avatars, saved as you choose it. When there is an "Upload a photo" button you can use a photo of your own too (JPEG or PNG; the middle square is kept and saved with "Use this photo"; "Remove photo" goes back to your initial, and a photo replaced or removed is deleted at once). Only you see your avatar (/taker/account/profile). Your e-mail address cannot be changed here; contact us if it needs to change.
 - About me: optional details for quizzes aimed at people like you, and the topics you like.
 - My certifications (/taker/account/certificates): the certificates you hold and your public certification page (off unless you turn it on).
 - Sign-in and security: password, two-step verification, linked accounts, signed-in devices and recent sign-ins.

@@ -13,6 +13,7 @@ import { keyPaths } from '../qb/messageKeys'
 import { PRESETS } from './api'
 import { AVATAR_BACKGROUNDS, initialColour } from './colour'
 import { AVATAR_MESSAGES } from './messages'
+import { photoProblem, squareCrop } from './photo'
 
 /*
  * A taker's avatar (Q114a, docs/quizbuks/plans/impl/Q114.md): the colour of the initial, the presets' drawings in every
@@ -28,8 +29,9 @@ const ENTRY = { name: 'app', selfRegistration: true, requireVerifiedEmail: false
 
 /** The server for a verified taker with a complete profile, their avatar row (none: the initial) and the choice. */
 function server({ avatar = null as Record<string, unknown> | null, failSet = false, failRead = false,
-  complete = true } = {}) {
+  complete = true, photoEnabled = false, photoMissing = false } = {}) {
   const sets: Record<string, unknown>[] = []
+  const uploads: string[] = []
   let row = avatar
   vi.spyOn(globalThis, 'fetch').mockImplementation(async (input: RequestInfo | URL) => {
     const request = input instanceof Request ? input : new Request(new URL(String(input), window.location.origin))
@@ -52,24 +54,33 @@ function server({ avatar = null as Record<string, unknown> | null, failSet = fal
           offset: 0, limit: 300 })
       case '/api/dictionaries/urn:jabiz:dict:quizbuks:currency':
         return json(200, [{ code: 'JPY', label: 'Japanese yen' }])
-      case '/api/datasets/urn:jabiz:dataset:me:QbTakerAvatar/query':
+      case '/api/queries/qb.app.avatar':
         if (failRead) return json(500, {})
-        return json(200, { items: row ? [{ id: 'u1', version: 1, attributes: row }] : [], offset: 0, limit: 1 })
+        return json(200, { items: [{ kind: null, preset: null, photo: null, ...row, photoEnabled }], offset: 0,
+          limit: 1 })
+      case '/api/files':
+        uploads.push(new URL(request.url).searchParams.get('policy') ?? '')
+        return json(201, { fileId: `f${uploads.length}`, policy: 'qb.taker-avatar' })
       case '/api/processes/QB_AVATAR_SET/latest':
         sets.push(body as Record<string, unknown>)
         if (failSet) {
           return json(422, { status: 422, title: 'Unprocessable', violations: [{ field: 'preset',
             ruleCode: 'QB_AVATAR_PRESET_UNKNOWN', message: 'Choose one of the avatars offered.' }] })
         }
-        row = { kind: (body as { kind: string }).kind, preset: (body as { preset?: string }).preset ?? null }
+        row = { kind: (body as { kind: string }).kind, preset: (body as { preset?: string }).preset ?? null,
+          photo: (body as { photo?: string }).photo ?? null }
         return json(200, { output: row })
       case '/api/queries/qb.app.inbox-unread':
         return json(200, { items: [{ messages: 0, broadcasts: 0 }], offset: 0, limit: 1 })
       default:
+        if (path.startsWith('/api/files/') && path.endsWith('/content/w256')) {
+          return photoMissing ? json(404, {}) : new Response('jpeg', { status: 200,
+            headers: { 'Content-Type': 'image/jpeg' } })
+        }
         return json(404, {})
     }
   })
-  return { sets }
+  return { sets, uploads }
 }
 
 beforeAll(() => configureClient({ entry: 'app' }))
@@ -232,5 +243,92 @@ describe('choosing the avatar on "Edit profile" (Q114a)', () => {
     render(<App />)
     expect(await screen.findByTestId('profile-name')).toBeInTheDocument()
     expect(screen.queryByTestId('avatar-picker')).toBeNull()
+  })
+})
+
+describe('a photo as the avatar (Q114b)', () => {
+  beforeEach(() => {
+    // jsdom has no object URLs or image decoding: the page's own steps stand in.
+    URL.createObjectURL = vi.fn(() => 'blob:photo')
+    URL.revokeObjectURL = vi.fn()
+  })
+
+  it('keeps the middle square, at most 512 pixels, and takes JPEG and PNG only', () => {
+    expect(squareCrop(4000, 3000)).toEqual({ sx: 500, sy: 0, side: 3000, size: 512 })
+    expect(squareCrop(300, 500)).toEqual({ sx: 0, sy: 100, side: 300, size: 300 })
+    expect(photoProblem(new Blob(['x'], { type: 'image/png' }))).toBeNull()
+    expect(photoProblem(new Blob(['x'], { type: 'image/gif' }))).toBe('notImage')
+    expect(photoProblem({ type: 'image/jpeg', size: 21 * 1024 * 1024 } as Blob)).toBe('tooLarge')
+  })
+
+  it('shows the photo, cut to the circle', async () => {
+    server({ avatar: { kind: 'PHOTO', photo: 'f9' } })
+    window.history.replaceState(null, '', '/account')
+    render(<App />)
+    await waitFor(() => expect(screen.getByTestId('me-avatar')).toHaveAttribute('data-avatar', 'photo'))
+    await waitFor(() => expect(screen.getByTestId('me-avatar').querySelector('img')).toHaveAttribute('src',
+      'blob:photo'))
+    expect(screen.getByTestId('me-avatar').querySelector('img')).toHaveAttribute('alt', '')
+  })
+
+  it('falls back to the initial when the photo is gone', async () => {
+    server({ avatar: { kind: 'PHOTO', photo: 'f404' }, photoMissing: true })
+    window.history.replaceState(null, '', '/account')
+    render(<App />)
+    await waitFor(() => expect(screen.getByTestId('me-avatar').querySelector('[data-avatar="initial"]'))
+      .toHaveTextContent('K'))
+  })
+
+  it('offers no upload while photos are off, and still removes a photo chosen before', async () => {
+    const { sets } = server({ avatar: { kind: 'PHOTO', photo: 'f9' } })
+    window.history.replaceState(null, '', '/account/profile')
+    render(<App />)
+    const picker = await screen.findByTestId('avatar-picker')
+    await waitFor(() => expect(within(picker).getByTestId('avatar-current')).toHaveAttribute('data-avatar', 'photo'))
+    await userEvent.click(within(picker).getByTestId('avatar-change'))
+    const dialog = await screen.findByTestId('avatar-dialog')
+    expect(within(dialog).queryByTestId('avatar-photo-upload')).toBeNull()
+    await userEvent.click(within(dialog).getByTestId('avatar-photo-remove'))
+    const ask = await screen.findByRole('alertdialog', { name: 'Remove your photo?' })
+    await userEvent.click(within(ask).getByRole('button', { name: 'Remove photo' }))
+    await waitFor(() => expect(sets).toEqual([{ kind: 'INITIAL' }]))
+    await waitFor(() => expect(within(picker).getByTestId('avatar-current')).toHaveAttribute('data-avatar', 'initial'))
+  })
+
+  it('makes the picture square, shows it, and uploads and saves it with "Use this photo"', async () => {
+    const photo = await import('./photo')
+    const square = vi.spyOn(photo, 'squarePhoto').mockResolvedValue(new Blob(['square'], { type: 'image/jpeg' }))
+    const { sets, uploads } = server({ photoEnabled: true })
+    window.history.replaceState(null, '', '/account/profile')
+    const { container } = render(<App />)
+    const picker = await screen.findByTestId('avatar-picker')
+    await userEvent.click(within(picker).getByTestId('avatar-change'))
+    const dialog = await screen.findByTestId('avatar-dialog')
+    expect(await within(dialog).findByTestId('avatar-photo-upload')).toHaveTextContent('Upload a photo')
+    await expectAccessible(container.ownerDocument.body)
+
+    const file = new File(['raw'], 'IMG_0001.png', { type: 'image/png' })
+    await userEvent.upload(within(dialog).getByTestId('avatar-photo-input'), file)
+    expect(square).toHaveBeenCalledWith(file)
+    const preview = await within(dialog).findByTestId('avatar-photo-preview')
+    expect(within(preview).getByRole('img', { name: 'Your photo as your avatar' })).toHaveAttribute('src', 'blob:photo')
+    expect(sets).toEqual([])
+    await userEvent.click(within(preview).getByTestId('avatar-photo-use'))
+    await waitFor(() => expect(sets).toEqual([{ kind: 'PHOTO', photo: 'f1' }]))
+    expect(uploads).toEqual(['qb.taker-avatar'])
+    await waitFor(() => expect(within(picker).getByTestId('avatar-current')).toHaveAttribute('data-avatar', 'photo'))
+    expect(within(dialog).getByTestId('avatar-photo-note')).toHaveTextContent('deletes this photo')
+  })
+
+  it('says why a picture was not taken, and uploads nothing', async () => {
+    const { uploads } = server({ photoEnabled: true })
+    window.history.replaceState(null, '', '/account/profile')
+    render(<App />)
+    await userEvent.click(within(await screen.findByTestId('avatar-picker')).getByTestId('avatar-change'))
+    const dialog = await screen.findByTestId('avatar-dialog')
+    await userEvent.upload(await within(dialog).findByTestId('avatar-photo-input'),
+      new File(['gif'], 'a.gif', { type: 'image/gif' }), { applyAccept: false })
+    expect(await within(dialog).findByTestId('avatar-error')).toHaveTextContent('Choose a JPEG or PNG picture.')
+    expect(uploads).toEqual([])
   })
 })

@@ -1722,6 +1722,13 @@ FROM per_attempt WHERE calls > 0;
 - **升级**：迁移 V129（费用按运营商与月份、赠送额度付款按付款时间的两个索引，`CONCURRENTLY` 建、不挡写入，同 V127；建到一半失败留下的 INVALID 索引按 V129 的注释处理）；部署后不需要运行 `QB_SETUP`。
   - `OPERATOR_GIFT_CARRY_OPEN`（提示）：见上"合同结束"。
 
+### 7.61 学者的头像照片（Q114b）
+
+- **是什么**：学者在"编辑资料 → 更换头像"中可以用自己的照片（`QB_AVATAR_SET`，文件策略 `qb.taker-avatar`：JPEG / PNG ≤ 2 MB，平台重新编码、去掉 EXIF 与 GPS）。只有本人看得到；换下或移除的照片当即删除，删除账号后由平台的文件清扫删除（`docs/quizbuks/plans/impl/Q114.md`）。
+- **开关**：受控参数 `qb.avatar.photo.enabled`（缺省与首次上线都是 `false`，`QB_SETUP` 提出，另一位管理员发布）。**提到头像照片的隐私政策新版本（`docs/quizbuks/legal/` 第2条"学者"的个人资料一行）生效之后才打开**：一位管理员以 `CONTROL_CHANGE_PROPOSE` 提出 `true`，另一位发布。关着时"上传照片"不出现，服务器拒绝新选照片（422 `QB_AVATAR_PHOTO_DISABLED`）；已选的照片照常显示、可以移除，关掉不会删除它们。
+- **部署**：迁移 `V136` 给 `qb_taker_avatar` 加 `photo` 列并换检查约束；部署后运行一次 `QB_SETUP` 提出开关（另一位管理员发布 `false` 的提案即可）。没有任务、告警或核对项。
+- **学者说照片不见了**：多半是换了预设或首字（照片随即删除），或照片读不出来时页面改显示首字；平台管理系统的数据浏览 `QbTakerAvatar` 里看得到种类与文件编号，看不到照片本身。
+
 ## 8. 升级到线 1.3（S0 的迁移 V29、V30）
 
 S0（`shopify/S0-publisher.md`）给发布、档位、卡片、会话、分析、现金 / 兑换 / 电子奖品与码池、邀请加上 `publisher_kind`（已有的行全部为 `SPONSOR`），并把普通表的 `sponsor_id` 列改名为 `publisher_id`。

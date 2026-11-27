@@ -148,7 +148,10 @@ class FirstLaunchSwitchesTest {
      */
     private static final Map<String, String> NOT_IN_THE_REGISTRY = Map.of(
         QbParams.PROSPECT_ENABLED, "AI prospecting finds and researches businesses for the platform's own outreach: no "
-            + "money moves, and the declared value (off) is also the first launch's; its own switch page proposes it");
+            + "money moves, and the declared value (off) is also the first launch's; its own switch page proposes it",
+        QbParams.AVATAR_PHOTO_ENABLED, "Q114b: whether a taker may use their own photo as their avatar, only they see "
+            + "it: no money moves, and the declared value (off) is also the first launch's; it waits for the privacy "
+            + "policy that mentions the photo, not for a decision about money");
 
     @Test
     void everyControlledBooleanEnabledSwitchIsInTheRegistryOrExemptWithAReason() {

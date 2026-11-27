@@ -1,6 +1,6 @@
 import { fetchFileContent } from '@jabiz/client'
 import { cn } from '@jabiz/ui'
-import { useEffect, useState } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 
 /**
  * The object URLs of the files' images shown, shared by every image of the same file and variant: a cover shown again
@@ -68,14 +68,16 @@ function releaseImage(key: string, entry: Entry) {
 /**
  * An image of an uploaded file (an avatar, a cover). Files need the session (the access token lives in memory, never
  * in a cookie), so the content is fetched and shown through an object URL (shared, see `images`); the default content
- * security policy allows `img-src blob:`. A variant (`w256`) when given, the original otherwise; nothing while loading
- * or when the file cannot be read.
+ * security policy allows `img-src blob:`. A variant (`w256`) when given, the original otherwise; nothing while loading,
+ * and `fallback` (else nothing) when the file cannot be read.
  */
-export function FileImage({ fileId, variant, alt, className, ...rest }: {
+export function FileImage({ fileId, variant, alt, className, fallback, ...rest }: {
   fileId: string
   variant?: string
   alt: string
   className?: string
+  /** Shown instead when the file cannot be read (Q114b: a taker's photo falls back to their initial). */
+  fallback?: ReactNode
   'data-testid'?: string
 }) {
   const [loaded, setLoaded] = useState<{ key: string; url: string | null } | null>(null)
@@ -100,6 +102,7 @@ export function FileImage({ fileId, variant, alt, className, ...rest }: {
   }, [key, fileId, variant])
   // An image already here shows from the first paint; one still coming shows once it is here.
   const url = loaded?.key === key ? loaded.url : cachedImage(fileId, variant)
+  if (!url && loaded?.key === key && fallback !== undefined) return <>{fallback}</>
   if (!url) return <span aria-hidden data-slot="image-loading" className={cn('bg-muted inline-block', className)} />
   return <img src={url} alt={alt} className={cn('object-cover', className)} {...rest} />
 }

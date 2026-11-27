@@ -733,6 +733,16 @@ public final class QbParams {
     public static final List<String> ERASURE_CLOSE_CONTROLLED = List.of(ERASURE_CLOSE_ENABLED);
 
     /**
+     * Q114b (docs/quizbuks/plans/impl/Q114.md section 5.4): whether a taker may choose a photo of their own as their
+     * avatar. Controlled, so that it is turned on by two administrators once the privacy policy that mentions the photo
+     * is in effect; off (declared, and at the first launch), a photo cannot be newly chosen, and one already chosen
+     * still shows and can be removed. No money: not in FirstLaunchSwitches.
+     */
+    public static final String AVATAR_PHOTO_ENABLED = "qb.avatar.photo.enabled";
+    /** The avatar's controlled parameter (the last of {@link #CONTROLLED}). */
+    public static final List<String> AVATAR_PHOTO = List.of(AVATAR_PHOTO_ENABLED);
+
+    /**
      * The parameters that change only through controlled changes (proposed by one administrator, published by
      * another): the money settings, and the review switches, since turning one on removes a person's review.
      */
@@ -747,7 +757,7 @@ public final class QbParams {
         RECON_THRESHOLDS,
         HELP_USER_LIMITS,
         OPERATOR_SHARE, OPERATOR_SETTLEMENT, OPERATOR_SETTLEMENT_CHECK, AI_FEE_CONTROLLED,
-        List.of(FEE_AUTO_PAY_ENABLED, FEE_AUTO_PAY_MISSED_AFTER_HOURS), AI_FEE_CHECK)
+        List.of(FEE_AUTO_PAY_ENABLED, FEE_AUTO_PAY_MISSED_AFTER_HOURS), AI_FEE_CHECK, AVATAR_PHOTO)
         .flatMap(List::stream).toList();
 
     /** A parameter: its key, kind (as the platform writes kinds) and first value. */
@@ -1269,7 +1279,11 @@ public final class QbParams {
         new Param(AI_CREDIT_EXPIRED_HELD_AFTER_HOURS, Map.of("type", "numeric", "precision", 3, "scale", 0), "48",
             "How many hours after it expired (or was voided) granted credit still in an AI credit beyond what the jobs "
                 + "still holding credit hold is reported by the daily check, taken from 48 to 720 (the expiry runs "
-                + "daily; the check does not run until this is published)"));
+                + "daily; the check does not run until this is published)"),
+        // Q114b: the takers' avatar photos (controlled; the last of CONTROLLED).
+        new Param(AVATAR_PHOTO_ENABLED, BOOL, false,
+            "Whether takers may use a photo of their own as their avatar (turn on once the privacy policy that "
+                + "mentions the photo is in effect; off: existing photos still show, none can be newly chosen)"));
 
     /** The declared value of a parameter: what {@code QB_SETUP} writes. */
     public static String defaultOf(String key) {

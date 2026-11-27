@@ -20,7 +20,7 @@
 
 **Takers**
 
-- Profile: display name, country or region, city (optional), the currency used for display
+- Profile: display name, country or region, city (optional), the currency used for display, and an avatar photo (optional; shown to you only, stored without its location and other metadata, and deleted when you replace or remove it)
 - About me (all optional): gender (including "prefer not to say"), year of birth, occupation and interests
 - Quiz attempts: your answers, start and submission times, score, pass or fail, and the rewards you earned
 - Your Kudos balance and history in the Service; cash rewards and digital prizes you receive, and any disputes about them

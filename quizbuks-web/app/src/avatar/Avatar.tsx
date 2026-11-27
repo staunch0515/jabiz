@@ -4,6 +4,7 @@ import { useQuery } from '@tanstack/react-query'
 import { useState, type HTMLAttributes } from 'react'
 import { PROFILE_QUERY } from '../pages/ProfileForm'
 import { readMyProfile } from '../qb/api'
+import { FileImage } from '../qb/FileImage'
 import { AVATAR_QUERY, presetUrl, readMyAvatar } from './api'
 import { initialBackground } from './colour'
 
@@ -27,14 +28,25 @@ export function InitialAvatar({ className, ...rest }: SpanProps) {
 }
 
 /**
- * The taker's avatar in a circle of `className`'s size (Q114a, docs/quizbuks/plans/impl/Q114.md section 4.1): the
- * preset they chose, else their initial. Until it is read, when it cannot be read, and when the drawing does not load
- * (offline: the worker caches the shell only), the initial; never an error. Decorative, as the initial was.
+ * The taker's avatar in a circle of `className`'s size (Q114, docs/quizbuks/plans/impl/Q114.md section 4.1): the photo
+ * (Q114b: its 256 px variant, cut to the circle) or the preset they chose, else their initial. Until it is read, when it
+ * cannot be read, and when the picture does not load (offline: the worker caches the shell only), the initial; never an
+ * error. Decorative, as the initial was.
  */
 export function Avatar({ className, ...rest }: SpanProps) {
   const avatar = useQuery({ queryKey: AVATAR_QUERY, queryFn: readMyAvatar })
   const [broken, setBroken] = useState<string | null>(null)
-  const preset = avatar.data?.kind === 'PRESET' ? avatar.data.preset : null
+  const chosen = avatar.data?.avatar
+  if (chosen?.kind === 'PHOTO') {
+    return (
+      <span aria-hidden {...rest} data-avatar="photo"
+        className={cn('bg-muted flex shrink-0 overflow-hidden rounded-full', className)}>
+        <FileImage fileId={chosen.photo} variant="w256" alt="" className="size-full rounded-full"
+          fallback={<InitialAvatar className="size-full" />} />
+      </span>
+    )
+  }
+  const preset = chosen?.kind === 'PRESET' ? chosen.preset : null
   if (!preset || broken === preset) return <InitialAvatar className={className} {...rest} />
   return (
     <span aria-hidden {...rest} data-avatar={preset}
