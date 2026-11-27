@@ -25,6 +25,10 @@ import static org.assertj.core.api.Assertions.assertThat;
  */
 class TakerErasureIT extends PayoutItSupport {
 
+    @org.springframework.beans.factory.annotation.Autowired
+    @org.springframework.beans.factory.annotation.Qualifier("fileSweepJob")
+    com.jabiz.job.JobDefinition<com.jabiz.runtime.file.FileProcesses.PurgeInput> sweep;
+
     /** Her name as her bank holds it (half-width katakana): found nowhere once she is erased. */
     private static final String ANN_HOLDER = "ﾐﾅﾐ ﾊﾅｺ";
     private static final AtomicInteger NUMBERS = new AtomicInteger(9_004_000);
@@ -165,6 +169,39 @@ class TakerErasureIT extends PayoutItSupport {
         assertThat(query("SELECT 1 FROM qb_taker_avatar WHERE user_id = ?", dee)).isEmpty();
         assertThat(query("SELECT preset FROM qb_taker_avatar WHERE user_id = ?", eve)).singleElement()
             .satisfies(row -> assertThat(row).containsEntry("preset", "p05"));
+    }
+
+    /**
+     * Q114b: an erased taker's photo goes too: the row goes with the account, and the platform's sweep deletes the
+     * file nothing refers to any more; another taker's photo stays.
+     */
+    @Test
+    void anErasedTakersPhotoGoes() {
+        setControlledParam(QbParams.AVATAR_PHOTO_ENABLED, "true");
+        String dee = payee("t-q114b-dee-" + UUID.randomUUID().toString().substring(0, 8));
+        String eve = payee("t-q114b-eve-" + UUID.randomUUID().toString().substring(0, 8));
+        Map<String, String> photos = new HashMap<>();
+        for (String id : List.of(dee, eve)) {
+            String photo = (String) upload(com.jabiz.quizbuks.avatar.QbAvatars.PHOTO_POLICY,
+                com.jabiz.runtime.test.FileSamples.jpeg(320, 320), "me.jpg", "image/jpeg", taker(id))
+                .expectStatus().isCreated().expectBody(MAP).returnResult().getResponseBody().get("fileId");
+            run("QB_AVATAR_SET", taker(id), body("kind", "PHOTO", "photo", photo));
+            photos.put(id, photo);
+        }
+
+        runAsSystem("ACCOUNT_ERASE", Map.of("userId", dee, "requestedBy", "it-support"));
+        deliverEvents();
+        assertThat(query("SELECT 1 FROM qb_taker_avatar WHERE user_id = ?", dee)).isEmpty();
+
+        clock.advance(Duration.ofDays(2));
+        execute("UPDATE jabiz_shedlock SET lock_until = locked_at");
+        assertThat(jobRunner.run(sweep, clock.instant())).isEqualTo(com.jabiz.runtime.job.JobRunner.Outcome.SUCCEEDED);
+        // The storage half runs after the commit.
+        org.awaitility.Awaitility.await().atMost(Duration.ofSeconds(30)).until(() -> query("SELECT 1 FROM op_process p "
+            + "WHERE p.process_name = 'FILE_PURGE_ORPHANS' AND NOT EXISTS (SELECT 1 FROM op_process_after_commit a "
+            + "WHERE a.process_seq_id = p.process_seq_id AND a.succeeded)").isEmpty());
+        assertThat(query("SELECT 1 FROM sys_file WHERE file_id = ?", UUID.fromString(photos.get(dee)))).isEmpty();
+        assertThat(query("SELECT 1 FROM sys_file WHERE file_id = ?", UUID.fromString(photos.get(eve)))).hasSize(1);
     }
 
     /** F-S8: what a taker blocked goes with the account; another taker's blocks of the same stay. */

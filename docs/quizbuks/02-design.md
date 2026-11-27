@@ -99,7 +99,7 @@ docs/quizbuks/               本文件等
 |---|---|---|---|
 | `QbProfile` | T | 主键 `profileId`；`userId`（文本，不可变、唯一、有索引）、`displayName`、`countryCode`（字典，可空）、`city`、`preferredCurrency`（USD/EUR/GBP/JPY/CNY/INR，只用于显示参考，可空）；`processOnly`：`createdAt`（资料第一次保存的时间；管理员页面的"注册时间"即此，商家入驻建立的只有名字的资料也算）、`editedAt`、`revision` | 答题人与商家共用的资料（商家只有名字，由入驻写入）；激活即邮箱已验证，由平台（G1）管；封禁另见 `QbUserBan` |
 | `QbSponsor` | T | 主键 `onboardingId`；`userId`（文本，不可变、唯一）、`contactName`（商家的名字，随入驻审核）、`company`、`intro`（Markdown）、`avatar`（文件，策略 `qb.sponsor-avatar`）；`processOnly`：`reviewStatus`（PENDING / APPROVED / REJECTED，状态机）、`termsAcceptedAt`、`approvalRequestId`、`submittedAt`、`approvedAt`、`rejectReason`、`rejectedAt`、`revision`、`editedAt`；Q87：`billingMode`（PREPAID / POSTPAID，空 = 受控参数 `qb.fee.default-billing-mode`）、`creditLimit`（后付的信用额）、`billingReason`、`billingSetBy` / `billingSetAt`（只经 `QB_OPERATOR_BILLING_SET`） | 商家入驻（审批对象 `qb.sponsor`）；发布人的公开信息来自这里（U-10 发布人名称 / 头像）；平台费的计费方式由所属运营商（或总部）按商户设（Q87） |
-| `QbTakerAvatar` | P（Q114） | 主键 `userId`（一人一行）；`kind`（`INITIAL` / `PRESET`，Q114b 加 `PHOTO`）、`preset`（`AvatarPresets.CODES` 之一）、`editedAt` | 学者本人的头像（`docs/quizbuks/plans/impl/Q114.md`）：只有本人经 `me:` 视图读到，没有行即首字；只经 `QB_AVATAR_SET` 写入；删除账号时删除 |
+| `QbTakerAvatar` | P（Q114） | 主键 `userId`（一人一行）；`kind`（`INITIAL` / `PRESET` / `PHOTO`）、`preset`（`AvatarPresets.CODES` 之一）、`photo`（文件，策略 `qb.taker-avatar`，Q114b：JPEG / PNG ≤ 2 MB、重新编码、`privateMetadata()`、上传与读取 `qb.me`）、`editedAt` | 学者本人的头像（`docs/quizbuks/plans/impl/Q114.md`）：只有本人经 `me:` 视图与模板 `qb.app.avatar` 读到，没有行即首字；只经 `QB_AVATAR_SET` 写入，换下或去掉的照片当即删除；删除账号时删除（照片由平台清扫） |
 | `QbUserBan` | T | 主键 `banId`；`userId`（引用平台用户，不可变、唯一）；`processOnly`：`banned`、`reason`、`bannedAt` / `bannedBy`、`liftedAt` / `liftedBy` / `liftNote`、`revision` | 封禁（Q2 D-Q2-4）：与资料分开，没有资料的人也能封禁；历史即封禁与解封的记录 |
 | `QbOperator` | P（Q48a） | 主键 `operatorId`；`name`、`contactName`、`contactEmail`、`collection`（PLATFORM；DIRECT 留给以后的直接收款）、`status`（ACTIVE / SUSPENDED）、`note`、`createdAt` / `createdBy`、`revision` | 运营商（代理商）。直营（总部）没有记录：没有归属的商户即总部的 |
 | `QbOperatorMember` | P（Q48a） | `operatorId`、`userId`（引用平台用户：登录检查按 UUID 读）、`lead`、`operatorActive`（随运营商的状态，登录检查只读本人的行）、`addedAt` / `addedBy`、`removedAt` / `removedBy` | 成员关系；移除只写移除时间（抽查按决定时的成员关系判断），一人同时只属于一个运营商（部分唯一索引） |
@@ -356,7 +356,7 @@ SCHEDULED / LIVE / PAUSED / FUNDS_SHORT ──到结束时间（Q4）、名额�
 | 流程 | 权限 | 要点 |
 |---|---|---|
 | `QB_PROFILE_SAVE` | `qb.me`，要求已验证 | 注册第二步与资料修改（U-02、U-70）；国家来自字典；第一次给出国家时发 `qb.welcome` |
-| `QB_AVATAR_SET` | `qb.me`，要求已验证，封禁即拒绝 | 学者选自己的头像（Q114a：首字或预设）；本人的锁内写入，后写的为准 |
+| `QB_AVATAR_SET` | `qb.me`，要求已验证，封禁即拒绝 | 学者选自己的头像（Q114a：首字或预设；Q114b：本人上传的照片，只在受控参数 `qb.avatar.photo.enabled` 开着时能新选）；本人的锁内写入，后写的为准；换下或去掉的照片以 `FILE_DELETE` 当即删除 |
 | `QB_SPONSOR_APPLY` | `qb.sponsor.me`，要求已验证 | 商家入驻资料 + 同意条款 → 审批（受控参数 `qb.review.sponsor.auto` 为真即自动通过；无规则时拒绝 `QB_REVIEW_NOT_CONFIGURED`）；待审核时再申请即取代旧请求；关闭"重新提交"待办 |
 | `QB_SPONSOR_PROFILE_SAVE` | `qb.sponsor.me`，要求已验证 | 已通过的商家修改名字、公司、简介、头像，不再审核 |
 | `QB_SPONSOR_APPROVAL_RESULT` | 系统（审批事件；`qb.sponsor.system`，不授予任何角色） | 只认入驻自己的请求，且请求绑定的内容等于当前内容：批准 → `APPROVED` 并发邮件；驳回（理由取自审批人的决定）→ `REJECTED`、邮件、给商家"重新提交"待办 |

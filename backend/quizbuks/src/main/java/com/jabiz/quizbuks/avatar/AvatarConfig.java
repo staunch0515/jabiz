@@ -3,6 +3,8 @@ package com.jabiz.quizbuks.avatar;
 import com.jabiz.context.RequestContext;
 import com.jabiz.dataset.DatasetDefinition;
 import com.jabiz.entity.EntityDefinition;
+import com.jabiz.file.FilePolicy;
+import com.jabiz.file.MediaTypes;
 import com.jabiz.process.ProcessContext;
 import com.jabiz.process.ProcessDefinition;
 import com.jabiz.quizbuks.QbPermissions;
@@ -11,7 +13,7 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
 /**
- * Registers the takers' avatars (Q114a): the entity, the administrators' dataset (read by those who read users;
+ * Registers the takers' avatars (Q114): the entity, the photos' file policy (Q114b), the administrators' dataset (read by those who read users;
  * written by the process only, its write permission one no role holds), one's own dataset and the choice.
  */
 @Configuration
@@ -46,6 +48,22 @@ public class AvatarConfig {
             .policy(p -> p.readOnly(true).allowTimeTravel(false))
             .storage(s -> s.driver("r2dbc-postgresql").connectionPoolRef(poolRef))
             .scope(s -> s.fromContext("userId", "actorId", RequestContext::actorId)));
+    }
+
+    /**
+     * Q114b: the takers' photos, as the sponsors' avatars: re-encoded without metadata (EXIF, GPS), small. Uploaded
+     * and read with {@code qb.me}: only the taker knows the random id ({@code privateMetadata()}), and the name and
+     * the uploader stay theirs.
+     */
+    @Bean
+    FilePolicy qbTakerAvatarPhotoPolicy() {
+        return FilePolicy.define(QbAvatars.PHOTO_POLICY)
+            .allow(MediaTypes.JPEG, MediaTypes.PNG)
+            .maxBytes(2 * FilePolicy.MB)
+            .image(i -> i.maxPixels(25_000_000).variants(128, 256))
+            .permissions(QbPermissions.ME, QbPermissions.ME)
+            .privateMetadata()
+            .build();
     }
 
     @Bean

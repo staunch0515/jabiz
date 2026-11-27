@@ -631,6 +631,8 @@ class SetupIT extends QbItSupport {
         // F-M15 b: the wind-up of an erased sponsor's money (off, controlled) and when finance hears it takes long.
         expected.putAll(Map.of(QbParams.ERASURE_CLOSE_ENABLED, "false", QbParams.ERASURE_CLOSE_ALERT_DAYS, "3",
             QbParams.ERASURE_CLOSE_REGISTER_DAYS, "30"));
+        // Q114b: the takers' avatar photos (off, controlled; turned on once the privacy policy mentions them).
+        expected.put(QbParams.AVATAR_PHOTO_ENABLED, "false");
         assertThat(values).containsExactlyInAnyOrderEntriesOf(expected);
     }
 
