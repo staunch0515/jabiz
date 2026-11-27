@@ -1,6 +1,7 @@
 import type { APIRequestContext } from '@playwright/test'
 import { adminToken, expect, expectAccessible, prepareQuizbuks, run, signIn, test, unique } from './support'
 import { fundedSponsor, searchHome, taker, untilLive } from './play'
+import { VIDEO_FILE, videoServer } from './video-server'
 
 /*
  * F-S10 (docs/quizbuks/plans/impl/F-S10.md): publications with a YouTube Shorts video appear in the home's shelf of
@@ -12,12 +13,18 @@ test.beforeEach(async ({ request }) => {
   await prepareQuizbuks(request)
 })
 
-/** A live publication of the sponsor's, of a quiz whose video is `video` (a YouTube Shorts link; none: no video). */
+/**
+ * A live publication of the sponsor's, of a quiz whose video is `video` (a YouTube Shorts link; none: no video),
+ * marked vertical by the sponsor when `vertical`.
+ */
 async function shortsPublication(request: APIRequestContext, sponsor: { token: string; balance: number }, name: string,
-  video: string | null) {
+  video: string | null, vertical?: boolean) {
   const quiz = await run(request, sponsor.token, 'QB_QUIZ_SAVE', { title: `${name} quiz`, timeLimitSec: 300 })
   const quizId = quiz.quizId as string
-  if (video) await run(request, sponsor.token, 'QB_MATERIAL_SAVE', { quizId, kind: 'VIDEO_LINK', title: 'Short', url: video })
+  if (video) {
+    await run(request, sponsor.token, 'QB_MATERIAL_SAVE', { quizId, kind: 'VIDEO_LINK', title: 'Short', url: video,
+      ...(vertical ? { vertical: true } : {}) })
+  }
   await run(request, sponsor.token, 'QB_QUESTION_SAVE', { quizId, stem: 'What did the short show?', points: 1,
     options: [{ text: 'A song', correct: true }, { text: 'A map' }] })
   const version = await run(request, sponsor.token, 'QB_QUIZ_PUBLISH_VERSION', { quizId })
@@ -68,9 +75,10 @@ test('a Shorts publication is in the shelf; the vertical mode swipes on and lead
   await expectAccessible(page, 'app vertical mode')
   // A swipe up shows the next one; the keys and the buttons move as well.
   const screens = viewer.getByTestId('shorts-screens')
-  // The pointer over the screens but off the player: its frame covers the middle (a wheel there goes to the
-  // frame's page, and Playwright refuses to hover a covered point).
-  await screens.hover({ position: { x: 8, y: 8 } })
+  // The pointer over the screen's name, off the player (which takes the rest of a vertical video's screen: a wheel
+  // there goes to the frame's page, and Playwright refuses to hover a point the frame takes).
+  await expect(screens).toBeVisible()
+  await viewer.locator('[data-current]').getByTestId('shorts-name').hover()
   await page.mouse.wheel(0, 900)
   await expect(viewer.locator('[data-testid="shorts-screen"][data-current]')).toHaveAttribute('data-publication', first)
   const current = viewer.locator('[data-testid="shorts-screen"][data-current]')
@@ -153,7 +161,8 @@ test('a post\'s video opens the video mode: black, landscape across, the posts w
   await expect(page).toHaveURL(new RegExp(`[?&]video=${first}`))
   const viewer = page.getByTestId('shorts-viewer')
   await expect(viewer).toBeVisible()
-  expect(await viewer.evaluate((element) => getComputedStyle(element).backgroundColor)).toBe('rgb(0, 0, 0)')
+  expect(await page.getByTestId('shorts-backdrop').evaluate((element) => getComputedStyle(element).backgroundColor))
+    .toBe('rgb(0, 0, 0)')
   // The two with a video, in the home's order; the one without is not among them.
   await expect(viewer.getByTestId('shorts-screen')).toHaveCount(2)
   await expect(viewer.locator(`[data-publication="${none}"]`)).toHaveCount(0)
@@ -174,4 +183,75 @@ test('a post\'s video opens the video mode: black, landscape across, the posts w
   await current.getByTestId('shorts-start').click()
   expect((await started).status()).toBe(200)
   await expect(page).toHaveURL(/\/taker\/play\//)
+})
+
+test('a vertical video fills the screen of the vertical mode and plays at once, a file and a Shorts link (F-S10)',
+  async ({ page, request }) => {
+  test.setTimeout(180_000)
+  await videoServer(page)
+  await page.route('https://www.youtube-nocookie.com/**', (route) => route.fulfill({ contentType: 'text/html',
+    body: '<!doctype html><html lang="en"><title>Player</title></html>' }))
+  const sponsor = await fundedSponsor(request)
+  const base = unique('Tall run ')
+  // Newest first on the home: the file the sponsor marked vertical, then the Shorts link.
+  const short = await shortsPublication(request, sponsor, `${base} short`, 'https://www.youtube.com/shorts/cccccccccc1')
+  const file = await shortsPublication(request, sponsor, `${base} file`, VIDEO_FILE, true)
+  const me = await taker(request, 'Tall')
+  await untilLive(request, me.token, short)
+  await untilLive(request, me.token, file)
+
+  await page.setViewportSize({ width: 390, height: 844 })
+  await signIn(page, '/taker/', me.email)
+  await expect(page.getByTestId('home')).toBeVisible()
+  await searchHome(page, base)
+  await expect(page.getByTestId('feed-card')).toHaveCount(2)
+  // The file's post, in the middle of the screen, plays in the app's player; a tap on it opens the video mode.
+  const post = page.getByTestId('feed-card').filter({ hasText: `${base} file` })
+  await post.evaluate((element) => element.scrollIntoView({ block: 'center' }))
+  await expect(page.getByTestId('video-open')).toBeVisible()
+  await page.getByTestId('video-open').click()
+  await expect(page).toHaveURL(new RegExp(`[?&]video=${file}`))
+  const viewer = page.getByTestId('shorts-viewer')
+  const current = viewer.locator('[data-current]')
+  await expect(current).toHaveAttribute('data-publication', file)
+  await expect(current.getByTestId('shorts-stage')).toHaveAttribute('data-orientation', 'vertical')
+
+  // The player over all of the phone's screen, the picture cut rather than letterboxed.
+  const stage = page.getByTestId('video-stage')
+  const filled = async (width: number, height: number, left = 0) => {
+    await expect.poll(async () => {
+      const box = await stage.boundingBox()
+      return !!box && [box.x - left, box.y, box.width - width, box.height - height].every((off) => Math.abs(off) <= 1)
+    }, { message: `the player covers ${width} by ${height} from ${left}` }).toBe(true)
+  }
+  await filled(390, 844)
+  const video = page.getByTestId('video-stage-file')
+  expect(await video.evaluate((element) => getComputedStyle(element).objectFit)).toBe('cover')
+  // It plays, not waiting on its paused controls for a tap.
+  await expect.poll(() => video.evaluate((element: HTMLVideoElement) => !element.paused && element.currentTime > 0.5),
+    { message: 'the file plays by itself' }).toBe(true)
+  // The name and the buttons lie over the video, and take their taps.
+  const details = current.getByTestId('shorts-details')
+  const box = (await details.boundingBox())!
+  expect(await page.evaluate(([x, y]) => document.elementFromPoint(x, y)?.closest('[data-testid="shorts-details"]') != null,
+    [box.x + box.width / 2, box.y + box.height / 2])).toBe(true)
+  await expectAccessible(page, 'app vertical mode, a vertical file over the screen')
+
+  // The wide layout: the full height, in a column of the video's shape in the middle.
+  await page.setViewportSize({ width: 1280, height: 800 })
+  await filled(450, 800, 415)
+  await expect.poll(() => video.evaluate((element: HTMLVideoElement) => !element.paused)).toBe(true)
+
+  // The Shorts link: YouTube's frame given the vertical shape over all of the screen (cut at the sides on a phone).
+  await page.setViewportSize({ width: 390, height: 844 })
+  await viewer.getByTestId('shorts-next').click()
+  await expect(current).toHaveAttribute('data-publication', short)
+  await expect(current).toBeInViewport({ ratio: 0.9 })
+  await filled(390, 844)
+  const frame = stage.locator('iframe')
+  await expect(frame).toHaveAttribute('src', /autoplay=1&mute=1/)
+  await expect.poll(async () => {
+    const box = await frame.boundingBox()
+    return !!box && Math.abs(box.width - 844 * 9 / 16) <= 1 && Math.abs(box.height - 844) <= 1
+  }, { message: 'the frame is 9:16 over all of the screen' }).toBe(true)
 })

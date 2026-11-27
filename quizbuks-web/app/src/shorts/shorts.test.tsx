@@ -288,6 +288,65 @@ describe('the full-screen vertical mode (F-S10)', () => {
   })
 })
 
+describe('a vertical video fills the screen of the vertical mode (F-S10)', () => {
+  const FILE = 'https://cdn.example.com/tall.mp4'
+  const POSTS = [card('t1', { video: YOUTUBE, videoVertical: true }), card('t2', { video: FILE, videoVertical: true }),
+    card('t3', { video: BILIBILI, videoVertical: true }), card('w1', { video: YOUTUBE.replace('dQw4w9WgXcQ', 'bbbbbbbbbbb') })]
+
+  async function openOn(id: string) {
+    server({ feed: POSTS, shorts: [] })
+    window.history.replaceState(null, '', `/?video=${id}`)
+    render(<App />)
+    const viewer = await screen.findByTestId('shorts-viewer')
+    return viewer.querySelector('[data-current]') as HTMLElement
+  }
+
+  it('lays the app\'s player over all of the screen, the foot over the video, and lets taps through to it', async () => {
+    const shown = await openOn('t1')
+    const box = within(shown).getByTestId('shorts-video-box')
+    // All of the screen's height, at most its width: on a phone all of it, wider a column of the video's shape.
+    expect(box).toHaveClass('aspect-[9/16]', 'h-full', 'max-w-full', 'pointer-events-none')
+    expect(box).not.toHaveClass('bg-neutral-900')
+    expect(within(shown).getByTestId('video-slot')).toHaveAttribute('data-fit', 'cover')
+    // The name and the buttons over the video, and still tappable.
+    const foot = within(shown).getByTestId('shorts-foot')
+    expect(box).toContainElement(foot)
+    expect(foot).toHaveClass('pointer-events-auto')
+    // The screens lie over the player, which lies over the black: out of the home's layers, in the page itself.
+    expect(screen.getByTestId('shorts-viewer').parentElement).toBe(document.body)
+    expect(screen.getByTestId('shorts-viewer')).toHaveClass('z-50')
+    expect(screen.getByTestId('shorts-backdrop')).toHaveClass('z-40')
+    await waitFor(() => expect(screen.getByTestId('video-stage')).toHaveStyle({ zIndex: '45' }))
+    await expectAccessible(screen.getByTestId('shorts-viewer'))
+  })
+
+  it('fills the screen with a vertical video file, played muted by itself', async () => {
+    const shown = await openOn('t2')
+    expect(within(shown).getByTestId('video-slot')).toHaveAttribute('data-fit', 'cover')
+    const video = await screen.findByTestId('video-stage-file') as HTMLVideoElement
+    expect(video).toHaveClass('object-cover')
+    expect(video.autoplay).toBe(true)
+    expect(video.muted).toBe(true)
+  })
+
+  it('gives another site\'s player the vertical shape over all of the screen', async () => {
+    const shown = await openOn('t3')
+    const fit = within(shown).getByTestId('shorts-cover-fit')
+    const player = within(fit).getByTestId('video-player')
+    expect(player.className).toContain('h-[max(100%,calc(100cqw*16/9))]')
+    expect(player.className).toContain('w-[max(100%,calc(100cqh*9/16))]')
+    expect(player.querySelector('iframe')).toHaveAttribute('src', expect.stringContaining('autoplay=1'))
+  })
+
+  it('keeps a landscape video across the middle, its foot under it', async () => {
+    const shown = await openOn('w1')
+    const box = within(shown).getByTestId('shorts-video-box')
+    expect(box).toHaveClass('aspect-video')
+    expect(box).not.toContainElement(within(shown).getByTestId('shorts-foot'))
+    expect(within(shown).getByTestId('video-slot')).not.toHaveAttribute('data-fit')
+  })
+})
+
 describe('the video mode of the posts (Q113c, §9.3)', () => {
   const LANDSCAPE = 'https://www.youtube-nocookie.com/embed/bbbbbbbbbbb'
   const POSTS = [card('v1', { video: LANDSCAPE, displayLanguage: 'ja' }), card('n1'),
@@ -306,7 +365,9 @@ describe('the video mode of the posts (Q113c, §9.3)', () => {
 
   it('is black, over the posts with a video in the home\'s order (those without skipped), a landscape one across', async () => {
     const { viewer } = await openVideos('v1')
-    expect(viewer).toHaveClass('bg-black', 'text-white')
+    // Black behind it all (the app's player lies between the black and the screens, its overlays over the video).
+    expect(viewer).toHaveClass('text-white')
+    expect(screen.getByTestId('shorts-backdrop')).toHaveClass('bg-black')
     expect(viewer).toHaveAccessibleName('Videos')
     expect(within(viewer).getAllByTestId('shorts-screen').map((s) => s.getAttribute('data-publication')))
       .toEqual(['v1', 'v2', 'v3'])
