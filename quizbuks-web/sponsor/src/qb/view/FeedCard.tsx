@@ -1,5 +1,5 @@
 import { cn } from '@jabiz/ui'
-import { Banknote, CircleCheck, Clock, Coins, Gift, Play, Share, Ticket, type LucideIcon } from 'lucide-react'
+import { Banknote, CircleCheck, Clock, Coins, Gift, Maximize2, Play, Share, Ticket, type LucideIcon } from 'lucide-react'
 import type { ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 import { CoverPlaceholder } from '../Illustrations'
@@ -73,20 +73,22 @@ export function PostAgeText({ startAt, at, testId = 'feed-card-age', title }: { 
  * video's length in a corner (a play mark when it has one, its player instead while `playing`: the home plays the
  * post in the middle of the screen, Q65); last a line of facts 12 px under it: what passing earns in the reward's
  * colour with the way it is paid, how many answered, the time limit and `share`. Three places to tap (§9.3): the
- * sponsor's picture and name to their page; the name, the introduction and the picture to the quiz (`href`; the
- * picture goes to the video mode once Q113c makes it). `onOpen` is told of a tap that opens it. A preview (`href`
- * null) leads nowhere. The numbers are Tailwind's steps: this is the shared folder, which the frame's `xspec.ts` is
+ * sponsor's picture and name to their page; the name and the introduction to the quiz (`href`), and the picture too
+ * when it has no video. A video plays in place, as on x.com (2026-11-27): one not playing starts at a tap (`onPlay`),
+ * the playing one takes the tap as a player (its sound, its controls), and the button at its top right opens the
+ * full-screen video mode (`videoHref`). A vertical video keeps its shape: 9:16, at most 287 px across (x.com's 285 by
+ * 506), at the left. `onOpen` is told of a tap that opens a page. A preview (`href` null) leads nowhere. The numbers are Tailwind's steps: this is the shared folder, which the frame's `xspec.ts` is
  * not in; the geometry test measures them.
  */
-export function FeedCardView({ card, href, videoHref, playing = false, note, video, onOpen, menu, at, share }: {
+export function FeedCardView({ card, href, videoHref, playing = false, note, video, onOpen, onPlay, menu, at, share }: {
   card: FeedCard
   href: string | null
   /**
-   * Q113c (§9.3): where the post's video leads, the full-screen video mode from this post; its picture, and a tap on
-   * the video playing on the home, go there (the name and the text still go to the quiz). None: the picture goes to
-   * `href`, as without a video.
+   * Q113c (§9.3): the full-screen video mode from this post, behind the button at the top right of its playing video.
    */
   videoHref?: string
+  /** Q113 §9.3 (as x.com): a tap on the picture of a video not playing plays it in place. None: it goes to `href`. */
+  onPlay?: () => void
   playing?: boolean; note?: ReactNode
   /** Q65: the app's own place for the playing video (its one player, given the cover it comes in beside); a plain
       player otherwise. */
@@ -111,7 +113,8 @@ export function FeedCardView({ card, href, videoHref, playing = false, note, vid
   const length = card.video && !failed ? videoLength(card.videoDurationSec) : null
   // §9.1: media have 16 px corners. Written out: the brand's theme still squares its radius steps (Q34, which Q113 P2
   // replaces page by page).
-  const frame = 'bg-muted border-qb-outline relative mt-3 block aspect-video w-full overflow-hidden rounded-[16px] border'
+  const frame = cn('bg-muted border-qb-outline relative mt-3 block w-full overflow-hidden rounded-[16px] border',
+    card.videoVertical && card.video ? 'aspect-[9/16] max-w-[287px]' : 'aspect-video')
   const picture = (
     <span className={cn('group', frame)}>
       {cover}
@@ -187,22 +190,29 @@ export function FeedCardView({ card, href, videoHref, playing = false, note, vid
             <span className="absolute inset-0 block" aria-hidden data-testid="feed-card-cover">{cover}</span>
             {video ? video(cover) : <VideoPlayer player={card.video!} autoplay title={t('feed.videoTitle', { name: card.name })}
               className="bg-muted absolute inset-0 size-full overflow-hidden" />}
-            {/* Q113c: another site's player takes taps of its own (it is in a frame): a tap anywhere on it opens the
-                video mode, whose controls it has (x.com's way). The app's own player (`video`) has the stage's button
-                for that (`video/stage.tsx`). */}
-            {videoHref && plays && !video && (
-              <Link to={videoHref} onNavigate={onOpen} data-testid="feed-card-video-open"
+            {/* Another site's player takes its taps itself (it is in a frame); the app's own player takes the first tap
+                on the stage (`engage`). The full-screen video mode (Q113c) is the button at the top right, above the
+                app's player (the stage lies at z-index 5, the header at 10). */}
+            {videoHref && (
+              <Link to={videoHref} onNavigate={onOpen} data-testid="feed-card-video-mode"
                 aria-label={t('feed.openVideoMode', { name: card.name })}
-                className="focus-visible:ring-ring absolute inset-0 z-10 block rounded-[16px] outline-none focus-visible:ring-[3px] focus-visible:ring-inset">
-                <span className="sr-only">{t('feed.openVideoMode', { name: card.name })}</span>
+                className="focus-visible:ring-ring absolute top-2 right-2 z-[6] flex size-8 items-center justify-center rounded-full bg-black/60 text-white outline-none hover:bg-black/75 focus-visible:ring-[3px]">
+                <Maximize2 aria-hidden className="size-4" />
               </Link>
             )}
           </span>
-          : href
-            ? <Link to={videoHref && plays ? videoHref : href} data-testid="feed-card-picture" onNavigate={onOpen}
-              aria-label={videoHref && plays ? t('feed.openVideoMode', { name: card.name }) : card.name}
-              className="block rounded-[16px]">{picture}</Link>
-            : picture}
+          : href && plays && onPlay
+            ? <button type="button" data-testid="feed-card-picture" onClick={onPlay}
+              aria-label={t('feed.playVideo', { name: card.name })}
+              // A button does not let its content's margin out (it lays out its own box): the 12 px are its own, so that it
+              // does not reach over the text above it (a target of its own, §9.3).
+              className={cn('mt-3 block w-full cursor-pointer rounded-[16px] text-left [&>span]:mt-0',
+                card.videoVertical && 'max-w-[287px]')}>
+              {picture}</button>
+            : href
+              ? <Link to={href} data-testid="feed-card-picture" onNavigate={onOpen}
+                aria-label={card.name} className="block rounded-[16px]">{picture}</Link>
+              : picture}
         <div className="text-muted-foreground mt-3 flex h-5 items-center justify-between gap-2 text-[13px] leading-5"
           data-testid="feed-card-facts">
           <span className="text-qb-reward-foreground flex min-w-0 items-center gap-1 font-bold" data-testid="feed-card-reward"

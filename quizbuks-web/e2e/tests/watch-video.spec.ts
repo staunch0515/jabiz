@@ -107,10 +107,11 @@ test('a video to watch is shown on the home with its reward and starts the quiz'
   // The App's policy lets this player in (the stub answers for it).
   await expect(stage.frameLocator('iframe').getByRole('button', { name: 'Play' })).toBeVisible()
   await expectAccessible(page, 'app home video to watch')
-  // A tap on the video (nothing in the player is touched) opens the start page; the same player plays on there.
+  // The video mode, then the start page: the same player plays on there.
   const before = await frame.elementHandle()
-  await page.getByTestId('video-open').click()
-  // Q113c: the tap opens the video mode; its "Details" goes on to the start page, the same player with it.
+  // Q113 §9.3 (as x.com): a tap plays it in place; the key at its top right opens the video mode, whose
+  // "Details" goes on to the start page, the same player with it.
+  await page.getByTestId('feed-card-video-mode').click()
   await page.getByTestId('shorts-viewer').locator('[data-current]').getByTestId('shorts-details').click()
   await expect(page).toHaveURL(/\/p\/[^/]+$/)
   await expect(page.getByTestId('detail-hero').getByTestId('video-slot')).toHaveAttribute('data-mode', 'page')

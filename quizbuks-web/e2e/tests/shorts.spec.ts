@@ -140,7 +140,7 @@ test('a post\'s video opens the video mode: black, landscape across, the posts w
   test.setTimeout(180_000)
   await page.route('https://www.youtube-nocookie.com/**', (route) => route.fulfill({ contentType: 'text/html',
     body: '<!doctype html><html lang="en"><title>Player</title></html>' }))
-  // Nothing plays by itself: the post's picture is the one to tap (a playing one has the stage's button instead).
+  // Nothing plays by itself: the post's picture is the one to tap.
   await page.emulateMedia({ reducedMotion: 'reduce' })
   const sponsor = await fundedSponsor(request)
   const base = unique('Videos run ')
@@ -157,7 +157,12 @@ test('a post\'s video opens the video mode: black, landscape across, the posts w
   await searchHome(page, base)
   await expect(page.getByTestId('feed-card')).toHaveCount(3)
   const post = page.getByTestId('feed-card').filter({ hasText: `${base} one` })
+  // Q113 §9.3 (as x.com): the picture plays the video in place (even with less motion asked for: it was asked for);
+  // the key at its top right opens the video mode.
   await post.getByTestId('feed-card-picture').click()
+  await expect(post).toHaveAttribute('data-playing', 'true')
+  await expect(page).not.toHaveURL(/[?&]video=/)
+  await post.getByTestId('feed-card-video-mode').click()
   await expect(page).toHaveURL(new RegExp(`[?&]video=${first}`))
   const viewer = page.getByTestId('shorts-viewer')
   await expect(viewer).toBeVisible()
@@ -205,11 +210,16 @@ test('a vertical video fills the screen of the vertical mode and plays at once, 
   await expect(page.getByTestId('home')).toBeVisible()
   await searchHome(page, base)
   await expect(page.getByTestId('feed-card')).toHaveCount(2)
-  // The file's post, in the middle of the screen, plays in the app's player; a tap on it opens the video mode.
+  // Q113 §9.3 (as x.com): on the home a vertical video keeps its shape, 9:16 at most 287 px across, at the left.
   const post = page.getByTestId('feed-card').filter({ hasText: `${base} file` })
   await post.evaluate((element) => element.scrollIntoView({ block: 'center' }))
-  await expect(page.getByTestId('video-open')).toBeVisible()
-  await page.getByTestId('video-open').click()
+  const onHome = (await post.getByTestId('feed-card-playing').boundingBox())!
+  expect(onHome.width, 'a vertical video on the home is at most 287 px across').toBeCloseTo(287, 0)
+  expect(onHome.height / onHome.width).toBeCloseTo(16 / 9, 1)
+  const head = (await post.getByTestId('feed-card-head').boundingBox())!
+  expect(onHome.x, 'at the left of the text').toBeCloseTo(head.x, 0)
+  // Its key at the top right opens the video mode.
+  await post.getByTestId('feed-card-video-mode').click()
   await expect(page).toHaveURL(new RegExp(`[?&]video=${file}`))
   const viewer = page.getByTestId('shorts-viewer')
   const current = viewer.locator('[data-current]')
