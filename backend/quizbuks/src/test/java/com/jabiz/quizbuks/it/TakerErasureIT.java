@@ -150,6 +150,23 @@ class TakerErasureIT extends PayoutItSupport {
                 .containsEntry("strict_topics", true));
     }
 
+    /** Q114a: the avatar a taker chose goes with the account; another taker's stays. */
+    @Test
+    void anErasedTakersAvatarGoes() {
+        String dee = payee("t-q114-dee-" + UUID.randomUUID().toString().substring(0, 8));
+        String eve = payee("t-q114-eve-" + UUID.randomUUID().toString().substring(0, 8));
+        for (String id : List.of(dee, eve)) {
+            run("QB_AVATAR_SET", taker(id), body("kind", "PRESET", "preset", "p05"));
+        }
+
+        runAsSystem("ACCOUNT_ERASE", Map.of("userId", dee, "requestedBy", "it-support"));
+        deliverEvents();
+
+        assertThat(query("SELECT 1 FROM qb_taker_avatar WHERE user_id = ?", dee)).isEmpty();
+        assertThat(query("SELECT preset FROM qb_taker_avatar WHERE user_id = ?", eve)).singleElement()
+            .satisfies(row -> assertThat(row).containsEntry("preset", "p05"));
+    }
+
     /** F-S8: what a taker blocked goes with the account; another taker's blocks of the same stay. */
     @Test
     void anErasedTakersBlocksGo() {

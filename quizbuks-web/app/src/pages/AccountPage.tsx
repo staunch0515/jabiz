@@ -16,6 +16,7 @@ import { QB } from '../qb/messages'
 import { SoundSwitch } from '../qb/SoundSettings'
 import { navigate, Redirect } from '../qb/router'
 import { LikedTopics } from './LikedTopics'
+import { AvatarPicker } from '../avatar/AvatarPicker'
 import { BlockList } from '../blocks/BlockList'
 import { ProfileDetails } from './ProfileDetails'
 import { QuizLanguages } from './QuizLanguages'
@@ -165,6 +166,8 @@ function ProfilePart() {
     <div className="flex flex-col gap-3" data-testid="account-profile">
       {profile.isPending && <PageState kind="loading" />}
       {profile.isError && <PageState kind="error" description={t('failed')} />}
+      {/* Q114a: the avatar, saved on its own (not part of the form), so the welcome step stays as short as it is. */}
+      <AvatarPicker />
       {profile.isSuccess && (
         // The form keeps what was typed; each save sends the revision the server answered last.
         <ProfileForm profile={profile.data} submitLabel={tApp('profile.save')} />

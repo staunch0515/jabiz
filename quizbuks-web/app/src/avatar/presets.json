@@ -1,0 +1,17 @@
+{
+  "_comment": "Q114a: the preset avatars, in the order the picker shows them; the same list as backend AvatarPresets.CODES (AvatarPresetsTest). A code is never reused for another drawing.",
+  "codes": [
+    "p01",
+    "p02",
+    "p03",
+    "p04",
+    "p05",
+    "p06",
+    "p07",
+    "p08",
+    "p09",
+    "p10",
+    "p11",
+    "p12"
+  ]
+}

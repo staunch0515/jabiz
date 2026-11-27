@@ -25,6 +25,7 @@ import { readWallet, WALLET_PATH, WALLET_SUMMARY_QUERY } from '../wallet/api'
 import { MAPS_PATH } from '../maps/paths'
 import { AreaHeader } from './AreaHeader'
 import { FrameLink } from './FrameLink'
+import { Avatar } from '../avatar/Avatar'
 import { PRIZES_PATH } from './areas'
 import { useOpenPrizes } from './prizes'
 import './messages'
@@ -197,10 +198,8 @@ export function MePage() {
         note={answered !== undefined ? <span data-testid="me-answered-count">{t('me.answered', { count: answered })}</span> : undefined} />
       <div aria-hidden className="bg-accent -mx-4 aspect-[3/1] max-h-[200px]" data-testid="me-banner" />
       <div className="relative flex flex-col">
-        <span aria-hidden data-testid="me-avatar"
-          className="bg-primary text-primary-foreground border-background absolute -top-[43px] left-0 flex size-[93px] items-center justify-center rounded-full border-4 text-[34px] font-bold">
-          {name.trim().charAt(0).toUpperCase()}
-        </span>
+        <Avatar data-testid="me-avatar"
+          className="border-background absolute -top-[43px] left-0 size-[93px] border-4 text-[34px]" />
         <div className="flex h-16 items-start justify-end pt-3">
           <Button asChild variant="outline" className="border-qb-outline h-9 rounded-full px-4 font-bold">
             <Link to={accountPath('profile')} data-testid="me-edit-profile">{t('me.edit')}</Link>

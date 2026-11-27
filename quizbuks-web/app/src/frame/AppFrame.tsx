@@ -18,7 +18,8 @@ import { Link, useLocation } from '../qb/router'
 import { badgeText } from '../inbox/api'
 import { isFirstLevel } from './AreaHeader'
 import { AREA_TABS, areaOf, BOTTOM_AREAS, MY_PASSES_PATH, PRIZES_PATH, routeOf, SETTINGS_ROW, type Area, type AreaKey } from './areas'
-import { DrawerProvider, Initial, useKudosAtHand } from './Drawer'
+import { DrawerProvider, useKudosAtHand } from './Drawer'
+import { Avatar } from '../avatar/Avatar'
 import { FabScanIcon, GiftIcon } from './icons'
 import { FrameLink } from './FrameLink'
 import { HeadsProvider, useChromeOffset } from './Header'
@@ -146,7 +147,7 @@ function RailAccount() {
   return (
     <FrameLink to={areaOf('me').path} aria-label={t('frame.drawer.rows.me')} data-testid="side-rail-account"
       className="hover:bg-accent focus-visible:ring-ring flex items-center gap-3 rounded-full p-(--x-rail-pill-inset) text-left outline-none focus-visible:ring-2">
-      <Initial className="size-10 text-[15px]" />
+      <Avatar className="size-10 text-[15px]" />
       <span className="hidden min-w-0 flex-1 flex-col xl:flex">
         <span className="truncate text-[15px] leading-5 font-bold">{name}</span>
         {kudos !== undefined && (

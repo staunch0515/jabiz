@@ -30,6 +30,17 @@
   --qb-outline: #d4d4e8;
   --qb-reward: #e3b23c;
   --qb-reward-foreground: #6e4d00;
+  /* Q114a: the initial's backgrounds, one taken from the taker's id (avatar/colour.ts); white text on each
+     ≥ 6:1. The same in both appearances. */
+  --qb-avatar-1: #0f6b5c;
+  --qb-avatar-2: #1d4ed8;
+  --qb-avatar-3: #7e22ce;
+  --qb-avatar-4: #be185d;
+  --qb-avatar-5: #b91c1c;
+  --qb-avatar-6: #a14a07;
+  --qb-avatar-7: #4d6b0f;
+  --qb-avatar-8: #475569;
+  --qb-avatar-foreground: #ffffff;
 }
 
 .dark {
@@ -58,4 +69,14 @@
   --qb-outline: #3f3f46;
   --qb-reward: #e3b23c;
   --qb-reward-foreground: #f0c75e;
+  /* Q114a: the initial's backgrounds are the same in both appearances. */
+  --qb-avatar-1: #0f6b5c;
+  --qb-avatar-2: #1d4ed8;
+  --qb-avatar-3: #7e22ce;
+  --qb-avatar-4: #be185d;
+  --qb-avatar-5: #b91c1c;
+  --qb-avatar-6: #a14a07;
+  --qb-avatar-7: #4d6b0f;
+  --qb-avatar-8: #475569;
+  --qb-avatar-foreground: #ffffff;
 }

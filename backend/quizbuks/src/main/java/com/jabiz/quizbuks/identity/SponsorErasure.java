@@ -169,6 +169,8 @@ public class SponsorErasure {
                     ErasedEntity.delete(QbInvitations.INVITATION, "publisherId", "email"),
                     // The account's own: profile, settings and inbox.
                     ErasedEntity.delete(QbAccounts.PROFILE, "userId", "displayName", "city"),
+                    // Q114: the avatar chosen (and, from Q114b, the photo, which then has no row referring to it).
+                    ErasedEntity.delete(com.jabiz.quizbuks.avatar.QbAvatars.AVATAR, "userId"),
                     // F-S9: with the topics they liked (masked in the audit records too).
                     ErasedEntity.delete(QbSettings.SETTINGS, "userId", "publicHandle", "likedTopics"),
 

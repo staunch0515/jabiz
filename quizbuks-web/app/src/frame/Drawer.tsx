@@ -4,6 +4,7 @@ import { useQuery } from '@tanstack/react-query'
 import { createContext, useContext, useMemo, useState, type MouseEvent, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 import { APP } from '../messages'
+import { Avatar } from '../avatar/Avatar'
 import { useMySponsor } from '../mysponsor/api'
 import { PROFILE_QUERY } from '../pages/ProfileForm'
 import { readMyProfile } from '../qb/api'
@@ -40,19 +41,6 @@ export function DrawerProvider({ children }: { children: ReactNode }) {
       {children}
       <Drawer open={open} onOpenChange={setOpen} />
     </DrawerState.Provider>
-  )
-}
-
-/** The taker's initial in a circle of `className`'s size. */
-export function Initial({ className }: { className?: string }) {
-  const { email } = useAuth()
-  const profile = useQuery({ queryKey: PROFILE_QUERY, queryFn: readMyProfile })
-  const initial = (profile.data?.displayName || email || '?').trim().charAt(0).toUpperCase()
-  return (
-    <span aria-hidden className={cn('bg-primary text-primary-foreground flex shrink-0 items-center justify-center rounded-full',
-      'font-bold', className)}>
-      {initial}
-    </span>
   )
 }
 
@@ -105,7 +93,7 @@ function Drawer({ open, onOpenChange }: { open: boolean; onOpenChange: (open: bo
           <SheetDescription className="sr-only">{t('frame.drawer.account')}</SheetDescription>
           <FrameLink to={DRAWER_ROWS[0].path} aria-label={t('frame.drawer.rows.me')}
             className="focus-visible:ring-ring w-fit rounded-full outline-none focus-visible:ring-2">
-            <Initial className="size-10 text-[17px]" />
+            <Avatar className="size-10 text-[17px]" />
           </FrameLink>
           <div className="flex min-w-0 flex-col">
             <p className="truncate text-[17px] leading-5 font-bold" data-testid="drawer-name">{name}</p>
