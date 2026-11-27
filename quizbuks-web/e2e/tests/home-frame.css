@@ -29,3 +29,11 @@ aside {
   visibility: hidden !important;
   flex: 0 0 2.5rem !important;
 }
+
+/*
+ * The test system's mark (platform 17zz27) folds itself to a dot after a while, so a capture may catch it either way:
+ * not the home, not drawn (on a phone the home is tall enough that the mark, fixed to the screen's corner, is in it).
+ */
+[data-testid="environment-badge"] {
+  visibility: hidden !important;
+}
