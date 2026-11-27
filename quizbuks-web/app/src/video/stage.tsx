@@ -41,6 +41,8 @@ interface Slot {
   onOpen?: () => void
   /** The cover the player fades in over (`VideoStage`, `crossFade`). */
   cover?: ReactNode
+  /** F-S10: a vertical video in the vertical mode fills its place (`coverBox`), cut at the edges, never letterboxed. */
+  fit?: 'cover'
 }
 
 interface StageState {
@@ -77,6 +79,18 @@ let unknownTimer: ReturnType<typeof setTimeout> | null = null
 /** A player that says nothing of its first frame within this wait is shown anyway (its own error page, say). */
 const FRAME_WAIT_MS = 8_000
 let frameTimer: ReturnType<typeof setTimeout> | null = null
+/**
+ * F-S10: until when a short's player has had its sound asked for without the viewer's tap (a new player taking the
+ * sound of the one before, after a swipe, or a tap the browser no longer counts): a browser that refuses the sound
+ * then pauses the video (iOS's Safari, a file unmuted), leaving it on its paused controls. A short plays on instead,
+ * muted (`playMuted`), and offers the sound button again.
+ */
+let unaskedSoundUntil = 0
+let unaskedSoundTimer: ReturnType<typeof setTimeout> | null = null
+/** How long a short's player has to show it took the sound asked for without a tap (it plays, or it is given up). */
+export const UNASKED_SOUND_MS = 3_000
+/** YouTube's last state of the player (`onStateChange`): 1 playing, 3 buffering. */
+let youtubePlayerState: number | null = null
 
 /**
  * The player's first frame is there: the stage shows it. Until then the stage is transparent, so what lies under its
@@ -184,13 +198,20 @@ function post(message: unknown) {
   target.postMessage(JSON.stringify(message), vimeo ? 'https://player.vimeo.com' : 'https://www.youtube-nocookie.com')
 }
 
-/** Turns the sound on, within the viewer's tap (the browser judges the tap). */
-export function soundOn() {
+/**
+ * Turns the sound on, within the viewer's tap (the browser judges the tap). `tap` false: asked for by the stage itself
+ * (a new player taking the sound asked for before it was ready), which a browser may refuse (see `unaskedSoundUntil`).
+ */
+export function soundOn(tap = true) {
   if (!state.player) return
+  const unasked = !tap && state.slot?.mode === 'short'
+  if (unasked) awaitUnaskedSound()
   if (media && videoKind(state.player) === 'file') {
     media.muted = false
     media.volume = 1
-    void media.play()?.catch(() => undefined)
+    void media.play()?.catch(() => {
+      if (soundRefused()) playMuted()
+    })
   } else if (state.player.startsWith(VIMEO_PLAYER)) {
     post({ method: 'setMuted', value: false })
     post({ method: 'setVolume', value: 1 })
@@ -203,6 +224,48 @@ export function soundOn() {
   set({ soundAsked: true })
 }
 
+/** F-S10: the sound asked for without a tap is being awaited; once the wait is over, a player not playing is restarted muted. */
+function awaitUnaskedSound() {
+  unaskedSoundUntil = Date.now() + UNASKED_SOUND_MS
+  if (unaskedSoundTimer) clearTimeout(unaskedSoundTimer)
+  unaskedSoundTimer = setTimeout(() => {
+    unaskedSoundTimer = null
+    if (!soundRefused(true)) return
+    const file = videoKind(state.player) === 'file'
+    // Still loading (YouTube buffering, a file without its data) is no refusal; anything else not playing is.
+    const stuck = file ? !!media && media.paused : !playerPlaying && youtubePlayerState !== 3
+    if (stuck) playMuted()
+    else unaskedSoundUntil = 0
+  }, UNASKED_SOUND_MS)
+}
+
+/** Whether a short's player is within the wait of a sound asked for without a tap (`end`: the wait just ended). */
+function soundRefused(end = false): boolean {
+  return state.slot?.mode === 'short' && !!state.player && (end ? unaskedSoundUntil > 0
+    : unaskedSoundUntil >= Date.now())
+}
+
+/** F-S10: the browser refused the sound and stopped the short: it plays on muted, and the sound button shows again. */
+function playMuted() {
+  unaskedSoundUntil = 0
+  if (unaskedSoundTimer) {
+    clearTimeout(unaskedSoundTimer)
+    unaskedSoundTimer = null
+  }
+  if (!state.player) return
+  if (media && videoKind(state.player) === 'file') {
+    media.muted = true
+    void media.play()?.catch(() => undefined)
+  } else if (state.player.startsWith(VIMEO_PLAYER)) {
+    post({ method: 'setMuted', value: true })
+    post({ method: 'play' })
+  } else {
+    post({ event: 'command', func: 'mute', args: [] })
+    post({ event: 'command', func: 'playVideo', args: [] })
+  }
+  set({ soundAsked: false, soundOn: false })
+}
+
 /** What the players say back: YouTube's `infoDelivery` with `muted`, Vimeo's `volumechange`. */
 function listen(event: MessageEvent) {
   if (!frame || event.source !== frame.contentWindow) return
@@ -213,7 +276,7 @@ function listen(event: MessageEvent) {
     return
   }
   // A player now ready (YouTube's `onReady`, Vimeo's `ready`) takes the sound asked for before it could hear it.
-  if ((data?.event === 'onReady' || data?.event === 'ready') && state.soundAsked && !state.soundOn) soundOn()
+  if ((data?.event === 'onReady' || data?.event === 'ready') && state.soundAsked && !state.soundOn) soundOn(false)
   const info = data?.info as Record<string, unknown> | undefined
   if (data?.event === 'infoDelivery' && info && typeof info.muted === 'boolean') {
     if (state.soundOn !== !info.muted) {
@@ -258,6 +321,7 @@ function listen(event: MessageEvent) {
     if (data.event === 'play') framedNow()
     playerPlaying = data.event === 'play'
     report({ type: 'state', playing: playerPlaying, at })
+    if (data.event === 'pause' && soundRefused()) playMuted()
   }
   if (data?.event === 'ended') {
     heard = true
@@ -296,6 +360,7 @@ function mediaEvent(event: Event) {
       heard = true
       playerPlaying = event.type === 'play'
       report({ type: 'state', playing: playerPlaying, at })
+      if (event.type === 'pause' && soundRefused()) playMuted()
       return
     case 'ended':
       heard = true
@@ -332,12 +397,19 @@ function attachMedia(element: HTMLVideoElement | null) {
   // A file already holding its frame (loaded before the stage listened) says so now.
   if (element.readyState >= HAVE_CURRENT_DATA) framedNow()
   else awaitFrame()
-  if (state.soundAsked) soundOn()
+  if (state.soundAsked) soundOn(false)
   startCounting()
 }
 
 function youtubeState(playerState: number, at: number) {
   heard = true
+  youtubePlayerState = playerState
+  // Paused (2) or back to its play button (5, cued) as the sound asked for without a tap came: the browser refused it.
+  if ((playerState === 2 || playerState === 5) && soundRefused()) {
+    playerPlaying = false
+    playMuted()
+    return
+  }
   // Playing, or paused on a frame: the player has its first frame (buffering or unstarted show none yet).
   if (playerState === 1 || playerState === 2) framedNow()
   if (playerState === 0) {
@@ -416,6 +488,8 @@ function leave(slot: Slot) {
       set({ player: null, soundAsked: false, soundOn: false, framed: false, returning: null })
       heard = false
       playerPlaying = false
+      youtubePlayerState = null
+      unaskedSoundUntil = 0
     }
   }, back ? SWITCH_MS : wait)
 }
@@ -434,7 +508,7 @@ export function stagePlayer(): { player: string | null; soundOn: boolean } {
  * `card`) the player cannot be touched: a tap anywhere on it is `onOpen`. On the start page (`page`) the player's
  * controls work.
  */
-export function VideoSlot({ id, player, title, mode, publicationId = null, active = true, onOpen, cover, className }: {
+export function VideoSlot({ id, player, title, mode, publicationId = null, active = true, onOpen, cover, fit, className }: {
   id: string
   player: string
   title: string
@@ -445,6 +519,8 @@ export function VideoSlot({ id, player, title, mode, publicationId = null, activ
   onOpen?: () => void
   /** The cover the player comes in over (a card's): read as the slot is claimed, not a dependency. */
   cover?: ReactNode
+  /** F-S10: the player fills the place, cut at its edges (a vertical video in the vertical mode). */
+  fit?: 'cover'
   className?: string
 }) {
   const ref = useRef<HTMLDivElement>(null)
@@ -455,25 +531,43 @@ export function VideoSlot({ id, player, title, mode, publicationId = null, activ
   useLayoutEffect(() => {
     const element = ref.current
     if (!element || !active) return
-    const slot: Slot = { key: id, player, title, mode, element, publicationId, onOpen, cover: coverRef.current }
+    const slot: Slot = { key: id, player, title, mode, element, publicationId, onOpen, cover: coverRef.current, fit }
     claim(slot)
     return () => leave(slot)
-  }, [id, player, title, mode, publicationId, active, onOpen])
+  }, [id, player, title, mode, publicationId, active, onOpen, fit])
   return (
     <div ref={ref} className={className ?? 'bg-muted relative aspect-video w-full'} data-testid="video-slot"
-      data-mode={mode} data-active={active || undefined} />
+      data-mode={mode} data-active={active || undefined} data-fit={fit} />
   )
 }
 
 /**
  * The area a slot's player is kept within (F-S10: the vertical mode's screens): the element around the slot marked
- * `data-video-area`. The stage lies above the page, so without it the player of a screen moving in or out would cover
- * what is around the screens while the scroll travels: the mode's header, whose buttons a tap then misses (the tap goes
- * to the player).
+ * `data-video-area`. Without it the player of a screen moving in or out would show beyond the screens while the scroll
+ * travels (the stage lies on the page, not in the screens).
  */
 const VIDEO_AREA = 'data-video-area'
 
+/** F-S10: the stage's place in the vertical mode: over its backdrop (z-index 40), under its screens (50). */
+export const SHORT_STAGE_Z = 45
+
 interface Clip { top: number; right: number; bottom: number; left: number }
+
+/** The shape of a vertical video (YouTube's Shorts, a phone's recording): 9 across, 16 high. */
+export const VERTICAL_ASPECT = 9 / 16
+
+/**
+ * F-S10: where a player of the given shape (width over height) lies to fill a place of `width` by `height`: as wide or
+ * as high as the place, whichever covers it, centred, the rest cut off by the place (as CSS's `object-fit: cover`). A
+ * frame's player letterboxes its video within the frame, so the frame itself is given the video's shape.
+ */
+export function coverBox(width: number, height: number, aspect: number): { width: number; height: number;
+  left: number; top: number } {
+  if (!(width > 0) || !(height > 0) || !(aspect > 0)) return { width: Math.max(0, width), height: Math.max(0, height), left: 0, top: 0 }
+  const coverWidth = Math.max(width, height * aspect)
+  const coverHeight = Math.max(height, width / aspect)
+  return { width: coverWidth, height: coverHeight, left: (width - coverWidth) / 2, top: (height - coverHeight) / 2 }
+}
 
 interface Placement { top: number; left: number; width: number; height: number; clip: Clip | null }
 
@@ -540,6 +634,9 @@ export function VideoStage() {
   // The cover shows while there is none to show the player, and the player shows once framed (not while it returns).
   const coverShown = !!cover && !(stage.framed && !returning)
   const fade = cover ? crossFade(!coverShown, videoKind(stage.player) !== 'file') : null
+  // F-S10: a vertical short fills the place: a file by `object-cover`, a frame given the video's shape over all of it.
+  const fill = slot?.fit === 'cover'
+  const framePlace = fill && rect ? coverBox(rect.width, rect.height, VERTICAL_ASPECT) : null
   return createPortal(
     <div ref={box} data-testid="video-stage" data-mode={slot?.mode}
       style={{ position: 'absolute', top: rect?.top ?? 0, left: rect?.left ?? 0, width: rect?.width ?? 0,
@@ -550,8 +647,9 @@ export function VideoStage() {
         overflow: 'hidden',
         // In full screen the player fills the screen: nothing of the home's place is cut off it.
         clipPath: clip && !fullscreen ? `inset(${clip.top}px ${clip.right}px ${clip.bottom}px ${clip.left}px)` : undefined,
-        // F-S10: above the vertical mode's screens (which lie over the home at z-index 50).
-        zIndex: slot?.mode === 'short' ? 55 : 5 }}>
+        // F-S10: in the vertical mode, between its black backdrop (z-index 40) and its screens (50), whose overlays (the
+        // way back, the name, the buttons) lie over the video; the screens let a tap through to the player.
+        zIndex: slot?.mode === 'short' ? SHORT_STAGE_Z : 5 }} data-fit={slot?.fit}>
       {/* A card's cover and its player cross-fade (`crossFade`): the player fades in over the cover as the cover fades
           out, once the player has its frame, and back when the card stops. Under the stage the card's own cover lies
           still, so what shows through mid-fade is the cover too, never black. Without a cover the player simply shows
@@ -567,7 +665,8 @@ export function VideoStage() {
           title={slot?.title ?? ''}
           aria-label={slot?.title ?? ''}
           // On a card nothing black lies behind the picture (it would darken the cover mid-fade).
-          className={cn('size-full object-contain', slot?.mode !== 'card' && !returning && 'bg-black')}
+          className={cn('size-full', fill ? 'object-cover' : 'object-contain',
+            slot?.mode !== 'card' && !returning && 'bg-black')}
           data-testid="video-stage-file"
           autoPlay
           muted
@@ -585,7 +684,9 @@ export function VideoStage() {
         }}
         src={stagedPlayer(stage.player)}
         title={slot?.title ?? ''}
-        className="size-full border-0"
+        className={framePlace ? 'absolute border-0' : 'size-full border-0'}
+        style={framePlace ? { width: framePlace.width, height: framePlace.height, left: framePlace.left,
+          top: framePlace.top } : undefined}
         allow="autoplay; encrypted-media; picture-in-picture; fullscreen"
         allowFullScreen
         referrerPolicy="strict-origin-when-cross-origin"
@@ -596,7 +697,7 @@ export function VideoStage() {
           awaitFrame()
           playerPlaying = false
           greet()
-          if (state.soundAsked) soundOn()
+          if (state.soundAsked) soundOn(false)
           startCounting()
         }}
       />

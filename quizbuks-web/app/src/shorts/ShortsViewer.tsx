@@ -1,6 +1,7 @@
-import { Button } from '@jabiz/ui'
+import { Button, cn } from '@jabiz/ui'
 import { ChevronDown, ChevronUp, Play, Volume2, X } from 'lucide-react'
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
+import { createPortal } from 'react-dom'
 import { useTranslation } from 'react-i18next'
 import { APP } from '../messages'
 import { CoverPlaceholder } from '../qb/Illustrations'
@@ -43,6 +44,11 @@ function SponsorAvatar({ card }: { card: FeedCard }) {
  *
  * Not tied to the home's layout: it takes the short videos, the one to start on and what to do on leaving or
  * answering, so that it moves into the new frame of Q108 as it is.
+ *
+ * A vertical video fills the screen (on a phone all of it, cut at the sides rather than letterboxed; on a wider screen
+ * the full height in a column of its shape), the way back, the Sponsor, the name and the buttons over it. The app's
+ * player therefore lies under the screens (`SHORT_STAGE_Z`, over the mode's black backdrop), and the place of a playing
+ * screen's video lets taps and swipes through to it, as when the player lay above.
  */
 export function ShortsViewer({ cards, startId, onClose, onDetails, menu, exposure = false, title, onNearEnd }: {
   cards: readonly FeedCard[]
@@ -190,12 +196,17 @@ export function ShortsViewer({ cards, startId, onClose, onDetails, menu, exposur
     onDetails(card)
   }
 
-  return (
-    // Q113c (§9.3): black, no head and no bottom menu; at the top only the way back (its name is the mode's), where the
-    // screen is and the buttons for the one before and after (the arrow keys too).
+  // Over the whole page, out of the home's own layers (whose stacking would otherwise hold the screens under the player).
+  return createPortal(
+    <>
+      {/* Black behind all of it, the app's player above it and the screens above both (see `SHORT_STAGE_Z`). */}
+      <div aria-hidden className="fixed inset-0 z-40 bg-black" data-testid="shorts-backdrop" />
+    {/* Q113c (§9.3): black, no head and no bottom menu; at the top only the way back (its name is the mode's), where the
+        screen is and the buttons for the one before and after (the arrow keys too), over the video. */}
     <div ref={dialog} role="dialog" aria-modal="true" aria-label={title ?? t('shorts.title')} tabIndex={-1}
-      className="fixed inset-0 z-50 flex flex-col bg-black text-white outline-none" data-testid="shorts-viewer">
-      <div className="flex h-12 shrink-0 items-center gap-2 px-2">
+      className="fixed inset-0 z-50 text-white outline-none" data-testid="shorts-viewer">
+      <div className="pointer-events-none absolute inset-x-0 top-0 z-10 flex h-12 items-center gap-2 bg-linear-to-b from-black/60 to-transparent px-2 [&>*]:pointer-events-auto"
+        data-testid="shorts-header">
         <Button variant="ghost" size="icon" onClick={onClose} aria-label={t('shorts.close')} data-testid="shorts-close"
           className="rounded-full text-white hover:bg-white/10 hover:text-white">
           <X aria-hidden />
@@ -216,9 +227,9 @@ export function ShortsViewer({ cards, startId, onClose, onDetails, menu, exposur
           <ChevronDown aria-hidden />
         </Button>
       </div>
-      {/* The app's player stays within the screens (the stage's `data-video-area`): a screen's player moving in from
-          above must not cover the header, whose buttons would then miss a tap made while the scroll travels. */}
-      <div ref={scroller} className="min-h-0 flex-1 snap-y snap-mandatory overflow-y-auto overscroll-contain"
+      {/* The app's player stays within the screens (the stage's `data-video-area`), all of the window: a screen's
+          player moving in or out is cut where its screen is. */}
+      <div ref={scroller} className="absolute inset-0 snap-y snap-mandatory overflow-y-auto overscroll-contain"
         data-testid="shorts-screens" data-video-area="">
         {cards.map((card, at) => {
           const shown = at === index
@@ -226,30 +237,89 @@ export function ShortsViewer({ cards, startId, onClose, onDetails, menu, exposur
           const failed = videoFailed(card.video)
           const plays = shown && !!card.video && !failed && (!still || played.has(card.publicationId))
           const sponsor = card.sponsorCompany ?? card.sponsorName
+          const vertical = !!card.videoVertical
+          // The app's player shows through the place (it lies under the screens), and takes its taps and swipes.
+          const staged = plays && trackable(card.video)
+          const foot = (
+            /* Over the foot of the screen (Q113c, §9.3): the Sponsor (to their page), the name, the reward in its colour,
+               and the two buttons; each may be absent (ads and entertainment videos later have "Details" only). Over a
+               vertical video, on a shade that keeps the white text readable. */
+            <div className={vertical
+              ? 'pointer-events-auto absolute inset-x-0 bottom-0 flex flex-col gap-2 bg-linear-to-t from-black/75 via-black/45 to-transparent px-4 pt-16 pb-4'
+              : 'flex w-full max-w-md shrink-0 flex-col gap-2 px-4'} data-testid="shorts-foot">
+              <div className="flex min-w-0 items-center gap-2 text-[15px] leading-5">
+                {sponsor && card.sponsorHandle
+                  ? <Link to={sponsorPagePath(card.sponsorHandle)} className="flex min-w-0 items-center gap-2 font-bold hover:underline"
+                    aria-label={tView('feed.sponsorPage', { name: sponsor })} data-testid="shorts-sponsor">
+                    <SponsorAvatar card={card} /><span className="truncate">{sponsor}</span></Link>
+                  : sponsor && <span className="flex min-w-0 items-center gap-2 font-bold" data-testid="shorts-sponsor">
+                    <SponsorAvatar card={card} /><span className="truncate">{sponsor}</span></span>}
+                {menu && <span className="ml-auto shrink-0 [&_button]:text-white">{menu(card)}</span>}
+              </div>
+              <h3 className="line-clamp-2 text-[17px] leading-6 font-bold" data-testid="shorts-name">{card.name}</h3>
+              <span className="flex flex-wrap items-center gap-x-1.5 text-[13px] text-white/80">
+                <span data-testid="shorts-reward"><RewardText card={card} className="text-qb-reward font-bold" /></span>
+                {card.watchRequired && (
+                  <>
+                    <span aria-hidden>·</span>
+                    <span data-testid="shorts-watch">{tView('feed.watchFirst')}</span>
+                  </>
+                )}
+              </span>
+              <div className="flex items-start justify-end gap-2">
+                <Button className={FLOW_OTHER} onClick={() => details(card)} data-testid="shorts-details">
+                  {t('shorts.details')}
+                </Button>
+                {shown && <FlowStart card={card} exposure={exposure} />}
+              </div>
+              {/* The sound: YouTube's and Vimeo's with the app's button (it then stays on); the others' by a tap on
+                  their own player (A3-18). */}
+              {staged && !stage.soundOn && (
+                <Button variant="outline" size="sm" onClick={() => soundOn()} data-testid="shorts-sound"
+                  className="self-start rounded-full border-white/60 bg-transparent text-white hover:bg-white/10 hover:text-white">
+                  <Volume2 aria-hidden />
+                  {t('shorts.soundOn')}
+                </Button>
+              )}
+              {plays && !trackable(card.video) && (
+                <p className="text-xs text-white/80" data-testid="shorts-tap-for-sound">{t('shorts.tapForSound')}</p>
+              )}
+            </div>
+          )
+          const title = tView('feed.videoTitle', { name: card.name })
           return (
             <section key={card.publicationId} data-shorts-screen={at} data-testid="shorts-screen"
               data-publication={card.publicationId} data-current={shown || undefined}
               aria-roledescription={t('shorts.slide')} aria-label={t('shorts.position', { n: at + 1, total: cards.length })}
               aria-hidden={shown ? undefined : true} inert={!shown || undefined}
-              className="flex h-full snap-start flex-col items-center gap-3 pb-4">
+              className={vertical ? 'relative flex h-full snap-start justify-center'
+                : 'flex h-full snap-start flex-col items-center gap-3 pt-12 pb-4'}>
               {/* F-S13: the screen shown of another's video counts its exposure while it plays. */}
               {shown && exposure && card.exposed && (
                 <ExposureWatch key={card.publicationId} publicationId={card.publicationId} surface="VERTICAL"
                   video={card.video} durationSec={card.videoDurationSec} active={plays} />
               )}
-              {/* A vertical video fills the height; any other is across the width in the middle (Q113c). */}
-              <div className="flex min-h-0 w-full flex-1 items-center justify-center" data-testid="shorts-stage"
-                data-orientation={card.videoVertical ? 'vertical' : 'landscape'}>
-                <div className={card.videoVertical
-                  ? 'relative aspect-[9/16] h-full max-w-full overflow-hidden rounded-md bg-neutral-900'
-                  : 'relative aspect-video max-h-full w-full overflow-hidden bg-neutral-900'}>
-                  {plays && trackable(card.video)
+              {/* A vertical video fills the screen: on a phone all of it (cut at the sides, not letterboxed), wider the
+                  full height in a column of its shape, with the foot over it. Any other is across the width in the
+                  middle (Q113c), the foot under it. */}
+              <div className={vertical ? 'flex h-full w-full justify-center' : 'flex min-h-0 w-full flex-1 items-center justify-center'}
+                data-testid="shorts-stage" data-orientation={vertical ? 'vertical' : 'landscape'}>
+                <div className={cn(vertical ? 'relative aspect-[9/16] h-full max-w-full overflow-hidden'
+                  : 'relative aspect-video max-h-full w-full overflow-hidden',
+                // Transparent where the app's player shows through; taps on it go to the player beneath.
+                staged ? 'pointer-events-none' : 'bg-neutral-900')} data-testid="shorts-video-box">
+                  {staged
                     ? <VideoSlot id={`short:${card.publicationId}`} player={card.video!} mode="short"
-                      publicationId={card.publicationId} className="absolute inset-0 size-full"
-                      title={tView('feed.videoTitle', { name: card.name })} />
+                      publicationId={card.publicationId} className="absolute inset-0 size-full" title={title}
+                      fit={vertical ? 'cover' : undefined} />
                     : plays
-                      ? <VideoPlayer player={card.video!} autoplay className="absolute inset-0 size-full"
-                        title={tView('feed.videoTitle', { name: card.name })} />
+                      ? vertical
+                        // Another site's frame given the vertical shape over all of the place, cut at its edges.
+                        ? <div className="absolute inset-0 overflow-hidden [container-type:size]" data-testid="shorts-cover-fit">
+                          <VideoPlayer player={card.video!} autoplay title={title}
+                            className="absolute top-1/2 left-1/2 h-[max(100%,calc(100cqw*16/9))] w-[max(100%,calc(100cqh*9/16))] -translate-x-1/2 -translate-y-1/2" />
+                        </div>
+                        : <VideoPlayer player={card.video!} autoplay className="absolute inset-0 size-full" title={title} />
                       : (
                         <>
                           {card.cover
@@ -274,53 +344,16 @@ export function ShortsViewer({ cards, startId, onClose, onDetails, menu, exposur
                           )}
                         </>
                       )}
+                  {vertical && foot}
                 </div>
               </div>
-              {/* Over the foot of the screen (Q113c, §9.3): the Sponsor (to their page), the name, the reward in its colour,
-                  and the two buttons; each may be absent (ads and entertainment videos later have "Details" only). */}
-              <div className="flex w-full max-w-md shrink-0 flex-col gap-2 px-4">
-                <div className="flex min-w-0 items-center gap-2 text-[15px] leading-5">
-                  {sponsor && card.sponsorHandle
-                    ? <Link to={sponsorPagePath(card.sponsorHandle)} className="flex min-w-0 items-center gap-2 font-bold hover:underline"
-                      aria-label={tView('feed.sponsorPage', { name: sponsor })} data-testid="shorts-sponsor">
-                      <SponsorAvatar card={card} /><span className="truncate">{sponsor}</span></Link>
-                    : sponsor && <span className="flex min-w-0 items-center gap-2 font-bold" data-testid="shorts-sponsor">
-                      <SponsorAvatar card={card} /><span className="truncate">{sponsor}</span></span>}
-                  {menu && <span className="ml-auto shrink-0 [&_button]:text-white">{menu(card)}</span>}
-                </div>
-                <h3 className="line-clamp-2 text-[17px] leading-6 font-bold" data-testid="shorts-name">{card.name}</h3>
-                <span className="flex flex-wrap items-center gap-x-1.5 text-[13px] text-white/80">
-                  <span data-testid="shorts-reward"><RewardText card={card} className="text-qb-reward font-bold" /></span>
-                  {card.watchRequired && (
-                    <>
-                      <span aria-hidden>·</span>
-                      <span data-testid="shorts-watch">{tView('feed.watchFirst')}</span>
-                    </>
-                  )}
-                </span>
-                <div className="flex items-start justify-end gap-2">
-                  <Button className={FLOW_OTHER} onClick={() => details(card)} data-testid="shorts-details">
-                    {t('shorts.details')}
-                  </Button>
-                  {shown && <FlowStart card={card} exposure={exposure} />}
-                </div>
-                {/* The sound: YouTube's and Vimeo's with the app's button (it then stays on); the others' by a tap on
-                    their own player (A3-18). */}
-                {plays && trackable(card.video) && !stage.soundOn && (
-                  <Button variant="outline" size="sm" onClick={() => soundOn()} data-testid="shorts-sound"
-                    className="self-start rounded-full border-white/60 bg-transparent text-white hover:bg-white/10 hover:text-white">
-                    <Volume2 aria-hidden />
-                    {t('shorts.soundOn')}
-                  </Button>
-                )}
-                {plays && !trackable(card.video) && (
-                  <p className="text-xs text-white/80" data-testid="shorts-tap-for-sound">{t('shorts.tapForSound')}</p>
-                )}
-              </div>
+              {!vertical && foot}
             </section>
           )
         })}
       </div>
     </div>
+    </>,
+    document.body,
   )
 }

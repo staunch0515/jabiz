@@ -1,8 +1,7 @@
-import { readFileSync } from 'node:fs'
-import { fileURLToPath } from 'node:url'
-import type { APIRequestContext, Page } from '@playwright/test'
+import type { APIRequestContext } from '@playwright/test'
 import { adminToken, expect, expectAccessible, prepareQuizbuks, run, signIn, test, unique } from './support'
 import { fundedSponsor, searchHome, taker, untilLive } from './play'
+import { MISSING_VIDEO_FILE as MISSING, VIDEO_FILE as FILE, videoServer } from './video-server'
 
 /*
  * F-S15 (docs/quizbuks/plans/impl/F-S15.md): a video file on any https address. A sponsor enters the file's address;
@@ -17,26 +16,6 @@ import { fundedSponsor, searchHome, taker, untilLive } from './play'
 test.beforeEach(async ({ request }) => {
   await prepareQuizbuks(request)
 })
-
-const FILE = 'https://videos.e2e.quizbuks.test/quizbuks-demo-10s.webm'
-const MISSING = 'https://videos.e2e.quizbuks.test/missing.webm'
-const VIDEO = readFileSync(fileURLToPath(new URL('./media/quizbuks-demo-10s.webm', import.meta.url)))
-
-/** The video server: the file, with byte ranges as a real one answers them (browsers ask for ranges of media). */
-async function videoServer(page: Page) {
-  await page.route(FILE, (route) => {
-    const range = /bytes=(\d+)-(\d*)/.exec(route.request().headers().range ?? '')
-    if (!range) {
-      return route.fulfill({ status: 200, contentType: 'video/webm', body: VIDEO,
-        headers: { 'Accept-Ranges': 'bytes' } })
-    }
-    const from = Number(range[1])
-    const to = range[2] ? Math.min(Number(range[2]), VIDEO.length - 1) : VIDEO.length - 1
-    return route.fulfill({ status: 206, contentType: 'video/webm', body: VIDEO.subarray(from, to + 1),
-      headers: { 'Accept-Ranges': 'bytes', 'Content-Range': `bytes ${from}-${to}/${VIDEO.length}` } })
-  })
-  await page.route(MISSING, (route) => route.fulfill({ status: 404, contentType: 'text/plain', body: 'Not found' }))
-}
 
 /** A live publication of the sponsor's whose quiz has a video link of `url` (to watch first when `watch`). */
 async function livePublication(request: APIRequestContext, sponsor: { token: string; balance: number }, url: string,
