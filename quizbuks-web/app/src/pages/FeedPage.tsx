@@ -571,6 +571,18 @@ export function FeedPage({ name, country, base = HOME_PATH }: {
     if (trackable(card.video)) openWithSound(card.video!)
     setTapped({ id: card.publicationId, centred })
   }, [centred])
+  // As x.com: the video tapped stops once it has left the screen (none in the middle then plays it on).
+  const tappedId = tapped?.id ?? null
+  useEffect(() => {
+    if (!list || !tappedId || typeof IntersectionObserver === 'undefined') return
+    const card = list.querySelector(`[data-publication="${CSS.escape(tappedId)}"]`)
+    if (!card) return
+    const observer = new IntersectionObserver((entries) => {
+      if (entries.some((entry) => !entry.isIntersecting)) setTapped(null)
+    })
+    observer.observe(card)
+    return () => observer.disconnect()
+  }, [list, tappedId])
   // Q65: one player: none of the home's while a video mode is open over it.
   const playing = viewing || viewingVideos ? null : tapped?.id ?? centred
   useMoreNearTheEnd(end, () => {

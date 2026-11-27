@@ -772,6 +772,10 @@ describe('the video to watch (Q19, Q63)', () => {
     expect(screen.queryByTestId('video-open')).toBeNull()
     expect(screen.queryByTestId('shorts-viewer')).toBeNull()
     expect(api.posted('QB_ATTEMPT_START')).toEqual([])
+    // As x.com: scrolled off the screen, it stops (nothing else is in the middle to play).
+    io.fire(card, false, '')
+    await waitFor(() => expect(card).not.toHaveAttribute('data-playing'))
+    await waitFor(() => expect(document.querySelector('iframe')).toBeNull())
   })
 
   it('plays the video playing on the home in place at a tap, its sound on; its top right key opens the video mode',
