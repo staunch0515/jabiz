@@ -1,7 +1,7 @@
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import '../qb/view/messages'
-import { coverBox, openWithSound, soundOn, UNASKED_SOUND_MS, useStage, VERTICAL_ASPECT, VideoSlot, VideoStage } from './stage'
+import { cornerOf, coverBox, openWithSound, soundOn, UNASKED_SOUND_MS, useStage, VERTICAL_ASPECT, VideoSlot, VideoStage } from './stage'
 
 const FILE = 'https://cdn.example.com/first-frame.mp4'
 const YOUTUBE = 'https://www.youtube-nocookie.com/embed/firstFrame01'
@@ -184,5 +184,71 @@ describe('a short plays on when the browser refuses the sound asked for without 
     posted.length = 0
     hear({ event: 'onStateChange', info: 2 })
     expect(posted).toEqual([])
+  })
+})
+
+describe('the vertical mode keeps the sound from video to video (2026-11-28)', () => {
+  function Short({ player }: { player: string }) {
+    const stage = useStage()
+    return (
+      <>
+        <VideoSlot id={`short:${player}`} player={player} title="Short" mode="short" fit="cover" />
+        <VideoStage />
+        <span data-testid="sound">{String(stage.soundOn)}</span>
+      </>
+    )
+  }
+
+  it('gives the next file to the same <video>, whose sound the viewer\'s tap turned on, so it plays with the sound', async () => {
+    vi.spyOn(HTMLMediaElement.prototype, 'play').mockResolvedValue(undefined)
+    const first = 'https://cdn.example.com/kept-one.mp4'
+    const second = 'https://cdn.example.com/kept-two.mp4'
+    const { rerender } = render(<Short player={first} />)
+    const video = await screen.findByTestId('video-stage-file') as HTMLVideoElement
+    expect(video.muted).toBe(true)
+    // The viewer's tap turns the sound on (the browser grants it to this element).
+    soundOn()
+    fireEvent(video, new Event('volumechange'))
+    expect(video.muted).toBe(false)
+    expect(screen.getByTestId('sound')).toHaveTextContent('true')
+    // A swipe: the next screen's player takes the sound (as the viewer's `go` asks for it).
+    openWithSound(second)
+    rerender(<Short player={second} />)
+    await waitFor(() => expect(screen.getByTestId('video-stage-file')).toHaveAttribute('src', second))
+    expect(screen.getByTestId('video-stage-file')).toBe(video)
+    expect(video.muted).toBe(false)
+    expect(screen.getByTestId('sound')).toHaveTextContent('true')
+  })
+
+  it('starts the next file muted when its sound was not asked for (a home card after the sound was on)', async () => {
+    vi.spyOn(HTMLMediaElement.prototype, 'play').mockResolvedValue(undefined)
+    const first = 'https://cdn.example.com/card-one.mp4'
+    const second = 'https://cdn.example.com/card-two.mp4'
+    const { rerender } = render(<Card player={first} />)
+    const video = await screen.findByTestId('video-stage-file') as HTMLVideoElement
+    soundOn()
+    expect(video.muted).toBe(false)
+    rerender(<Card player={second} />)
+    await waitFor(() => expect(screen.getByTestId('video-stage-file')).toHaveAttribute('src', second))
+    expect(video.muted).toBe(true)
+  })
+})
+
+describe('the stage has the corners of its place (2026-11-28)', () => {
+  it('rounds the player as a home card\'s frame is rounded, within its border; a square place stays square', async () => {
+    render(
+      <>
+        <span data-testid="frame" style={{ borderTopLeftRadius: '16px', borderTopWidth: '1px', borderTopStyle: 'solid' }}>
+          <VideoSlot id="card:corners" player="https://cdn.example.com/corners.mp4" title="Clip" mode="card"
+            className="absolute inset-0" />
+        </span>
+        <VideoStage />
+      </>,
+    )
+    await waitFor(() => expect(screen.getByTestId('video-stage').style.borderRadius).toBe('15px'))
+    const square = document.createElement('div')
+    document.body.append(square)
+    expect(cornerOf(square)).toBe(0)
+    square.remove()
   })
 })

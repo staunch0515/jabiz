@@ -1,7 +1,7 @@
 import type { APIRequestContext } from '@playwright/test'
 import { adminToken, expect, expectAccessible, prepareQuizbuks, run, signIn, test, unique } from './support'
 import { fundedSponsor, searchHome, taker, untilLive } from './play'
-import { VIDEO_FILE, videoServer } from './video-server'
+import { SECOND_VIDEO_FILE, VIDEO_FILE, videoServer } from './video-server'
 
 /*
  * F-S10 (docs/quizbuks/plans/impl/F-S10.md): publications with a YouTube Shorts video appear in the home's shelf of
@@ -287,4 +287,50 @@ test('a vertical video fills the screen of the vertical mode and plays at once, 
     const box = await frame.boundingBox()
     return !!box && Math.abs(box.width - 844 * 9 / 16) <= 1 && Math.abs(box.height - 844) <= 1
   }, { message: 'the frame is 9:16 over all of the screen' }).toBe(true)
+})
+
+test('the video mode keeps the sound on from video to video, with no button for it; the home\'s player has the card\'s corners (2026-11-28)',
+  async ({ page, request }) => {
+  test.setTimeout(180_000)
+  await videoServer(page)
+  const sponsor = await fundedSponsor(request)
+  const base = unique('Loud run ')
+  // Newest first: the first file's post, then the second's.
+  const later = await shortsPublication(request, sponsor, `${base} two`, SECOND_VIDEO_FILE, true)
+  const first = await shortsPublication(request, sponsor, `${base} one`, VIDEO_FILE, true)
+  const me = await taker(request, 'Loud')
+  await untilLive(request, me.token, later)
+  await untilLive(request, me.token, first)
+
+  await page.setViewportSize({ width: 390, height: 844 })
+  await signIn(page, '/taker/', me.email)
+  await expect(page.getByTestId('home')).toBeVisible()
+  await searchHome(page, base)
+  await expect(page.getByTestId('feed-card')).toHaveCount(2)
+  const post = page.getByTestId('feed-card').filter({ hasText: `${base} one` })
+  await post.evaluate((element) => element.scrollIntoView({ block: 'center' }))
+  await expect(page.getByTestId('video-open')).toBeVisible()
+  // The playing video has the rounded corners of its cover (the card's 16 px, within its 1 px border).
+  const stage = page.getByTestId('video-stage')
+  await expect(stage).toHaveCSS('border-radius', '15px')
+  const video = page.getByTestId('video-stage-file')
+  // On the home it plays muted.
+  await expect.poll(() => video.evaluate((element: HTMLVideoElement) => element.muted)).toBe(true)
+  // The tap opens the video mode with the sound on.
+  await page.getByTestId('video-open').click()
+  const viewer = page.getByTestId('shorts-viewer')
+  const current = viewer.locator('[data-current]')
+  await expect(current).toHaveAttribute('data-publication', first)
+  await expect.poll(() => video.evaluate((element: HTMLVideoElement) => !element.muted && !element.paused)).toBe(true)
+  await expect(stage).toHaveCSS('border-radius', '0px')
+  await expect(viewer.getByTestId('shorts-sound')).toHaveCount(0)
+  // The element is marked, to show the next video plays in the same one (the one the tap gave the sound).
+  await video.evaluate((element) => element.setAttribute('data-e2e-kept', ''))
+  await viewer.getByTestId('shorts-next').click()
+  await expect(current).toHaveAttribute('data-publication', later)
+  await expect(video).toHaveAttribute('src', SECOND_VIDEO_FILE)
+  await expect(video).toHaveAttribute('data-e2e-kept', '')
+  await expect.poll(() => video.evaluate((element: HTMLVideoElement) => !element.muted && !element.paused
+    && element.currentTime > 0.5), { message: 'the next video plays with the sound' }).toBe(true)
+  await expect(viewer.getByTestId('shorts-sound')).toHaveCount(0)
 })
