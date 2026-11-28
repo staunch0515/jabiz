@@ -215,6 +215,19 @@ export function autoplaying(player: string): string {
   return player
 }
 
+/**
+ * The picture of a video before it plays, from the video itself (2026-11-28: a cover of the sponsor's, swapped for the
+ * video as it started, flashed): YouTube's own picture of it (`i.ytimg.com`, which sets no cookies; the app's
+ * `img-src https:`). Its 4:3 picture letterboxes the video, so it is shown cut to the video's place (`object-cover`):
+ * the bars fall outside a 16:9 and a 9:16 place alike. None for the other sites (a video file shows its own first
+ * frame, `VideoPoster`).
+ */
+export function videoPoster(player: string | null | undefined): string | null {
+  if (!player || !player.startsWith(YOUTUBE_PLAYER)) return null
+  const id = player.slice(YOUTUBE_PLAYER.length)
+  return YOUTUBE_ID.test(id) ? `https://i.ytimg.com/vi/${id}/hqdefault.jpg` : null
+}
+
 /** Whether the viewer asked for less motion: then no video starts by itself (Q63). */
 export function prefersStillVideo(): boolean {
   return typeof window !== 'undefined' && typeof window.matchMedia === 'function'

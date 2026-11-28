@@ -10,6 +10,7 @@ import { Link } from '../router'
 import { LazyImage } from './LazyImage'
 import { QBVIEW } from './messages'
 import { VideoPlayer } from './VideoPlayer'
+import { VideoPoster } from './VideoPoster'
 import { useVideoFailed } from '../videoFailures'
 import { postAge } from './postAge'
 
@@ -103,13 +104,13 @@ export function FeedCardView({ card, href, videoHref, playing = false, note, vid
   const MethodIcon = REWARD_METHOD_ICONS[card.rewardMethod]
   // F-S15: a video file that failed to play: the cover, and a link to the file.
   const failed = useVideoFailed(card.video)
-  // 2026-11-28 (the requester): a post with a video shows no cover: a picture that is not the video, swapped for the
-  // video as it starts, flashed. Its place is the page's plain surface until the player has its first frame, which
-  // then fades in over it (the stage's `crossFade`): never black, never another picture. A post without a video, and a
-  // video file that failed, keep the cover.
+  // 2026-11-28 (the requester): a post with a video shows no cover of the sponsor's (swapped for the video as it
+  // started, it flashed) nor a blank surface: the video's own picture (`VideoPoster`), which its player fades in over
+  // once it has its first frame (the stage's `crossFade`), never black. A post without a video, and a video file that
+  // failed, keep the cover.
   const plays = !!card.video && !failed
   const cover = plays
-    ? <span className="bg-muted absolute inset-0 size-full" data-testid="feed-card-video-surface" />
+    ? <VideoPoster player={card.video!} cover={card.cover} seed={card.publicationId} />
     : card.cover
     ? <LazyImage fileId={card.cover} variant="w640" alt=""
       className="absolute inset-0 size-full transition-transform duration-300 group-hover:scale-105" />

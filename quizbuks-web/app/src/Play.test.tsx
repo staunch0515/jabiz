@@ -739,14 +739,14 @@ describe('the video to watch (Q19, Q63)', () => {
     render(<App />)
     const card = await screen.findByTestId('feed-card')
     expect(card).toHaveAttribute('data-video', 'true')
-    // Out of the middle: no player, and no cover nor play mark over the video's place (2026-11-28: a cover flashed as
-    // the video took over): the page's plain surface, the video said to assistive technology only.
+    // Out of the middle: no player, no play mark, and not the sponsor's cover (2026-11-28: it flashed as the video took
+    // over) nor a blank: the video's own picture (YouTube's), cut to the place; the video said to assistive technology.
     expect(within(card).getByTestId('feed-card-video-mark')).toHaveTextContent('With a video')
     expect(within(card).getByTestId('feed-card-video-mark')).toHaveClass('sr-only')
-    expect(within(card).getByTestId('feed-card-video-surface')).toHaveClass('bg-muted')
+    expect(within(card).getByTestId('video-poster')).toHaveAttribute('src', 'https://i.ytimg.com/vi/dQw4w9WgXcQ/hqdefault.jpg')
+    expect(within(card).getByTestId('video-poster')).toHaveClass('object-cover')
     expect(within(card).queryByTestId('feed-card-placeholder')).toBeNull()
-    // The post has a cover, which a post with a video does not show.
-    expect(card.querySelector('img')).toBeNull()
+    expect(card.querySelectorAll('img')).toHaveLength(1)
     expect(card.querySelector('svg.lucide-play')).toBeNull()
     expect(document.querySelector('iframe')).toBeNull()
     io.fire(card, true, MIDDLE)
@@ -758,9 +758,11 @@ describe('the video to watch (Q19, Q63)', () => {
     expect(screen.getByTestId('video-open')).toHaveAccessibleName('Video: Capitals week')
     expect(within(card).getByTestId('video-slot')).toHaveAttribute('data-mode', 'card')
     expect(card).toHaveAttribute('data-playing', 'true')
-    // The plain surface stays under the player until the player has its first frame (never black): the player is
-    // transparent until then, and fades in over it.
-    expect(within(card).getByTestId('feed-card-playing')).toContainElement(within(card).getByTestId('feed-card-video-surface'))
+    // The video's own picture stays under the player until the player has its first frame (never black): the player is
+    // transparent until then, and fades in over it; the stage has the same picture.
+    expect(within(card).getByTestId('feed-card-playing')).toContainElement(within(card).getByTestId('video-poster'))
+    expect(within(screen.getByTestId('video-stage-cover')).getByTestId('video-poster')).toHaveAttribute('src',
+      'https://i.ytimg.com/vi/dQw4w9WgXcQ/hqdefault.jpg')
     expect(screen.getByTestId('video-stage-content').style.opacity).toBe('0')
     // Q66: the reward is in the line of facts, the same whether the video plays or not.
     expect(within(card).getByTestId('feed-card-reward')).toHaveTextContent('Up to 100 Kudos')
@@ -1045,17 +1047,17 @@ describe('a card\'s progress and its Sponsor (Q64, Q66)', () => {
     await expectAccessible()
   })
 
-  it('goes back from the start page with the header\'s arrow, and offers the Sponsor\'s page there', async () => {
+  it('goes back from the start page with the header\'s arrow; the Sponsor\'s page is the line at the top only', async () => {
     server({ publicationPage: () => json(200, { items: [publication({ sponsorHandle: 'capitals' })], offset: 0,
       limit: 1 }) })
     render(<App />)
     await userEvent.click(within((await screen.findAllByTestId('feed-card'))[0]).getByTestId('feed-card-link'))
     expect(await screen.findByTestId('detail-name')).toBeInTheDocument()
     expect(screen.queryByText('All quizzes')).toBeNull()
+    // 2026-11-28: no block for the Sponsor's page under the materials; the sponsor's line at the top leads there.
+    expect(screen.getByTestId('detail-sponsor-page')).toHaveAttribute('href', '/s/capitals')
     await userEvent.click(screen.getByTestId('page-tab-materials'))
-    const visit = await screen.findByTestId('sponsor-visit')
-    expect(visit).toHaveAttribute('href', '/s/capitals')
-    expect(visit).toHaveTextContent('Visit Capitals Inc')
+    expect(screen.queryByTestId('sponsor-visit')).toBeNull()
     await userEvent.click(screen.getByTestId('header-back'))
     await waitFor(() => expect(window.location.pathname).toBe('/'))
     expect(screen.queryByTestId('header-back')).toBeNull()
@@ -2319,7 +2321,12 @@ describe('a video file on any https address (F-S15)', () => {
       render(<App />)
       const card = await screen.findByTestId('feed-card')
       io.fire(card, true, MIDDLE)
-      expect(document.querySelector('video')).toBeNull()
+      // No player: only the file's first frame, which never plays.
+      expect(screen.queryByTestId('video-stage-file')).toBeNull()
+      const frame = within(card).getByTestId('video-poster-frame') as HTMLVideoElement
+      expect(frame.autoplay).toBe(false)
+      expect(frame).toHaveAttribute('src', `${FILE}#t=0.1`)
+      expect(frame).toHaveAttribute('preload', 'metadata')
     } finally {
       query.mockRestore()
     }
@@ -2480,12 +2487,12 @@ describe("a publication's tabs (F-F4c)", () => {
     await expectAccessible()
   })
 
-  it('has the materials, the products and the sponsor visit under the materials tab', async () => {
+  it('has the materials and the products under the materials tab, not the sponsor visit (the line at the top has it)', async () => {
     await open('?tab=materials')
     const tab = screen.getByTestId('detail-tab-materials')
     expect(within(tab).getByTestId('materials')).toBeInTheDocument()
     expect((await within(tab).findAllByTestId('publication-products-item'))).toHaveLength(1)
-    expect(within(tab).getByTestId('sponsor-visit')).toHaveAttribute('href', '/s/capitals')
+    expect(within(tab).queryByTestId('sponsor-visit')).toBeNull()
     await expectAccessible()
   })
 

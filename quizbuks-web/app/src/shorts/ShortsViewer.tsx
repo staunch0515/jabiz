@@ -13,6 +13,7 @@ import { LazyImage } from '../qb/view/LazyImage'
 import { RewardText } from '../qb/view/FeedCard'
 import { QBVIEW } from '../qb/view/messages'
 import { VideoPlayer } from '../qb/view/VideoPlayer'
+import { VideoPoster } from '../qb/view/VideoPoster'
 import { useVideoFailed, videoFailed } from '../qb/videoFailures'
 import { openWithSound, soundOn, stagePlayer, togglePlay, useStage, VideoSlot } from '../video/stage'
 import { ExposureWatch } from '../exposure/ExposureWatch'
@@ -311,9 +312,12 @@ export function ShortsViewer({ cards, startId, onClose, onDetails, menu, exposur
                 !staged && 'bg-neutral-900')} data-testid="shorts-video-box">
                   {staged
                     ? <>
+                      {/* The video's own picture under the player until its first frame (the stage fades it in over
+                          it): never black as the screen changes (2026-11-28). */}
                       <VideoSlot id={`short:${card.publicationId}`} player={card.video!} mode="short"
                         publicationId={card.publicationId} className="absolute inset-0 size-full" title={title}
-                        fit={vertical ? 'cover' : undefined} />
+                        fit={vertical ? 'cover' : undefined}
+                        cover={<VideoPoster player={card.video!} cover={card.cover} seed={card.publicationId} />} />
                       {/* The screen takes the taps on the video, never the player's own controls (which would leave it
                           in its controls, paused or waiting): a tap pauses the short or plays it on. A swipe here
                           moves to the next screen. */}
@@ -339,11 +343,13 @@ export function ShortsViewer({ cards, startId, onClose, onDetails, menu, exposur
                         : <VideoPlayer player={card.video!} autoplay className="absolute inset-0 size-full" title={title} />
                       : (
                         <>
-                          {/* No cover over a video's place (it flashed as the video took over, 2026-11-28): the mode's dark
-                              place until the player comes; only a video that failed shows its cover. */}
-                          {failed && (card.cover
-                            ? <LazyImage fileId={card.cover} variant="w640" alt="" className="absolute inset-0 size-full object-cover" />
-                            : <CoverPlaceholder seed={card.publicationId} className="absolute inset-0 size-full" />)}
+                          {/* The video's own picture (2026-11-28: no cover of the sponsor's, which flashed as the video
+                              took over, and never black); only a video that failed shows its cover. */}
+                          {failed
+                            ? card.cover
+                              ? <LazyImage fileId={card.cover} variant="w640" alt="" className="absolute inset-0 size-full object-cover" />
+                              : <CoverPlaceholder seed={card.publicationId} className="absolute inset-0 size-full" />
+                            : card.video && <VideoPoster player={card.video} cover={card.cover} seed={card.publicationId} />}
                           {shown && card.video && failed && (
                             <span className="absolute inset-0 flex items-center justify-center">
                               <Button asChild size="lg" variant="secondary">

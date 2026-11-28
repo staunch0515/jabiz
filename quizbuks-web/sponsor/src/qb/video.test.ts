@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { autoplaying, filePlayer, foreignVideo, isShorts, MAINLAND_SITES_DEFAULT, mainlandSites, pagePlayer, sitePlayer, trackable, trustedPlayer,
+import { autoplaying, filePlayer, videoPoster, foreignVideo, isShorts, MAINLAND_SITES_DEFAULT, mainlandSites, pagePlayer, sitePlayer, trackable, trustedPlayer,
   verticalVideo, videoHost, videoKind, videoPlayer, videoSite } from './video'
 
 /** The cases of the backend's `VideoEmbedsTest` (Q19): the App reads links as the server does. */
@@ -249,6 +249,20 @@ describe('video files and pages of other sites', () => {
     const accessible = mainlandSites(`${MAINLAND_SITES_DEFAULT},videos.quizbuks.com,www.youtube.com`)
     expect(foreignVideo([url], accessible)).toBe(foreign)
     expect(foreignVideo([url], mainlandSites(null))).toBe(foreign || !url.includes('bilibili'))
+  })
+})
+
+describe('a video\'s own picture before it plays (2026-11-28)', () => {
+  it('is YouTube\'s picture of the video, for its player only; none for the other sites, files and anything else', () => {
+    expect(videoPoster('https://www.youtube-nocookie.com/embed/dQw4w9WgXcQ'))
+      .toBe('https://i.ytimg.com/vi/dQw4w9WgXcQ/hqdefault.jpg')
+    expect(videoPoster(videoPlayer('https://www.youtube.com/shorts/aaaaaaaaaaa')))
+      .toBe('https://i.ytimg.com/vi/aaaaaaaaaaa/hqdefault.jpg')
+    for (const player of ['https://player.vimeo.com/video/76979871', 'https://cdn.example.com/a.mp4',
+      'https://player.bilibili.com/player.html?bvid=BV1GJ411x7h7&autoplay=0', 'https://www.youtube-nocookie.com/embed/x/../y',
+      'https://www.youtube-nocookie.com/embed/short', '', null, undefined]) {
+      expect(videoPoster(player)).toBeNull()
+    }
   })
 })
 
