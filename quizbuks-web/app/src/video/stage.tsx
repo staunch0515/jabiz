@@ -41,8 +41,12 @@ interface Slot {
   onOpen?: () => void
   /** The cover the player fades in over (`VideoStage`, `crossFade`). */
   cover?: ReactNode
-  /** F-S10: a vertical video in the vertical mode fills its place (`coverBox`), cut at the edges, never letterboxed. */
-  fit?: 'cover'
+  /**
+   * F-S10: a vertical video fills its place (`coverBox` for a frame), cut at the edges, never letterboxed. `fill`: a
+   * home card's landscape box: a file fills it too (a frame letterboxes within itself, the box being its shape), so no
+   * band of the card's cover under it shows beside the video (2026-11-28).
+   */
+  fit?: 'cover' | 'fill'
 }
 
 interface StageState {
@@ -540,8 +544,8 @@ export function VideoSlot({ id, player, title, mode, publicationId = null, activ
   onOpen?: () => void
   /** The cover the player comes in over (a card's): read as the slot is claimed, not a dependency. */
   cover?: ReactNode
-  /** F-S10: the player fills the place, cut at its edges (a vertical video in the vertical mode). */
-  fit?: 'cover'
+  /** F-S10: the player fills the place, cut at its edges (`cover`: vertical; `fill`: a card's landscape box). */
+  fit?: 'cover' | 'fill'
   className?: string
 }) {
   const ref = useRef<HTMLDivElement>(null)
@@ -656,8 +660,8 @@ export function VideoStage() {
   const coverShown = !!cover && !(stage.framed && !returning)
   const fade = cover ? crossFade(!coverShown, videoKind(stage.player) !== 'file') : null
   // F-S10: a vertical short fills the place: a file by `object-cover`, a frame given the video's shape over all of it.
-  const fill = slot?.fit === 'cover'
-  const framePlace = fill && rect ? coverBox(rect.width, rect.height, VERTICAL_ASPECT) : null
+  const fill = slot?.fit === 'cover' || slot?.fit === 'fill'
+  const framePlace = slot?.fit === 'cover' && rect ? coverBox(rect.width, rect.height, VERTICAL_ASPECT) : null
   return createPortal(
     <div ref={box} data-testid="video-stage" data-mode={slot?.mode}
       style={{ position: 'absolute', top: rect?.top ?? 0, left: rect?.left ?? 0, width: rect?.width ?? 0,
