@@ -362,6 +362,15 @@ describe('a vertical video fills the screen of the vertical mode (F-S10)', () =>
     expect(player.querySelector('iframe')).toHaveAttribute('src', expect.stringContaining('autoplay=1'))
   })
 
+  it('shows no cover over a video\'s place, on the screens not playing either (it flashed as the video came)', async () => {
+    server({ feed: POSTS.map((post) => ({ ...post, cover: 'cover-1' })), shorts: [] })
+    window.history.replaceState(null, '', '/?video=t1')
+    render(<App />)
+    const viewer = await screen.findByTestId('shorts-viewer')
+    expect(within(viewer).getAllByTestId('shorts-screen')).toHaveLength(4)
+    expect(viewer.querySelector('img')).toBeNull()
+  })
+
   it('keeps a landscape video across the middle, its foot under it', async () => {
     const shown = await openOn('w1')
     const box = within(shown).getByTestId('shorts-video-box')

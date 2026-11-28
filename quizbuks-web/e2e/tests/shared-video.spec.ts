@@ -203,7 +203,9 @@ test('a provider shares a video, its operator reviews it once, another Sponsor u
     await expect(frame.getByTestId('detail-hero').locator('iframe')).toHaveAttribute('src', player)
     await page.getByTestId('preview-screens').getByRole('radio', { name: 'Home card' }).click()
     await expect(frame).toHaveAttribute('data-screen', 'home')
-    await expect(frame.getByTestId('feed-card-video-mark')).toBeVisible()
+    // A post with a video: no cover and no play mark over its place (2026-11-28), the video said to assistive technology.
+    await expect(frame.getByTestId('feed-card-video-mark')).toHaveText('With a video')
+    await expect(frame.getByTestId('feed-card-video-surface')).toBeVisible()
     await expectAccessible(page, 'console preview with a shared video')
 
     // Submitted, reviewed as a publication (the video itself is not reviewed again) and live.
