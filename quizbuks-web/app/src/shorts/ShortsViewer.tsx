@@ -8,14 +8,14 @@ import { CoverPlaceholder } from '../qb/Illustrations'
 import { sponsorPagePath } from '../qb/page'
 import type { FeedCard } from '../qb/play'
 import { Link } from '../qb/router'
-import { prefersStillVideo, trackable } from '../qb/video'
+import { prefersStillVideo, trackable, videoKind } from '../qb/video'
 import { LazyImage } from '../qb/view/LazyImage'
 import { RewardText } from '../qb/view/FeedCard'
 import { QBVIEW } from '../qb/view/messages'
 import { VideoPlayer } from '../qb/view/VideoPlayer'
 import { VideoPoster } from '../qb/view/VideoPoster'
 import { useVideoFailed, videoFailed } from '../qb/videoFailures'
-import { openWithSound, soundOn, stagePlayer, togglePlay, useStage, VideoSlot } from '../video/stage'
+import { crossFade, openWithSound, soundOn, stagePlayer, togglePlay, useStage, VideoSlot } from '../video/stage'
 import { ExposureWatch } from '../exposure/ExposureWatch'
 import { queueReport } from '../exposure/reporter'
 import { FileImage } from '../qb/FileImage'
@@ -32,7 +32,7 @@ function SponsorAvatar({ card }: { card: FeedCard }) {
 /**
  * F-S10 (docs/quizbuks/plans/impl/F-S10.md): the full-screen vertical mode, like YouTube's Shorts. It lies over the
  * home (whose place stays where it was), one short video a screen; a swipe up is the next, down the one before (a
- * vertical scroll that snaps, the screen shown judged by IntersectionObserver), and so are the buttons and the arrow
+ * vertical scroll that snaps, the screen shown is the one the screens come to rest on), and so are the buttons and the arrow
  * keys (Escape goes back). Only the screen shown has a player, and only one (Q65): YouTube's and Vimeo's are the app's
  * one player (the stage), whose watching counts towards "watch to answer" (Q75) and whose sound, once on, stays on
  * from one video to the next; the other sites play in their own player, whose sound the viewer turns on with one tap
@@ -52,6 +52,9 @@ function SponsorAvatar({ card }: { card: FeedCard }) {
  * on the video itself (a tap pauses or plays on, `togglePlay`; a swipe moves on): the player's own controls are never
  * reached, so it never stops on them.
  */
+/** How long the screens are still before they are taken to rest (a browser without `scrollend`). */
+const SCROLL_REST_MS = 120
+
 export function ShortsViewer({ cards, startId, onClose, onDetails, menu, exposure = false, title, onNearEnd }: {
   cards: readonly FeedCard[]
   startId: string
@@ -135,42 +138,85 @@ export function ShortsViewer({ cards, startId, onClose, onDetails, menu, exposur
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  /** Moves to a screen: its player takes the sound the one before had (YouTube and Vimeo, by the stage). */
-  const go = useCallback((to: number) => {
-    if (to < 0 || to >= cards.length || to === index) return
-    const next = cards[to]
-    const now = stagePlayer()
-    if (next.video && trackable(next.video) && now.soundOn) openWithSound(next.video)
-    setIndex(to)
-    screenAt(to)?.scrollIntoView?.({ block: 'start', behavior: still ? 'auto' : 'smooth' })
-  }, [cards, index, still])
+  /*
+   * 2026-11-28 (the requester: two flickers before the next video showed): the screen shown changes once the screens
+   * have come to rest, not while they travel. The video going out plays on while any of it is in view (it turned to its
+   * poster in view before), and the one coming in shows its poster until then, the player taking it over where its
+   * screen has come to rest.
+   */
+  /** Where a button or key sent the screens, until they come to rest there. */
+  const target = useRef<number | null>(null)
+  const latestIndex = useRef(index)
+  useEffect(() => {
+    latestIndex.current = index
+  })
+  /** The screen shown is now `at`: its player takes the sound the one before had (YouTube and Vimeo, by the stage). */
+  const commit = useCallback((at: number) => {
+    target.current = null
+    if (at < 0 || at >= cards.length || at === latestIndex.current) return
+    const next = cards[at]
+    if (next.video && trackable(next.video) && stagePlayer().soundOn) openWithSound(next.video)
+    setIndex(at)
+  }, [cards])
 
-  // A swipe: the screen most in view is the one shown.
+  /** Moves to a screen: scrolled to, and shown once there. */
+  const go = useCallback((to: number) => {
+    const from = target.current ?? index
+    if (to < 0 || to >= cards.length || to === from) return
+    const next = cards[to]
+    // Asked for within the tap: the next player takes the sound as it comes.
+    if (next.video && trackable(next.video) && stagePlayer().soundOn) openWithSound(next.video)
+    const screen = screenAt(to)
+    // Without a layout (nothing that scrolls) the screen is shown at once.
+    if (!screen?.scrollIntoView || !(scroller.current?.clientHeight)) {
+      commit(to)
+      return
+    }
+    target.current = to
+    screen.scrollIntoView({ block: 'start', behavior: still ? 'auto' : 'smooth' })
+  }, [cards, index, still, commit])
+
+  // A swipe (or a button's scroll): once the screens rest, the one they rest on is shown. `scrollend` where the browser
+  // has it; else (and as well) a short quiet after the last scroll. A scroll already where it is sent ends at once.
   useEffect(() => {
     const root = scroller.current
-    if (!root || typeof IntersectionObserver === 'undefined') return
-    const observer = new IntersectionObserver((entries) => {
-      const seen = entries.filter((entry) => entry.isIntersecting)
-        .map((entry) => Number((entry.target as HTMLElement).dataset.shortsScreen))
-      if (seen.length > 0) {
-        const at = seen[0]
-        const next = cards[at]
-        if (next?.video && trackable(next.video) && stagePlayer().soundOn) openWithSound(next.video)
-        setIndex(at)
+    if (!root) return
+    let quiet: ReturnType<typeof setTimeout> | null = null
+    const rest = () => {
+      if (quiet) {
+        clearTimeout(quiet)
+        quiet = null
       }
-    }, { root, threshold: 0.6 })
-    root.querySelectorAll('[data-shorts-screen]').forEach((screen) => observer.observe(screen))
-    return () => observer.disconnect()
-  }, [cards])
+      const height = root.clientHeight
+      if (!(height > 0)) return
+      commit(Math.round(root.scrollTop / height))
+    }
+    const scrolled = () => {
+      if (quiet) clearTimeout(quiet)
+      quiet = setTimeout(rest, SCROLL_REST_MS)
+    }
+    root.addEventListener('scroll', scrolled, { passive: true })
+    root.addEventListener('scrollend', rest)
+    // A button's scroll that never moves (already there) still shows its screen.
+    const fallback = setInterval(() => {
+      if (target.current !== null && !quiet) commit(target.current)
+    }, SCROLL_REST_MS * 4)
+    return () => {
+      root.removeEventListener('scroll', scrolled)
+      root.removeEventListener('scrollend', rest)
+      if (quiet) clearTimeout(quiet)
+      clearInterval(fallback)
+    }
+  }, [commit])
 
   // The keys work wherever the focus is while the mode is open (a button that became disabled lets it go).
   const keys = (event: globalThis.KeyboardEvent) => {
     if (event.key === 'ArrowDown' || event.key === 'ArrowRight' || event.key === 'PageDown') {
       event.preventDefault()
-      go(index + 1)
+      go((target.current ?? index) + 1)
     } else if (event.key === 'ArrowUp' || event.key === 'ArrowLeft' || event.key === 'PageUp') {
       event.preventDefault()
-      go(index - 1)
+      go((target.current ?? index) - 1)
     } else if (event.key === 'Escape') {
       event.preventDefault()
       onClose()
@@ -218,12 +264,12 @@ export function ShortsViewer({ cards, startId, onClose, onDetails, menu, exposur
         <span className="text-sm text-white/80" aria-live="polite" data-testid="shorts-position">
           {t('shorts.position', { n: index + 1, total: cards.length })}
         </span>
-        <Button variant="ghost" size="icon" disabled={index === 0} onClick={() => go(index - 1)}
+        <Button variant="ghost" size="icon" disabled={index === 0} onClick={() => go((target.current ?? index) - 1)}
           aria-label={t('shorts.previous')} data-testid="shorts-previous"
           className="rounded-full text-white hover:bg-white/10 hover:text-white">
           <ChevronUp aria-hidden />
         </Button>
-        <Button variant="ghost" size="icon" disabled={index >= cards.length - 1} onClick={() => go(index + 1)}
+        <Button variant="ghost" size="icon" disabled={index >= cards.length - 1} onClick={() => go((target.current ?? index) + 1)}
           aria-label={t('shorts.next')} data-testid="shorts-next"
           className="rounded-full text-white hover:bg-white/10 hover:text-white">
           <ChevronDown aria-hidden />
@@ -242,6 +288,10 @@ export function ShortsViewer({ cards, startId, onClose, onDetails, menu, exposur
           const vertical = !!card.videoVertical
           // The app's player shows through the place (it lies under the screens), and takes its taps and swipes.
           const staged = plays && trackable(card.video)
+          // The poster shows until the app's player has its first frame of this screen's video.
+          const posterShown = !(staged && stage.slot?.key === `short:${card.publicationId}` && stage.player === card.video
+            && stage.framed)
+          const posterFade = card.video ? crossFade(!posterShown, videoKind(card.video) !== 'file').cover : undefined
           const foot = (
             /* Over the foot of the screen (Q113c, §9.3): the Sponsor (to their page), the name, the reward in its colour,
                and the two buttons; each may be absent (ads and entertainment videos later have "Details" only). Over a
@@ -310,14 +360,25 @@ export function ShortsViewer({ cards, startId, onClose, onDetails, menu, exposur
                   : 'relative aspect-video max-h-full w-full overflow-hidden',
                 // Transparent where the app's player shows through (it lies beneath the screens).
                 !staged && 'bg-neutral-900')} data-testid="shorts-video-box">
+                  {/* The video's own picture (a video that failed: its cover), the same element whether the screen
+                      is shown or not (2026-11-28: no picture painted anew as the player takes the screen over, never
+                      black). Over the app's player (which lies beneath the screens) until the player has its first
+                      frame here; it then fades out. */}
+                  {card.video && (
+                    <div key="poster" aria-hidden className="pointer-events-none absolute inset-0" data-testid="shorts-poster"
+                      data-shown={posterShown || undefined} style={posterFade}>
+                      {failed
+                        ? card.cover
+                          ? <LazyImage fileId={card.cover} variant="w640" alt="" className="absolute inset-0 size-full object-cover" />
+                          : <CoverPlaceholder seed={card.publicationId} className="absolute inset-0 size-full" />
+                        : <VideoPoster player={card.video} cover={card.cover} seed={card.publicationId} />}
+                    </div>
+                  )}
                   {staged
                     ? <>
-                      {/* The video's own picture under the player until its first frame (the stage fades it in over
-                          it): never black as the screen changes (2026-11-28). */}
                       <VideoSlot id={`short:${card.publicationId}`} player={card.video!} mode="short"
                         publicationId={card.publicationId} className="absolute inset-0 size-full" title={title}
-                        fit={vertical ? 'cover' : undefined}
-                        cover={<VideoPoster player={card.video!} cover={card.cover} seed={card.publicationId} />} />
+                        fit={vertical ? 'cover' : undefined} />
                       {/* The screen takes the taps on the video, never the player's own controls (which would leave it
                           in its controls, paused or waiting): a tap pauses the short or plays it on. A swipe here
                           moves to the next screen. */}
@@ -343,13 +404,6 @@ export function ShortsViewer({ cards, startId, onClose, onDetails, menu, exposur
                         : <VideoPlayer player={card.video!} autoplay className="absolute inset-0 size-full" title={title} />
                       : (
                         <>
-                          {/* The video's own picture (2026-11-28: no cover of the sponsor's, which flashed as the video
-                              took over, and never black); only a video that failed shows its cover. */}
-                          {failed
-                            ? card.cover
-                              ? <LazyImage fileId={card.cover} variant="w640" alt="" className="absolute inset-0 size-full object-cover" />
-                              : <CoverPlaceholder seed={card.publicationId} className="absolute inset-0 size-full" />
-                            : card.video && <VideoPoster player={card.video} cover={card.cover} seed={card.publicationId} />}
                           {shown && card.video && failed && (
                             <span className="absolute inset-0 flex items-center justify-center">
                               <Button asChild size="lg" variant="secondary">

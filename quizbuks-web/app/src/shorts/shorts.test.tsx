@@ -1,6 +1,6 @@
 import { configureClient, session } from '@jabiz/client'
 import { expectAccessible } from '@jabiz/ui/testing'
-import { act, cleanup, render, screen, waitFor, within } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import App from '../App'
@@ -232,7 +232,7 @@ describe('the full-screen vertical mode (F-S10)', () => {
     // The app's player is not playing meanwhile: one player.
     await waitFor(() => expect(document.querySelectorAll('iframe')).toHaveLength(1))
     await user.click(within(viewer).getByTestId('shorts-next'))
-    expect(within(current()).queryByTestId('video-player')).toBeNull()
+    await waitFor(() => expect(within(current()).queryByTestId('video-player')).toBeNull())
     await waitFor(() => expect(document.querySelectorAll('iframe')).toHaveLength(1))
   })
 
@@ -374,11 +374,20 @@ describe('a vertical video fills the screen of the vertical mode (F-S10)', () =>
     expect(t2.querySelector('video')).toBeNull()
     expect(within(t2).queryByTestId('video-poster')).toBeNull()
     expect(within(t3).queryByTestId('video-poster')).toBeNull()
-    // Playing: the same picture under the player on the stage, which fades the player in once it has its frame.
-    expect(within(t1).queryByTestId('video-poster')).toBeNull()
+    // Playing: the same picture, the same element, stays over the app's player (beneath the screens) until the
+    // player has its first frame; nothing of it is copied onto the stage (2026-11-28: painted anew, it flickered).
+    const poster = within(t1).getByTestId('shorts-poster')
+    expect(within(poster).getByTestId('video-poster')).toHaveAttribute('src', 'https://i.ytimg.com/vi/dQw4w9WgXcQ/hqdefault.jpg')
+    expect(poster).toHaveAttribute('data-shown')
+    expect(poster.style.opacity).toBe('1')
     const stage = await screen.findByTestId('video-stage')
-    expect(within(stage).getByTestId('video-poster')).toHaveAttribute('src', 'https://i.ytimg.com/vi/dQw4w9WgXcQ/hqdefault.jpg')
-    expect(screen.getByTestId('video-stage-content').style.opacity).toBe('0')
+    expect(within(stage).queryByTestId('video-stage-cover')).toBeNull()
+    // Its first frame (YouTube says it plays): the poster fades out, a beat later (the frame is painted after).
+    const frame = stage.querySelector('iframe')!
+    fireEvent(window, new MessageEvent('message', { source: frame.contentWindow, data: JSON.stringify({ event: 'onStateChange', info: 1 }) }))
+    await waitFor(() => expect(poster).not.toHaveAttribute('data-shown'))
+    expect(poster.style.opacity).toBe('0')
+    expect(poster.style.transition).toContain('250ms')
   })
 
   it('keeps a landscape video across the middle, its foot under it', async () => {
