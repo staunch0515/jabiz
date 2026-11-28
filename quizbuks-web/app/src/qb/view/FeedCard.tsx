@@ -1,5 +1,5 @@
 import { cn } from '@jabiz/ui'
-import { Banknote, CircleCheck, Clock, Coins, Gift, Play, Share, Ticket, type LucideIcon } from 'lucide-react'
+import { Banknote, CircleCheck, Clock, Coins, Gift, Share, Ticket, type LucideIcon } from 'lucide-react'
 import type { ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 import { CoverPlaceholder } from '../Illustrations'
@@ -70,8 +70,8 @@ export function PostAgeText({ startAt, at, testId = 'feed-card-age', title }: { 
  * the left, 8 px from the rest; the first line, 20 px high and level with the picture's top, the sponsor's name, the
  * post's age and `note` (the taker's own progress), with `menu` (F-S8: blocking) floating at its right end; then the
  * name in bold and the beginning of the introduction; the picture 12 px under it at 16:9 with 16 px corners, its
- * video's length in a corner (a play mark when it has one, its player instead while `playing`: the home plays the
- * post in the middle of the screen, Q65); last a line of facts 12 px under it: what passing earns in the reward's
+ * video's length in a corner (a video's place has no cover nor play mark, and its player while `playing`: the home
+ * plays the post in the middle of the screen, Q65); last a line of facts 12 px under it: what passing earns in the reward's
  * colour with the way it is paid, how many answered, the time limit and `share`. Three places to tap (§9.3): the
  * sponsor's picture and name to their page; the name, the introduction and the picture to the quiz (`href`; the
  * picture goes to the video mode once Q113c makes it). `onOpen` is told of a tap that opens it. A preview (`href`
@@ -103,7 +103,14 @@ export function FeedCardView({ card, href, videoHref, playing = false, note, vid
   const MethodIcon = REWARD_METHOD_ICONS[card.rewardMethod]
   // F-S15: a video file that failed to play: the cover, and a link to the file.
   const failed = useVideoFailed(card.video)
-  const cover = card.cover
+  // 2026-11-28 (the requester): a post with a video shows no cover: a picture that is not the video, swapped for the
+  // video as it starts, flashed. Its place is the page's plain surface until the player has its first frame, which
+  // then fades in over it (the stage's `crossFade`): never black, never another picture. A post without a video, and a
+  // video file that failed, keep the cover.
+  const plays = !!card.video && !failed
+  const cover = plays
+    ? <span className="bg-muted absolute inset-0 size-full" data-testid="feed-card-video-surface" />
+    : card.cover
     ? <LazyImage fileId={card.cover} variant="w640" alt=""
       className="absolute inset-0 size-full transition-transform duration-300 group-hover:scale-105" />
     : <CoverPlaceholder seed={card.publicationId} className="absolute inset-0 size-full"
@@ -118,14 +125,8 @@ export function FeedCardView({ card, href, videoHref, playing = false, note, vid
   const picture = (
     <span className={cn('group', frame)}>
       {cover}
-      {card.video && !failed && (
-        <span className="absolute inset-0 flex items-center justify-center" data-testid="feed-card-video-mark">
-          <span className="bg-background/85 text-foreground flex size-12 items-center justify-center rounded-full shadow-md">
-            <Play aria-hidden className="ml-0.5 size-6" />
-          </span>
-          <span className="sr-only">{t('feed.hasVideo')}</span>
-        </span>
-      )}
+      {/* No play mark over the video's place (2026-11-28, the requester): said to assistive technology only. */}
+      {plays && <span className="sr-only" data-testid="feed-card-video-mark">{t('feed.hasVideo')}</span>}
       {length && (
         <span aria-hidden className="absolute bottom-2 left-2 rounded bg-black/75 px-1 text-[13px] leading-5 text-white tabular-nums"
           data-testid="feed-card-length">{length}</span>
@@ -153,7 +154,6 @@ export function FeedCardView({ card, href, videoHref, playing = false, note, vid
   const textClass = 'line-clamp-3 -mb-0.5 block py-0.5 text-[15px] leading-5 break-words'
   // Q99b: every site's video plays on the home the same way; YouTube's and Vimeo's in the app's one player (`video`),
   // the others in their own (their sound is their own button).
-  const plays = !!card.video && !failed
   const reward = card.kind === 'SURVEY' ? t('feed.surveyReward', { amount: formatKudos(card.maxReward) })
     : t('feed.upTo', { amount: formatKudos(card.maxReward) })
   return (

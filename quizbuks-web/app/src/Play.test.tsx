@@ -735,12 +735,19 @@ describe('the video to watch (Q19, Q63)', () => {
   it('plays a card\'s video muted while the card is in the middle of the screen, and its picture opens the video mode',
     async () => {
     const io = intersections()
-    const api = server({ feed: [{ ...CARD, video: PLAYER }] })
+    const api = server({ feed: [{ ...CARD, video: PLAYER, cover: 'file-1' }] })
     render(<App />)
     const card = await screen.findByTestId('feed-card')
     expect(card).toHaveAttribute('data-video', 'true')
-    // Out of the middle: the picture with a play mark, no player.
+    // Out of the middle: no player, and no cover nor play mark over the video's place (2026-11-28: a cover flashed as
+    // the video took over): the page's plain surface, the video said to assistive technology only.
     expect(within(card).getByTestId('feed-card-video-mark')).toHaveTextContent('With a video')
+    expect(within(card).getByTestId('feed-card-video-mark')).toHaveClass('sr-only')
+    expect(within(card).getByTestId('feed-card-video-surface')).toHaveClass('bg-muted')
+    expect(within(card).queryByTestId('feed-card-placeholder')).toBeNull()
+    // The post has a cover, which a post with a video does not show.
+    expect(card.querySelector('img')).toBeNull()
+    expect(card.querySelector('svg.lucide-play')).toBeNull()
     expect(document.querySelector('iframe')).toBeNull()
     io.fire(card, true, MIDDLE)
     // Q65: the app's one player, laid over the card's place; nothing in it is for touching.
@@ -751,8 +758,9 @@ describe('the video to watch (Q19, Q63)', () => {
     expect(screen.getByTestId('video-open')).toHaveAccessibleName('Video: Capitals week')
     expect(within(card).getByTestId('video-slot')).toHaveAttribute('data-mode', 'card')
     expect(card).toHaveAttribute('data-playing', 'true')
-    // The cover stays under the player until the player has its first frame; the player is transparent until then.
-    expect(within(card).getByTestId('feed-card-playing')).toContainElement(within(card).getByTestId('feed-card-placeholder'))
+    // The plain surface stays under the player until the player has its first frame (never black): the player is
+    // transparent until then, and fades in over it.
+    expect(within(card).getByTestId('feed-card-playing')).toContainElement(within(card).getByTestId('feed-card-video-surface'))
     expect(screen.getByTestId('video-stage-content').style.opacity).toBe('0')
     // Q66: the reward is in the line of facts, the same whether the video plays or not.
     expect(within(card).getByTestId('feed-card-reward')).toHaveTextContent('Up to 100 Kudos')

@@ -339,9 +339,11 @@ export function ShortsViewer({ cards, startId, onClose, onDetails, menu, exposur
                         : <VideoPlayer player={card.video!} autoplay className="absolute inset-0 size-full" title={title} />
                       : (
                         <>
-                          {card.cover
+                          {/* No cover over a video's place (it flashed as the video took over, 2026-11-28): the mode's dark
+                              place until the player comes; only a video that failed shows its cover. */}
+                          {failed && (card.cover
                             ? <LazyImage fileId={card.cover} variant="w640" alt="" className="absolute inset-0 size-full object-cover" />
-                            : <CoverPlaceholder seed={card.publicationId} className="absolute inset-0 size-full" />}
+                            : <CoverPlaceholder seed={card.publicationId} className="absolute inset-0 size-full" />)}
                           {shown && card.video && failed && (
                             <span className="absolute inset-0 flex items-center justify-center">
                               <Button asChild size="lg" variant="secondary">
