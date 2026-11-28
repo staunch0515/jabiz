@@ -392,19 +392,37 @@ const HAVE_CURRENT_DATA = 2
 const MEDIA_EVENTS = ['loadeddata', 'playing', 'durationchange', 'loadedmetadata', 'timeupdate', 'play', 'pause', 'ended',
   'volumechange']
 
-/** F-S15: the stage's `<video>` comes or goes: a new player, nothing heard yet, its events listened to. */
+/** F-S15: the stage's `<video>` comes or goes: its events listened to, and its file taken as a new player. */
 function attachMedia(element: HTMLVideoElement | null) {
   if (element === media) return
   if (media) MEDIA_EVENTS.forEach((type) => media!.removeEventListener(type, mediaEvent))
   media = element
   if (!element) return
   MEDIA_EVENTS.forEach((type) => element.addEventListener(type, mediaEvent))
+  mediaPlayerNow(element)
+}
+
+/**
+ * A file is the stage's player now (the `<video>` just come, or the same one given the next file): nothing heard yet,
+ * its first frame awaited, and the sound as asked for. 2026-11-28 (the requester: the sound on by itself in every mode
+ * but the home): the stage keeps one `<video>` from file to file, its address changed, rather than a new element for
+ * each. A browser grants the sound to the element the viewer's tap turned it on in (iOS's Safari: never to a new one
+ * without a tap), so the vertical mode's next video, given the same element, plays with the sound at once.
+ */
+function mediaPlayerNow(element: HTMLVideoElement) {
   heard = false
   playerPlaying = false
   // A file already holding its frame (loaded before the stage listened) says so now.
   if (element.readyState >= HAVE_CURRENT_DATA) framedNow()
   else awaitFrame()
-  if (state.soundAsked) soundOn(false)
+  if (state.soundAsked) {
+    soundOn(false)
+    // The element may already be unmuted (the file before had the sound): no `volumechange` comes to say so.
+    if (!element.muted && element.volume > 0 && !state.soundOn) set({ soundOn: true })
+  } else if (!element.muted) {
+    // A new player not asked for with the sound (a home card's) starts muted, as a new element would.
+    element.muted = true
+  }
   startCounting()
 }
 
@@ -594,7 +612,22 @@ export function coverBox(width: number, height: number, aspect: number): { width
   return { width: coverWidth, height: coverHeight, left: (width - coverWidth) / 2, top: (height - coverHeight) / 2 }
 }
 
-interface Placement { top: number; left: number; width: number; height: number; clip: Clip | null }
+/**
+ * The rounding of a slot's place: its own, or else that of the frame it fills (a home card's, `rounded-[16px]` with its
+ * border), within the frame's border. 0 for a square place (the start page, the vertical mode's screens).
+ */
+export function cornerOf(element: HTMLElement): number {
+  const own = parseFloat(getComputedStyle(element).borderTopLeftRadius) || 0
+  if (own > 0) return own
+  const frame = element.parentElement
+  if (!frame) return 0
+  const style = getComputedStyle(frame)
+  const outer = parseFloat(style.borderTopLeftRadius) || 0
+  const border = parseFloat(style.borderTopWidth) || 0
+  return Math.max(0, outer - border)
+}
+
+interface Placement { top: number; left: number; width: number; height: number; clip: Clip | null; radius: number }
 
 /** What of the slot's place lies outside its area, from each side; null when the slot has no area. */
 function clipOf(element: HTMLElement, box: DOMRect): Clip | null {
@@ -626,20 +659,32 @@ export function VideoStage() {
     media.current = element
     attachMedia(element)
   }, [])
+  // The same `<video>` given the next file (`mediaPlayerNow`); a new element says so through `attach`.
+  const mediaPlayer = useRef<string | null>(null)
+  useLayoutEffect(() => {
+    const element = media.current
+    const file = stage.player && videoKind(stage.player) === 'file' ? stage.player : null
+    const before = mediaPlayer.current
+    mediaPlayer.current = file
+    // It plays the new file by its `autoplay`; with the sound asked for, `soundOn` plays it.
+    if (element && file && before && before !== file) mediaPlayerNow(element)
+  }, [stage.player])
   useEffect(() => {
     window.addEventListener('message', listen)
     return () => window.removeEventListener('message', listen)
   }, [])
   useEffect(() => {
     if (!slot) return
+    // The corners of the place: the stage rounds them as the place does (kept while a card's player fades back).
+    const radius = cornerOf(slot.element)
     let running = true
     const place = () => {
       if (!running) return
       const box = slot.element.getBoundingClientRect()
       const next: Placement = { top: box.top + window.scrollY, left: box.left + window.scrollX, width: box.width,
-        height: box.height, clip: clipOf(slot.element, box) }
+        height: box.height, clip: clipOf(slot.element, box), radius }
       setRect((current) => (current && current.top === next.top && current.left === next.left
-        && current.width === next.width && current.height === next.height && sameClip(current.clip, next.clip)
+        && current.radius === next.radius && current.width === next.width && current.height === next.height && sameClip(current.clip, next.clip)
         ? current : next))
       requestAnimationFrame(place)
     }
@@ -649,6 +694,7 @@ export function VideoStage() {
   if (!stage.player || typeof document === 'undefined') return null
   // Nothing of the slot's place within its area: the player is not shown (nor touched).
   const clip = rect?.clip
+  const radius = rect?.radius ?? 0
   const hidden = !!clip && !!rect && rect.height > 0 && (clip.top + clip.bottom >= rect.height
     || clip.left + clip.right >= rect.width)
   // A card that stopped playing keeps the stage over its place while the player fades back to the cover.
@@ -671,7 +717,11 @@ export function VideoStage() {
         // The player is kept to the slot's place.
         overflow: 'hidden',
         // In full screen the player fills the screen: nothing of the home's place is cut off it.
-        clipPath: clip && !fullscreen ? `inset(${clip.top}px ${clip.right}px ${clip.bottom}px ${clip.left}px)` : undefined,
+        clipPath: clip && !fullscreen
+          ? `inset(${clip.top}px ${clip.right}px ${clip.bottom}px ${clip.left}px${radius ? ` round ${radius}px` : ''})`
+          : undefined,
+        // 2026-11-28 (the requester): a home card's video has the rounded corners of its cover, playing or not.
+        borderRadius: radius && !fullscreen ? radius : undefined,
         // F-S10: in the vertical mode, between its black backdrop (z-index 40) and its screens (50), whose overlays (the
         // way back, the name, the buttons) lie over the video; the screens take the taps (`togglePlay`).
         zIndex: slot?.mode === 'short' ? SHORT_STAGE_Z : 5 }} data-fit={slot?.fit}>
@@ -683,9 +733,9 @@ export function VideoStage() {
       <div className="absolute inset-0" data-testid="video-stage-content" style={fade?.player}>
       {videoKind(stage.player) === 'file' ? (
         // F-S15: a video file, started muted; its controls on the start page only (the vertical mode plays it as a
-        // short: its screen takes the taps, `togglePlay`).
+        // short: its screen takes the taps, `togglePlay`). One element from file to file, its address changed
+        // (`mediaPlayerNow`): the sound the viewer's tap turned on stays its own.
         <video
-          key={stage.player}
           ref={attach}
           src={stage.player}
           title={slot?.title ?? ''}
