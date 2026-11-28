@@ -23,7 +23,6 @@ import { Link, useLocation } from '../qb/router'
 import { FrameLink } from '../frame/FrameLink'
 import { prefersStillVideo, trackable } from '../qb/video'
 import { VideoPlayer } from '../qb/view/VideoPlayer'
-import { SponsorVisit } from './SponsorVisit'
 import { VideoSlot } from '../video/stage'
 import { StartPageExposure } from '../exposure/ExposureWatch'
 import { queueReport } from '../exposure/reporter'
@@ -373,14 +372,11 @@ export function PublicationPage({ publicationId, country }: { publicationId: str
   const extra: ContentTabs['extra'] = {
     // At the end of the reward, under the rules (Q113b-2: the tab "Reward" of before).
     reward: <ReferralPanel publication={p} />,
-    materials: productList.length > 0 || p.sponsorHandle ? (
-      <>
-        <ProductCards products={productList}
-          title={tView('products.title')} testId="publication-products" onOpen={countProductClick} />
-        {/* Q64: the sponsor's own page, with all their products, from the start page as from the result. */}
-        <SponsorVisit handle={p.sponsorHandle} sponsor={p.sponsorCompany ?? p.sponsorName} avatar={p.sponsorAvatar}
-          products={productList.length > 0} />
-      </>) : undefined,
+    // 2026-11-28 (the requester): no block for the sponsor's page under the materials: the sponsor's line at the top
+    // already leads there (the result page keeps it, `SponsorVisit`).
+    materials: productList.length > 0 ? (
+      <ProductCards products={productList}
+        title={tView('products.title')} testId="publication-products" onOpen={countProductClick} />) : undefined,
     rules: (
       // Q49a: the official rules of a quiz with a reward (Apple 5.3, Google Play's contest policy), and reporting it
       // (Apple 1.2).

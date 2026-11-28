@@ -1,11 +1,26 @@
 import { expectAccessible as expectAccessibleWith, setAppearance } from '@jabiz/ui/testing/playwright'
 import { test as base, expect, type APIRequestContext, type Page } from '@playwright/test'
 
+/** One grey pixel: YouTube's picture of any video in the tests (`VIDEO_PICTURE`). */
+const GREY_PIXEL = Buffer.from(
+  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGNoaGgAAAMEAYFL09IQAAAAAElFTkSuQmCC', 'base64')
+
+/** YouTube's pictures of videos (the app's `videoPoster`), answered by the tests: no test reaches YouTube. */
+export const VIDEO_PICTURE = 'https://i.ytimg.com/**'
+
 /**
  * Playwright's test, failing any test during which a page reported a Content-Security-Policy violation: the server
- * sends each SPA's policy (docs/design/17-apps-and-branches.md section 3.2) and the pages must work within it.
+ * sends each SPA's policy (docs/design/17-apps-and-branches.md section 3.2) and the pages must work within it. YouTube's
+ * pictures of videos are answered with one grey pixel (the same every run, for the pixel baselines too).
  */
-export const test = base.extend<{ contentSecurityPolicy: void }>({
+export const test = base.extend<{ contentSecurityPolicy: void; videoPictures: void }>({
+  videoPictures: [
+    async ({ page }, use) => {
+      await page.route(VIDEO_PICTURE, (route) => route.fulfill({ contentType: 'image/png', body: GREY_PIXEL }))
+      await use()
+    },
+    { auto: true },
+  ],
   contentSecurityPolicy: [
     async ({ page }, use) => {
       const violations: string[] = []

@@ -219,9 +219,9 @@ test('a vertical video fills the screen of the vertical mode and plays at once, 
     return !!player && [player.x - onHome.x - 1, player.y - onHome.y - 1, player.width - onHome.width + 2,
       player.height - onHome.height + 2].every((off) => Math.abs(off) <= 1)
   }, { message: 'the player on the home is the cover\'s box' }).toBe(true)
-  // No cover and no play mark: the page's surface until the player's first frame, then the video (never black).
+  // No cover and no play mark: the video's own first frame until the player's, then the video (never black).
   expect(await post.locator('img').count()).toBe(0)
-  await expect(post.getByTestId('feed-card-video-surface')).toBeAttached()
+  await expect(post.getByTestId('video-poster-frame')).toHaveAttribute('src', `${VIDEO_FILE}#t=0.1`)
   await expect.poll(() => page.getByTestId('video-stage-content').evaluate((element) => getComputedStyle(element).opacity))
     .toBe('1')
   // A tap maximizes this video: the full-screen video mode on it.
@@ -267,9 +267,16 @@ test('a vertical video fills the screen of the vertical mode and plays at once, 
 
   // The Shorts link: YouTube's frame given the vertical shape over all of the screen (cut at the sides on a phone).
   await page.setViewportSize({ width: 390, height: 844 })
+  // The switch is never black: the next screen shows YouTube's picture of the video, and so does the stage under its
+  // player, which stays transparent until it has its first frame (YouTube's player is a blank page here: it never does).
+  await expect(current.getByTestId('video-poster')).toHaveCount(0)
   await viewer.getByTestId('shorts-next').click()
   await expect(current).toHaveAttribute('data-publication', short)
   await expect(current).toBeInViewport({ ratio: 0.9 })
+  await expect(stage.getByTestId('video-stage-cover').getByTestId('video-poster'))
+    .toHaveAttribute('src', 'https://i.ytimg.com/vi/cccccccccc1/hqdefault.jpg')
+  // Waited for: the last video's player may still be fading out at this moment (the fade takes 450 ms).
+  await expect(stage.getByTestId('video-stage-content')).toHaveCSS('opacity', '0')
   await filled(390, 844)
   const frame = stage.locator('iframe')
   await expect(frame).toHaveAttribute('src', /autoplay=1&mute=1/)
