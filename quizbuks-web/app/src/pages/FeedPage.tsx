@@ -299,14 +299,21 @@ function useMoreNearTheEnd(sentinel: HTMLElement | null, more: () => void) {
 }
 
 /**
- * The playing card's video (Q65): the app's one player, which nothing on the card touches until a tap plays it in
- * place with its sound and its own controls (the stage's `engage`; Q113 §9.3, as x.com).
+ * The playing card's video (Q65): the app's one player, which nothing on the card touches; a tap on it opens the
+ * start page with the sound on, the same player playing on.
  */
-function CardVideo({ card, player, cover }: { card: FeedCard; player: string; cover: ReactNode }) {
+function CardVideo({ card, player, cover, to }: { card: FeedCard; player: string; cover: ReactNode
+  /** Q113c: where a tap on the playing video leads (the video mode from this post), with the sound on. */
+  to: string }) {
   const { t } = useTranslation(QBVIEW)
+  const open = useCallback(() => {
+    openWithSound(player)
+    navigate(to)
+  }, [to, player])
   // No background of its own: the cover comes in the stage's strip beside the player (see `video/stage.tsx`).
-  return <VideoSlot id={`card:${card.publicationId}`} player={player} mode="card"
-    publicationId={card.publicationId} className="relative aspect-video w-full" cover={cover}
+  return <VideoSlot id={`card:${card.publicationId}`} player={player} mode="card" onOpen={open}
+    // All of the card's video box (16:9, or 9:16 for a vertical video): the player is the cover's size.
+    publicationId={card.publicationId} className="absolute inset-0 size-full" cover={cover}
     title={t('feed.videoTitle', { name: card.name })} />
 }
 
@@ -563,28 +570,8 @@ export function FeedPage({ name, country, base = HOME_PATH }: {
   const [list, setList] = useState<HTMLUListElement | null>(null)
   const [end, setEnd] = useState<HTMLDivElement | null>(null)
   const centred = useCentredVideo(list, cards.length + shelves.length)
-  // Q113 §9.3 (as x.com): a video tapped plays in place, until another comes to the middle of the screen.
-  const [tapped, setTapped] = useState<{ id: string; centred: string | null } | null>(null)
-  if (tapped && tapped.centred !== centred && centred !== null && centred !== tapped.id) setTapped(null)
-  const play = useCallback((card: FeedCard) => {
-    // Its sound is asked for within the tap: the new player turns it on as it comes, the browser permitting (Q66).
-    if (trackable(card.video)) openWithSound(card.video!)
-    setTapped({ id: card.publicationId, centred })
-  }, [centred])
-  // As x.com: the video tapped stops once it has left the screen (none in the middle then plays it on).
-  const tappedId = tapped?.id ?? null
-  useEffect(() => {
-    if (!list || !tappedId || typeof IntersectionObserver === 'undefined') return
-    const card = list.querySelector(`[data-publication="${CSS.escape(tappedId)}"]`)
-    if (!card) return
-    const observer = new IntersectionObserver((entries) => {
-      if (entries.some((entry) => !entry.isIntersecting)) setTapped(null)
-    })
-    observer.observe(card)
-    return () => observer.disconnect()
-  }, [list, tappedId])
   // Q65: one player: none of the home's while a video mode is open over it.
-  const playing = viewing || viewingVideos ? null : tapped?.id ?? centred
+  const playing = viewing || viewingVideos ? null : centred
   useMoreNearTheEnd(end, () => {
     if (feed.hasNextPage && !feed.isFetchingNextPage) void feed.fetchNextPage()
   })
@@ -690,9 +677,9 @@ export function FeedPage({ name, country, base = HOME_PATH }: {
                     playing={playing === card.publicationId} note={<CardProgressNote card={card} at={at} />}
                     menu={<BlockMenu item={card} className="text-muted-foreground hover:text-primary rounded-full" />} at={at}
                     share={<SharePostButton publicationId={card.publicationId} name={card.name} />}
-                    video={trackable(card.video) ? (cover) => <CardVideo card={card} player={card.video!} cover={cover} />
+                    video={trackable(card.video) ? (cover) => <CardVideo card={card} player={card.video!} cover={cover}
+                      to={videoPath(q, card.publicationId, base)} />
                       : undefined}
-                    onPlay={() => play(card)}
                     onOpen={trackable(card.video) ? () => openWithSound(card.video!) : undefined} />
                   {/* F-S10: a shelf of short videos after this card (the parameters' places). */}
                   {shelf && <ShortsShelf items={shelf.items} hrefOf={(c) => shortsPath(q, c.publicationId, base)}

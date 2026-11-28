@@ -222,7 +222,7 @@ test('a provider shares a video, its operator reviews it once, another Sponsor u
     await expect.poll(async () => (await myShare(request, provider.token, assetId))?.usesRunning,
       { message: 'the provider sees the use' }).toBe(1)
 
-    // 5. The App: the home card plays the shared video; the start page (by the video mode) plays the same player on.
+    // 5. The App: the home card plays the shared video; a tap opens the start page, where the same player plays on.
     const me = await taker(request, 'Mio')
     await untilLive(request, me.token, publicationId)
     await page.setViewportSize({ width: 390, height: 844 })
@@ -235,9 +235,8 @@ test('a provider shares a video, its operator reviews it once, another Sponsor u
     const stage = page.getByTestId('video-stage')
     await expect(stage.locator('iframe')).toHaveAttribute('src', new RegExp(`^${player}\\?autoplay=1&mute=1`))
     await expectAccessible(page, 'app home with a shared video')
-    // Q113 §9.3 (as x.com): a tap plays it in place; the key at its top right opens the video mode, whose
-    // "Details" goes on to the start page, the same player with it.
-    await page.getByTestId('feed-card-video-mode').click()
+    await page.getByTestId('video-open').click()
+    // Q113c: the tap opens the video mode; its "Details" goes on to the start page, the same player with it.
     await page.getByTestId('shorts-viewer').locator('[data-current]').getByTestId('shorts-details').click()
     await expect(page).toHaveURL(new RegExp(`/taker/p/${publicationId}$`))
     await expect(page.getByTestId('detail-hero').getByTestId('video-slot')).toHaveAttribute('data-mode', 'page')

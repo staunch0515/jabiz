@@ -388,6 +388,8 @@ const en = {
     watchLeft: '{{count}} s to watch',
     watchToEnd: 'Watch it to the end',
     soundOn: 'Turn the sound on',
+    pause: 'Pause',
+    resume: 'Play',
     tapForSound: 'Tap the player to turn its sound on.',
   },
   feed: {
@@ -1082,6 +1084,8 @@ const zh: typeof en = {
     watchLeft: '还差 {{count}} 秒',
     watchToEnd: '看完即可答题',
     soundOn: '开声音',
+    pause: '暂停',
+    resume: '继续播放',
     tapForSound: '点一下播放器即可开声音。',
   },
   feed: {
@@ -1776,6 +1780,8 @@ const ja: typeof en = {
     watchLeft: 'あと {{count}} 秒',
     watchToEnd: '最後まで見ると回答できます',
     soundOn: '音声をオンにする',
+    pause: '一時停止',
+    resume: '再生',
     tapForSound: 'プレーヤーをタップすると音声がオンになります。',
   },
   feed: {

@@ -95,16 +95,9 @@ test('a video file plays muted on the home and is the video to watch before the 
   await expectAccessible(page, 'app home video file')
   // It really plays: its time goes on.
   await expect.poll(() => video.evaluate((element: HTMLVideoElement) => element.currentTime)).toBeGreaterThan(0.5)
-  // Q113 §9.3 (as x.com): a tap plays it in place as a player: the home stays, its sound on, its own controls, playing.
+  // A tap opens the start page with the same player (its sound on); the start waits for the watching it reports.
   await page.getByTestId('video-open').click()
-  await expect(page.getByTestId('video-open')).toHaveCount(0)
-  await expect(page).not.toHaveURL(/[?&]video=/)
-  await expect.poll(() => video.evaluate((element: HTMLVideoElement) => element.controls && !element.muted
-    && !element.paused)).toBe(true)
-  // The start page takes the same player over (its sound on); the start waits for the watching it reports.
-  // Q113 §9.3 (as x.com): a tap plays it in place; the key at its top right opens the video mode, whose
-  // "Details" goes on to the start page, the same player with it.
-  await page.getByTestId('feed-card-video-mode').click()
+  // Q113c: the tap opens the video mode; its "Details" goes on to the start page, the same player with it.
   await page.getByTestId('shorts-viewer').locator('[data-current]').getByTestId('shorts-details').click()
   await expect(page).toHaveURL(/\/p\/[^/]+$/)
   await expect(page.getByTestId('detail-hero').getByTestId('video-slot')).toHaveAttribute('data-mode', 'page')
