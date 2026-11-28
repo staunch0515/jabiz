@@ -44,7 +44,7 @@ async function shortsPublication(request: APIRequestContext, sponsor: { token: s
   return publicationId
 }
 
-test('a Shorts publication is in the shelf; the vertical mode swipes on and leads to answering', async ({ page, request }) => {
+test('the home has no shelf of short videos; the vertical mode swipes on and leads to answering', async ({ page, request }) => {
   test.setTimeout(180_000)
   // No YouTube here: the player is a blank page.
   await page.route('https://www.youtube-nocookie.com/**', (route) => route.fulfill({ contentType: 'text/html',
@@ -61,13 +61,12 @@ test('a Shorts publication is in the shelf; the vertical mode swipes on and lead
   await signIn(page, '/taker/', me.email)
   await expect(page.getByTestId('home')).toBeVisible()
   await searchHome(page, base)
-  const shelf = page.getByTestId('shorts-shelf')
-  await expect(shelf).toHaveCount(1)
-  await expect(shelf.getByTestId('shorts-card')).toHaveCount(2)
-  await expectAccessible(page, 'app home with a shelf of short videos')
-
-  // The newest first, as the home: the second one, then the first.
-  await shelf.getByTestId('shorts-card-open').first().click()
+  // 2026-11-28 (the requester, x.com's way): no shelf of short videos; a post's video opens the mode. An old address
+  // of the vertical mode opens it on the same publication.
+  await expect(page.getByTestId('feed-card')).toHaveCount(2)
+  await expect(page.getByTestId('shorts-shelf')).toHaveCount(0)
+  await page.goto(`/taker/?q=${encodeURIComponent(base)}&shorts=${second}`)
+  await expect(page).toHaveURL(new RegExp(`[?&]video=${second}`))
   const viewer = page.getByTestId('shorts-viewer')
   await expect(viewer).toBeVisible()
   await expect(viewer.getByTestId('shorts-position')).toHaveText(/1/)
@@ -128,8 +127,8 @@ test('a Shorts publication is in the shelf; the vertical mode swipes on and lead
   // Back to the home, where it was; then again, and on to answering.
   await page.keyboard.press('Escape')
   await expect(viewer).toHaveCount(0)
-  await expect(shelf).toBeVisible()
-  await shelf.getByTestId('shorts-card-open').last().click()
+  await expect(page.getByTestId('home')).toBeVisible()
+  await page.goto(`/taker/?q=${encodeURIComponent(base)}&video=${first}`)
   await page.getByTestId('shorts-viewer').locator('[data-current]').getByTestId('shorts-details').click()
   await expect(page).toHaveURL(new RegExp(`/taker/p/${first}$`))
   await expect(page.getByTestId('detail-start')).toBeVisible()
@@ -276,10 +275,10 @@ test('a vertical video fills the screen of the vertical mode and plays at once, 
   await viewer.getByTestId('shorts-next').click()
   await expect(current).toHaveAttribute('data-publication', short)
   await expect(current).toBeInViewport({ ratio: 0.9 })
-  await expect(stage.getByTestId('video-stage-cover').getByTestId('video-poster'))
+  // The screen's own poster stays over the player (beneath the screens) until the player has its first frame.
+  await expect(current.getByTestId('shorts-poster').getByTestId('video-poster'))
     .toHaveAttribute('src', 'https://i.ytimg.com/vi/cccccccccc1/hqdefault.jpg')
-  // Waited for: the last video's player may still be fading out at this moment (the fade takes 450 ms).
-  await expect(stage.getByTestId('video-stage-content')).toHaveCSS('opacity', '0')
+  await expect(current.getByTestId('shorts-poster')).toHaveCSS('opacity', '1')
   await filled(390, 844)
   const frame = stage.locator('iframe')
   await expect(frame).toHaveAttribute('src', /autoplay=1&mute=1/)
@@ -333,4 +332,109 @@ test('the video mode keeps the sound on from video to video, with no button for 
   await expect.poll(() => video.evaluate((element: HTMLVideoElement) => !element.muted && !element.paused
     && element.currentTime > 0.5), { message: 'the next video plays with the sound' }).toBe(true)
   await expect(viewer.getByTestId('shorts-sound')).toHaveCount(0)
+})
+
+/**
+ * What each frame of the page shows while the video mode moves on (2026-11-28, the requester: two flickers before the
+ * next video shows), sampled at every animation frame: per screen, how much of it is in view and how much of its
+ * poster shows; the stage's player layer, its opacity and whether its video has a frame.
+ */
+interface FlowFrame {
+  screens: { publication: string; inView: number; poster: number }[]
+  /** `covered`: how much of the poster of the screen the player is under shows over it. */
+  player: { opacity: number; framed: boolean; top: number; covered: number } | null
+}
+
+async function sampleFrames(page: import('@playwright/test').Page) {
+  await page.evaluate(() => {
+    const frames: unknown[] = []
+    ;(window as unknown as { flowFrames: unknown[] }).flowFrames = frames
+    const opacityOf = (element: Element | null, until: Element) => {
+      let value = 1
+      for (let at = element; at && at !== until.parentElement; at = at.parentElement) {
+        value *= Number(getComputedStyle(at).opacity)
+      }
+      return value
+    }
+    const sample = () => {
+      const height = window.innerHeight
+      const screens = [...document.querySelectorAll('[data-testid="shorts-screen"]')].map((screen) => {
+        const box = screen.getBoundingClientRect()
+        const inView = Math.max(0, Math.min(box.bottom, height) - Math.max(box.top, 0)) / height
+        const videoBox = screen.querySelector('[data-testid="shorts-video-box"]')!
+        const poster = videoBox.querySelector('[data-testid="shorts-poster"]')
+          ?? videoBox.querySelector('[data-testid="feed-card-placeholder"], [data-testid="video-poster"], img')
+        return { publication: (screen as HTMLElement).dataset.publication!, inView,
+          poster: poster ? opacityOf(poster, videoBox) : 0 }
+      })
+      const content = document.querySelector('[data-testid="video-stage-content"]')
+      const stage = document.querySelector<HTMLElement>('[data-testid="video-stage"]')
+      const video = document.querySelector<HTMLVideoElement>('[data-testid="video-stage-file"]')
+      const under = document.querySelector('[data-testid="video-slot"]')?.closest('[data-testid="shorts-screen"]')
+      const poster = under?.querySelector('[data-testid="shorts-poster"]')
+      const player = content && stage && getComputedStyle(stage).visibility === 'visible'
+        ? { opacity: opacityOf(content, stage), framed: !!video && video.readyState >= 2,
+          top: stage.getBoundingClientRect().top, covered: poster ? Number(getComputedStyle(poster).opacity) : 0 }
+        : null
+      frames.push({ screens, player })
+      requestAnimationFrame(sample)
+    }
+    requestAnimationFrame(sample)
+  })
+}
+
+test('the video mode moves on to the next video without a flicker: no blank player, no poster cut in (2026-11-28)',
+  async ({ page, request }) => {
+  test.setTimeout(180_000)
+  await videoServer(page)
+  const sponsor = await fundedSponsor(request)
+  const base = unique('Smooth run ')
+  const later = await shortsPublication(request, sponsor, `${base} two`, SECOND_VIDEO_FILE, true)
+  const first = await shortsPublication(request, sponsor, `${base} one`, VIDEO_FILE, true)
+  const me = await taker(request, 'Smooth')
+  await untilLive(request, me.token, later)
+  await untilLive(request, me.token, first)
+
+  await page.setViewportSize({ width: 390, height: 844 })
+  await signIn(page, '/taker/', me.email)
+  await expect(page.getByTestId('home')).toBeVisible()
+  await searchHome(page, base)
+  await expect(page.getByTestId('feed-card')).toHaveCount(2)
+  const post = page.getByTestId('feed-card').filter({ hasText: `${base} one` })
+  await post.evaluate((element) => element.scrollIntoView({ block: 'center' }))
+  await page.getByTestId('video-open').click()
+  const viewer = page.getByTestId('shorts-viewer')
+  const current = viewer.locator('[data-current]')
+  await expect(current).toHaveAttribute('data-publication', first)
+  const video = page.getByTestId('video-stage-file')
+  await expect.poll(() => video.evaluate((element: HTMLVideoElement) => !element.paused && element.currentTime > 0.5))
+    .toBe(true)
+
+  // A swipe up, as a finger's: the next screen scrolls in, and its video plays.
+  await sampleFrames(page)
+  await current.getByTestId('shorts-name').hover()
+  // A finger's swipe (Chromium's own touch gesture): the screens travel, and snap to the next one.
+  const box = (await current.getByTestId('shorts-name').boundingBox())!
+  const cdp = await page.context().newCDPSession(page)
+  await cdp.send('Input.synthesizeScrollGesture', { x: Math.round(box.x + box.width / 2), y: Math.round(box.y),
+    yDistance: -500, speed: 1200, gestureSourceType: 'touch' })
+  await expect(current).toHaveAttribute('data-publication', later)
+  await expect(video).toHaveAttribute('src', SECOND_VIDEO_FILE)
+  await expect.poll(() => video.evaluate((element: HTMLVideoElement) => !element.paused && element.currentTime > 0.5))
+    .toBe(true)
+  const frames = await page.evaluate(() => (window as unknown as { flowFrames: FlowFrame[] }).flowFrames)
+  expect(frames.length).toBeGreaterThan(10)
+  // 1. The player never shows without its video's frame (black, or the stage's empty place): what shows until it has
+  //    one is the poster.
+  const blank = frames.filter((frame) => frame.player && frame.player.opacity > 0.05 && !frame.player.framed
+    && frame.player.covered < 0.95)
+  expect(blank.length, `frames where the player shows no picture: ${JSON.stringify(blank.slice(0, 3))}`).toBe(0)
+  // 2. The screen moving out keeps its video while it is in view: its poster does not cut in over it as it goes.
+  const cut = frames.filter((frame, at) => {
+    const before = frames[at - 1]?.screens.find((screen) => screen.publication === first)
+    const now = frame.screens.find((screen) => screen.publication === first)
+    return !!before && !!now && now.inView > 0.05 && before.poster < 0.5 && now.poster >= 0.5
+  })
+  expect(cut.length, `frames where the screen going out turns to its poster in view: ${JSON.stringify(cut.slice(0, 3))}`)
+    .toBe(0)
 })

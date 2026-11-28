@@ -246,6 +246,7 @@ beforeEach(() => {
   session.store('access', 'refresh')
   forgetAttempts()
   forgetRedeem()
+  window.localStorage.removeItem('qb.home.notices.seen')
   window.history.replaceState(null, '', '/')
 })
 afterEach(() => {
@@ -408,15 +409,43 @@ describe('the ways a reward is paid (Q22)', () => {
     window.localStorage.removeItem('qb.feed.method')
   })
 
-  it('lists the cash rewards waiting for the Taker on the home, leading to each result', async () => {
+  it('says a cash reward waits in a pill under the header, which leads to its result and then goes (x.com\'s way)', async () => {
     server({ cashRewards: [{ cashRewardId: 'c1', attemptId: ATTEMPT, code: 'C-ABCD1234', publicationId: PUB,
       publicationName: 'Capitals week', sponsorCompany: 'Capitals Inc', amount: 100, status: 'MARKED_PAID',
       dueAt: '2026-10-20T00:00:00Z', markedPaidAt: '2026-10-20T01:00:00Z', confirmBy: '2026-10-27T01:00:00Z' }] })
     render(<App />)
     const notice = await screen.findByTestId('home-cash')
     expect(notice).toHaveTextContent('A cash reward needs your attention')
-    expect(within(notice).getByRole('link')).toHaveAttribute('href', `/result/${ATTEMPT}`)
-    expect(within(notice).getByTestId('home-cash-item')).toHaveTextContent('C-ABCD1234')
+    // Not a band at the top of the page: a pill that takes no room of it.
+    expect(screen.getByTestId('home-cash-place')).toHaveClass('sticky', 'h-0')
+    await userEvent.click(notice)
+    await waitFor(() => expect(window.location.pathname).toBe(`/result/${ATTEMPT}`))
+    // Seen: not again on the home, until something new or changed waits.
+    cleanup()
+    window.history.replaceState(null, '', '/')
+    server({ cashRewards: [{ cashRewardId: 'c1', attemptId: ATTEMPT, code: 'C-ABCD1234', publicationId: PUB,
+      publicationName: 'Capitals week', sponsorCompany: 'Capitals Inc', amount: 100, status: 'MARKED_PAID',
+      dueAt: '2026-10-20T00:00:00Z', markedPaidAt: '2026-10-20T01:00:00Z', confirmBy: '2026-10-27T01:00:00Z' },
+    { cashRewardId: 'c2', attemptId: 'a-2', code: 'C-EFGH5678', publicationId: PUB, publicationName: 'Capitals week',
+      sponsorCompany: 'Capitals Inc', amount: 50, status: 'DUE', dueAt: '2026-10-20T00:00:00Z', markedPaidAt: null,
+      confirmBy: null }] })
+    render(<App />)
+    expect(await screen.findByTestId('home-cash')).toHaveTextContent('A cash reward needs your attention')
+    // More than one waiting: the prizes' page.
+    cleanup()
+    window.localStorage.removeItem('qb.home.notices.seen')
+    window.history.replaceState(null, '', '/')
+    server({ cashRewards: [{ cashRewardId: 'c1', attemptId: ATTEMPT, code: 'C-ABCD1234', publicationId: PUB,
+      publicationName: 'Capitals week', sponsorCompany: 'Capitals Inc', amount: 100, status: 'DUE',
+      dueAt: '2026-10-20T00:00:00Z', markedPaidAt: null, confirmBy: null },
+    { cashRewardId: 'c2', attemptId: 'a-2', code: 'C-EFGH5678', publicationId: PUB, publicationName: 'Capitals week',
+      sponsorCompany: 'Capitals Inc', amount: 50, status: 'DUE', dueAt: '2026-10-20T00:00:00Z', markedPaidAt: null,
+      confirmBy: null }] })
+    render(<App />)
+    const two = await screen.findByTestId('home-cash')
+    expect(two).toHaveTextContent('2 cash rewards need your attention')
+    await userEvent.click(two)
+    await waitFor(() => expect(window.location.pathname).toBe('/history/prizes'))
   })
 
   it('says how a quiz pays on its page, with the prize to collect', async () => {
@@ -586,7 +615,7 @@ describe('collecting a prize by the Sponsor\'s code (Q22b)', () => {
     expect(window.location.pathname).toBe('/')
   })
 
-  it('lists the prizes waiting on the home, and shows a claim waiting for the Sponsor on the result', async () => {
+  it('says a prize waits in the home\'s pill, and shows a claim waiting for the Sponsor on the result', async () => {
     server({ redemptions: [{ ...prizeRow, status: 'CLAIMED', confirmBy: '2026-10-20T01:10:00Z' }],
       result: () => json(200, { output: finished({ score: 5, passed: true, reward: 100, rewardStatus: 'REDEEM',
         rewardMethod: 'OFFLINE_REDEEM', cash: null, redeem: { redemptionId: 'r1', status: 'CLAIMED', code: 'C-ABCD1234',
@@ -595,8 +624,6 @@ describe('collecting a prize by the Sponsor\'s code (Q22b)', () => {
     render(<App />)
     const notice = await screen.findByTestId('home-redeem')
     expect(notice).toHaveTextContent('A prize is waiting for you')
-    expect(within(notice).getByTestId('home-redeem-item')).toHaveAttribute('data-status', 'CLAIMED')
-    expect(within(notice).getByRole('link')).toHaveAttribute('href', `/result/${ATTEMPT}`)
     cleanup()
     server({ result: () => json(200, { output: finished({ score: 5, passed: true, reward: 100, rewardStatus: 'REDEEM',
       rewardMethod: 'OFFLINE_REDEEM', cash: null, redeem: { redemptionId: 'r1', status: 'CLAIMED', code: 'C-ABCD1234',
@@ -795,7 +822,7 @@ describe('the video to watch (Q19, Q63)', () => {
   it('shows a vertical video in its own 9:16 box, its player the cover\'s size, and maximizes it at a tap (Q113 §9.3)',
     async () => {
     const io = intersections()
-    server({ feed: [{ ...CARD, video: PLAYER, videoVertical: true }] })
+    const { calls } = server({ feed: [{ ...CARD, video: PLAYER, videoVertical: true }] })
     render(<App />)
     const card = await screen.findByTestId('feed-card')
     // Not playing: the cover in the vertical box (x.com's shape: 9:16, at most 287 px across, at the left).
@@ -814,6 +841,8 @@ describe('the video to watch (Q19, Q63)', () => {
     expect(within(viewer).getByTestId('shorts-stage')).toHaveAttribute('data-orientation', 'vertical')
     await waitFor(() => expect(screen.getByTestId('video-stage')).toHaveAttribute('data-mode', 'short'))
     expect(screen.getByTestId('video-stage').querySelector('iframe')).toBe(frame)
+    // F-S10: the vertical mode's openings are counted here (the home's shelf of shorts that counted them is gone).
+    await waitFor(() => expect(calls.some((c) => c.path === `/api/public/counters/qb.shorts-open/${PUB}`)).toBe(true))
   })
 
   it('plays another site\'s video on the home and the start page as YouTube\'s, in its own player (Q99b)',

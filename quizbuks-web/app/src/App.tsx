@@ -11,7 +11,6 @@ import {
   OidcCallback,
   PageState,
   PasswordResetRequest,
-  PwaUpdatePrompt,
   SignInForm,
   SignUpForm,
   StepUpProvider,
@@ -29,6 +28,7 @@ import { APP } from './messages'
 import { takerHandleOf, TakerPage, verifyKeyOf, VerifyPage } from './certificates/PublicCertificates'
 import { ACCOUNT_SECURITY_PATH, AccountPage, isAccountPath, rememberLinked } from './pages/AccountPage'
 import { VideoStage } from './video/stage'
+import { UpdatePill } from './frame/TopPill'
 import { FeedControlsProvider, FeedFiltersButton, FeedPage } from './pages/FeedPage'
 import { SearchPage } from './pages/SearchPage'
 import { HistoryPage } from './pages/HistoryPage'
@@ -311,7 +311,8 @@ function SignedIn({ path }: { path: string }) {
         nav && 'pb-[calc(var(--bottom-bar-offset)+env(safe-area-inset-bottom)+1rem)] md:pb-4',
         (path === HOME || item?.page === 'p') && 'pt-0')}>
         <OfflineBanner />
-        <PwaUpdatePrompt />
+        {/* 2026-11-28: a new version is a pill under the header (x.com's "Show new posts"), not a band. */}
+        <UpdatePill />
         <VerifyEmailBanner />
         {page}
       </main>

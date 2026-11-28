@@ -100,12 +100,12 @@ test('the Sponsor marks a cash reward paid and the Taker confirms it', async ({ 
   })
   await signIn(page, '/taker/', owed.taker.email)
   await expect(page.getByTestId('home')).toBeVisible()
+  // 2026-11-28: one pill under the header (x.com's "Show new posts"), gone once tapped.
   const notice = page.getByTestId('home-cash')
   await expect(notice).toBeVisible()
-  await expect(notice.getByTestId('home-cash-item').filter({ hasText: owed.code })).toHaveAttribute('data-status',
-    'MARKED_PAID')
+  await expect(notice).toHaveText(/cash reward/)
   await expectAccessible(page, 'app home with a cash reward')
-  await notice.getByRole('link').first().click()
+  await notice.click()
   await expect(page).toHaveURL(new RegExp(`/result/${owed.attemptId}$`))
   const reward = page.getByTestId('result-reward')
   await expect(reward).toHaveAttribute('data-cash-status', 'MARKED_PAID')

@@ -277,6 +277,9 @@ const en = {
     DIGITAL_PRIZEShort: 'Digital',
     DIGITAL_PRIZEHint: 'After passing you get a code, a voucher or a link right here in the app, nothing to collect:',
   },
+  notices: {
+    update: 'A new version · tap to update',
+  },
   cash: {
     openTitle_one: 'A cash reward needs your attention',
     openTitle_other: '{{count}} cash rewards need your attention',
@@ -974,6 +977,9 @@ const zh: typeof en = {
     DIGITAL_PRIZEShort: '电子',
     DIGITAL_PRIZEHint: '通过后直接在 App 里得到兑换码、券号或链接，无需到店领取：',
   },
+  notices: {
+    update: '有新版本，点按更新',
+  },
   cash: {
     openTitle_one: '有一笔现金奖励需要你处理',
     openTitle_other: '有 {{count}} 笔现金奖励需要你处理',
@@ -1669,6 +1675,9 @@ const ja: typeof en = {
     DIGITAL_PRIZE: 'デジタル賞品',
     DIGITAL_PRIZEShort: 'デジタル',
     DIGITAL_PRIZEHint: '合格するとコード、クーポン番号またはリンクをこのアプリで受け取れます。店舗に行く必要はありません：',
+  },
+  notices: {
+    update: '新しいバージョンがあります。タップして更新',
   },
   cash: {
     openTitle_one: '対応が必要な現金報酬があります',

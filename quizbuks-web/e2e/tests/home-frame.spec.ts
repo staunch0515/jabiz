@@ -147,7 +147,8 @@ test('the home stays pixel for pixel as it was before F-F4', async ({ page, requ
     for (const width of WIDTHS) {
       await page.setViewportSize({ width, height: VIEWPORT_HEIGHT })
       const home = await searched(page, words, made.length)
-      await expect(home.getByTestId('shorts-shelf')).toHaveCount(1)
+      // 2026-11-28: no shelf of short videos on the home (x.com's way).
+      await expect(home.getByTestId('shorts-shelf')).toHaveCount(0)
       // The same content in the same order (the DOM's side of the comparison, read first when a picture differs).
       await expect(home.getByTestId('feed-card-name')).toHaveText(made.map((card) => card.name).reverse())
       await expect(page).toHaveScreenshot(`home-${width}-${appearance}.png`, { clip: await homeClip(page),

@@ -19,9 +19,9 @@ import {
  * F-S13 (docs/quizbuks/plans/impl/F-S13.md): a provider shares a vertical and a horizontal video; another Sponsor uses
  * the vertical one on two publications (one with a single exposure bought, through the tests' own purchase, which runs
  * F-M8's sub-process) and the horizontal one on a third, and has a short of its own. The home's preview never counts;
- * in the vertical mode the pushes follow the own short, opening one and watching it counts; the publication with one
- * exposure bought ends within a minute; the taker who opened the pushes does not see them again; the start page counts
- * the horizontal video. The players are pages of another site (timed on the screen), answered by a blank page here.
+ * in the video mode (the home's posts' videos; no shelf of shorts and no pushes since 2026-11-28) opening one and
+ * watching it counts; the publication with one exposure bought ends within a minute; the start page counts the
+ * horizontal video. The players are pages of another site (timed on the screen), answered by a blank page here.
  */
 test.beforeEach(async ({ request }) => {
   await prepareQuizbuks(request)
@@ -102,7 +102,7 @@ function watchReports(page: Page) {
   return sent
 }
 
-test('the home does not count; the vertical mode and the start page do; used up ends; opened is not pushed again',
+test('the home does not count; the video mode and the start page do; used up ends',
   async ({ browser, page, request }) => {
     test.setTimeout(480_000)
     const players = async (target: Page) => {
@@ -140,7 +140,6 @@ test('the home does not count; the vertical mode and the start page do; used up 
     await expect(home.getByTestId('home')).toBeVisible()
     await searchHome(home, base)
     await expect(home.getByTestId('feed-card')).toHaveCount(4)
-    await expect(home.getByTestId('shorts-shelf')).toHaveCount(1)
     // Longer than a screen counts: the preview still does not.
     await home.waitForTimeout(times.watchMs)
     await home.goto('/taker/account/preferences')
@@ -151,41 +150,32 @@ test('the home does not count; the vertical mode and the start page do; used up 
       expect((await figures(request, sponsor.token, id)).successes, `the home counted ${id}`).toBe(0)
     }
 
-    // 2. The vertical mode: opened on the own short, the pushes follow; one watched counts, both are opened.
+    // 2. The video mode over the home's posts (newest first: wide, unlimited, limited, own): opened on the unlimited
+    // one, then on to the limited one, watched for the seconds; both are opened, the watched one counts.
     const me = await taker(request, 'Mio')
     const sent = watchReports(page)
     await signIn(page, '/taker/', me.email)
     await expect(page.getByTestId('home')).toBeVisible()
     await searchHome(page, base)
-    const shelf = page.getByTestId('shorts-shelf')
-    await shelf.locator(`[data-testid="shorts-card"][data-publication="${own}"]`).getByTestId('shorts-card-open')
-      .click()
+    await expect(page.getByTestId('feed-card')).toHaveCount(4)
+    await page.goto(`/taker/?q=${encodeURIComponent(base)}&video=${unlimited}`)
     const viewer = page.getByTestId('shorts-viewer')
     await expect(viewer).toBeVisible()
     const screens = viewer.getByTestId('shorts-screen')
-    await expect(screens).toHaveCount(3)
-    await expect(screens.first()).toHaveAttribute('data-publication', own)
-    const order = await screens.evaluateAll((all) => all.map((s) => (s as HTMLElement).dataset.publication))
-    expect(order.slice(1).sort()).toEqual([limited, unlimited].sort())
+    await expect(screens).toHaveCount(4)
     const current = viewer.locator('[data-testid="shorts-screen"][data-current]')
+    await expect(current).toHaveAttribute('data-publication', unlimited)
+    await expectAccessible(page, 'app video mode on another\'s video')
     await viewer.getByTestId('shorts-next').click()
-    await expect(current).toHaveAttribute('data-publication', order[1]!)
-    await expectAccessible(page, 'app vertical mode on a push')
-    // Watch the limited one for the seconds (whichever place it has), the other only opened.
-    if (order[1] !== limited) {
-      await viewer.getByTestId('shorts-next').click()
-      await expect(current).toHaveAttribute('data-publication', limited)
-    }
+    await expect(current).toHaveAttribute('data-publication', limited)
     await page.waitForTimeout(times.watchMs)
-    if (order[2] !== limited) {
-      await viewer.getByTestId('shorts-next').click()
-      await expect(current).toHaveAttribute('data-publication', order[2]!)
-    }
+    await viewer.getByTestId('shorts-next').click()
+    await expect(current).toHaveAttribute('data-publication', own)
     // The reports go within the interval, or as soon as the page goes.
     await expect.poll(async () => (await figures(request, sponsor.token, limited)).successes,
       { message: 'the vertical mode counted the exposure', ...counted }).toBe(1)
     await expect.poll(async () => (await figures(request, sponsor.token, unlimited)).opens,
-      { message: 'the other push was opened', ...counted }).toBe(1)
+      { message: 'the other one was opened', ...counted }).toBe(1)
     expect((await figures(request, sponsor.token, unlimited)).successes).toBe(0)
     expect(sent.filter((r) => r.kind === 'EXPOSURE' && r.publicationId === limited)).toHaveLength(1)
 
@@ -198,18 +188,10 @@ test('the home does not count; the vertical mode and the start page do; used up 
     expect(Number(fee?.purchased)).toBe(1)
     expect(Number(fee?.counted)).toBe(1)
 
-    // 4. Opened once, never pushed again: the vertical mode shows the own short alone now.
     await page.keyboard.press('Escape')
     await expect(viewer).toHaveCount(0)
-    await page.reload()
-    await searchHome(page, base)
-    await page.getByTestId('shorts-shelf').locator(`[data-testid="shorts-card"][data-publication="${own}"]`)
-      .getByTestId('shorts-card-open').click()
-    await expect(page.getByTestId('shorts-viewer')).toBeVisible()
-    await expect(page.getByTestId('shorts-screen')).toHaveCount(1)
-    await page.keyboard.press('Escape')
 
-    // 5. The start page counts the horizontal video on the screen (light, then dark).
+    // 4. The start page counts the horizontal video on the screen (light, then dark).
     await page.goto(`/taker/p/${wide}`)
     await expect(page.getByTestId('exposure-start')).toBeVisible()
     await expectAccessible(page, 'app start page of a shared video')

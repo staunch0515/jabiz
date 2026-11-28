@@ -1,13 +1,11 @@
 import { configureClient, session } from '@jabiz/client'
 import { expectAccessible } from '@jabiz/ui/testing'
-import { act, cleanup, render, screen, waitFor, within } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import App from '../App'
 import '../messages'
-import type { FeedCard } from '../qb/play'
 import { forgetPlayback, playbackOf } from '../video/playback'
-import { placeShelves, shelfPositions, shelfSize, SHORTS_DEFAULT_PER_SHELF, SHORTS_LIMIT } from './shelves'
 
 /*
  * F-S10 (docs/quizbuks/plans/impl/F-S10.md): the home's shelves of vertical short videos and the full-screen vertical
@@ -32,15 +30,14 @@ function card(id: string, more: Record<string, unknown> = {}) {
 
 const FEED = Array.from({ length: 5 }, (_, i) => card(`p${i + 1}`))
 const SHORTS = [
-  card('s1', { video: YOUTUBE, videoVertical: true, shortsPositions: '2,12', shortsPerShelf: '2' }),
-  card('s2', { video: BILIBILI, videoVertical: true, shortsPositions: '2,12', shortsPerShelf: '2' }),
-  card('s3', { video: YOUTUBE.replace('dQw4w9WgXcQ', 'aaaaaaaaaaa'), videoVertical: true, shortsPositions: '2,12',
-    shortsPerShelf: '2' }),
+  card('s1', { video: YOUTUBE, videoVertical: true }),
+  card('s2', { video: BILIBILI, videoVertical: true }),
+  card('s3', { video: YOUTUBE.replace('dQw4w9WgXcQ', 'aaaaaaaaaaa'), videoVertical: true }),
 ]
 
 interface Call { path: string; method: string; body: unknown }
 
-function server(options: { feed?: Record<string, unknown>[]; shorts?: Record<string, unknown>[] } = {}) {
+function server(options: { feed?: Record<string, unknown>[] } = {}) {
   const calls: Call[] = []
   vi.spyOn(globalThis, 'fetch').mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
     const request = input instanceof Request ? input
@@ -61,9 +58,7 @@ function server(options: { feed?: Record<string, unknown>[]; shorts?: Record<str
         return json(200, { items: [{ id: 'p1', version: 1, attributes: { displayName: 'Mei', countryCode: 'JP',
           city: null, preferredCurrency: 'JPY', revision: 1 } }], offset: 0, limit: 1 })
       case '/api/queries/qb.app.feed': {
-        const params = (body as { params: { shorts?: boolean } }).params
-        return json(200, { items: params.shorts ? options.shorts ?? SHORTS : options.feed ?? FEED, offset: 0,
-          limit: 10 })
+        return json(200, { items: options.feed ?? [...FEED, ...SHORTS], offset: 0, limit: 10 })
       }
       case '/api/client/region':
         return json(404, {})
@@ -108,81 +103,42 @@ afterEach(() => {
   document.body.style.overflow = ''
 })
 
-const feedCard = (id: string) => card(id) as unknown as FeedCard
 
-describe('the shelves\' places (F-S10)', () => {
-  it('reads the parameters as the setup gives them, and anything else safely', () => {
-    expect(shelfPositions(null)).toEqual([3, 12])
-    expect(shelfPositions('12, 3,3, x, 0, -1')).toEqual([3, 12])
-    expect(shelfPositions('')).toEqual([])
-    expect(shelfSize(null)).toBe(SHORTS_DEFAULT_PER_SHELF)
-    expect(shelfSize('4')).toBe(4)
-    expect(shelfSize('0')).toBe(1)
-    expect(shelfSize('999')).toBe(SHORTS_LIMIT)
-    expect(shelfSize('many')).toBe(SHORTS_DEFAULT_PER_SHELF)
-  })
-
-  it('puts each place\'s own group after its card, waits for more cards, and closes a complete list', () => {
-    const shorts = ['a', 'b', 'c', 'd', 'e'].map(feedCard)
-    const ids = (list: ReturnType<typeof placeShelves>) => list.map((s) => [s.after, s.items.map((c) => c.publicationId)])
-    expect(ids(placeShelves(20, false, [3, 12], 2, shorts))).toEqual([[3, ['a', 'b']], [12, ['c', 'd']]])
-    // Twelve cards not loaded yet: the second shelf waits; with no more cards it closes the list.
-    expect(ids(placeShelves(10, false, [3, 12], 2, shorts))).toEqual([[3, ['a', 'b']]])
-    expect(ids(placeShelves(10, true, [3, 12, 20], 2, shorts))).toEqual([[3, ['a', 'b']], [10, ['c', 'd']]])
-    // A place without short videos left shows nothing; no short videos, no shelf.
-    expect(ids(placeShelves(20, true, [3, 12], 10, shorts))).toEqual([[3, ['a', 'b', 'c', 'd', 'e']]])
-    expect(placeShelves(20, true, [3, 12], 10, [])).toEqual([])
-    expect(placeShelves(0, true, [3], 10, shorts)).toEqual([])
-  })
-})
-
-describe('the home\'s shelf of short videos (F-S10)', () => {
-  it('asks the feed\'s template for the vertical ones and shows them at the parameters\' places', async () => {
-    const { feedReads } = server()
+describe('the home without a shelf of short videos (2026-11-28, x.com\'s way)', () => {
+  it('shows no shelf and asks for no short videos or pushes', async () => {
+    const api = server({ feed: [...FEED, ...SHORTS] })
     render(<App />)
-    const shelves = await screen.findAllByTestId('shorts-shelf')
-    expect(shelves).toHaveLength(2)
-    // The first after the second card, the second (the place 12 is beyond five cards) closing the list.
-    const list = screen.getByTestId('feed-list')
-    const order = Array.from(list.children).map((li) => (li as HTMLElement).dataset.publication ?? 'shelf')
-    expect(order).toEqual(['p1', 'p2', 'shelf', 'p3', 'p4', 'p5', 'shelf'])
-    expect(within(shelves[0]).getAllByTestId('shorts-card').map((c) => c.dataset.publication)).toEqual(['s1', 's2'])
-    expect(within(shelves[1]).getAllByTestId('shorts-card').map((c) => c.dataset.publication)).toEqual(['s3'])
-    expect(shelves[0]).toHaveTextContent('Shorts')
-    // The same conditions as the feed, with only `shorts` added; never a player on a small card.
-    const [main, shorts] = feedReads()
-    expect(main.params.shorts).toBeUndefined()
-    expect(shorts.params).toMatchObject({ ...main.params, shorts: true })
-    expect(within(shelves[0]).queryByTitle(/Video/)).toBeNull()
-    await expectAccessible()
-  })
-
-  it('shows no shelf when there is no vertical publication', async () => {
-    server({ shorts: [card('h1', { video: YOUTUBE, videoVertical: false })] })
-    render(<App />)
-    await screen.findAllByTestId('feed-card')
-    await waitFor(() => expect(screen.getAllByTestId('feed-card')).toHaveLength(5))
-    await new Promise((resolve) => setTimeout(resolve, 20))
+    expect(await screen.findAllByTestId('feed-card')).toHaveLength(FEED.length + SHORTS.length)
     expect(screen.queryByTestId('shorts-shelf')).toBeNull()
+    expect(api.feedReads().every((read) => read.params.shorts !== true && read.params.push !== true)).toBe(true)
+  })
+
+  it('opens the video mode on the publication an old address of the vertical mode names', async () => {
+    server({ feed: [...FEED, ...SHORTS] })
+    window.history.replaceState(null, '', '/?shorts=s1')
+    render(<App />)
+    const viewer = await screen.findByTestId('shorts-viewer')
+    await waitFor(() => expect(window.location.search).toBe('?video=s1'))
+    expect(viewer.querySelector('[data-current]')).toHaveAttribute('data-publication', 's1')
   })
 })
 
 describe('the full-screen vertical mode (F-S10)', () => {
+  /** Opens the mode on a post's video (the home's shelf of shorts that opened it before is gone, 2026-11-28). */
   async function open(id = 's1') {
     const user = userEvent.setup()
-    const shelf = (await screen.findAllByTestId('shorts-shelf'))[0]
-    const target = within(shelf).getAllByTestId('shorts-card').find((c) => c.dataset.publication === id)!
-    await user.click(within(target).getByTestId('shorts-card-open'))
+    window.history.pushState(null, '', `/?video=${id}`)
+    window.dispatchEvent(new PopStateEvent('popstate'))
     return { user, viewer: await screen.findByTestId('shorts-viewer') }
   }
 
   const current = () => screen.getAllByTestId('shorts-screen').find((s) => s.dataset.current)!
 
-  it('opens over the home on the tapped one, with one player only, and counts the opening', async () => {
-    const { calls } = server()
+  it('opens over the home on the tapped one, with one player only', async () => {
+    server()
     render(<App />)
     const { viewer } = await open('s1')
-    expect(window.location.search).toBe('?shorts=s1')
+    expect(window.location.search).toBe('?video=s1')
     expect(viewer).toHaveAttribute('aria-modal', 'true')
     expect(current().dataset.publication).toBe('s1')
     expect(within(viewer).getByTestId('shorts-position')).toHaveTextContent('1 of 3')
@@ -190,8 +146,6 @@ describe('the full-screen vertical mode (F-S10)', () => {
     await waitFor(() => expect(document.querySelectorAll('iframe')).toHaveLength(1))
     expect(screen.getByTestId('video-stage')).toHaveAttribute('data-mode', 'short')
     expect(within(current()).getByTestId('video-slot')).toHaveAttribute('data-mode', 'short')
-    await waitFor(() => expect(calls.some((c) => c.method === 'POST'
-      && c.path === '/api/public/counters/qb.shorts-open/s1')).toBe(true))
     // The home does not scroll beneath it.
     expect(document.body.style.overflow).toBe('hidden')
     await expectAccessible(viewer)
@@ -219,7 +173,6 @@ describe('the full-screen vertical mode (F-S10)', () => {
     await waitFor(() => expect(screen.queryByTestId('shorts-viewer')).toBeNull())
     expect(window.location.search).toBe('')
     expect(document.body.style.overflow).toBe('')
-    expect(screen.getAllByTestId('shorts-shelf')).toHaveLength(2)
   })
 
   it('plays another site in its own player, whose sound is a tap on it (A3-18)', async () => {
@@ -232,7 +185,7 @@ describe('the full-screen vertical mode (F-S10)', () => {
     // The app's player is not playing meanwhile: one player.
     await waitFor(() => expect(document.querySelectorAll('iframe')).toHaveLength(1))
     await user.click(within(viewer).getByTestId('shorts-next'))
-    expect(within(current()).queryByTestId('video-player')).toBeNull()
+    await waitFor(() => expect(within(current()).queryByTestId('video-player')).toBeNull())
     await waitFor(() => expect(document.querySelectorAll('iframe')).toHaveLength(1))
   })
 
@@ -294,7 +247,7 @@ describe('a vertical video fills the screen of the vertical mode (F-S10)', () =>
     card('t3', { video: BILIBILI, videoVertical: true }), card('w1', { video: YOUTUBE.replace('dQw4w9WgXcQ', 'bbbbbbbbbbb') })]
 
   async function openOn(id: string) {
-    server({ feed: POSTS, shorts: [] })
+    server({ feed: POSTS })
     window.history.replaceState(null, '', `/?video=${id}`)
     render(<App />)
     const viewer = await screen.findByTestId('shorts-viewer')
@@ -363,7 +316,7 @@ describe('a vertical video fills the screen of the vertical mode (F-S10)', () =>
   })
 
   it('shows the video\'s own picture on every screen, not the sponsor\'s cover (it flashed as the video came)', async () => {
-    server({ feed: POSTS.map((post) => ({ ...post, cover: 'cover-1' })), shorts: [] })
+    server({ feed: POSTS.map((post) => ({ ...post, cover: 'cover-1' })) })
     window.history.replaceState(null, '', '/?video=t1')
     render(<App />)
     const viewer = await screen.findByTestId('shorts-viewer')
@@ -374,11 +327,20 @@ describe('a vertical video fills the screen of the vertical mode (F-S10)', () =>
     expect(t2.querySelector('video')).toBeNull()
     expect(within(t2).queryByTestId('video-poster')).toBeNull()
     expect(within(t3).queryByTestId('video-poster')).toBeNull()
-    // Playing: the same picture under the player on the stage, which fades the player in once it has its frame.
-    expect(within(t1).queryByTestId('video-poster')).toBeNull()
+    // Playing: the same picture, the same element, stays over the app's player (beneath the screens) until the
+    // player has its first frame; nothing of it is copied onto the stage (2026-11-28: painted anew, it flickered).
+    const poster = within(t1).getByTestId('shorts-poster')
+    expect(within(poster).getByTestId('video-poster')).toHaveAttribute('src', 'https://i.ytimg.com/vi/dQw4w9WgXcQ/hqdefault.jpg')
+    expect(poster).toHaveAttribute('data-shown')
+    expect(poster.style.opacity).toBe('1')
     const stage = await screen.findByTestId('video-stage')
-    expect(within(stage).getByTestId('video-poster')).toHaveAttribute('src', 'https://i.ytimg.com/vi/dQw4w9WgXcQ/hqdefault.jpg')
-    expect(screen.getByTestId('video-stage-content').style.opacity).toBe('0')
+    expect(within(stage).queryByTestId('video-stage-cover')).toBeNull()
+    // Its first frame (YouTube says it plays): the poster fades out, a beat later (the frame is painted after).
+    const frame = stage.querySelector('iframe')!
+    fireEvent(window, new MessageEvent('message', { source: frame.contentWindow, data: JSON.stringify({ event: 'onStateChange', info: 1 }) }))
+    await waitFor(() => expect(poster).not.toHaveAttribute('data-shown'))
+    expect(poster.style.opacity).toBe('0')
+    expect(poster.style.transition).toContain('250ms')
   })
 
   it('keeps a landscape video across the middle, its foot under it', async () => {
@@ -398,7 +360,7 @@ describe('the video mode of the posts (Q113c, §9.3)', () => {
     calls.filter((c) => c.path.startsWith('/api/processes/QB_ATTEMPT_START')).map((c) => c.body)
 
   async function openVideos(id: string, feed: Record<string, unknown>[] = POSTS) {
-    const api = server({ feed, shorts: [] })
+    const api = server({ feed })
     window.history.replaceState(null, '', `/?video=${id}`)
     render(<App />)
     const viewer = await screen.findByTestId('shorts-viewer')

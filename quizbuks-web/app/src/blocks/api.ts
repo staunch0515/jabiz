@@ -79,11 +79,10 @@ export function covers(kind: BlockKind, from: FeedCard, card: FeedCard): boolean
 }
 
 /**
- * Everything a block or an unblock changes, read again: the home, its shorts and the vertical mode's pushes (F-S13), the
- * pages, the inbox, the list.
+ * Everything a block or an unblock changes, read again: the home, the pages, the inbox, the list.
  */
 export function refreshAfterBlocking(queryClient: QueryClient) {
-  return Promise.all([['qb', 'feed'], ['qb', 'feed-shorts'], ['qb', 'feed-pushes'], ['qb', 'publication'],
+  return Promise.all([['qb', 'feed'], ['qb', 'publication'],
     ['qb', 'inbox'], BLOCKS_QUERY]
     .map((queryKey) => queryClient.invalidateQueries({ queryKey })))
 }

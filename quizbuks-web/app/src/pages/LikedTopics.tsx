@@ -42,9 +42,8 @@ export function LikedTopics() {
       notify.error(problemText(error))
     },
     onSuccess: (saved) => queryClient.setQueryData<UserSettings>(SETTINGS_QUERY, saved),
-    // The home and its shelf of shorts ask again (the server reads the settings itself).
-    onSettled: () => Promise.all([queryClient.invalidateQueries({ queryKey: ['qb', 'feed'] }),
-      queryClient.invalidateQueries({ queryKey: ['qb', 'feed-shorts'] })]),
+    // The home asks again (the server reads the settings itself).
+    onSettled: () => queryClient.invalidateQueries({ queryKey: ['qb', 'feed'] }),
   })
   const busy = settings.isPending || save.isPending
   const toggle = (code: string, on: boolean) => {
