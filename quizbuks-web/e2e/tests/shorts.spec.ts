@@ -44,7 +44,7 @@ async function shortsPublication(request: APIRequestContext, sponsor: { token: s
   return publicationId
 }
 
-test('a Shorts publication is in the shelf; the vertical mode swipes on and leads to answering', async ({ page, request }) => {
+test('the home has no shelf of short videos; the vertical mode swipes on and leads to answering', async ({ page, request }) => {
   test.setTimeout(180_000)
   // No YouTube here: the player is a blank page.
   await page.route('https://www.youtube-nocookie.com/**', (route) => route.fulfill({ contentType: 'text/html',
@@ -61,13 +61,12 @@ test('a Shorts publication is in the shelf; the vertical mode swipes on and lead
   await signIn(page, '/taker/', me.email)
   await expect(page.getByTestId('home')).toBeVisible()
   await searchHome(page, base)
-  const shelf = page.getByTestId('shorts-shelf')
-  await expect(shelf).toHaveCount(1)
-  await expect(shelf.getByTestId('shorts-card')).toHaveCount(2)
-  await expectAccessible(page, 'app home with a shelf of short videos')
-
-  // The newest first, as the home: the second one, then the first.
-  await shelf.getByTestId('shorts-card-open').first().click()
+  // 2026-11-28 (the requester, x.com's way): no shelf of short videos; a post's video opens the mode. An old address
+  // of the vertical mode opens it on the same publication.
+  await expect(page.getByTestId('feed-card')).toHaveCount(2)
+  await expect(page.getByTestId('shorts-shelf')).toHaveCount(0)
+  await page.goto(`/taker/?q=${encodeURIComponent(base)}&shorts=${second}`)
+  await expect(page).toHaveURL(new RegExp(`[?&]video=${second}`))
   const viewer = page.getByTestId('shorts-viewer')
   await expect(viewer).toBeVisible()
   await expect(viewer.getByTestId('shorts-position')).toHaveText(/1/)
@@ -128,8 +127,8 @@ test('a Shorts publication is in the shelf; the vertical mode swipes on and lead
   // Back to the home, where it was; then again, and on to answering.
   await page.keyboard.press('Escape')
   await expect(viewer).toHaveCount(0)
-  await expect(shelf).toBeVisible()
-  await shelf.getByTestId('shorts-card-open').last().click()
+  await expect(page.getByTestId('home')).toBeVisible()
+  await page.goto(`/taker/?q=${encodeURIComponent(base)}&video=${first}`)
   await page.getByTestId('shorts-viewer').locator('[data-current]').getByTestId('shorts-details').click()
   await expect(page).toHaveURL(new RegExp(`/taker/p/${first}$`))
   await expect(page.getByTestId('detail-start')).toBeVisible()

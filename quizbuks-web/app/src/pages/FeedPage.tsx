@@ -1,8 +1,5 @@
 import { i18n, useAuth, type Filter } from '@jabiz/client'
 import {
-  Alert,
-  AlertDescription,
-  AlertTitle,
   Button,
   Combobox,
   Input,
@@ -22,19 +19,18 @@ import {
   Spinner,
   Switch,
 } from '@jabiz/ui'
-import { useInfiniteQuery, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Gift, HandCoins, LayoutGrid, X, type LucideIcon } from 'lucide-react'
+import { useInfiniteQuery, useQuery } from '@tanstack/react-query'
+import { LayoutGrid, X, type LucideIcon } from 'lucide-react'
 import { FilterIcon } from '../frame/icons'
-import { createContext, Fragment, useCallback, useContext, useEffect, useId, useMemo, useRef, useState, type FormEvent, type ReactNode } from 'react'
+import { createContext, useCallback, useContext, useEffect, useId, useMemo, useRef, useState, type FormEvent, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 import { ACCOUNT_BLOCKS_PATH } from './accountPaths'
 import { APP } from '../messages'
 import { EmptyArt } from '../qb/Illustrations'
 import { FeedCardView, REWARD_METHOD_ICONS } from '../qb/view/FeedCard'
 import { readCountries, shownLanguages } from '../qb/api'
-import { formatKudos } from '../qb/kudos'
 import { QB } from '../qb/messages'
-import { cardProgress, FEED_SORTS, readFeed, readOpenCashRewards, readOpenRedemptions, rewardPath, type BlockKind, type FeedCard, type FeedSort, type RewardMethod }
+import { cardProgress, FEED_SORTS, readFeed, readOpenCashRewards, readOpenRedemptions, type BlockKind, type FeedCard, type FeedSort, type RewardMethod }
   from '../qb/play'
 import { problemText } from '../qb/problems'
 import { canGoBack, Link, navigate, useLocation } from '../qb/router'
@@ -46,16 +42,12 @@ import { useSoundSetting } from '../qb/SoundSettings'
 import { HomeInstallOffer } from '../install'
 import { SharePostButton } from '../share/SharePostButton'
 import { useMainlandChina } from '../qb/region'
-import { countShortsOpen, readShorts } from '../shorts/api'
-import { placeShelves, type Shelf } from '../shorts/shelves'
-import { ShortsShelf } from '../shorts/ShortsShelf'
 import { ShortsViewer } from '../shorts/ShortsViewer'
+import { HomeNotice } from './HomeNotice'
+import { countShortsOpen } from '../shorts/api'
+import { useExposureSettings } from '../exposure/ExposureWatch'
 import { BlockMenu } from '../blocks/BlockMenu'
 import { covers } from '../blocks/api'
-import { readPushes } from '../exposure/api'
-import { useExposureSettings } from '../exposure/ExposureWatch'
-import { placePushes } from '../exposure/pushes'
-import { DEFAULT_PUSH_EVERY } from '../exposure/rules'
 
 /** The home's address, searched from the header (Q63): `/?q=<text>`. */
 export const HOME_PATH = '/'
@@ -71,18 +63,9 @@ export function searchOf(search: string): string {
 }
 
 /**
- * F-S10: the home's address with the full-screen vertical mode open on a publication (`shorts=<id>`), the search
- * kept: the mode lies over the home, so that the browser's back closes it and the home is where it was.
+ * F-S10: the publication an old address of the vertical mode (`shorts=<id>`, the home's shelf of short videos, gone
+ * 2026-11-28) was open on; null for none. The home opens the video mode on it instead.
  */
-export function shortsPath(q: string, publicationId: string | null, base = HOME_PATH): string {
-  const params = new URLSearchParams()
-  if (q) params.set('q', q)
-  if (publicationId) params.set('shorts', publicationId)
-  const query = params.toString()
-  return query ? `${base}?${query}` : base
-}
-
-/** The publication the vertical mode is open on, from the home's address; null when it is closed. */
 export function shortsOf(search: string): string | null {
   return new URLSearchParams(search).get('shorts') || null
 }
@@ -308,8 +291,10 @@ function CardVideo({ card, player, cover, to }: { card: FeedCard; player: string
   const { t } = useTranslation(QBVIEW)
   const open = useCallback(() => {
     openWithSound(player)
+    // F-S10: the vertical mode's openings, counted for a vertical video (the shelf that counted them is gone).
+    if (card.videoVertical) countShortsOpen(card)
     navigate(to)
-  }, [to, player])
+  }, [to, player, card])
   // No background of its own: the cover comes in the stage's strip beside the player (see `video/stage.tsx`).
   return <VideoSlot id={`card:${card.publicationId}`} player={player} mode="card" onOpen={open}
     // All of the card's video box (16:9, or 9:16 for a vertical video): the player is the cover's size.
@@ -465,7 +450,7 @@ export function FeedPage({ name, country, base = HOME_PATH }: {
   const { method, chooseMethod, filters, setFilters, open: filtersOpen, setOpen: setFiltersOpen } = useFeedControls()
   const filterList = feedFilters(filters)
   const active = activeFilterCount(filters)
-  // The cash rewards still waiting for the taker or the sponsor: a notice at the top, with each to look at.
+  // The cash rewards still waiting for the taker or the sponsor, and the prizes to collect: the pill at the top.
   const cash = useQuery({ queryKey: ['qb', 'cash-rewards', 'open'], queryFn: readOpenCashRewards })
   const openCash = cash.data ?? []
   const prizes = useQuery({ queryKey: ['qb', 'redemptions', 'open'], queryFn: readOpenRedemptions })
@@ -493,68 +478,14 @@ export function FeedPage({ name, country, base = HOME_PATH }: {
     getNextPageParam: (last) => (last.items.length < FEED_PAGE ? undefined : last.offset + FEED_PAGE),
   })
   const cards = useMemo(() => feed.data?.pages.flatMap((page) => page.items) ?? [], [feed.data])
-  // F-S10: the vertical short videos under the same conditions (the template's `shorts`), once the feed is there.
-  const shorts = useQuery({
-    queryKey: ['qb', 'feed-shorts', at, country, q, filters.sort, filters.includeAnswered, method, filterList,
-      i18n.language, languages, mainlandChina, strictTopics, likedKey],
-    queryFn: () => readShorts({ at, country, q, sort: filters.sort, method: method === 'ALL' ? null : method,
-      includeAnswered: filters.includeAnswered, languages, mainlandChina, filters: filterList }),
-    enabled: feed.isSuccess,
-  })
-  const shortCards = useMemo(() => shorts.data?.cards ?? [], [shorts.data])
-  // F-S13: the vertical mode's pushes (another's vertical video, never opened), under the same conditions; read again
-  // once the mode closes, so that those opened in it are not pushed again.
   const { emailVerified } = useAuth()
-  const queryClient = useQueryClient()
-  const pushKey = ['qb', 'feed-pushes', at, country, q, filters.sort, filters.includeAnswered, method, filterList,
-    i18n.language, languages, mainlandChina, strictTopics, likedKey]
-  const pushes = useQuery({
-    queryKey: pushKey,
-    queryFn: () => readPushes({ at, country, q, sort: filters.sort, method: method === 'ALL' ? null : method,
-      includeAnswered: filters.includeAnswered, languages, mainlandChina, filters: filterList }),
-    enabled: feed.isSuccess,
-    staleTime: Infinity,
-  })
-  const exposureSettings = useExposureSettings()
-  const pushEvery = exposureSettings?.pushEvery ?? DEFAULT_PUSH_EVERY
-  // The screens are placed from the one the mode opened on, and stay so while it is open (a block moves it on within
-  // them).
-  const [openedOn, setOpenedOn] = useState<string | null>(null)
-  if (shortsOpen === null && openedOn !== null) setOpenedOn(null)
-  if (shortsOpen !== null && openedOn === null) setOpenedOn(shortsOpen)
-  const pushCards = pushes.data
-  const placed = useMemo(() => openedOn ? placePushes(shortCards, pushCards ?? [], openedOn, pushEvery)
-    : shortCards, [shortCards, pushCards, openedOn, pushEvery])
-  // The same screens stay the same list (the mode moves back to the screen the address names whenever its list
-  // changes): a read that changes nothing, or the parameters arriving, must not move the taker back. Adjusted while
-  // rendering (React's derived state).
-  const [screens, setScreens] = useState<readonly FeedCard[]>(placed)
-  const sameScreens = screens.length === placed.length
-    && screens.every((card, i) => card.publicationId === placed[i].publicationId)
-  if (!sameScreens) setScreens(placed)
-  const viewerCards = sameScreens ? screens : placed
-  const shelves = shorts.data
-    ? placeShelves(cards.length, !feed.hasNextPage, shorts.data.positions, shorts.data.perShelf, shortCards) : []
-  const shelfAfter = new Map<number, Shelf>(shelves.map((shelf) => [shelf.after, shelf]))
-  const openShorts = useCallback((card: FeedCard) => {
-    countShortsOpen(card)
-    navigate(shortsPath(q, card.publicationId, base))
-  }, [q, base])
-  const closeShorts = useCallback(() => {
-    void queryClient.invalidateQueries({ queryKey: ['qb', 'feed-pushes'] })
-    if (canGoBack()) window.history.back()
-    else navigate(shortsPath(q, null, base), { replace: true })
-  }, [q, base, queryClient])
-  // F-S8: a block in the vertical mode moves it on to the next short the block leaves (the list is read again); none
-  // left closes it.
-  const blockedInShorts = (card: FeedCard, kind: BlockKind) => {
-    const at = viewerCards.findIndex((c) => c.publicationId === card.publicationId)
-    const next = [...viewerCards.slice(at + 1), ...viewerCards.slice(0, Math.max(0, at)).reverse()]
-      .find((c) => !covers(kind, card, c))
-    if (next) navigate(shortsPath(q, next.publicationId, base), { replace: true })
-    else closeShorts()
-  }
-  const viewing = shortsOpen !== null && viewerCards.some((card) => card.publicationId === shortsOpen)
+  // F-S13: the reports' parameters read with the home, so that the video mode's first report goes as they say.
+  useExposureSettings(emailVerified)
+  // 2026-11-28 (the requester): no shelf of short videos on the home (x.com's way): a post's video opens the video mode.
+  // An old address of the vertical mode (`?shorts=<id>`) opens the video mode on the same publication.
+  useEffect(() => {
+    if (shortsOpen !== null) navigate(videoPath(q, shortsOpen, base), { replace: true })
+  }, [shortsOpen, q, base])
   // Q113c: the posts with a video that plays, in the home's order (one that failed shows its cover and is left out).
   const videoCards = useMemo(() => cards.filter((card) => !!card.video && !videoFailed(card.video)), [cards])
   const viewingVideos = videoOpen !== null && videoCards.some((card) => card.publicationId === videoOpen)
@@ -572,9 +503,9 @@ export function FeedPage({ name, country, base = HOME_PATH }: {
   }
   const [list, setList] = useState<HTMLUListElement | null>(null)
   const [end, setEnd] = useState<HTMLDivElement | null>(null)
-  const centred = useCentredVideo(list, cards.length + shelves.length)
+  const centred = useCentredVideo(list, cards.length)
   // Q65: one player: none of the home's while a video mode is open over it.
-  const playing = viewing || viewingVideos ? null : centred
+  const playing = viewingVideos ? null : centred
   useMoreNearTheEnd(end, () => {
     if (feed.hasNextPage && !feed.isFetchingNextPage) void feed.fetchNextPage()
   })
@@ -582,47 +513,14 @@ export function FeedPage({ name, country, base = HOME_PATH }: {
   return (
     <section className="flex flex-col" aria-labelledby={results ? 'search-title' : 'home-title'}
       data-testid={results ? 'search-results' : 'home'}>
+      {/* What waits for the taker: one pill under the header (x.com's "Show new posts"), gone once tapped. */}
+      {!results && <HomeNotice prizes={openPrizes} cash={openCash} />}
       {/* Q65: what comes before the cards takes room only when there is something to see: the first card is right
           under the header otherwise. */}
       <div className="flex flex-col gap-4 has-[>:not(.sr-only)]:pb-4" data-testid="home-top">
       {/* Q66: no greeting band; the page's heading is for assistive technology only. */}
       {!results && <h1 id="home-title" className="sr-only">{t('home.greeting', { name })}</h1>}
       {!results && <HomeInstallOffer />}
-      {!results && openCash.length > 0 && (
-        <Alert variant={openCash.some((r) => r.status === 'OVERDUE') ? 'warning' : 'default'} data-testid="home-cash">
-          <HandCoins aria-hidden />
-          <AlertTitle>{t('cash.openTitle', { count: openCash.length })}</AlertTitle>
-          <AlertDescription className="text-current">
-            <ul className="flex flex-col gap-1">
-              {openCash.map((r) => (
-                <li key={r.cashRewardId} data-testid="home-cash-item" data-status={r.status}>
-                  <Link to={rewardPath(r)} className="underline underline-offset-4">
-                    {t(`cash.open.${r.status}`, { name: r.publicationName, amount: formatKudos(r.amount), code: r.code })}
-                  </Link>
-                </li>
-              ))}
-            </ul>
-          </AlertDescription>
-        </Alert>
-      )}
-      {!results && openPrizes.length > 0 && (
-        <Alert data-testid="home-redeem">
-          <Gift aria-hidden />
-          <AlertTitle>{t('redeem.openTitle', { count: openPrizes.length })}</AlertTitle>
-          <AlertDescription className="text-current">
-            <ul className="flex flex-col gap-1">
-              {openPrizes.map((r) => (
-                <li key={r.redemptionId} data-testid="home-redeem-item" data-status={r.status}>
-                  <Link to={rewardPath(r)} className="underline underline-offset-4">
-                    {t(`redeem.open.${r.status === 'CLAIMED' ? 'CLAIMED' : 'DUE'}`, { sponsor: r.sponsorCompany ?? t('cash.theSponsor'),
-                      description: r.description, code: r.code })}
-                  </Link>
-                </li>
-              ))}
-            </ul>
-          </AlertDescription>
-        </Alert>
-      )}
       {q && (
         <div className="flex items-center gap-2 text-sm" data-testid="feed-searched">
           <span className="min-w-0 truncate">{t('feed.searchedFor', { q })}</span>
@@ -671,11 +569,8 @@ export function FeedPage({ name, country, base = HOME_PATH }: {
           {/* Q113b-1: posts across the column, a divider between them (Q63: the one with a video in the middle of the screen plays). */}
           <ul ref={setList} className="border-border -mx-4 flex flex-col border-t" data-testid="feed-list"
             aria-label={t('feed.listTitle')}>
-            {cards.map((card, i) => {
-              const shelf = shelfAfter.get(i + 1)
-              return (
-                <Fragment key={card.publicationId}>
-                  <FeedCardView card={card} href={`/p/${card.publicationId}`}
+            {cards.map((card) => (
+                  <FeedCardView key={card.publicationId} card={card} href={`/p/${card.publicationId}`}
                     videoHref={videoPath(q, card.publicationId, base)}
                     playing={playing === card.publicationId} note={<CardProgressNote card={card} at={at} />}
                     menu={<BlockMenu item={card} className="text-muted-foreground hover:text-primary rounded-full" />} at={at}
@@ -684,19 +579,9 @@ export function FeedPage({ name, country, base = HOME_PATH }: {
                       to={videoPath(q, card.publicationId, base)} />
                       : undefined}
                     onOpen={trackable(card.video) ? () => openWithSound(card.video!) : undefined} />
-                  {/* F-S10: a shelf of short videos after this card (the parameters' places). */}
-                  {shelf && <ShortsShelf items={shelf.items} hrefOf={(c) => shortsPath(q, c.publicationId, base)}
-                    onOpen={openShorts} />}
-                </Fragment>
-              )
-            })}
+            ))}
           </ul>
           <div ref={setEnd} aria-hidden data-testid="feed-end" />
-          {viewing && (
-            <ShortsViewer cards={viewerCards} startId={shortsOpen!} onClose={closeShorts} exposure={emailVerified}
-              onDetails={(card) => navigate(`/p/${card.publicationId}`)}
-              menu={(card) => <BlockMenu item={card} onBlocked={(kind) => blockedInShorts(card, kind)} />} />
-          )}
           {viewingVideos && (
             <ShortsViewer cards={videoCards} startId={videoOpen!} onClose={closeVideos} exposure={emailVerified}
               title={t('shorts.videoTitle')}

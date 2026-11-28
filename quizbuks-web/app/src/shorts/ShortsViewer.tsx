@@ -16,7 +16,7 @@ import { VideoPlayer } from '../qb/view/VideoPlayer'
 import { VideoPoster } from '../qb/view/VideoPoster'
 import { useVideoFailed, videoFailed } from '../qb/videoFailures'
 import { crossFade, openWithSound, soundOn, stagePlayer, togglePlay, useStage, VideoSlot } from '../video/stage'
-import { ExposureWatch } from '../exposure/ExposureWatch'
+import { ExposureWatch, useExposureSettings } from '../exposure/ExposureWatch'
 import { queueReport } from '../exposure/reporter'
 import { FileImage } from '../qb/FileImage'
 import { FLOW_OTHER, FlowStart } from './FlowStart'
@@ -79,6 +79,8 @@ export function ShortsViewer({ cards, startId, onClose, onDetails, menu, exposur
   const scroller = useRef<HTMLDivElement>(null)
   const dialog = useRef<HTMLDivElement>(null)
   const stage = useStage()
+  // F-S13: the reports' batch and interval, for the openings reported here (the watching's own screens read them too).
+  useExposureSettings(exposure)
   // F-S15: re-rendered when a video file fails.
   useVideoFailed(null)
   // F-S8: the screen shown follows the publication the address names (a block moves it on), and stays within the list

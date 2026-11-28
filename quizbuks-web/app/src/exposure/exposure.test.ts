@@ -1,7 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import type { FeedCard } from '../qb/play'
 import cases from './exposure-cases.json'
-import { placePushes, rotate } from './pushes'
 import { configureReporter, flushReports, forgetReports, pendingReports, queueReport, reported } from './reporter'
 import { billable, dailyCap, decide, endGraceSec, maxPerCall, minTolerance, neededSec, overshoot, pushAt, pushable,
   pushEvery, reconciles, reportBatch, reportIntervalSec, seconds, tolerancePercent, usedUp,
@@ -142,43 +140,6 @@ describe('the reports (F-S13)', () => {
   })
 })
 
-const card = (id: string, more: Partial<FeedCard> = {}): FeedCard => ({ publicationId: id, name: id, quizTitle: id,
-  cover: null, video: 'v', kind: 'QUIZ', maxReward: 0, rewardMethod: 'PLATFORM', digitalDelivery: null,
-  digitalDescription: null, completions: 0, sponsorName: null, sponsorCompany: 'S', sponsorAvatar: null,
-  sponsorCountry: null, startAt: '', endAt: '', timeLimitSec: 60, questionCount: 1, pickCount: null, fullScore: 1,
-  videoVertical: true, ...more })
-
-describe('where the pushes stand (F-S13)', () => {
-  it('takes the turns the server gives (by the publisher\'s id, which the App never gets), not the names', () => {
-    // Two publishers of the same name: their turns still alternate.
-    const pushes = [card('a1', { sponsorCompany: 'Same', pushTurn: 1, pushRank: 2 }),
-      card('a2', { sponsorCompany: 'Same', pushTurn: 2, pushRank: 2 }),
-      card('b1', { sponsorCompany: 'Same', pushTurn: 1, pushRank: 1 }),
-      card('c1', { sponsorCompany: 'Other', pushTurn: 1, pushRank: 3 })]
-    expect(rotate(pushes).map((c) => c.publicationId)).toEqual(['b1', 'a1', 'c1', 'a2'])
-    // Without turns: as given.
-    expect(rotate([card('x'), card('y')]).map((c) => c.publicationId)).toEqual(['x', 'y'])
-  })
-
-  it('puts a push every n-th screen from the one opened on, the rest after', () => {
-    const shorts = ['s1', 's2', 's3', 's4', 's5', 's6'].map((id) => card(id))
-    const pushes = [card('x', { exposed: true, pushTurn: 1, pushRank: 1 }),
-      card('y', { exposed: true, pushTurn: 1, pushRank: 2 })]
-    // The shelf shows x too (an exposed short): in the vertical mode it stands only as a push.
-    const screens = placePushes([...shorts, card('x', { exposed: true })], pushes, 's2', 2)
-    expect(screens.map((c) => c.publicationId)).toEqual(['s1', 's2', 's3', 'x', 's4', 'y', 's5', 's6'])
-    // Short videos run out: the pushes follow one after another.
-    expect(placePushes([card('s1')], pushes, 's1', 5).map((c) => c.publicationId)).toEqual(['s1', 'x', 'y'])
-    // A push tapped on the shelf is the first screen, and not pushed again in the same mode.
-    expect(placePushes([card('s1'), card('x', { exposed: true })], pushes, 'x', 1).map((c) => c.publicationId))
-      .toEqual(['s1', 'x', 'y'])
-    // Opened earlier (no longer a push): not in the vertical mode, unless it is the one tapped.
-    expect(placePushes([card('s1'), card('z', { exposed: true })], [], 's1', 1).map((c) => c.publicationId))
-      .toEqual(['s1'])
-    // Nothing to place on: the short videos as they are.
-    expect(placePushes([card('s1')], pushes, 'gone', 2).map((c) => c.publicationId)).toEqual(['s1'])
-  })
-})
 
 describe('reports left by an earlier page (F-S13)', () => {
   it('are kept in the tab until the server has them, and sent by the next page', async () => {

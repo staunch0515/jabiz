@@ -26,7 +26,7 @@ function card(id: string, more: Record<string, unknown> = {}) {
   return { publicationId: id, name: `Quiz ${id}`, quizTitle: 'Capitals', cover: null, maxReward: 100, completions: 2,
     sponsorName: 'Alice', sponsorCompany: 'Capitals Inc', sponsorAvatar: null, sponsorCountry: 'JP',
     startAt: '2026-10-01T01:00:00Z', endAt: '2099-10-30T00:00:00Z', timeLimitSec: 300, questionCount: 2, fullScore: 5,
-    shortsPositions: '2', shortsPerShelf: '10', ...more }
+    ...more }
 }
 
 const short = (id: string, video = YOUTUBE.replace('dQw4w9WgXcQ', `${id}xxxxxxxxxx`.slice(0, 11))) =>
@@ -63,10 +63,9 @@ function server(options: { shorts?: Record<string, unknown>[]; pushes?: Record<s
         return json(200, { items: [{ id: 'p1', version: 1, attributes: { displayName: 'Mei', countryCode: 'JP',
           city: null, preferredCurrency: 'JPY', revision: 1 } }], offset: 0, limit: 1 })
       case '/api/queries/qb.app.feed': {
-        const params = (body as { params: { shorts?: boolean; push?: boolean } }).params
-        const items = params.push ? options.pushes ?? [PUSH_X] : params.shorts ? options.shorts ?? SHORTS
-          : options.feed ?? FEED
-        return json(200, { items, offset: 0, limit: 10 })
+        // The home's posts; those with a video make the video mode's screens (no shelf of shorts, no pushes since
+        // 2026-11-28).
+        return json(200, { items: [...(options.feed ?? FEED), ...(options.shorts ?? SHORTS)], offset: 0, limit: 10 })
       }
       case '/api/queries/qb.app.exposure-settings':
         if (options.settingsAfter) await options.settingsAfter
@@ -88,8 +87,6 @@ function server(options: { shorts?: Record<string, unknown>[]; pushes?: Record<s
     calls,
     reports: () => calls.filter((c) => c.path === '/api/processes/QB_EXPOSURE_REPORT/latest')
       .flatMap((c) => (c.body as { reports: Record<string, unknown>[] }).reports),
-    pushReads: () => calls.filter((c) => c.path === '/api/queries/qb.app.feed'
-      && (c.body as { params: { push?: boolean } }).params.push === true),
   }
 }
 
@@ -115,55 +112,21 @@ afterEach(() => {
   document.body.style.overflow = ''
 })
 
+/** Opens the video mode on a post's video (the home's shelf of shorts that opened it before is gone, 2026-11-28). */
 async function open(id = 's1') {
   const user = userEvent.setup()
-  const shelf = (await screen.findAllByTestId('shorts-shelf'))[0]
-  const target = within(shelf).getAllByTestId('shorts-card').find((c) => c.dataset.publication === id)!
-  await user.click(within(target).getByTestId('shorts-card-open'))
+  await screen.findAllByTestId('feed-card')
+  window.history.pushState(null, '', `/?video=${id}`)
+  window.dispatchEvent(new PopStateEvent('popstate'))
   return { user, viewer: await screen.findByTestId('shorts-viewer') }
 }
 
 const current = () => screen.getAllByTestId('shorts-screen').find((s) => s.dataset.current)!
 const order = () => screen.getAllByTestId('shorts-screen').map((s) => s.dataset.publication)
 
-describe('the vertical mode\'s pushes (F-S13)', () => {
-  it('reads them under the feed\'s conditions and places them every n-th screen, taking turns', async () => {
-    const pushY = push('y', 1, 2, YOUTUBE.replace('dQw4w9WgXcQ', 'yyyyyyyyyyy'))
-    const { calls, pushReads } = server({ shorts: [...SHORTS, short('s4')], pushes: [PUSH_X, push('x2', 2, 1),
-      pushY] })
-    render(<App />)
-    // The home's shelf still shows every vertical publication, x among them (its preview never counts).
-    const shelf = (await screen.findAllByTestId('shorts-shelf'))[0]
-    expect(within(shelf).getAllByTestId('shorts-card').map((c) => c.dataset.publication)).toContain('x')
-    const { viewer } = await open('s1')
-    // Every second screen from the one opened on (the parameter), in the server's turns: x, y, then x2.
-    expect(order()).toEqual(['s1', 's2', 'x', 's3', 'y', 's4', 'x2'])
-    const reads = pushReads()
-    expect(reads.length).toBeGreaterThan(0)
-    const main = calls.find((c) => c.path === '/api/queries/qb.app.feed') as Call
-    expect((reads[0].body as { params: object }).params).toMatchObject({
-      ...(main.body as { params: object }).params, push: true })
-    expect((reads[0].body as { sorts: unknown }).sorts).toEqual([{ field: 'pushTurn', asc: true },
-      { field: 'pushRank', asc: true }])
-    await expectAccessible(viewer)
-  })
-
-  it('stays on the screen shown when the parameters arrive after the mode opened', async () => {
-    let arrive = () => {}
-    const { calls } = server({ settingsAfter: new Promise<void>((resolve) => { arrive = resolve }) })
-    render(<App />)
-    const { user, viewer } = await open('s1')
-    await user.click(within(viewer).getByTestId('shorts-next'))
-    const shown = current().dataset.publication
-    expect(shown).not.toBe('s1')
-    arrive()
-    await waitFor(() => expect(calls.some((c) => c.path === '/api/queries/qb.app.exposure-settings')).toBe(true))
-    await new Promise((resolve) => setTimeout(resolve, 50))
-    expect(current().dataset.publication).toBe(shown)
-  })
-
-  it('reports a push opened, and reads them again once the mode closes', async () => {
-    const { reports, pushReads } = server()
+describe('the vertical mode (F-S13)', () => {
+  it('reports another\'s video opened, once in the tab', async () => {
+    const { reports } = server()
     render(<App />)
     const { user, viewer } = await open('s1')
     expect(order()).toEqual(['s1', 's2', 'x', 's3'])
@@ -176,9 +139,6 @@ describe('the vertical mode\'s pushes (F-S13)', () => {
     await user.click(within(viewer).getByTestId('shorts-previous'))
     await user.click(within(viewer).getByTestId('shorts-next'))
     expect(reports().filter((r) => r.kind === 'OPEN')).toHaveLength(1)
-    const before = pushReads().length
-    await user.keyboard('{Escape}')
-    await waitFor(() => expect(pushReads().length).toBeGreaterThan(before))
   })
 
   it('counts the exposure once a run of the player reaches the seconds, and going on to answer', async () => {
@@ -213,7 +173,7 @@ describe('the vertical mode\'s pushes (F-S13)', () => {
 
   it('times another site\'s player on the screen, and nothing plays or counts with less motion', async () => {
     const other = push('o', 1, 1, BILIBILI)
-    const { reports } = server({ shorts: [other, short('s1')], pushes: [other], seconds: '1' })
+    const { reports } = server({ shorts: [other, short('s1')], seconds: '1' })
     render(<App />)
     await open('o')
     await waitFor(() => expect(reports()).toContainEqual({ publicationId: 'o', kind: 'EXPOSURE', surface: 'VERTICAL',
@@ -222,7 +182,7 @@ describe('the vertical mode\'s pushes (F-S13)', () => {
     forgetReports()
     window.history.replaceState(null, '', '/')
     stillMotion(true)
-    const still = server({ shorts: [other, short('s1')], pushes: [other], seconds: '1' })
+    const still = server({ shorts: [other, short('s1')], seconds: '1' })
     render(<App />)
     await open('o')
     await waitFor(() => expect(still.reports()).toContainEqual({ publicationId: 'o', kind: 'OPEN',
