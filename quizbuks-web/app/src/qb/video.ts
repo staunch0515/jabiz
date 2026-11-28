@@ -219,8 +219,8 @@ export function autoplaying(player: string): string {
  * The picture of a video before it plays, from the video itself (2026-11-28: a cover of the sponsor's, swapped for the
  * video as it started, flashed): YouTube's own picture of it (`i.ytimg.com`, which sets no cookies; the app's
  * `img-src https:`). Its 4:3 picture letterboxes the video, so it is shown cut to the video's place (`object-cover`):
- * the bars fall outside a 16:9 and a 9:16 place alike. None for the other sites (a video file shows its own first
- * frame, `VideoPoster`).
+ * the bars fall outside a 16:9 and a 9:16 place alike. None for the other sites and video files (they show the
+ * sponsor's cover, `VideoPoster`).
  */
 export function videoPoster(player: string | null | undefined): string | null {
   if (!player || !player.startsWith(YOUTUBE_PLAYER)) return null

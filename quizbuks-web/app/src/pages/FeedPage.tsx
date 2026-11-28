@@ -314,6 +314,9 @@ function CardVideo({ card, player, cover, to }: { card: FeedCard; player: string
   return <VideoSlot id={`card:${card.publicationId}`} player={player} mode="card" onOpen={open}
     // All of the card's video box (16:9, or 9:16 for a vertical video): the player is the cover's size.
     publicationId={card.publicationId} className="absolute inset-0 size-full" cover={cover}
+    // The video fills the card's box as its cover does (a 3:4 file in a 9:16 box left bands where the cover showed
+    // through, 2026-11-28).
+    fit={card.videoVertical ? 'cover' : 'fill'}
     title={t('feed.videoTitle', { name: card.name })} />
 }
 

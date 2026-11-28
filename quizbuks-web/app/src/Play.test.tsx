@@ -2303,6 +2303,9 @@ describe('a video file on any https address (F-S15)', () => {
     expect(video.muted).toBe(true)
     expect(video.autoplay).toBe(true)
     expect(video).toHaveAttribute('playsinline')
+    // It fills the card's box as the cover under it does: no band of the cover beside the video (2026-11-28).
+    expect(video).toHaveClass('object-cover')
+    expect(within(card).getByTestId('video-slot')).toHaveAttribute('data-fit', 'fill')
     // On a card nothing in the player is for touching: no controls, a tap opens the start page.
     expect(video.controls).toBe(false)
     expect(screen.getByTestId('video-open')).toBeInTheDocument()
@@ -2321,12 +2324,11 @@ describe('a video file on any https address (F-S15)', () => {
       render(<App />)
       const card = await screen.findByTestId('feed-card')
       io.fire(card, true, MIDDLE)
-      // No player: only the file's first frame, which never plays.
-      expect(screen.queryByTestId('video-stage-file')).toBeNull()
-      const frame = within(card).getByTestId('video-poster-frame') as HTMLVideoElement
-      expect(frame.autoplay).toBe(false)
-      expect(frame).toHaveAttribute('src', `${FILE}#t=0.1`)
-      expect(frame).toHaveAttribute('preload', 'metadata')
+      // No player, and no video element at all: a file's place shows the sponsor's cover (here the placeholder), not
+      // a `<video>` kept for its first frame (2026-11-28: an iPhone did not paint those, and they kept the playing one
+      // from showing).
+      expect(document.querySelector('video')).toBeNull()
+      expect(within(card).getByTestId('feed-card-placeholder')).toBeInTheDocument()
     } finally {
       query.mockRestore()
     }

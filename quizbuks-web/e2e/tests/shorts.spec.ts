@@ -219,9 +219,12 @@ test('a vertical video fills the screen of the vertical mode and plays at once, 
     return !!player && [player.x - onHome.x - 1, player.y - onHome.y - 1, player.width - onHome.width + 2,
       player.height - onHome.height + 2].every((off) => Math.abs(off) <= 1)
   }, { message: 'the player on the home is the cover\'s box' }).toBe(true)
-  // No cover and no play mark: the video's own first frame until the player's, then the video (never black).
-  expect(await post.locator('img').count()).toBe(0)
-  await expect(post.getByTestId('video-poster-frame')).toHaveAttribute('src', `${VIDEO_FILE}#t=0.1`)
+  // No play mark; a file's place shows the sponsor's cover (here the placeholder) until the player's first frame, then
+  // the video fills the box as the cover did, so none of the cover shows beside it (never black).
+  await expect(post.getByTestId('feed-card-placeholder')).toBeAttached()
+  expect(await post.locator('[data-testid="feed-card-playing"] video').count()).toBe(0)
+  expect(await page.getByTestId('video-stage-file').evaluate((element) => getComputedStyle(element).objectFit))
+    .toBe('cover')
   await expect.poll(() => page.getByTestId('video-stage-content').evaluate((element) => getComputedStyle(element).opacity))
     .toBe('1')
   // A tap maximizes this video: the full-screen video mode on it.

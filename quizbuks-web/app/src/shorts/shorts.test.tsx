@@ -368,9 +368,11 @@ describe('a vertical video fills the screen of the vertical mode (F-S10)', () =>
     render(<App />)
     const viewer = await screen.findByTestId('shorts-viewer')
     const [t1, t2, t3, w1] = within(viewer).getAllByTestId('shorts-screen')
-    // Not playing: YouTube's picture of the video, a file's own first frame; a site without a picture keeps the cover.
+    // Not playing: YouTube's picture of the video; a file and a site without a picture show the sponsor's cover (no
+    // `<video>` kept for a file's first frame).
     expect(within(w1).getByTestId('video-poster')).toHaveAttribute('src', 'https://i.ytimg.com/vi/bbbbbbbbbbb/hqdefault.jpg')
-    expect(within(t2).getByTestId('video-poster-frame')).toHaveAttribute('src', 'https://cdn.example.com/tall.mp4#t=0.1')
+    expect(t2.querySelector('video')).toBeNull()
+    expect(within(t2).queryByTestId('video-poster')).toBeNull()
     expect(within(t3).queryByTestId('video-poster')).toBeNull()
     // Playing: the same picture under the player on the stage, which fades the player in once it has its frame.
     expect(within(t1).queryByTestId('video-poster')).toBeNull()
