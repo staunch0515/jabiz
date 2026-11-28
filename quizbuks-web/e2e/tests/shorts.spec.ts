@@ -275,7 +275,8 @@ test('a vertical video fills the screen of the vertical mode and plays at once, 
   await expect(current).toBeInViewport({ ratio: 0.9 })
   await expect(stage.getByTestId('video-stage-cover').getByTestId('video-poster'))
     .toHaveAttribute('src', 'https://i.ytimg.com/vi/cccccccccc1/hqdefault.jpg')
-  expect(await stage.getByTestId('video-stage-content').evaluate((element) => getComputedStyle(element).opacity)).toBe('0')
+  // Waited for: the last video's player may still be fading out at this moment (the fade takes 450 ms).
+  await expect(stage.getByTestId('video-stage-content')).toHaveCSS('opacity', '0')
   await filled(390, 844)
   const frame = stage.locator('iframe')
   await expect(frame).toHaveAttribute('src', /autoplay=1&mute=1/)
